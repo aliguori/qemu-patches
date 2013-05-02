@@ -1,0 +1,1 @@
+../i2c-Add-AT24Cxx-EEPROM-model/v3.1366993155/0001-i2c-Introduce-device-address-mask.patch

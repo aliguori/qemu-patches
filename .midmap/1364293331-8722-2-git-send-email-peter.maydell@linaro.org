@@ -1,0 +1,1 @@
+../Fix-versatile_pci-now-without-breaking-linux/v2.1364311320/0001-versatile_pci-Fix-hardcoded-tabs.patch

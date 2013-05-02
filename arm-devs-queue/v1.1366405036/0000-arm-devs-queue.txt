@@ -1,0 +1,48 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Peter Maydell <peter.maydell@linaro.org>
+To: Anthony Liguori <anthony@codemonkey.ws>,
+ Peter Maydell <peter.maydell@linaro.org>
+Cc: Anthony Liguori <anthony@codemonkey.ws>, Paul Brook <paul@codesourcery.com>,
+ qemu-devel@nongnu.org, qemu-devel <qemu-devel@nongnu.org>
+Date: Fri, 19 Apr 2013 15:57:16 +0100
+Message-id: 1366383447-13082-1-git-send-email-peter.maydell@linaro.org
+Subject: [PATCH 00/11] arm-devs queue
+
+arm-devs queue pullreq; this is just the versatile-pci
+cleanup (which has been on the list for some time now).
+Please pull.
+
+thanks
+-- PMM
+
+
+The following changes since commit 09dada400328d75daf79e3eca1e48e024fec148d:
+
+  configure: remove duplicate test (2013-04-18 14:12:31 +0200)
+
+are available in the git repository at:
+
+  git://git.linaro.org/people/pmaydell/qemu-arm.git arm-devs.next
+
+for you to fetch changes up to af9277e69df688ebb8ccccb7edecc45f0f85ea51:
+
+  hw/versatile_pci: Drop unnecessary vpb_pci_config_addr() (2013-04-19 11:15:21 +0100)
+
+----------------------------------------------------------------
+Peter Maydell (11):
+      versatile_pci: Fix hardcoded tabs
+      versatile_pci: Expose PCI I/O region on Versatile PB
+      versatile_pci: Update to realize and instance init functions
+      versatile_pci: Change to subclassing TYPE_PCI_HOST_BRIDGE
+      versatile_pci: Use separate PCI I/O space rather than system I/O space
+      versatile_pci: Put the host bridge PCI device at slot 29
+      versatile_pci: Implement the correct PCI IRQ mapping
+      versatile_pci: Implement the PCI controller's control registers
+      arm/realview: Fix mapping of PCI regions
+      versatile_pci: Expose PCI memory space to system
+      hw/versatile_pci: Drop unnecessary vpb_pci_config_addr()
+
+ hw/arm/realview.c       |   22 +--
+ hw/arm/versatilepb.c    |   11 +-
+ hw/pci-host/versatile.c |  399 +++++++++++++++++++++++++++++++++++++++++------
+ 3 files changed, 371 insertions(+), 61 deletions(-)

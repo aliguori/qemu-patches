@@ -1,0 +1,308 @@
+From patches Mon Sep 17 00:00:00 2001
+From: fred.konrad@greensocs.com
+To: Anthony Liguori <aliguori@us.ibm.com>, qemu-devel@nongnu.org
+Cc: cornelia.huck@de.ibm.com, peter.maydell@linaro.org,
+ mark.burton@greensocs.com, fred.konrad@greensocs.com
+Date: Thu, 11 Apr 2013 16:29:57 +0200
+Message-id: 1365690602-22729-3-git-send-email-fred.konrad@greensocs.com
+Subject: [PATCH 2/7] virtio-net: add the virtio-net device.
+
+From: KONRAD Frederic <fred.konrad@greensocs.com>
+
+Create virtio-net-device which extends virtio-device, so it can be connected on
+virtio-bus.
+
+Signed-off-by: KONRAD Frederic <fred.konrad@greensocs.com>
+---
+ hw/net/virtio-net.c            | 152 +++++++++++++++++++++++++++++++++++++++--
+ hw/s390x/s390-virtio-bus.c     |   6 +-
+ hw/s390x/virtio-ccw.c          |   6 +-
+ hw/virtio/virtio-pci.c         |   4 +-
+ include/hw/virtio/virtio-net.h |  13 ++++
+ 5 files changed, 161 insertions(+), 20 deletions(-)
+
+diff --git a/hw/net/virtio-net.c b/hw/net/virtio-net.c
+index bc8fd43..988fe03 100644
+--- a/hw/net/virtio-net.c
++++ b/hw/net/virtio-net.c
+@@ -20,6 +20,7 @@
+ #include "qemu/timer.h"
+ #include "hw/virtio/virtio-net.h"
+ #include "net/vhost_net.h"
++#include "hw/virtio/virtio-bus.h"
+ 
+ #define VIRTIO_NET_VM_VERSION    11
+ 
+@@ -64,6 +65,9 @@ static int vq2q(int queue_index)
+  * - we could suppress RX interrupt if we were so inclined.
+  */
+ 
++/*
++ * Moving to QOM later in this serie.
++ */
+ static VirtIONet *to_virtio_net(VirtIODevice *vdev)
+ {
+     return (VirtIONet *)vdev;
+@@ -1252,22 +1256,45 @@ static void virtio_net_guest_notifier_mask(VirtIODevice *vdev, int idx,
+                              vdev, idx, mask);
+ }
+ 
+-VirtIODevice *virtio_net_init(DeviceState *dev, NICConf *conf,
+-                              virtio_net_conf *net, uint32_t host_features)
++void virtio_net_set_config_size(VirtIONet *n, uint32_t host_features)
+ {
+-    VirtIONet *n;
+     int i, config_size = 0;
+-
+     for (i = 0; feature_sizes[i].flags != 0; i++) {
+         if (host_features & feature_sizes[i].flags) {
+             config_size = MAX(feature_sizes[i].end, config_size);
+         }
+     }
++    n->config_size = config_size;
++}
++
++static VirtIODevice *virtio_net_common_init(DeviceState *dev, NICConf *conf,
++                                            virtio_net_conf *net,
++                                            uint32_t host_features,
++                                            VirtIONet **pn)
++{
++    VirtIONet *n = *pn;
++    int i, config_size = 0;
+ 
+-    n = (VirtIONet *)virtio_common_init("virtio-net", VIRTIO_ID_NET,
+-                                        config_size, sizeof(VirtIONet));
++    /*
++     * We have two cases here: the old virtio-net-pci device, and the
++     * refactored virtio-net.
++     */
++    if (n == NULL) {
++        /* virtio-net-pci */
++        for (i = 0; feature_sizes[i].flags != 0; i++) {
++            if (host_features & feature_sizes[i].flags) {
++                config_size = MAX(feature_sizes[i].end, config_size);
++            }
++        }
++        n = (VirtIONet *)virtio_common_init("virtio-net", VIRTIO_ID_NET,
++                                            config_size, sizeof(VirtIONet));
++        n->config_size = config_size;
++    } else {
++        /* virtio-net */
++        virtio_init(VIRTIO_DEVICE(n), "virtio-net", VIRTIO_ID_NET,
++                                                    n->config_size);
++    }
+ 
+-    n->config_size = config_size;
+     n->vdev.get_config = virtio_net_get_config;
+     n->vdev.set_config = virtio_net_set_config;
+     n->vdev.get_features = virtio_net_get_features;
+@@ -1337,6 +1364,13 @@ VirtIODevice *virtio_net_init(DeviceState *dev, NICConf *conf,
+     return &n->vdev;
+ }
+ 
++VirtIODevice *virtio_net_init(DeviceState *dev, NICConf *conf,
++                              virtio_net_conf *net, uint32_t host_features)
++{
++    VirtIONet *n = NULL;
++    return virtio_net_common_init(dev, conf, net, host_features, &n);
++}
++
+ void virtio_net_exit(VirtIODevice *vdev)
+ {
+     VirtIONet *n = DO_UPCAST(VirtIONet, vdev, vdev);
+@@ -1368,3 +1402,107 @@ void virtio_net_exit(VirtIODevice *vdev)
+     qemu_del_nic(n->nic);
+     virtio_cleanup(&n->vdev);
+ }
++
++static int virtio_net_device_init(VirtIODevice *vdev)
++{
++    DeviceState *qdev = DEVICE(vdev);
++    VirtIONet *n = VIRTIO_NET(vdev);
++
++    /*
++     * Initially, the new VirtIONet device will have a config size =
++     * sizeof(struct config), because we can't get host_features here.
++     */
++    if (virtio_net_common_init(qdev, &(n->nic_conf),
++                               &(n->net_conf), 0, &n) == NULL) {
++        return -1;
++    }
++    return 0;
++}
++
++static int virtio_net_device_exit(DeviceState *qdev)
++{
++    VirtIONet *n = VIRTIO_NET(qdev);
++    VirtIODevice *vdev = VIRTIO_DEVICE(qdev);
++    int i;
++
++    /* This will stop vhost backend if appropriate. */
++    virtio_net_set_status(vdev, 0);
++
++    unregister_savevm(qdev, "virtio-net", n);
++
++    g_free(n->mac_table.macs);
++    g_free(n->vlans);
++
++    for (i = 0; i < n->max_queues; i++) {
++        VirtIONetQueue *q = &n->vqs[i];
++        NetClientState *nc = qemu_get_subqueue(n->nic, i);
++
++        qemu_purge_queued_packets(nc);
++
++        if (q->tx_timer) {
++            qemu_del_timer(q->tx_timer);
++            qemu_free_timer(q->tx_timer);
++        } else {
++            qemu_bh_delete(q->tx_bh);
++        }
++    }
++
++    g_free(n->vqs);
++    qemu_del_nic(n->nic);
++    virtio_common_cleanup(&n->vdev);
++
++    return 0;
++}
++
++static void virtio_net_instance_init(Object *obj)
++{
++    VirtIONet *n = VIRTIO_NET(obj);
++
++    /*
++     * The default config_size is sizeof(struct virtio_net_config).
++     * Can be overriden with virtio_net_set_config_size.
++     */
++    n->config_size = sizeof(struct virtio_net_config);
++}
++
++static Property virtio_net_properties[] = {
++    DEFINE_NIC_PROPERTIES(VirtIONet, nic_conf),
++    DEFINE_PROP_UINT32("x-txtimer", VirtIONet, net_conf.txtimer,
++                                               TX_TIMER_INTERVAL),
++    DEFINE_PROP_INT32("x-txburst", VirtIONet, net_conf.txburst, TX_BURST),
++    DEFINE_PROP_STRING("tx", VirtIONet, net_conf.tx),
++    DEFINE_PROP_END_OF_LIST(),
++};
++
++static void virtio_net_class_init(ObjectClass *klass, void *data)
++{
++    DeviceClass *dc = DEVICE_CLASS(klass);
++    VirtioDeviceClass *vdc = VIRTIO_DEVICE_CLASS(klass);
++    dc->exit = virtio_net_device_exit;
++    dc->props = virtio_net_properties;
++    vdc->init = virtio_net_device_init;
++    vdc->get_config = virtio_net_get_config;
++    vdc->set_config = virtio_net_set_config;
++    vdc->get_features = virtio_net_get_features;
++    vdc->set_features = virtio_net_set_features;
++    vdc->bad_features = virtio_net_bad_features;
++    vdc->reset = virtio_net_reset;
++    vdc->set_status = virtio_net_set_status;
++    vdc->guest_notifier_mask = virtio_net_guest_notifier_mask;
++    vdc->guest_notifier_pending = virtio_net_guest_notifier_pending;
++}
++
++static const TypeInfo virtio_net_info = {
++    .name = TYPE_VIRTIO_NET,
++    .parent = TYPE_VIRTIO_DEVICE,
++    .instance_size = sizeof(VirtIONet),
++    .instance_init = virtio_net_instance_init,
++    .class_init = virtio_net_class_init,
++};
++
++static void virtio_register_types(void)
++{
++    type_register_static(&virtio_net_info);
++}
++
++type_init(virtio_register_types)
+diff --git a/hw/s390x/s390-virtio-bus.c b/hw/s390x/s390-virtio-bus.c
+index a71c145..2708af8 100644
+--- a/hw/s390x/s390-virtio-bus.c
++++ b/hw/s390x/s390-virtio-bus.c
+@@ -427,11 +427,7 @@ static const VirtIOBindings virtio_s390_bindings = {
+ static Property s390_virtio_net_properties[] = {
+     DEFINE_NIC_PROPERTIES(VirtIOS390Device, nic),
+     DEFINE_VIRTIO_NET_FEATURES(VirtIOS390Device, host_features),
+-    DEFINE_PROP_UINT32("x-txtimer", VirtIOS390Device,
+-                       net.txtimer, TX_TIMER_INTERVAL),
+-    DEFINE_PROP_INT32("x-txburst", VirtIOS390Device,
+-                      net.txburst, TX_BURST),
+-    DEFINE_PROP_STRING("tx", VirtIOS390Device, net.tx),
++    DEFINE_VIRTIO_NET_PROPERTIES(VirtIOS390Device, net),
+     DEFINE_PROP_END_OF_LIST(),
+ };
+ 
+diff --git a/hw/s390x/virtio-ccw.c b/hw/s390x/virtio-ccw.c
+index 9f2289d..f675fbc 100644
+--- a/hw/s390x/virtio-ccw.c
++++ b/hw/s390x/virtio-ccw.c
+@@ -735,11 +735,7 @@ static Property virtio_ccw_net_properties[] = {
+     DEFINE_PROP_STRING("devno", VirtioCcwDevice, bus_id),
+     DEFINE_VIRTIO_NET_FEATURES(VirtioCcwDevice, host_features[0]),
+     DEFINE_NIC_PROPERTIES(VirtioCcwDevice, nic),
+-    DEFINE_PROP_UINT32("x-txtimer", VirtioCcwDevice,
+-                       net.txtimer, TX_TIMER_INTERVAL),
+-    DEFINE_PROP_INT32("x-txburst", VirtioCcwDevice,
+-                      net.txburst, TX_BURST),
+-    DEFINE_PROP_STRING("tx", VirtioCcwDevice, net.tx),
++    DEFINE_VIRTIO_NET_PROPERTIES(VirtioCcwDevice, net),
+     DEFINE_PROP_END_OF_LIST(),
+ };
+ 
+diff --git a/hw/virtio/virtio-pci.c b/hw/virtio/virtio-pci.c
+index df02355..cb4c064 100644
+--- a/hw/virtio/virtio-pci.c
++++ b/hw/virtio/virtio-pci.c
+@@ -1007,9 +1007,7 @@ static Property virtio_net_properties[] = {
+     DEFINE_PROP_UINT32("vectors", VirtIOPCIProxy, nvectors, 3),
+     DEFINE_VIRTIO_NET_FEATURES(VirtIOPCIProxy, host_features),
+     DEFINE_NIC_PROPERTIES(VirtIOPCIProxy, nic),
+-    DEFINE_PROP_UINT32("x-txtimer", VirtIOPCIProxy, net.txtimer, TX_TIMER_INTERVAL),
+-    DEFINE_PROP_INT32("x-txburst", VirtIOPCIProxy, net.txburst, TX_BURST),
+-    DEFINE_PROP_STRING("tx", VirtIOPCIProxy, net.tx),
++    DEFINE_VIRTIO_NET_PROPERTIES(VirtIOPCIProxy, net),
+     DEFINE_PROP_END_OF_LIST(),
+ };
+ 
+diff --git a/include/hw/virtio/virtio-net.h b/include/hw/virtio/virtio-net.h
+index d2cc996..9fbb506 100644
+--- a/include/hw/virtio/virtio-net.h
++++ b/include/hw/virtio/virtio-net.h
+@@ -17,6 +17,10 @@
+ #include "hw/virtio/virtio.h"
+ #include "hw/pci/pci.h"
+ 
++#define TYPE_VIRTIO_NET "virtio-net-device"
++#define VIRTIO_NET(obj) \
++        OBJECT_CHECK(VirtIONet, (obj), TYPE_VIRTIO_NET)
++
+ #define ETH_ALEN    6
+ 
+ /* from Linux's virtio_net.h */
+@@ -177,6 +181,8 @@ typedef struct VirtIONet {
+         uint8_t *macs;
+     } mac_table;
+     uint32_t *vlans;
++    virtio_net_conf net_conf;
++    NICConf nic_conf;
+     DeviceState *qdev;
+     int multiqueue;
+     uint16_t max_queues;
+@@ -243,4 +249,11 @@ struct virtio_net_ctrl_mq {
+         DEFINE_PROP_BIT("ctrl_mac_addr", _state, _field, VIRTIO_NET_F_CTRL_MAC_ADDR, true), \
+         DEFINE_PROP_BIT("mq", _state, _field, VIRTIO_NET_F_MQ, false)
+ 
++#define DEFINE_VIRTIO_NET_PROPERTIES(_state, _field)                           \
++    DEFINE_PROP_UINT32("x-txtimer", _state, _field.txtimer, TX_TIMER_INTERVAL),\
++    DEFINE_PROP_INT32("x-txburst", _state, _field.txburst, TX_BURST),          \
++    DEFINE_PROP_STRING("tx", _state, _field.tx)
++
++void virtio_net_set_config_size(VirtIONet *n, uint32_t host_features);
++
+ #endif
+-- 
+1.8.1.4
+

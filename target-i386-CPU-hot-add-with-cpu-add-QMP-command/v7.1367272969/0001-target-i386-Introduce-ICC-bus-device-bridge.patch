@@ -1,0 +1,354 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Igor Mammedov <imammedo@redhat.com>
+To: Igor Mammedov <imammedo@redhat.com>, qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, ehabkost@redhat.com, mst@redhat.com,
+ jan.kiszka@siemens.com, claudio.fontana@huawei.com, qemu-devel@nongnu.org,
+ aderumier@odiso.com, lcapitulino@redhat.com, jfrei@linux.vnet.ibm.com,
+ yang.z.zhang@intel.com, pbonzini@redhat.com, eblake@redhat.com,
+ afaerber@suse.de, lig.fnst@cn.fujitsu.com, rth@twiddle.net
+Date: Mon, 29 Apr 2013 17:02:50 +0200
+Message-id: 1367247776-7695-2-git-send-email-imammedo@redhat.com
+Subject: [PATCH 1/7] target-i386: Introduce ICC bus/device/bridge
+
+Provides a hotpluggable bus for APIC and CPU.
+
+* icc-bridge will serve as a parent for icc-bus and provide
+  mmio mapping services to child icc-devices.
+* icc-device will replace SysBusDevice as a parent of APIC
+  and IOAPIC devices.
+
+Signed-off-by: Igor Mammedov <imammedo@redhat.com>
+[AF: QOM cleanups]
+Signed-off-by: Andreas Färber <afaerber@suse.de>
+---
+v2:
+ - rename instance name of icc-bus to "icc"
+
+Signed-off-by: Igor Mammedov <imammedo@redhat.com>
+---
+ MAINTAINERS                        |   6 ++
+ default-configs/i386-softmmu.mak   |   1 +
+ default-configs/x86_64-softmmu.mak |   1 +
+ hw/cpu/Makefile.objs               |   1 +
+ hw/cpu/icc_bus.c                   | 109 +++++++++++++++++++++++++++++++++++++
+ hw/i386/pc_piix.c                  |   7 +++
+ hw/i386/pc_q35.c                   |   7 +++
+ include/hw/cpu/icc_bus.h           |  79 +++++++++++++++++++++++++++
+ 8 files changed, 211 insertions(+)
+ create mode 100644 hw/cpu/icc_bus.c
+ create mode 100644 include/hw/cpu/icc_bus.h
+
+diff --git a/MAINTAINERS b/MAINTAINERS
+index 4dfd8bf..be02724 100644
+--- a/MAINTAINERS
++++ b/MAINTAINERS
+@@ -644,6 +644,12 @@ F: qom/cpu.c
+ F: include/qemu/cpu.h
+ F: target-i386/cpu.c
+ 
++ICC Bus
++M: Igor Mammedov <imammedo@redhat.com>
++S: Supported
++F: include/hw/cpu/icc_bus.h
++F: hw/cpu/icc_bus.c
++
+ Device Tree
+ M: Peter Crosthwaite <peter.crosthwaite@petalogix.com>
+ M: Alexander Graf <agraf@suse.de>
+diff --git a/default-configs/i386-softmmu.mak b/default-configs/i386-softmmu.mak
+index 368a776..833e722 100644
+--- a/default-configs/i386-softmmu.mak
++++ b/default-configs/i386-softmmu.mak
+@@ -44,3 +44,4 @@ CONFIG_LPC_ICH9=y
+ CONFIG_PCI_Q35=y
+ CONFIG_APIC=y
+ CONFIG_IOAPIC=y
++CONFIG_ICC_BUS=y
+diff --git a/default-configs/x86_64-softmmu.mak b/default-configs/x86_64-softmmu.mak
+index 2711b83..b749eb7 100644
+--- a/default-configs/x86_64-softmmu.mak
++++ b/default-configs/x86_64-softmmu.mak
+@@ -44,3 +44,4 @@ CONFIG_LPC_ICH9=y
+ CONFIG_PCI_Q35=y
+ CONFIG_APIC=y
+ CONFIG_IOAPIC=y
++CONFIG_ICC_BUS=y
+diff --git a/hw/cpu/Makefile.objs b/hw/cpu/Makefile.objs
+index a49ca04..4461ece 100644
+--- a/hw/cpu/Makefile.objs
++++ b/hw/cpu/Makefile.objs
+@@ -1,4 +1,5 @@
+ obj-$(CONFIG_ARM11MPCORE) += arm11mpcore.o
+ obj-$(CONFIG_ARM9MPCORE) += a9mpcore.o
+ obj-$(CONFIG_ARM15MPCORE) += a15mpcore.o
++obj-$(CONFIG_ICC_BUS) += icc_bus.o
+ 
+diff --git a/hw/cpu/icc_bus.c b/hw/cpu/icc_bus.c
+new file mode 100644
+index 0000000..3ac8eeb
+--- /dev/null
++++ b/hw/cpu/icc_bus.c
+@@ -0,0 +1,109 @@
++/* icc_bus.c
++ * emulate x86 ICC (Interrupt Controller Communications) bus
++ *
++ * Copyright (c) 2013 Red Hat, Inc
++ *
++ * Authors:
++ *     Igor Mammedov <imammedo@redhat.com>
++ *
++ * This library is free software; you can redistribute it and/or
++ * modify it under the terms of the GNU Lesser General Public
++ * License as published by the Free Software Foundation; either
++ * version 2 of the License, or (at your option) any later version.
++ *
++ * This library is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++ * Lesser General Public License for more details.
++ *
++ * You should have received a copy of the GNU Lesser General Public
++ * License along with this library; if not, see <http://www.gnu.org/licenses/>
++ */
++#include "hw/cpu/icc_bus.h"
++#include "hw/sysbus.h"
++
++/* icc-bridge implementation */
++
++static void icc_bus_init(Object *obj)
++{
++    BusState *b = BUS(obj);
++
++    b->allow_hotplug = true;
++}
++
++static const TypeInfo icc_bus_info = {
++    .name = TYPE_ICC_BUS,
++    .parent = TYPE_BUS,
++    .instance_size = sizeof(ICCBus),
++    .instance_init = icc_bus_init,
++};
++
++
++/* icc-device implementation */
++
++static void icc_device_realize(DeviceState *dev, Error **errp)
++{
++    ICCDevice *id = ICC_DEVICE(dev);
++    ICCDeviceClass *idc = ICC_DEVICE_GET_CLASS(id);
++
++    if (idc->init) {
++        if (idc->init(id) < 0) {
++            error_setg(errp, "%s initialization failed.",
++                       object_get_typename(OBJECT(dev)));
++        }
++    }
++}
++
++static void icc_device_class_init(ObjectClass *oc, void *data)
++{
++    DeviceClass *dc = DEVICE_CLASS(oc);
++
++    dc->realize = icc_device_realize;
++    dc->bus_type = TYPE_ICC_BUS;
++}
++
++static const TypeInfo icc_device_info = {
++    .name = TYPE_ICC_DEVICE,
++    .parent = TYPE_DEVICE,
++    .abstract = true,
++    .instance_size = sizeof(ICCDevice),
++    .class_size = sizeof(ICCDeviceClass),
++    .class_init = icc_device_class_init,
++};
++
++
++/*  icc-bridge implementation */
++
++typedef struct ICCBridgeState {
++    /*< private >*/
++    SysBusDevice parent_obj;
++    /*< public >*/
++
++    ICCBus icc_bus;
++} ICCBridgeState;
++
++#define ICC_BRIGDE(obj) OBJECT_CHECK(ICCBridgeState, (obj), TYPE_ICC_BRIDGE)
++
++static void icc_bridge_init(Object *obj)
++{
++    ICCBridgeState *s = ICC_BRIGDE(obj);
++
++    qbus_create_inplace(&s->icc_bus, TYPE_ICC_BUS, DEVICE(s), "icc");
++}
++
++static const TypeInfo icc_bridge_info = {
++    .name  = TYPE_ICC_BRIDGE,
++    .parent = TYPE_SYS_BUS_DEVICE,
++    .instance_init  = icc_bridge_init,
++    .instance_size  = sizeof(ICCBridgeState),
++};
++
++
++static void icc_bus_register_types(void)
++{
++    type_register_static(&icc_bus_info);
++    type_register_static(&icc_device_info);
++    type_register_static(&icc_bridge_info);
++}
++
++type_init(icc_bus_register_types)
+diff --git a/hw/i386/pc_piix.c b/hw/i386/pc_piix.c
+index 89b4cb4..51b738a 100644
+--- a/hw/i386/pc_piix.c
++++ b/hw/i386/pc_piix.c
+@@ -37,6 +37,7 @@
+ #include "hw/kvm/clock.h"
+ #include "sysemu/sysemu.h"
+ #include "hw/sysbus.h"
++#include "hw/cpu/icc_bus.h"
+ #include "sysemu/arch_init.h"
+ #include "sysemu/blockdev.h"
+ #include "hw/i2c/smbus.h"
+@@ -85,8 +86,13 @@ static void pc_init1(MemoryRegion *system_memory,
+     MemoryRegion *ram_memory;
+     MemoryRegion *pci_memory;
+     MemoryRegion *rom_memory;
++    DeviceState *icc_bridge;
+     void *fw_cfg = NULL;
+ 
++    icc_bridge = qdev_create(NULL, TYPE_ICC_BRIDGE);
++    object_property_add_child(qdev_get_machine(), "icc-bridge",
++                              OBJECT(icc_bridge), NULL);
++
+     pc_cpus_init(cpu_model);
+     pc_acpi_init("acpi-dsdt.aml");
+ 
+@@ -161,6 +167,7 @@ static void pc_init1(MemoryRegion *system_memory,
+     if (pci_enabled) {
+         ioapic_init_gsi(gsi_state, "i440fx");
+     }
++    qdev_init_nofail(icc_bridge);
+ 
+     pc_register_ferr_irq(gsi[13]);
+ 
+diff --git a/hw/i386/pc_q35.c b/hw/i386/pc_q35.c
+index f160893..317dd0c 100644
+--- a/hw/i386/pc_q35.c
++++ b/hw/i386/pc_q35.c
+@@ -41,6 +41,7 @@
+ #include "hw/ide/pci.h"
+ #include "hw/ide/ahci.h"
+ #include "hw/usb.h"
++#include "hw/cpu/icc_bus.h"
+ 
+ /* ICH9 AHCI has 6 ports */
+ #define MAX_SATA_PORTS     6
+@@ -73,6 +74,11 @@ static void pc_q35_init(QEMUMachineInitArgs *args)
+     int i;
+     ICH9LPCState *ich9_lpc;
+     PCIDevice *ahci;
++    DeviceState *icc_bridge;
++
++    icc_bridge = qdev_create(NULL, TYPE_ICC_BRIDGE);
++    object_property_add_child(qdev_get_machine(), "icc-bridge",
++                              OBJECT(icc_bridge), NULL);
+ 
+     pc_cpus_init(cpu_model);
+     pc_acpi_init("q35-acpi-dsdt.aml");
+@@ -156,6 +162,7 @@ static void pc_q35_init(QEMUMachineInitArgs *args)
+     if (pci_enabled) {
+         ioapic_init_gsi(gsi_state, NULL);
+     }
++    qdev_init_nofail(icc_bridge);
+ 
+     pc_register_ferr_irq(gsi[13]);
+ 
+diff --git a/include/hw/cpu/icc_bus.h b/include/hw/cpu/icc_bus.h
+new file mode 100644
+index 0000000..d728a7d
+--- /dev/null
++++ b/include/hw/cpu/icc_bus.h
+@@ -0,0 +1,79 @@
++/* icc_bus.h
++ * emulate x86 ICC (Interrupt Controller Communications) bus
++ *
++ * Copyright (c) 2013 Red Hat, Inc
++ *
++ * Authors:
++ *     Igor Mammedov <imammedo@redhat.com>
++ *
++ * This library is free software; you can redistribute it and/or
++ * modify it under the terms of the GNU Lesser General Public
++ * License as published by the Free Software Foundation; either
++ * version 2 of the License, or (at your option) any later version.
++ *
++ * This library is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++ * Lesser General Public License for more details.
++ *
++ * You should have received a copy of the GNU Lesser General Public
++ * License along with this library; if not, see <http://www.gnu.org/licenses/>
++ */
++#ifndef ICC_BUS_H
++#define ICC_BUS_H
++
++#include "hw/qdev-core.h"
++
++#define TYPE_ICC_BUS "icc-bus"
++
++#ifndef CONFIG_USER_ONLY
++
++/**
++ * ICCBus:
++ *
++ * ICC bus
++ */
++typedef struct ICCBus {
++    /*< private >*/
++    BusState parent_obj;
++    /*< public >*/
++} ICCBus;
++
++#define ICC_BUS(obj) OBJECT_CHECK(ICCBus, (obj), TYPE_ICC_BUS)
++
++/**
++ * ICCDevice:
++ *
++ * ICC device
++ */
++typedef struct ICCDevice {
++    /*< private >*/
++    DeviceState qdev;
++    /*< public >*/
++} ICCDevice;
++
++/**
++ * ICCDeviceClass:
++ * @init: Initialization callback for derived classes.
++ *
++ * ICC device class
++ */
++typedef struct ICCDeviceClass {
++    /*< private >*/
++    DeviceClass parent_class;
++    /*< public >*/
++
++    int (*init)(ICCDevice *dev); /* TODO replace with QOM realize */
++} ICCDeviceClass;
++
++#define TYPE_ICC_DEVICE "icc-device"
++#define ICC_DEVICE(obj) OBJECT_CHECK(ICCDevice, (obj), TYPE_ICC_DEVICE)
++#define ICC_DEVICE_CLASS(klass) \
++     OBJECT_CLASS_CHECK(ICCDeviceClass, (klass), TYPE_ICC_DEVICE)
++#define ICC_DEVICE_GET_CLASS(obj) \
++     OBJECT_GET_CLASS(ICCDeviceClass, (obj), TYPE_ICC_DEVICE)
++
++#define TYPE_ICC_BRIDGE "icc-bridge"
++
++#endif /* CONFIG_USER_ONLY */
++#endif
+-- 
+1.8.2.1
+

@@ -1,0 +1,29 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Liu Yuan <namei.unix@gmail.com>
+To: qemu-devel@nongnu.org
+Cc: sheepdog@lists.wpkg.org
+Date: Mon, 22 Apr 2013 14:59:08 +0800
+Message-id: 1366613950-10918-1-git-send-email-namei.unix@gmail.com
+Subject: [PATCH 0/2] implement .bdrv_co_is_allocated
+
+From: Liu Yuan <tailai.ly@taobao.com>
+
+v2:
+ - correct 'end' calculation
+ - get the longest unallocated area
+ - replace SECTOR_SIZE with BDRV_SECTOR_SIZE
+
+PATCH 1/2 is ia prepare patch
+PATCH 2/2 implement .bdrv_co_is_allocated
+
+Liu Yuan (2):
+  sheepdog: use BDRV_SECTOR_SIZE
+  sheepdog: implement .bdrv_co_is_allocated()
+
+ block/sheepdog.c |   46 ++++++++++++++++++++++++++++++++++++++++------
+ 1 file changed, 40 insertions(+), 6 deletions(-)
+
+-- 
+1.7.9.5
+
+

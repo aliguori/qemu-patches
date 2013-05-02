@@ -1,0 +1,55 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Liu Ping Fan <qemulist@gmail.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, Paolo Bonzini <pbonzini@redhat.com>,
+ Stefan Hajnoczi <stefanha@gmail.com>, Marcelo Tosatti <mtosatti@redhat.com>,
+ Peter Maydell <peter.maydell@linaro.org>, Jan Kiszka <jan.kiszka@siemens.com>,
+ Vasilis Liaskovitis <vasilis.liaskovitis@profitbricks.com>
+Date: Mon, 1 Apr 2013 16:20:29 +0800
+Message-id: 1364804434-7980-1-git-send-email-qemulist@gmail.com
+Subject: [PATCH 0/5] proposal to make hostmem listener RAM unplug safe
+
+From: Liu Ping Fan <pingfank@linux.vnet.ibm.com>
+
+This is an proposal similar to push core listener out of biglock
+     for core listener out of biglock, 
+     refer to orignal plan posted by Marcelo Tosatti,
+     http://lists.gnu.org/archive/html/qemu-devel/2012-06/msg04315.html
+
+While core listener's out of biglock still no driven use case, as to
+HostMem listner, it is already out of biglock, we need to ensure it RAM
+unplug safe.  Currently, to handle such issue, we need to call
+bdrv_drain_all() in hostmem->commit(), while these patch fix this issue
+with refcnt.
+
+RAM_Device {
+  int refcnt; ---> this is what we to inc/dec when hostmem_lookup()/"req cb"
+....
+  MemoryRegion mr;
+}
+
+For RAM hotunplug, please refer to Vasilis Liaskovitis's patches
+   http://lists.gnu.org/archive/html/qemu-devel/2012-12/msg02693.html
+
+
+Liu Ping Fan (5):
+  memory: add ref/unref interface for MemroyRegionOps
+  hostmem: make hostmem global and RAM hotunplg safe
+  vring: use hostmem's RAM safe api
+  virtio-blk: release reference to RAM's memoryRegion
+  hostmem: init/finalize hostmem listener
+
+ hw/dataplane/hostmem.c    |  130 +++++++++++++++++++++++++++++++-------------
+ hw/dataplane/hostmem.h    |   19 ++-----
+ hw/dataplane/virtio-blk.c |   52 ++++++++++++++----
+ hw/dataplane/vring.c      |   88 ++++++++++++++++++++++--------
+ hw/dataplane/vring.h      |    5 +-
+ include/exec/memory.h     |   10 ++++
+ include/qemu/main-loop.h  |    2 +
+ memory.c                  |   18 ++++++
+ vl.c                      |    2 +
+ 9 files changed, 235 insertions(+), 91 deletions(-)
+
+-- 
+1.7.4.4
+

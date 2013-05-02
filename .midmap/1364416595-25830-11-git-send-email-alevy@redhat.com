@@ -1,0 +1,1 @@
+../ccid-and-libcacard-fixes-for-windows-mingw/v2.1364441785/0010-libcacard-cac-change-big-switch-functions-to-single-return-point.patch

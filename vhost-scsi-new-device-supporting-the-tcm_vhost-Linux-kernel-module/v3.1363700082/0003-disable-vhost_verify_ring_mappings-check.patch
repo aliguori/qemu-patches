@@ -1,0 +1,47 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Asias He <asias@redhat.com>
+To: "Nicholas A. Bellinger" <nab@linux-iscsi.org>,
+ Paolo Bonzini <pbonzini@redhat.com>, Asias He <asias@redhat.com>,
+ Stefan Hajnoczi <stefanha@gmail.com>, qemu-devel@nongnu.org,
+ "Michael S. Tsirkin" <mst@redhat.com>
+Cc: Rusty Russell <rusty@rustcorp.com.au>, Paolo Bonzini <pbonzini@redhat.com>,
+ Asias He <asias@redhat.com>, kvm@vger.kernel.org,
+ Kevin O'Connor <kevin@koconnor.net>,
+ "Nicholas A. Bellinger" <nab@linux-iscsi.org>,
+ Stefan Hajnoczi <stefanha@gmail.com>, qemu-devel@nongnu.org,
+ "Michael S. Tsirkin" <mst@redhat.com>,
+ virtualization@lists.linux-foundation.org, seabios-devel <seabios@seabios.org>,
+ target-devel@vger.kernel.org, Nicholas Bellinger <nab@linux-iscsi.org>,
+ Stefan Hajnoczi <stefanha@redhat.com>
+Date: Tue, 19 Mar 2013 08:34:45 +0800
+Message-id: 1363653285-23776-4-git-send-email-asias@redhat.com
+Subject: [PATCH 3/3] disable vhost_verify_ring_mappings check
+
+---
+ hw/vhost.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/hw/vhost.c b/hw/vhost.c
+index 4d6aee3..0c52ec4 100644
+--- a/hw/vhost.c
++++ b/hw/vhost.c
+@@ -421,10 +421,12 @@ static void vhost_set_memory(MemoryListener *listener,
+         return;
+     }
+ 
++#if 0
+     if (dev->started) {
+         r = vhost_verify_ring_mappings(dev, start_addr, size);
+         assert(r >= 0);
+     }
++#endif
+ 
+     if (!dev->log_enabled) {
+         r = ioctl(dev->control, VHOST_SET_MEM_TABLE, dev->mem);
+-- 
+1.8.1.4
+
+--
+To unsubscribe from this list: send the line "unsubscribe kvm" in
+the body of a message to majordomo@vger.kernel.org
+More majordomo info at  http://vger.kernel.org/majordomo-info.html

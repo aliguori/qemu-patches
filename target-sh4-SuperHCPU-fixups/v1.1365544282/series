@@ -1,0 +1,3 @@
+0000-target-sh4-SuperHCPU-fixups.txt
+0001-shix-Catch-CPU-initialization-errors.patch
+0002-sh7750-Change-cpu-field-type-to-SuperHCPU.patch

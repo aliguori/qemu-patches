@@ -1,0 +1,1 @@
+../VMWare-PVSCSI-paravirtual-device-implementation/v7.1366383945/0001-VMWare-PVSCSI-paravirtual-device-implementation.patch

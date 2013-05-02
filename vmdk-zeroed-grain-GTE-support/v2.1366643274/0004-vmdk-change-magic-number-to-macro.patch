@@ -1,0 +1,39 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Fam Zheng <famz@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: kwolf@redhat.com, Fam Zheng <famz@redhat.com>, stefanha@redhat.com
+Date: Mon, 22 Apr 2013 10:07:58 +0800
+Message-id: 1366596479-22212-5-git-send-email-famz@redhat.com
+Subject: [PATCH 4/5] vmdk: change magic number to macro
+
+Two hard coded flag bits are changed to macros.
+Signed-off-by: Fam Zheng <famz@redhat.com>
+---
+ block/vmdk.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/block/vmdk.c b/block/vmdk.c
+index d8c6c70..632689b 100644
+--- a/block/vmdk.c
++++ b/block/vmdk.c
+@@ -32,6 +32,7 @@
+ #define VMDK3_MAGIC (('C' << 24) | ('O' << 16) | ('W' << 8) | 'D')
+ #define VMDK4_MAGIC (('K' << 24) | ('D' << 16) | ('M' << 8) | 'V')
+ #define VMDK4_COMPRESSION_DEFLATE 1
++#define VMDK4_FLAG_NL_DETECT (1 << 0)
+ #define VMDK4_FLAG_RGD (1 << 1)
+ /* Zeroed-grain enable bit */
+ #define VMDK4_FLAG_ZERO_GRAIN   (1 << 2)
+@@ -1287,7 +1288,7 @@ static int vmdk_create_extent(const char *filename, int64_t filesize,
+     magic = cpu_to_be32(VMDK4_MAGIC);
+     memset(&header, 0, sizeof(header));
+     header.version = zeroed_grain ? 2 : 1;
+-    header.flags = 3
++    header.flags = VMDK4_FLAG_RGD | VMDK4_FLAG_NL_DETECT
+                    | (compress ? VMDK4_FLAG_COMPRESS | VMDK4_FLAG_MARKER : 0)
+                    | (zeroed_grain ? VMDK4_FLAG_ZG : 0);
+     header.compressAlgorithm = compress ? VMDK4_COMPRESSION_DEFLATE : 0;
+-- 
+1.8.1.4
+
+

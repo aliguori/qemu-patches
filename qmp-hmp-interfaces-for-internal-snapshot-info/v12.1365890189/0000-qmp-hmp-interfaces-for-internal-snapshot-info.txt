@@ -1,0 +1,222 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Wenchao Xia <xiawenc@linux.vnet.ibm.com>
+To: Wenchao Xia <xiawenc@linux.vnet.ibm.com>, qemu-devel@nongnu.org
+Cc: kwolf@redhat.com, phrdina@redhat.com,
+ Wenchao Xia <xiawenc@linux.vnet.ibm.com>, qemu-devel@nongnu.org,
+ stefanha@gmail.com, armbru@redhat.com, lcapitulino@redhat.com,
+ pbonzini@redhat.com
+Date: Sat, 13 Apr 2013 16:56:29 +0800
+Message-id: 1365843407-16504-1-git-send-email-xiawenc@linux.vnet.ibm.com
+Subject: [PATCH 00/18] qmp/hmp interfaces for internal snapshot info
+
+  This serial let qmp interface show info for internal snapshot/backing chain
+on all block device at runtime, it helps management stack to find the correct
+image to merge when qemu is running, and retrieve exactly the same info of what
+qemu saws, avoiding async trouble if management stack use qemu-img info when
+qemu is running(Since qemu-img shows 'static' info, Management stack may need
+to guess qemu's logic to rebuild runtime 'dynamic' info, and a lock between
+query and blkdev_snapshot_create/delete?). 
+  Also hmp code is added, following are the interfaces added/enhanced:
+
+1) qmp: query-block, show info for a block device include image info
+Example:
+-> { "execute": "query-block" }
+<- {
+      "return":[
+         {
+            "io-status": "ok",
+            "device":"ide0-hd0",
+            "locked":false,
+            "removable":false,
+            "inserted":{
+               "ro":false,
+               "drv":"qcow2",
+               "encrypted":false,
+               "file":"disks/test.qcow2",
+               "backing_file_depth":1,
+               "bps":1000000,
+               "bps_rd":0,
+               "bps_wr":0,
+               "iops":1000000,
+               "iops_rd":0,
+               "iops_wr":0,
+               "image":{
+                  "filename":"disks/test.qcow2",
+                  "format":"qcow2",
+                  "virtual-size":2048000,
+                  "backing_file":"base.qcow2",
+                  "full-backing-filename":"disks/base.qcow2",
+                  "backing-filename-format:"qcow2",
+                  "snapshots":[
+                     {
+                        "id": "1",
+                        "name": "snapshot1",
+                        "vm-state-size": 0,
+                        "date-sec": 10000200,
+                        "date-nsec": 12,
+                        "vm-clock-sec": 206,
+                        "vm-clock-nsec": 30
+                     }
+                  ],
+                  "backing-image":{
+                      "filename":"disks/base.qcow2",
+                      "format":"qcow2",
+                      "virtual-size":2048000
+                  }
+               }
+            },
+            "type":"unknown"
+         },
+         {
+            "io-status": "ok",
+            "device":"ide1-cd0",
+            "locked":false,
+            "removable":true,
+            "type":"unknown"
+         },
+         {
+            "device":"floppy0",
+            "locked":false,
+            "removable":true,
+            "type":"unknown"
+         },
+         {
+            "device":"sd0",
+            "locked":false,
+            "removable":true,
+            "type":"unknown"
+         }
+      ]
+   }
+
+2) qmp: query-snapshots, show avaiable vm snapshot info which can be used
+in loadvm.
+Example:
+-> { "execute": "query-snapshots" }
+<- {
+      "return":[
+         {
+            "id": "1",
+            "name": "snapshot1",
+            "vm-state-size": 0,
+            "date-sec": 10000200,
+            "date-nsec": 12,
+            "vm-clock-sec": 206,
+            "vm-clock-nsec": 30
+         }
+      ]
+    }
+
+3) hmp: info block, show what got in qmp query-block in monitor
+
+Details:
+  These patches follows the rule that use qmp to retieve information,
+hmp layer just does a translation from qmp object it got.
+  To make code graceful, snapshot and image info retrieving code in
+qemu and qemu-img are merged into block layer, and some function name was
+adjusted to make it tips better. For the part touch by the serial, it works as:
+
+   qemu          qemu-img
+
+dump_monitor    dump_stdout
+     |--------------| 
+            |
+       block/qapi.c
+
+  Special thanks for Markus, Stefan, Kevin, Eric reviewing many times.
+
+Changelog:
+v11:
+  General change:
+  5/17: check if snapshot > 0 on success in caller, add comments on the
+function says that caller need to check it on success.
+  7/17: check if snapshot > 0 on success before set info->has_snapshots.
+
+  Address Eric's comments:
+  5/17: use error_setg_errno instead of strerror().
+  12/17: also move bdrv_snapshot_dump() since it need to be changed using
+GString later.
+  13/17: using GString as buffer.
+  14/17: using GString to dump snapshot info.
+  16/17: using GString to dump image info.
+
+  Address Kevin's comments:
+  11/17: return void for bdrv_query_info().
+  17/17: spell fix in help message, using parameter "-v" to show
+verbose info.
+
+V12:
+  Address Markus's comments:
+  02/18: better incode comments for bdrv_snapshot_find(), add tip about the
+logic change in snapshot create/delete/load/info if some snapshot's id is mixed
+with name in commit message.
+  05/18: better incode comments for bdrv_query_snapshot_info_list(), do not
+check return value in caller qemu-img.
+  07/18: new patch changing the vm snapshot filter logic, to be exactly the
+same with load_vmstate(). To tip it clearly this patch is made a seperate one,
+and can be droped if original logic want to be kepted.
+  08/18: squash -ENOMEDIUM and -ENOTSUP in switch statement in
+bdrv_query_image_info().
+  11/18: better incode comments for bdrv_query_image_info().
+  12/18: change disk name suffix from .img to .qcow2 in example, to tip better.
+  14/18: new funtion message_printf(), which automatically dump to monitor if
+it present, discard buffer or GString.
+  15/18: use message_printf() instead of buffer.
+  17/18: use message_printf() instead of buffer.
+
+  Address Eric's comments:
+  05/18: better incode comments for bdrv_query_snapshot_info_list(), do not
+check return value in caller qemu-img.
+
+  Address Stefan's comments:
+  10/18: added doc about the meaning of "consistent snapshot" in
+qmp-commands.hx.
+
+  Address Kevin's comments:
+  12/18: use local_error to detect error in qmp_query_snapshots(), in case
+caller set errp = NULL.
+
+Wenchao Xia (18):
+  1 block: move bdrv_snapshot_find() to block/snapshot.c
+  2 block: distinguish id and name in bdrv_find_snapshot()
+  3 qemu-img: remove unused parameter in collect_image_info()
+  4 block: move collect_snapshots() and collect_image_info() to block/qapi.c
+  5 block: add snapshot info query function bdrv_query_snapshot_info_list()
+  6 block: add check for VM snapshot in bdrv_query_snapshot_info_list()
+  7 block: change VM snapshot checking logic
+  8 block: add image info query function bdrv_query_image_info()
+  9 block: move qmp_query_block() and bdrv_query_info() to block/qapi.c
+  10 qmp: add interface query-snapshots
+  11 qmp: add recursive member in ImageInfo
+  12 qmp: add ImageInfo in BlockDeviceInfo used by query-block
+  13 block: move bdrv_snapshot_dump() and dump_human_image_info() to block/qapi.c
+  14 block: dump to monitor for bdrv_snapshot_dump() and bdrv_image_info_dump()
+  15 hmp: add function hmp_info_snapshots()
+  16 hmp: switch snapshot info function to qmp based one
+  17 hmp: show ImageInfo in 'info block'
+  18 hmp: add parameters device and -v for info block
+
+ block.c                     |  109 -----------
+ block/Makefile.objs         |    1 +
+ block/qapi.c                |  452 +++++++++++++++++++++++++++++++++++++++++++
+ block/snapshot.c            |   78 ++++++++
+ hmp.c                       |   63 ++++++
+ hmp.h                       |    1 +
+ include/block/block.h       |    2 -
+ include/block/qapi.h        |   43 ++++
+ include/block/snapshot.h    |   37 ++++
+ include/qemu/error-report.h |    1 +
+ monitor.c                   |    9 +-
+ qapi-schema.json            |   24 ++-
+ qemu-img.c                  |  165 +---------------
+ qmp-commands.hx             |  127 ++++++++++++-
+ savevm.c                    |   96 +---------
+ util/qemu-error.c           |   18 ++
+ 16 files changed, 861 insertions(+), 365 deletions(-)
+ create mode 100644 block/qapi.c
+ create mode 100644 block/snapshot.c
+ create mode 100644 include/block/qapi.h
+ create mode 100644 include/block/snapshot.h
+
+
+

@@ -1,0 +1,116 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Liu Ping Fan <qemulist@gmail.com>
+To: qemu-devel@nongnu.org
+Cc: Paolo Bonzini <pbonzini@redhat.com>, gleb@redhat.com,
+ Anthony Liguori <anthony@codemonkey.ws>, Stefan Hajnoczi <stefanha@gmail.com>,
+ Marcelo Tosatti <mtosatti@redhat.com>,
+ Peter Maydell <peter.maydell@linaro.org>, Jan Kiszka <jan.kiszka@siemens.com>
+Date: Sun, 25 Nov 2012 10:03:04 +0800
+Message-id: 1353808984-22368-8-git-send-email-qemulist@gmail.com
+Subject: [PATCH 7/7] vcpu: push mmio dispatcher out of big lock
+
+From: Liu Ping Fan <pingfank@linux.vnet.ibm.com>
+
+To anti the recursive big lock, introduce separate interfaces to allow
+address space dispatcher called with/without big lock.
+
+Signed-off-by: Liu Ping Fan <pingfank@linux.vnet.ibm.com>
+---
+ cpu-common.h |    3 +++
+ exec.c       |   21 +++++++++++++++++----
+ kvm-all.c    |    4 +++-
+ 3 files changed, 23 insertions(+), 5 deletions(-)
+
+diff --git a/cpu-common.h b/cpu-common.h
+index c0d27af..69c1d7a 100644
+--- a/cpu-common.h
++++ b/cpu-common.h
+@@ -51,6 +51,9 @@ void qemu_ram_set_idstr(ram_addr_t addr, const char *name, DeviceState *dev);
+ 
+ void cpu_physical_memory_rw(target_phys_addr_t addr, uint8_t *buf,
+                             int len, int is_write);
++void cpu_physical_memory_nolock_rw(target_phys_addr_t addr, uint8_t *buf,
++                            int len, int is_write);
++
+ static inline void cpu_physical_memory_read(target_phys_addr_t addr,
+                                             void *buf, int len)
+ {
+diff --git a/exec.c b/exec.c
+index 7eae54e..9fec600 100644
+--- a/exec.c
++++ b/exec.c
+@@ -3468,8 +3468,8 @@ static void address_space_dec_req_pending(void)
+     thread_context.req_pending--;
+ }
+ 
+-void address_space_rw(AddressSpace *as, target_phys_addr_t addr, uint8_t *buf,
+-                      int len, bool is_write)
++static void address_space_rw_internal(AddressSpace *as, target_phys_addr_t addr,
++                      uint8_t *buf, int len, bool is_write, bool biglock)
+ {
+     AddressSpaceDispatch *d = as->dispatch;
+     int l;
+@@ -3493,7 +3493,7 @@ void address_space_rw(AddressSpace *as, target_phys_addr_t addr, uint8_t *buf,
+             goto skip;
+         }
+ 
+-        if (!safe_ref) {
++        if (!safe_ref && !biglock) {
+             qemu_mutex_lock_iothread();
+             qemu_mutex_lock(&as->lock);
+             /* when 2nd try, mem map can change, need to judge it again */
+@@ -3576,12 +3576,18 @@ skip:
+         len -= l;
+         buf += l;
+         addr += l;
+-        if (!safe_ref) {
++        if (!safe_ref && !biglock) {
+             qemu_mutex_unlock_iothread();
+         }
+     }
+ }
+ 
++void address_space_rw(AddressSpace *as, target_phys_addr_t addr, uint8_t *buf,
++                      int len, bool is_write)
++{
++    address_space_rw_internal(as, addr, buf, len, is_write, true);
++}
++
+ void address_space_write(AddressSpace *as, target_phys_addr_t addr,
+                          const uint8_t *buf, int len)
+ {
+@@ -3607,6 +3613,13 @@ void cpu_physical_memory_rw(target_phys_addr_t addr, uint8_t *buf,
+     return address_space_rw(&address_space_memory, addr, buf, len, is_write);
+ }
+ 
++void cpu_physical_memory_nolock_rw(target_phys_addr_t addr, uint8_t *buf,
++                            int len, int is_write)
++{
++    return address_space_rw_internal(&address_space_memory, addr, buf, len,
++           is_write, false);
++}
++
+ /* used for ROM loading : can write in RAM and ROM */
+ void cpu_physical_memory_write_rom(target_phys_addr_t addr,
+                                    const uint8_t *buf, int len)
+diff --git a/kvm-all.c b/kvm-all.c
+index c2c6909..41261d2 100644
+--- a/kvm-all.c
++++ b/kvm-all.c
+@@ -1573,10 +1573,12 @@ int kvm_cpu_exec(CPUArchState *env)
+             break;
+         case KVM_EXIT_MMIO:
+             DPRINTF("handle_mmio\n");
+-            cpu_physical_memory_rw(run->mmio.phys_addr,
++            qemu_mutex_unlock_iothread();
++            cpu_physical_memory_nolock_rw(run->mmio.phys_addr,
+                                    run->mmio.data,
+                                    run->mmio.len,
+                                    run->mmio.is_write);
++            qemu_mutex_lock_iothread();
+             ret = 0;
+             break;
+         case KVM_EXIT_IRQ_WINDOW_OPEN:
+-- 
+1.7.4.4
+

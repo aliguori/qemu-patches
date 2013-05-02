@@ -1,0 +1,1 @@
+../QMP-queue/v1.1365171127/0004-chardev-drop-the-Memory-chardev-driver.patch

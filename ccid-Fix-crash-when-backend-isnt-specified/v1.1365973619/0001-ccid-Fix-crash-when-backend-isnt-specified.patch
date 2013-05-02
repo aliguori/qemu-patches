@@ -1,0 +1,45 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Cole Robinson <crobinso@redhat.com>
+To: mlureau@redhat.com, Cole Robinson <crobinso@redhat.com>,
+ qemu-devel@nongnu.org
+Cc: Cole Robinson <crobinso@redhat.com>, alevy@redhat.com, kraxel@redhat.com,
+ qemu-devel@nongnu.org
+Date: Sun, 14 Apr 2013 16:06:59 -0400
+Message-id: 681f15c0b6ac898724d68227f34977b106c7fa59.1365969853.git.crobinso@redhat.com
+Subject: [PATCH 1/1] ccid: Fix crash when backend isn't specified
+
+Reproducer:
+
+./x86_64-softmmu/qemu-system-x86_64 -device usb-ccid,id=ccid0 -usb -device ccid-card-emulated -monitor stdio
+
+Signed-off-by: Cole Robinson <crobinso@redhat.com>
+---
+ hw/usb/ccid-card-emulated.c | 10 ++++++++--
+ 1 file changed, 8 insertions(+), 2 deletions(-)
+
+diff --git a/hw/usb/ccid-card-emulated.c b/hw/usb/ccid-card-emulated.c
+index 29dcd7a..65e1432 100644
+--- a/hw/usb/ccid-card-emulated.c
++++ b/hw/usb/ccid-card-emulated.c
+@@ -500,9 +500,15 @@ static int emulated_initfn(CCIDCardState *base)
+     if (init_pipe_signaling(card) < 0) {
+         return -1;
+     }
+-    card->backend = parse_enumeration(card->backend_str, backend_enum_table, 0);
++
++    card->backend = 0;
++    if (card->backend_str) {
++        card->backend = parse_enumeration(card->backend_str,
++                                          backend_enum_table, 0);
++    }
++
+     if (card->backend == 0) {
+-        printf("unknown backend, must be one of:\n");
++        printf("backend must be one of:\n");
+         for (ptable = backend_enum_table; ptable->name != NULL; ++ptable) {
+             printf("%s\n", ptable->name);
+         }
+-- 
+1.8.1.4
+
+

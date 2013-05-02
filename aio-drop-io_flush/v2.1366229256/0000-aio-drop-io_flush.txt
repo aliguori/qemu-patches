@@ -1,0 +1,116 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Stefan Hajnoczi <stefanha@redhat.com>
+To: Stefan Hajnoczi <stefanha@redhat.com>, qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, Paolo Bonzini <pbonzini@redhat.com>,
+ pingfank@linux.vnet.ibm.com, Kevin Wolf <kwolf@redhat.com>,
+ qemu-devel@nongnu.org, Stefan Hajnoczi <stefanha@redhat.com>
+Date: Wed, 17 Apr 2013 15:07:36 +0200
+Message-id: 1366204073-8468-1-git-send-email-stefanha@redhat.com
+Subject: [PATCH 00/17] aio: drop io_flush()
+
+This series gets rid of aio's .io_flush() callback.  It's based on Paolo's
+insight that bdrv_drain_all() can be implemented using the bs->tracked_requests
+list.  io_flush() is redundant since the block layer already knows if requests
+are pending.
+
+The point of this effort is to simplify our event loop(s).  If we can reduce
+custom features like io_flush() it becomes easier to unify event loops and
+reuse glib or other options.
+
+This is also important to me for dataplane, since bdrv_drain_all() is one of
+the synchronization points between threads.  QEMU monitor commands invoke
+bdrv_drain_all() while the block device is accessed from a dataplane thread.
+
+Background on io_flush() semantics:
+
+The io_flush() handler must return 1 if this aio fd handler is active.  That
+is, requests are pending and we'd like to make progress by monitoring the fd.
+
+If io_flush() returns 0, the aio event loop skips monitoring this fd.  This is
+critical for block drivers like iscsi where we have an idle TCP socket which we
+want to block on *only* when there are pending requests.
+
+The series works as follows:
+
+Part 1 - stop relying on .io_flush()
+
+The first patches change aio_poll() callers to check their termination
+condition themselves instead of relying on .io_flush():
+
+  1 block: stop relying on io_flush() in bdrv_drain_all()
+  2 dataplane/virtio-blk: check exit conditions before aio_poll()
+  3 tests: adjust test-aio to new aio_poll() semantics
+  4 tests: adjust test-thread-pool to new aio_poll() semantics
+
+Part 2 - stop calling .io_flush() from aio_poll()
+
+The semantic change to aio_poll() is made here:
+
+  5 aio: stop using .io_flush()
+
+Part 3 - drop io_flush() handlers, just pass NULL for the io_flush argument
+
+Remove the now dead code from all .io_flush() users:
+
+  6 block/curl: drop curl_aio_flush()
+  7 block/gluster: drop qemu_gluster_aio_flush_cb()
+  8 block/iscsi: drop iscsi_process_flush()
+  9 block/linux-aio: drop qemu_laio_completion_cb()
+ 10 block/nbd: drop nbd_have_request()
+ 11 block/rbd: drop qemu_rbd_aio_flush_cb()
+ 12 block/sheepdog: drop have_co_req() and aio_flush_request()
+ 13 block/ssh: drop return_true()
+ 14 dataplane/virtio-blk: drop flush_true() and flush_io()
+ 15 thread-pool: drop thread_pool_active()
+
+Part 4 - remove io_flush arguments from aio functions
+
+The big, mechanical patch that drops the io_flush argument:
+
+ 16 tests: drop event_active_cb()
+
+Note that I split Part 3 from Part 4 so it's easy to review individual block
+drivers.
+
+Stefan Hajnoczi (17):
+  block: stop relying on io_flush() in bdrv_drain_all()
+  dataplane/virtio-blk: check exit conditions before aio_poll()
+  tests: adjust test-aio to new aio_poll() semantics
+  tests: adjust test-thread-pool to new aio_poll() semantics
+  aio: stop using .io_flush()
+  block/curl: drop curl_aio_flush()
+  block/gluster: drop qemu_gluster_aio_flush_cb()
+  block/iscsi: drop iscsi_process_flush()
+  block/linux-aio: drop qemu_laio_completion_cb()
+  block/nbd: drop nbd_have_request()
+  block/rbd: drop qemu_rbd_aio_flush_cb()
+  block/sheepdog: drop have_co_req() and aio_flush_request()
+  block/ssh: drop return_true()
+  dataplane/virtio-blk: drop flush_true() and flush_io()
+  thread-pool: drop thread_pool_active()
+  tests: drop event_active_cb()
+  aio: drop io_flush argument
+
+ aio-posix.c                     | 36 ++++++------------
+ aio-win32.c                     | 37 ++++++++-----------
+ async.c                         |  4 +-
+ block.c                         | 47 ++++++++++++++++-------
+ block/curl.c                    | 25 ++-----------
+ block/gluster.c                 | 21 ++---------
+ block/iscsi.c                   | 10 +----
+ block/linux-aio.c               | 18 +--------
+ block/nbd.c                     | 18 ++-------
+ block/rbd.c                     | 16 +-------
+ block/sheepdog.c                | 33 ++++-------------
+ block/ssh.c                     | 12 +-----
+ hw/block/dataplane/virtio-blk.c | 25 +++----------
+ include/block/aio.h             | 11 +-----
+ main-loop.c                     |  9 ++---
+ tests/test-aio.c                | 82 +++++++++++++++++++++--------------------
+ tests/test-thread-pool.c        | 24 ++++++------
+ thread-pool.c                   | 11 +-----
+ 18 files changed, 155 insertions(+), 284 deletions(-)
+
+-- 
+1.8.1.4
+

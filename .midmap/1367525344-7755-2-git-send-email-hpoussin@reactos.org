@@ -1,0 +1,1 @@
+../ppc-prep-add-IBM-RS-6000-43p-machine/v1.1367550537/0001-pci-add-MPC105-PCI-host-bridge-emulation.patch

@@ -1,0 +1,44 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Jens Freimann <jfrei@linux.vnet.ibm.com>
+To: Alexander Graf <agraf@suse.de>,
+ =?UTF-8?q?Andreas=20F=C3=A4rber?= <afaerber@suse.de>
+Cc: Paolo Bonzini <pbonzini@redhat.com>, qemu-devel <qemu-devel@nongnu.org>,
+ Christian Borntraeger <borntraeger@de.ibm.com>,
+ Peter Maydell <peter.maydell@linaro.org>, Rabin Vincent <rabin@rab.in>,
+ Jens Freimann <jfrei@linux.vnet.ibm.com>
+Date: Tue, 23 Apr 2013 17:30:12 +0200
+Message-id: 1366731014-48790-1-git-send-email-jfrei@linux.vnet.ibm.com
+Subject: [PATCH 0/2] s390: dump-guest-memory support
+
+The first patch splits memory mapping code to allow architectures
+that don't support/use paging to implement dump-guest-memory support.
+
+Based on this, the second patch implements support for s390x.
+
+
+Ekaterina Tumanova (2):
+  Split out dump-guest-memory memory mapping code
+  s390: dump guest memory implementation
+
+ Makefile.target                 |   2 +-
+ configure                       |   2 +-
+ dump.c                          |  11 +-
+ include/elf.h                   |   6 ++
+ include/qapi/qmp/qerror.h       |   3 +
+ include/sysemu/dump.h           |   3 +
+ include/sysemu/memory_mapping.h |  12 +++
+ memory_mapping-stub.c           |  11 +-
+ memory_mapping.c                |  84 +--------------
+ memory_mapping_common.c         | 104 ++++++++++++++++++
+ target-s390x/Makefile.objs      |   2 +-
+ target-s390x/arch_dump.c        | 231 ++++++++++++++++++++++++++++++++++++++++
+ target-s390x/cpu-qom.h          |  21 ++++
+ target-s390x/cpu.c              |   7 ++
+ 14 files changed, 404 insertions(+), 95 deletions(-)
+ create mode 100644 memory_mapping_common.c
+ create mode 100644 target-s390x/arch_dump.c
+
+-- 
+1.7.12.4
+
+

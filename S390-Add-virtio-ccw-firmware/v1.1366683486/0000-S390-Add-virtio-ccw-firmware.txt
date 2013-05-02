@@ -1,0 +1,68 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Alexander Graf <agraf@suse.de>
+To: Christian Borntraeger <borntraeger@de.ibm.com>,
+ Alexander Graf <agraf@suse.de>, qemu-devel@nongnu.org
+Cc: Christian Borntraeger <borntraeger@de.ibm.com>, qemu-devel@nongnu.org,
+ Dominik Dingel <dingel@linux.vnet.ibm.com>
+Date: Mon, 22 Apr 2013 21:18:06 +0200
+Message-id: 1366658298-9275-1-git-send-email-agraf@suse.de
+Subject: [PATCH 00/12] S390: Add virtio-ccw firmware
+
+We used to be able to boot from the virtio-s390 machine using a
+modified version of zipl. However, for our new virtio-ccw machine,
+there was not such support available.
+
+This patch set adds a tiny but of firmware to the game, so that we
+get the same functionality back that we used to have on virtio-s390.
+
+It should live in the QEMU tree, so that we can easily extend it
+to support more fancy features, like asking the user to choose which
+entry to boot, or boot menus.
+
+Alex
+
+Alexander Graf (12):
+  S390: Make IPL reset address dynamic
+  S390: IPL: Support ELF firmware
+  S390: IPL: Use different firmware for different machines
+  S390: ccw firmware: Add start assembly
+  S390: ccw firmware: Add main program
+  S390: ccw firmware: Add sclp output
+  S390: ccw firmware: Add virtio device drivers
+  S390: ccw firmware: Add glue header
+  S390: ccw firmware: Add bootmap interpreter
+  S390: ccw firmware: Add Makefile
+  S390: ccw firmware: Add compiled blob
+  S390: CCW: Use new, working firmware by default
+
+ .gitignore                    |    2 +
+ Makefile                      |    1 +
+ hw/s390x/ipl.c                |   41 +++---
+ hw/s390x/s390-virtio-ccw.c    |    2 +-
+ hw/s390x/s390-virtio.c        |    7 +-
+ hw/s390x/s390-virtio.h        |    3 +-
+ pc-bios/s390-ccw.img          |  Bin 0 -> 9432 bytes
+ pc-bios/s390-ccw/Makefile     |   26 ++++
+ pc-bios/s390-ccw/bootmap.c    |  235 ++++++++++++++++++++++++++++++
+ pc-bios/s390-ccw/cio.h        |  322 +++++++++++++++++++++++++++++++++++++++++
+ pc-bios/s390-ccw/main.c       |   56 +++++++
+ pc-bios/s390-ccw/s390-ccw.h   |  131 +++++++++++++++++
+ pc-bios/s390-ccw/sclp-ascii.c |   81 ++++++++++
+ pc-bios/s390-ccw/sclp.h       |  107 ++++++++++++++
+ pc-bios/s390-ccw/start.S      |   16 ++
+ pc-bios/s390-ccw/virtio.c     |  274 +++++++++++++++++++++++++++++++++++
+ pc-bios/s390-ccw/virtio.h     |  158 ++++++++++++++++++++
+ 17 files changed, 1440 insertions(+), 22 deletions(-)
+ create mode 100644 pc-bios/s390-ccw.img
+ create mode 100644 pc-bios/s390-ccw/Makefile
+ create mode 100644 pc-bios/s390-ccw/bootmap.c
+ create mode 100644 pc-bios/s390-ccw/cio.h
+ create mode 100644 pc-bios/s390-ccw/main.c
+ create mode 100644 pc-bios/s390-ccw/s390-ccw.h
+ create mode 100644 pc-bios/s390-ccw/sclp-ascii.c
+ create mode 100644 pc-bios/s390-ccw/sclp.h
+ create mode 100644 pc-bios/s390-ccw/start.S
+ create mode 100644 pc-bios/s390-ccw/virtio.c
+ create mode 100644 pc-bios/s390-ccw/virtio.h
+
+

@@ -1,0 +1,5 @@
+0000-QMP-queue.txt
+0001-qstring-add-qstring_get_length.patch
+0002-Monitor-Make-output-buffer-dynamic.patch
+0003-hmp-human-monitor-command-stop-using-the-Memory-chardev-driver.patch
+0004-chardev-drop-the-Memory-chardev-driver.patch

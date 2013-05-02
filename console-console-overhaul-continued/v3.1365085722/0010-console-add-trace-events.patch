@@ -1,0 +1,60 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Gerd Hoffmann <kraxel@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, Gerd Hoffmann <kraxel@redhat.com>
+Date: Thu, 4 Apr 2013 09:28:52 +0200
+Message-id: 1365060546-24638-11-git-send-email-kraxel@redhat.com
+Subject: [PATCH 10/24] console: add trace events
+
+Signed-off-by: Gerd Hoffmann <kraxel@redhat.com>
+---
+ trace-events |    3 +++
+ ui/console.c |    4 ++++
+ 2 files changed, 7 insertions(+)
+
+diff --git a/trace-events b/trace-events
+index ad863ec..df60a93 100644
+--- a/trace-events
++++ b/trace-events
+@@ -961,6 +961,9 @@ dma_bdrv_cb(void *dbs, int ret) "dbs=%p ret=%d"
+ dma_map_wait(void *dbs) "dbs=%p"
+ 
+ # console.h
++console_gfx_new(void) ""
++console_txt_new(int w, int h) "%dx%d"
++console_select(int nr) "%d"
+ displaysurface_create(void *display_surface, int w, int h) "surface=%p, %dx%d"
+ displaysurface_create_from(void *display_surface, int w, int h, int bpp, int swap) "surface=%p, %dx%d, bpp %d, bswap %d"
+ displaysurface_free(void *display_surface) "surface=%p"
+diff --git a/ui/console.c b/ui/console.c
+index 41005c1..a4c9151 100644
+--- a/ui/console.c
++++ b/ui/console.c
+@@ -904,6 +904,8 @@ void console_select(unsigned int index)
+ 
+     if (index >= MAX_CONSOLES)
+         return;
++
++    trace_console_select(index);
+     if (active_console) {
+         surface = qemu_console_surface(active_console);
+         active_console->g_width = surface_width(surface);
+@@ -1367,6 +1369,7 @@ QemuConsole *graphic_console_init(vga_hw_update_ptr update,
+     DisplayState *ds;
+ 
+     ds = (DisplayState *) g_malloc0(sizeof(DisplayState));
++    trace_console_gfx_new();
+     s = new_console(ds, GRAPHIC_CONSOLE);
+     s->hw_update = update;
+     s->hw_invalidate = invalidate;
+@@ -1485,6 +1488,7 @@ static CharDriverState *text_console_init(ChardevVC *vc)
+         height = vc->rows * FONT_HEIGHT;
+     }
+ 
++    trace_console_txt_new(width, height);
+     if (width == 0 || height == 0) {
+         s = new_console(NULL, TEXT_CONSOLE);
+     } else {
+-- 
+1.7.9.7
+

@@ -1,0 +1,1 @@
+../block-make-qmp_transaction-extendable/v1.1364857288/0002-block-adjust-qmp_transaction-to-be-extendable.patch

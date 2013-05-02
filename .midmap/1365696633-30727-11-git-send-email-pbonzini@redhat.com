@@ -1,0 +1,1 @@
+../directory-reorganization-final-part/v1.1365721821/0010-exec-remove-useless-declarations-from-memory-internalh.patch

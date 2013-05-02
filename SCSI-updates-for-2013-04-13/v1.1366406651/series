@@ -1,0 +1,10 @@
+0000-SCSI-updates-for-2013-04-13.txt
+0001-scsi-avoid-assertion-failure-on-VERIFY-command.patch
+0002-scsi-VMWare-PVSCSI-paravirtual-device-implementation.patch
+0003-vhost-Add-vhost_commit-callback-for-SeaBIOS-ROM-region-re-mapping.patch
+0004-virtio-scsi-create-VirtIOSCSICommon.patch
+0005-virtio-simplify-Makefile-conditionals.patch
+0006-vhost-scsi-new-device-supporting-the-tcm_vhost-Linux-kernel-module.patch
+0007-vhost-scsi-pci-new-device-supporting-the-tcm_vhost-Linux-kernel-module.patch
+0008-vhost-scsi-ccw-new-device-supporting-the-tcm_vhost-Linux-kernel-module.patch
+0009-vhost-scsi-s390-new-device-supporting-the-tcm_vhost-Linux-kernel-module.patch

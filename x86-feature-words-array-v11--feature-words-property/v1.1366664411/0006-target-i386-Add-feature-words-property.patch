@@ -1,0 +1,253 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Eduardo Habkost <ehabkost@redhat.com>
+To: Eric Blake <eblake@redhat.com>, qemu-devel@nongnu.org,
+ =?UTF-8?q?Andreas=20F=C3=A4rber?= <afaerber@suse.de>
+Cc: libvir-list@redhat.com, Igor Mammedov <imammedo@redhat.com>,
+ Jiri Denemark <jdenemar@redhat.com>, qemu-devel@nongnu.org,
+ Andreas =?iso-8859-1?Q?F=E4rber?= <afaerber@suse.de>
+Date: Mon, 22 Apr 2013 16:00:17 -0300
+Message-id: 1366657220-776-7-git-send-email-ehabkost@redhat.com
+Subject: [PATCH 6/9] target-i386: Add "feature-words" property
+
+This property will be useful for libvirt, as libvirt already has logic
+based on low-level feature bits (not feature names), so it will be
+really easy to convert the current libvirt logic to something using the
+"feature-words" property.
+
+The property will have two main use cases:
+ - Checking host capabilities, by checking the features of the "host"
+   CPU model
+ - Checking which features are enabled on each CPU model
+
+Example output:
+
+  $ ./QMP/qmp --path=/tmp/m qom-get --path=/machine/unattached/device[1] --property=feature-words
+  item[0].cpuid-register: EDX
+  item[0].cpuid-input-eax: 2147483658
+  item[0].features: 0
+  item[1].cpuid-register: EAX
+  item[1].cpuid-input-eax: 1073741825
+  item[1].features: 0
+  item[2].cpuid-register: EDX
+  item[2].cpuid-input-eax: 3221225473
+  item[2].features: 0
+  item[3].cpuid-register: ECX
+  item[3].cpuid-input-eax: 2147483649
+  item[3].features: 101
+  item[4].cpuid-register: EDX
+  item[4].cpuid-input-eax: 2147483649
+  item[4].features: 563346425
+  item[5].cpuid-register: EBX
+  item[5].cpuid-input-eax: 7
+  item[5].features: 0
+  item[5].cpuid-input-ecx: 0
+  item[6].cpuid-register: ECX
+  item[6].cpuid-input-eax: 1
+  item[6].features: 2155880449
+  item[7].cpuid-register: EDX
+  item[7].cpuid-input-eax: 1
+  item[7].features: 126614521
+
+Signed-off-by: Eduardo Habkost <ehabkost@redhat.com>
+---
+Changes v1 -> v2:
+ * Merge the non-qapi and qapi patches, to keep series simpler
+ * Use the feature word array series as base, so we don't have
+   to set the feature word values one-by-one in the code
+ * Change type name of property from "x86-cpu-feature-words" to
+   "X86CPUFeatureWordInfo"
+ * Remove cpu-qapi-schema.json and simply add the type definitions
+   to qapi-schema.json, to keep the changes simpler
+   * This required compiling qapi-types.o and qapi-visit.o into
+     *-user as well
+---
+ .gitignore        |  2 ++
+ Makefile.objs     |  7 +++++-
+ qapi-schema.json  | 31 ++++++++++++++++++++++++
+ target-i386/cpu.c | 70 +++++++++++++++++++++++++++++++++++++++++++++----------
+ 4 files changed, 97 insertions(+), 13 deletions(-)
+
+diff --git a/.gitignore b/.gitignore
+index 487813a..71408e3 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -21,6 +21,8 @@ linux-headers/asm
+ qapi-generated
+ qapi-types.[ch]
+ qapi-visit.[ch]
++cpu-qapi-types.[ch]
++cpu-qapi-visit.[ch]
+ qmp-commands.h
+ qmp-marshal.c
+ qemu-doc.html
+diff --git a/Makefile.objs b/Makefile.objs
+index a473348..1835d37 100644
+--- a/Makefile.objs
++++ b/Makefile.objs
+@@ -78,10 +78,15 @@ common-obj-$(CONFIG_SMARTCARD_NSS) += $(libcacard-y)
+ ######################################################################
+ # qapi
+ 
+-common-obj-y += qmp-marshal.o qapi-visit.o qapi-types.o
++common-obj-y += qmp-marshal.o
+ common-obj-y += qmp.o hmp.o
+ endif
+ 
++######################################################################
++# some qapi visitors are used by both system and user emulation:
++
++common-obj-y += qapi-visit.o qapi-types.o
++
+ #######################################################################
+ # Target-independent parts used in system and user emulation
+ common-obj-y += qemu-log.o
+diff --git a/qapi-schema.json b/qapi-schema.json
+index 751d3c2..424434f 100644
+--- a/qapi-schema.json
++++ b/qapi-schema.json
+@@ -3505,3 +3505,34 @@
+     '*asl_compiler_rev':  'uint32',
+     '*file':              'str',
+     '*data':              'str' }}
++
++# @X86CPURegister32
++#
++# A X86 32-bit register
++#
++# Since: 1.5
++##
++{ 'enum': 'X86CPURegister32',
++  'data': [ 'EAX', 'EBX', 'ECX', 'EDX', 'ESP', 'EBP', 'ESI', 'EDI' ] }
++
++##
++# @X86CPUFeatureWordInfo
++#
++# Information about a X86 CPU feature word
++#
++# @cpuid-input-eax: Input EAX value for CPUID instruction for that feature word
++#
++# @cpuid-input-ecx: #optional Input ECX value for CPUID instruction for that
++#                   feature word
++#
++# @cpuid-register: Output register containing the feature bits
++#
++# @features: value of output register, containing the feature bits
++#
++# Since: 1.5
++##
++{ 'type': 'X86CPUFeatureWordInfo',
++  'data': { 'cpuid-input-eax': 'int',
++            '*cpuid-input-ecx': 'int',
++            'cpuid-register': 'X86CPURegister32',
++            'features': 'int' } }
+diff --git a/target-i386/cpu.c b/target-i386/cpu.c
+index 314931e..757749c 100644
+--- a/target-i386/cpu.c
++++ b/target-i386/cpu.c
+@@ -30,6 +30,8 @@
+ #include "qemu/config-file.h"
+ #include "qapi/qmp/qerror.h"
+ 
++#include "qapi-types.h"
++#include "qapi-visit.h"
+ #include "qapi/visitor.h"
+ #include "sysemu/arch_init.h"
+ 
+@@ -194,23 +196,34 @@ static FeatureWordInfo feature_word_info[FEATURE_WORDS] = {
+     },
+ };
+ 
++typedef struct X86RegisterInfo32 {
++    /* Name of register */
++    const char *name;
++    /* QAPI enum value register */
++    X86CPURegister32 qapi_enum;
++} X86RegisterInfo32;
++
++#define REGISTER(reg) \
++    [R_##reg] = { .name = #reg, .qapi_enum = X86_C_P_U_REGISTER32_##reg }
++X86RegisterInfo32 x86_reg_info_32[CPU_NB_REGS32] = {
++    REGISTER(EAX),
++    REGISTER(ECX),
++    REGISTER(EDX),
++    REGISTER(EBX),
++    REGISTER(ESP),
++    REGISTER(EBP),
++    REGISTER(ESI),
++    REGISTER(EDI),
++};
++#undef REGISTER
++
++
+ const char *get_register_name_32(unsigned int reg)
+ {
+-    static const char *reg_names[CPU_NB_REGS32] = {
+-        [R_EAX] = "EAX",
+-        [R_ECX] = "ECX",
+-        [R_EDX] = "EDX",
+-        [R_EBX] = "EBX",
+-        [R_ESP] = "ESP",
+-        [R_EBP] = "EBP",
+-        [R_ESI] = "ESI",
+-        [R_EDI] = "EDI",
+-    };
+-
+     if (reg > CPU_NB_REGS32) {
+         return NULL;
+     }
+-    return reg_names[reg];
++    return x86_reg_info_32[reg].name;
+ }
+ 
+ /* collects per-function cpuid data
+@@ -1360,6 +1373,36 @@ static void x86_cpuid_set_tsc_freq(Object *obj, Visitor *v, void *opaque,
+     cpu->env.tsc_khz = value / 1000;
+ }
+ 
++static void x86_cpu_get_feature_words(Object *obj, Visitor *v, void *opaque,
++                                   const char *name, Error **errp)
++{
++    X86CPU *cpu = X86_CPU(obj);
++    CPUX86State *env = &cpu->env;
++    FeatureWord w;
++    Error *err = NULL;
++    X86CPUFeatureWordInfo word_infos[FEATURE_WORDS] = { };
++    X86CPUFeatureWordInfoList list_entries[FEATURE_WORDS] = { };
++    X86CPUFeatureWordInfoList *list = NULL;
++
++    for (w = 0; w < FEATURE_WORDS; w++) {
++        FeatureWordInfo *wi = &feature_word_info[w];
++        X86CPUFeatureWordInfo *qwi = &word_infos[w];
++        qwi->cpuid_input_eax = wi->cpuid_eax;
++        qwi->has_cpuid_input_ecx = wi->cpuid_needs_ecx;
++        qwi->cpuid_input_ecx = wi->cpuid_ecx;
++        qwi->cpuid_register = x86_reg_info_32[wi->cpuid_reg].qapi_enum;
++        qwi->features = env->features[w];
++
++        /* List will be in reverse order, but order shouldn't matter */
++        list_entries[w].next = list;
++        list_entries[w].value = &word_infos[w];
++        list = &list_entries[w];
++    }
++
++    visit_type_X86CPUFeatureWordInfoList(v, &list, "feature-words", &err);
++    error_propagate(errp, err);
++}
++
+ static int cpu_x86_find_by_name(x86_def_t *x86_cpu_def, const char *name)
+ {
+     x86_def_t *def;
+@@ -2348,6 +2391,9 @@ static void x86_cpu_initfn(Object *obj)
+     object_property_add(obj, "tsc-frequency", "int",
+                         x86_cpuid_get_tsc_freq,
+                         x86_cpuid_set_tsc_freq, NULL, NULL, NULL);
++    object_property_add(obj, "feature-words", "X86CPUFeatureWordInfo",
++                        x86_cpu_get_feature_words,
++                        NULL, NULL, NULL, NULL);
+ 
+     env->cpuid_apic_id = x86_cpu_apic_id_from_index(cs->cpu_index);
+ 
+-- 
+1.8.1.4
+
+

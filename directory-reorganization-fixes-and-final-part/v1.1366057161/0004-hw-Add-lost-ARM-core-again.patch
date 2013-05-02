@@ -1,0 +1,38 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Stefan Weil <sw@weilnetz.de>
+Date: Mon, 15 Apr 2013 15:19:25 +0200
+Message-id: 1366031973-7718-5-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 04/12] hw: Add lost ARM core again
+
+From: Stefan Weil <sw@weilnetz.de>
+
+Commit 0434e30afb6175212389811e0b28b948eb3c1e40 accidentally removed
+the compilation of arm11mpcore.c.
+
+Signed-off-by: Stefan Weil <sw@weilnetz.de>
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ default-configs/arm-softmmu.mak | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/default-configs/arm-softmmu.mak b/default-configs/arm-softmmu.mak
+index 31725a9..27cbe3d 100644
+--- a/default-configs/arm-softmmu.mak
++++ b/default-configs/arm-softmmu.mak
+@@ -34,8 +34,8 @@ CONFIG_PFLASH_CFI02=y
+ CONFIG_MICRODRIVE=y
+ CONFIG_USB_MUSB=y
+ 
+-CONFIG_ARM5MPCORE=y
+ CONFIG_ARM9MPCORE=y
++CONFIG_ARM11MPCORE=y
+ CONFIG_ARM15MPCORE=y
+ 
+ CONFIG_ARM_GIC=y
+-- 
+1.8.1.4
+
+
+

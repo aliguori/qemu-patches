@@ -1,0 +1,1 @@
+../TARGET__ALIGNMENT-cleanup-and-config-targetmak-trimming/v3.1366233994/0010-configure-move-common-libraries-to-config-hostmak.patch

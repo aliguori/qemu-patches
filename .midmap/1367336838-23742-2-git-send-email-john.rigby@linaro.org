@@ -1,0 +1,1 @@
+../Add-mach-virt-platform/v1.1367333236/0001-ARM-Allow-boards-to-provide-an-fdt-blob.patch

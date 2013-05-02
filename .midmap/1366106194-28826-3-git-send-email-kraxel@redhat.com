@@ -1,0 +1,1 @@
+../spice-patch-queue/v1.1366131385/0002-qxl-add-2000x2000-and-2048x2048-video-modes.patch

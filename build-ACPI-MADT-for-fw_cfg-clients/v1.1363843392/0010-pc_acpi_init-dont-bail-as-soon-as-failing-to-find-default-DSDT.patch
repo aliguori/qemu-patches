@@ -1,0 +1,75 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Laszlo Ersek <lersek@redhat.com>
+To: Anthony Liguori <aliguori@us.ibm.com>, kraxel@redhat.com,
+ qemu-devel@nongnu.org, mst@redhat.com
+Cc: 
+Date: Thu, 21 Mar 2013 00:23:22 +0100
+Message-id: 1363821803-3380-11-git-send-email-lersek@redhat.com
+Subject: [PATCH 10/11] pc_acpi_init(): don't bail as soon as failing to find
+ default DSDT
+
+
+Signed-off-by: Laszlo Ersek <lersek@redhat.com>
+---
+ hw/i386/pc.c |   33 +++++++++++++++++----------------
+ 1 files changed, 17 insertions(+), 16 deletions(-)
+
+diff --git a/hw/i386/pc.c b/hw/i386/pc.c
+index 23f9800..0a5d4d4 100644
+--- a/hw/i386/pc.c
++++ b/hw/i386/pc.c
+@@ -888,9 +888,7 @@ void pc_cpus_init(const char *cpu_model)
+ 
+ void pc_acpi_init(const char *default_dsdt)
+ {
+-    char *filename = NULL, *arg = NULL;
+-    QemuOpts *opts;
+-    Error *err = NULL;
++    char *filename;
+ 
+     if (acpi_tables != NULL) {
+         /* manually set via -acpitable, leave it alone */
+@@ -900,23 +898,26 @@ void pc_acpi_init(const char *default_dsdt)
+     filename = qemu_find_file(QEMU_FILE_TYPE_BIOS, default_dsdt);
+     if (filename == NULL) {
+         fprintf(stderr, "WARNING: failed to find %s\n", default_dsdt);
+-        return;
+-    }
++    } else {
++        char *arg;
++        QemuOpts *opts;
++        Error *err = NULL;
+ 
+-    arg = g_strdup_printf("file=%s", filename);
++        arg = g_strdup_printf("file=%s", filename);
+ 
+-    /* creates a deep copy of "arg" */
+-    opts = qemu_opts_parse(qemu_find_opts("acpi"), arg, 0);
+-    g_assert(opts != NULL);
++        /* creates a deep copy of "arg" */
++        opts = qemu_opts_parse(qemu_find_opts("acpi"), arg, 0);
++        g_assert(opts != NULL);
+ 
+-    acpi_table_add(opts, &err);
+-    if (err) {
+-        fprintf(stderr, "WARNING: failed to load %s: %s\n", filename,
+-                error_get_pretty(err));
+-        error_free(err);
++        acpi_table_add(opts, &err);
++        if (err) {
++            fprintf(stderr, "WARNING: failed to load %s: %s\n", filename,
++                    error_get_pretty(err));
++            error_free(err);
++        }
++        g_free(arg);
++        g_free(filename);
+     }
+-    g_free(arg);
+-    g_free(filename);
+ }
+ 
+ void *pc_memory_init(MemoryRegion *system_memory,
+-- 
+1.7.1
+
+

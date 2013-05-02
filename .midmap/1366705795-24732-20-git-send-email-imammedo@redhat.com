@@ -1,0 +1,1 @@
+../target-i386-CPU-hot-add-with-cpu-add-QMP-command/v5.1366730974/0019-add-hot_add_cpu-hook-to-QEMUMachine-and-export-machine_args.patch

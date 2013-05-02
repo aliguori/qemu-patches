@@ -1,0 +1,226 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Aurelien Jarno <aurelien@aurel32.net>
+To: qemu-devel@nongnu.org
+Cc: Aurelien Jarno <aurelien@aurel32.net>
+Date: Sun, 31 Mar 2013 13:02:26 +0200
+Message-id: 1364727746-2686-8-git-send-email-aurelien@aurel32.net
+Subject: [PATCH 7/7] target-i386: add AES-NI instructions
+
+Reviewed-by: Edgar E. Iglesias <edgar.iglesias@gmail.com>
+Reviewed-by: Richard Henderson <rth@twiddle.net>
+Signed-off-by: Aurelien Jarno <aurelien@aurel32.net>
+---
+ disas/i386.c                 |    4 +-
+ target-i386/cpu.c            |    6 +--
+ target-i386/fpu_helper.c     |    1 +
+ target-i386/ops_sse.h        |   87 ++++++++++++++++++++++++++++++++++++++++++
+ target-i386/ops_sse_header.h |    6 +++
+ target-i386/translate.c      |    7 ++++
+ 6 files changed, 106 insertions(+), 5 deletions(-)
+
+diff --git a/disas/i386.c b/disas/i386.c
+index 04c033c..47f1f2e 100644
+--- a/disas/i386.c
++++ b/disas/i386.c
+@@ -1447,7 +1447,7 @@ static const unsigned char threebyte_0x38_uses_DATA_prefix[256] = {
+   /* a0 */ 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, /* af */
+   /* b0 */ 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, /* bf */
+   /* c0 */ 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, /* cf */
+-  /* d0 */ 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, /* df */
++  /* d0 */ 0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1, /* df */
+   /* e0 */ 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, /* ef */
+   /* f0 */ 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, /* ff */
+   /*       -------------------------------        */
+@@ -1519,7 +1519,7 @@ static const unsigned char threebyte_0x3a_uses_DATA_prefix[256] = {
+   /* a0 */ 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, /* af */
+   /* b0 */ 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, /* bf */
+   /* c0 */ 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, /* cf */
+-  /* d0 */ 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, /* df */
++  /* d0 */ 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1, /* df */
+   /* e0 */ 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, /* ef */
+   /* f0 */ 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, /* ff */
+   /*       -------------------------------        */
+diff --git a/target-i386/cpu.c b/target-i386/cpu.c
+index 5941d40..321d945 100644
+--- a/target-i386/cpu.c
++++ b/target-i386/cpu.c
+@@ -390,13 +390,13 @@ typedef struct x86_def_t {
+ #define TCG_EXT_FEATURES (CPUID_EXT_SSE3 | CPUID_EXT_PCLMULQDQ | \
+           CPUID_EXT_MONITOR | CPUID_EXT_SSSE3 | CPUID_EXT_CX16 | \
+           CPUID_EXT_SSE41 | CPUID_EXT_SSE42 | CPUID_EXT_POPCNT | \
+-          CPUID_EXT_MOVBE | CPUID_EXT_HYPERVISOR)
++          CPUID_EXT_MOVBE | CPUID_EXT_AES | CPUID_EXT_HYPERVISOR)
+           /* missing:
+           CPUID_EXT_DTES64, CPUID_EXT_DSCPL, CPUID_EXT_VMX, CPUID_EXT_SMX,
+           CPUID_EXT_EST, CPUID_EXT_TM2, CPUID_EXT_CID, CPUID_EXT_FMA,
+           CPUID_EXT_XTPR, CPUID_EXT_PDCM, CPUID_EXT_PCID, CPUID_EXT_DCA,
+-          CPUID_EXT_X2APIC, CPUID_EXT_TSC_DEADLINE_TIMER, CPUID_EXT_AES,
+-          CPUID_EXT_XSAVE, CPUID_EXT_OSXSAVE, CPUID_EXT_AVX, CPUID_EXT_F16C,
++          CPUID_EXT_X2APIC, CPUID_EXT_TSC_DEADLINE_TIMER, CPUID_EXT_XSAVE,
++          CPUID_EXT_OSXSAVE, CPUID_EXT_AVX, CPUID_EXT_F16C,
+           CPUID_EXT_RDRAND */
+ #define TCG_EXT2_FEATURES ((TCG_FEATURES & CPUID_EXT2_AMD_ALIASES) | \
+           CPUID_EXT2_NX | CPUID_EXT2_MMXEXT | CPUID_EXT2_RDTSCP | \
+diff --git a/target-i386/fpu_helper.c b/target-i386/fpu_helper.c
+index 29a8fb6..c0427fe 100644
+--- a/target-i386/fpu_helper.c
++++ b/target-i386/fpu_helper.c
+@@ -20,6 +20,7 @@
+ #include <math.h>
+ #include "cpu.h"
+ #include "helper.h"
++#include "qemu/aes.h"
+ #include "qemu/host-utils.h"
+ 
+ #if !defined(CONFIG_USER_ONLY)
+diff --git a/target-i386/ops_sse.h b/target-i386/ops_sse.h
+index 2ee5b8d..eb24b5f 100644
+--- a/target-i386/ops_sse.h
++++ b/target-i386/ops_sse.h
+@@ -2203,6 +2203,93 @@ void glue(helper_pclmulqdq, SUFFIX)(CPUX86State *env, Reg *d, Reg *s,
+     d->Q(0) = resl;
+     d->Q(1) = resh;
+ }
++
++/* AES-NI op helpers */
++static const uint8_t aes_shifts[16] = {
++    0, 5, 10, 15, 4, 9, 14, 3, 8, 13, 2, 7, 12, 1, 6, 11
++};
++
++static const uint8_t aes_ishifts[16] = {
++    0, 13, 10, 7, 4, 1, 14, 11, 8, 5, 2, 15, 12, 9, 6, 3
++};
++
++void glue(helper_aesdec, SUFFIX)(CPUX86State *env, Reg *d, Reg *s)
++{
++    int i;
++    Reg st = *d;
++    Reg rk = *s;
++
++    for (i = 0 ; i < 4 ; i++) {
++        d->L(i) = rk.L(i) ^ bswap32(AES_Td0[st.B(aes_ishifts[4*i+0])] ^
++                                    AES_Td1[st.B(aes_ishifts[4*i+1])] ^
++                                    AES_Td2[st.B(aes_ishifts[4*i+2])] ^
++                                    AES_Td3[st.B(aes_ishifts[4*i+3])]);
++    }
++}
++
++void glue(helper_aesdeclast, SUFFIX)(CPUX86State *env, Reg *d, Reg *s)
++{
++    int i;
++    Reg st = *d;
++    Reg rk = *s;
++
++    for (i = 0; i < 16; i++) {
++        d->B(i) = rk.B(i) ^ (AES_Td4[st.B(aes_ishifts[i])] & 0xff);
++    }
++}
++
++void glue(helper_aesenc, SUFFIX)(CPUX86State *env, Reg *d, Reg *s)
++{
++    int i;
++    Reg st = *d;
++    Reg rk = *s;
++
++    for (i = 0 ; i < 4 ; i++) {
++        d->L(i) = rk.L(i) ^ bswap32(AES_Te0[st.B(aes_shifts[4*i+0])] ^
++                                    AES_Te1[st.B(aes_shifts[4*i+1])] ^
++                                    AES_Te2[st.B(aes_shifts[4*i+2])] ^
++                                    AES_Te3[st.B(aes_shifts[4*i+3])]);
++    }
++}
++
++void glue(helper_aesenclast, SUFFIX)(CPUX86State *env, Reg *d, Reg *s)
++{
++    int i;
++    Reg st = *d;
++    Reg rk = *s;
++
++    for (i = 0; i < 16; i++) {
++        d->B(i) = rk.B(i) ^ (AES_Te4[st.B(aes_shifts[i])] & 0xff);
++    }
++
++}
++
++void glue(helper_aesimc, SUFFIX)(CPUX86State *env, Reg *d, Reg *s)
++{
++    int i;
++    Reg tmp = *s;
++
++    for (i = 0 ; i < 4 ; i++) {
++        d->L(i) = bswap32(AES_Td0[AES_Te4[tmp.B(4*i+0)] & 0xff] ^
++                          AES_Td1[AES_Te4[tmp.B(4*i+1)] & 0xff] ^
++                          AES_Td2[AES_Te4[tmp.B(4*i+2)] & 0xff] ^
++                          AES_Td3[AES_Te4[tmp.B(4*i+3)] & 0xff]);
++    }
++}
++
++void glue(helper_aeskeygenassist, SUFFIX)(CPUX86State *env, Reg *d, Reg *s,
++                                          uint32_t ctrl)
++{
++    int i;
++    Reg tmp = *s;
++
++    for (i = 0 ; i < 4 ; i++) {
++        d->B(i) = AES_Te4[tmp.B(i + 4)] & 0xff;
++        d->B(i + 8) = AES_Te4[tmp.B(i + 12)] & 0xff;
++    }
++    d->L(1) = (d->L(0) << 24 | d->L(0) >> 8) ^ ctrl;
++    d->L(3) = (d->L(2) << 24 | d->L(2) >> 8) ^ ctrl;
++}
+ #endif
+ 
+ #undef SHIFT
+diff --git a/target-i386/ops_sse_header.h b/target-i386/ops_sse_header.h
+index 2842233..a68c7cc 100644
+--- a/target-i386/ops_sse_header.h
++++ b/target-i386/ops_sse_header.h
+@@ -338,6 +338,12 @@ DEF_HELPER_3(popcnt, tl, env, tl, i32)
+ 
+ /* AES-NI op helpers */
+ #if SHIFT == 1
++DEF_HELPER_3(glue(aesdec, SUFFIX), void, env, Reg, Reg)
++DEF_HELPER_3(glue(aesdeclast, SUFFIX), void, env, Reg, Reg)
++DEF_HELPER_3(glue(aesenc, SUFFIX), void, env, Reg, Reg)
++DEF_HELPER_3(glue(aesenclast, SUFFIX), void, env, Reg, Reg)
++DEF_HELPER_3(glue(aesimc, SUFFIX), void, env, Reg, Reg)
++DEF_HELPER_4(glue(aeskeygenassist, SUFFIX), void, env, Reg, Reg, i32)
+ DEF_HELPER_4(glue(pclmulqdq, SUFFIX), void, env, Reg, Reg, i32)
+ #endif
+ 
+diff --git a/target-i386/translate.c b/target-i386/translate.c
+index d649e99..233f24f 100644
+--- a/target-i386/translate.c
++++ b/target-i386/translate.c
+@@ -3149,6 +3149,7 @@ struct SSEOpHelper_eppi {
+ #define SSE41_SPECIAL { { NULL, SSE_SPECIAL }, CPUID_EXT_SSE41 }
+ #define PCLMULQDQ_OP(x) { { NULL, gen_helper_ ## x ## _xmm }, \
+         CPUID_EXT_PCLMULQDQ }
++#define AESNI_OP(x) { { NULL, gen_helper_ ## x ## _xmm }, CPUID_EXT_AES }
+ 
+ static const struct SSEOpHelper_epp sse_op_table6[256] = {
+     [0x00] = SSSE3_OP(pshufb),
+@@ -3197,6 +3198,11 @@ static const struct SSEOpHelper_epp sse_op_table6[256] = {
+     [0x3f] = SSE41_OP(pmaxud),
+     [0x40] = SSE41_OP(pmulld),
+     [0x41] = SSE41_OP(phminposuw),
++    [0xdb] = AESNI_OP(aesimc),
++    [0xdc] = AESNI_OP(aesenc),
++    [0xdd] = AESNI_OP(aesenclast),
++    [0xde] = AESNI_OP(aesdec),
++    [0xdf] = AESNI_OP(aesdeclast),
+ };
+ 
+ static const struct SSEOpHelper_eppi sse_op_table7[256] = {
+@@ -3223,6 +3229,7 @@ static const struct SSEOpHelper_eppi sse_op_table7[256] = {
+     [0x61] = SSE42_OP(pcmpestri),
+     [0x62] = SSE42_OP(pcmpistrm),
+     [0x63] = SSE42_OP(pcmpistri),
++    [0xdf] = AESNI_OP(aeskeygenassist),
+ };
+ 
+ static void gen_sse(CPUX86State *env, DisasContext *s, int b,
+-- 
+1.7.10.4
+
+

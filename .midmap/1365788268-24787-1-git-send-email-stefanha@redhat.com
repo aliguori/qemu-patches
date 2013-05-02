@@ -1,0 +1,1 @@
+../qemu-img-refuse-to-compress-files-with-invalid-size/v1.1365813468/0001-qemu-img-refuse-to-compress-files-with-invalid-size.patch

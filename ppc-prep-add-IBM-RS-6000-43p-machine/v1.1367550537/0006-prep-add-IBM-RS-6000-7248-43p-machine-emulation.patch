@@ -1,0 +1,332 @@
+From patches Mon Sep 17 00:00:00 2001
+From: =?utf-8?q?Herv=C3=A9_Poussineau_=3Chpoussin=40reactos=2Eorg=3E?=
+To: qemu-devel@nongnu.org
+Cc: qemu-ppc@nongnu.org, =?UTF-8?q?Andreas=20F=C3=A4rber?= <afaerber@suse.de>,
+ =?UTF-8?q?Herv=C3=A9=20Poussineau?= <hpoussin@reactos.org>
+Date: Thu,  2 May 2013 22:09:03 +0200
+Message-id: 1367525344-7755-7-git-send-email-hpoussin@reactos.org
+Subject: [PATCH 6/7] prep: add IBM RS/6000 7248 (43p) machine emulation
+
+Machine is very simple (only one PCI host bridge and an ISA bridge).
+Provide a ibm_43p.cfg file to add more devices to this machine.
+
+Syntax is:
+qemu-system-ppc -M 43p -readconfig ibm_43p.cfg
+
+Signed-off-by: Hervé Poussineau <hpoussin@reactos.org>
+---
+ docs/ibm_43p.cfg |   38 ++++++++++
+ hw/ppc/prep.c    |  213 ++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 251 insertions(+)
+ create mode 100644 docs/ibm_43p.cfg
+
+diff --git a/docs/ibm_43p.cfg b/docs/ibm_43p.cfg
+new file mode 100644
+index 0000000..70bbfdb
+--- /dev/null
++++ b/docs/ibm_43p.cfg
+@@ -0,0 +1,38 @@
++############################################################################
++#
++# qemu-system-ppc -M 43p creates a bare machine with just the very essential
++# chipset devices being present:
++#
++#     00.0 - Host bridge
++#     0b.0 - ISA bridge
++#
++# This config file documents the other devices and how they are
++# created.  You can simply use "-readconfig $thisfile" to create
++# them all.
++
++[device]
++  driver = "i8042"
++
++[device]
++  driver = "pc87312"
++  config = "12"
++
++[device]
++  driver = "pcnet"
++  addr = "12.0"
++
++[device]
++  driver = "isa-m48t59"
++  iobase = "0x74"
++
++[device]
++  driver = "isa-ide"
++  iobase = "0x1f0"
++  iobase2 = "0x3f6"
++  irq = "14"
++
++[device]
++  driver = "isa-ide"
++  iobase = "0x170"
++  iobase2 = "0x376"
++  irq = "15"
+diff --git a/hw/ppc/prep.c b/hw/ppc/prep.c
+index 59c7da3..f307d41 100644
+--- a/hw/ppc/prep.c
++++ b/hw/ppc/prep.c
+@@ -30,6 +30,7 @@
+ #include "sysemu/sysemu.h"
+ #include "hw/isa/isa.h"
+ #include "hw/pci/pci.h"
++#include "hw/pci/pci_bus.h"
+ #include "hw/pci/pci_host.h"
+ #include "hw/ppc/ppc.h"
+ #include "hw/boards.h"
+@@ -41,6 +42,9 @@
+ #include "sysemu/blockdev.h"
+ #include "sysemu/arch_init.h"
+ #include "exec/address-spaces.h"
++#include "elf.h"
++#include "hw/nvram/fw_cfg.h"
++#include "hw/sparc/firmware_abi.h"
+ 
+ //#define HARD_DEBUG_PPC_IO
+ //#define DEBUG_PPC_IO
+@@ -50,6 +54,8 @@
+ 
+ #define MAX_IDE_BUS 2
+ 
++#define CFG_ADDR 0xf0000510
++
+ #define BIOS_SIZE (1024 * 1024)
+ #define BIOS_FILENAME "ppc_rom.bin"
+ #define KERNEL_LOAD_ADDR 0x01000000
+@@ -413,6 +419,61 @@ static const MemoryRegionOps PPC_prep_io_ops = {
+ 
+ #define NVRAM_SIZE        0x2000
+ 
++static int fw_cfg_boot_set(void *opaque, const char *boot_device)
++{
++    fw_cfg_add_i16(opaque, FW_CFG_BOOT_DEVICE, boot_device[0]);
++    return 0;
++}
++
++#define DEF_SYSTEM_SIZE 0xc10
++
++static void nvram_init(NvramClass *k, Nvram *nvram)
++{
++    uint8_t image[NVRAM_SIZE];
++    struct OpenBIOS_nvpart_v1 *part_header;
++    uint32_t start, end;
++    unsigned int i;
++
++    memset(image, '\0', sizeof(image));
++
++    start = 0;
++
++    /* OpenBIOS nvram variables */
++    /* Variable partition */
++    part_header = (struct OpenBIOS_nvpart_v1 *)&image[start];
++    part_header->signature = OPENBIOS_PART_SYSTEM;
++    pstrcpy(part_header->name, sizeof(part_header->name), "system");
++
++    end = start + sizeof(struct OpenBIOS_nvpart_v1);
++    for (i = 0; i < nb_prom_envs; i++) {
++        end = OpenBIOS_set_var(image, end, prom_envs[i]);
++    }
++
++    /* End marker */
++    image[end++] = '\0';
++
++    end = start + ((end - start + 15) & ~15);
++    /* XXX: OpenBIOS is not able to grow up a partition. Leave some space for
++       new variables. */
++    if (end < DEF_SYSTEM_SIZE) {
++        end = DEF_SYSTEM_SIZE;
++    }
++    OpenBIOS_finish_partition(part_header, end - start);
++
++    /* free partition */
++    start = end;
++    part_header = (struct OpenBIOS_nvpart_v1 *)&image[start];
++    part_header->signature = OPENBIOS_PART_FREE;
++    pstrcpy(part_header->name, sizeof(part_header->name), "free");
++
++    end = NVRAM_SIZE;
++    OpenBIOS_finish_partition(part_header, end - start);
++
++    for (i = 0; i < sizeof(image); i++) {
++        k->write(nvram, i, image[i]);
++    }
++}
++
+ static void cpu_request_exit(void *opaque, int irq, int level)
+ {
+     CPUPPCState *env = cpu_single_env;
+@@ -660,6 +721,150 @@ static void ppc_prep_init(QEMUMachineInitArgs *args)
+     register_ioport_write(0x0F00, 4, 1, &PPC_debug_write, NULL);
+ }
+ 
++static int prep_set_cmos_checksum(DeviceState *dev, void *opaque)
++{
++    uint16_t checksum = *(uint16_t *)opaque;
++    ISADevice *rtc;
++
++    rtc = ISA_DEVICE(object_dynamic_cast(OBJECT(dev), "mc146818rtc"));
++    if (rtc) {
++        rtc_set_memory(rtc, 0x2e, checksum & 0xff);
++        rtc_set_memory(rtc, 0x3e, checksum & 0xff);
++        rtc_set_memory(rtc, 0x2f, checksum >> 8);
++        rtc_set_memory(rtc, 0x3f, checksum >> 8);
++    }
++    return 0;
++}
++
++static int prep_init_m48t59(DeviceState *dev, void *opaque)
++{
++    if (object_dynamic_cast(OBJECT(dev), TYPE_NVRAM)) {
++        /* if nvram is initialized, we expect first word to be not null */
++        Nvram *nvram = NVRAM(dev);
++        NvramClass *k = NVRAM_GET_CLASS(dev);
++        if (k->read(nvram, 0) == 0 && k->read(nvram, 1) == 0) {
++            nvram_init(k, nvram);
++        }
++    }
++    return 0;
++}
++
++static void ppc_prep_init_m48t59(void *opaque)
++{
++    BusState *bus = opaque;
++    qbus_walk_children(bus, prep_init_m48t59, NULL, NULL);
++}
++
++static void ibm_43p_init(QEMUMachineInitArgs *args)
++{
++    CPUPPCState *env = NULL;
++    uint16_t cmos_checksum;
++    PowerPCCPU *cpu;
++    DeviceState *dev;
++    SysBusDevice *pcihost;
++    PCIBus *pci_bus;
++    ISABus *isa_bus;
++    qemu_irq *cpu_exit_irq;
++    void *fw_cfg;
++
++    /* init CPU */
++    if (!args->cpu_model) {
++        args->cpu_model = "604";
++    }
++    cpu = cpu_ppc_init(args->cpu_model);
++    if (cpu == NULL) {
++        fprintf(stderr, "Unable to find PowerPC CPU definition\n");
++        exit(1);
++    }
++    env = &cpu->env;
++
++    if (env->flags & POWERPC_FLAG_RTC_CLK) {
++        /* POWER / PowerPC 601 RTC clock frequency is 7.8125 MHz */
++        cpu_ppc_tb_init(env, 7812500UL);
++    } else {
++        /* Set time-base frequency to 100 Mhz */
++        cpu_ppc_tb_init(env, 100UL * 1000UL * 1000UL);
++    }
++    qemu_register_reset(ppc_prep_reset, cpu);
++    if (PPC_INPUT(env) != PPC_FLAGS_INPUT_6xx) {
++        hw_error("Only 6xx bus is supported on PREP machine\n");
++    }
++
++    /* PCI host */
++    pcihost = SYS_BUS_DEVICE(qdev_create(NULL, "mpc105-pcihost"));
++    qdev_prop_set_uint32(DEVICE(pcihost), "ram-size", (uint32_t)args->ram_size);
++    qdev_prop_set_uint32(DEVICE(pcihost), "elf-machine", ELF_MACHINE);
++    qdev_prop_set_bit(DEVICE(pcihost), "x-auto-conf", 1);
++    if (bios_name == NULL) {
++        bios_name = "openbios-ppc.elf";
++    }
++    qdev_prop_set_string(DEVICE(pcihost), "bios-name", bios_name);
++    object_property_add_child(qdev_get_machine(), "eagle", OBJECT(pcihost),
++                              NULL);
++    qdev_init_nofail(DEVICE(pcihost));
++    pci_bus = PCI_BUS(qdev_get_child_bus(DEVICE(pcihost), "pci.0"));
++    if (pci_bus == NULL) {
++        fprintf(stderr, "Couldn't create PCI host controller.\n");
++        exit(1);
++    }
++
++    /* PCI -> ISA bridge */
++    dev = DEVICE(pci_create_simple(pci_bus, PCI_DEVFN(11, 0), "i82378"));
++    cpu_exit_irq = qemu_allocate_irqs(cpu_request_exit, NULL, 1);
++    qdev_connect_gpio_out(dev, 0,
++                          first_cpu->irq_inputs[PPC6xx_INPUT_INT]);
++    qdev_connect_gpio_out(dev, 1, *cpu_exit_irq);
++    sysbus_connect_irq(pcihost, 0, qdev_get_gpio_in(dev, 9));
++    sysbus_connect_irq(pcihost, 1, qdev_get_gpio_in(dev, 11));
++    sysbus_connect_irq(pcihost, 2, qdev_get_gpio_in(dev, 9));
++    sysbus_connect_irq(pcihost, 3, qdev_get_gpio_in(dev, 11));
++    isa_bus = ISA_BUS(qdev_get_child_bus(dev, "isa.0"));
++
++    /* initialize CMOS checksums */
++    cmos_checksum = 0x6aa9;
++    qbus_walk_children(BUS(isa_bus), prep_set_cmos_checksum, NULL,
++                       &cmos_checksum);
++
++    /* initialize audio subsystem */
++    audio_init();
++
++    /* Initialize NVRAM (if empty) at next reboot */
++    qemu_register_reset(ppc_prep_init_m48t59, BUS(isa_bus));
++
++    /* Prepare firmware configuration for OpenBIOS */
++    fw_cfg = fw_cfg_init(0, 0, CFG_ADDR, CFG_ADDR + 2);
++    fw_cfg_add_i16(fw_cfg, FW_CFG_MAX_CPUS, (uint16_t)max_cpus);
++    fw_cfg_add_i32(fw_cfg, FW_CFG_ID, 1);
++    fw_cfg_add_i64(fw_cfg, FW_CFG_RAM_SIZE, (uint64_t)args->ram_size);
++    fw_cfg_add_i16(fw_cfg, FW_CFG_MACHINE_ID, ARCH_PREP);
++    fw_cfg_add_i32(fw_cfg, FW_CFG_KERNEL_ADDR, 0);
++    fw_cfg_add_i32(fw_cfg, FW_CFG_KERNEL_SIZE, 0);
++    fw_cfg_add_i32(fw_cfg, FW_CFG_KERNEL_CMDLINE, 0);
++    fw_cfg_add_i32(fw_cfg, FW_CFG_INITRD_ADDR, 0);
++    fw_cfg_add_i32(fw_cfg, FW_CFG_INITRD_SIZE, 0);
++    fw_cfg_add_i16(fw_cfg, FW_CFG_BOOT_DEVICE, '\0');
++
++    fw_cfg_add_i16(fw_cfg, FW_CFG_PPC_WIDTH, graphic_width);
++    fw_cfg_add_i16(fw_cfg, FW_CFG_PPC_HEIGHT, graphic_height);
++    fw_cfg_add_i16(fw_cfg, FW_CFG_PPC_DEPTH, graphic_depth);
++
++    fw_cfg_add_i32(fw_cfg, FW_CFG_PPC_IS_KVM, kvm_enabled());
++    if (kvm_enabled()) {
++#ifdef CONFIG_KVM
++        uint8_t *hypercall;
++
++        fw_cfg_add_i32(fw_cfg, FW_CFG_PPC_TBFREQ, kvmppc_get_tbfreq());
++        hypercall = g_malloc(16);
++        kvmppc_get_hypercall(env, hypercall, 16);
++        fw_cfg_add_bytes(fw_cfg, FW_CFG_PPC_KVM_HC, hypercall, 16);
++        fw_cfg_add_i32(fw_cfg, FW_CFG_PPC_KVM_PID, getpid());
++#endif
++    } else {
++        fw_cfg_add_i32(fw_cfg, FW_CFG_PPC_TBFREQ, get_ticks_per_sec());
++    }
++    qemu_register_boot_set(fw_cfg_boot_set, fw_cfg);
++}
++
+ static QEMUMachine prep_machine = {
+     .name = "prep",
+     .desc = "PowerPC PREP platform",
+@@ -668,9 +873,17 @@ static QEMUMachine prep_machine = {
+     DEFAULT_MACHINE_OPTIONS,
+ };
+ 
++static QEMUMachine ibm_43p_machine = {
++    .name = "43p",
++    .desc = "IBM RS/6000 7248 (43p)",
++    .init = ibm_43p_init,
++    .max_cpus = 1,
++};
++
+ static void prep_machine_init(void)
+ {
+     qemu_register_machine(&prep_machine);
++    qemu_register_machine(&ibm_43p_machine);
+ }
+ 
+ machine_init(prep_machine_init);
+-- 
+1.7.10.4
+
+

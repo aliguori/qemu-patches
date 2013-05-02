@@ -1,0 +1,1 @@
+../ide-refuse-WIN_READ_NATIVE_MAX-on-empty-device/v1.1365180661/0001-ide-refuse-WIN_READ_NATIVE_MAX-on-empty-device.patch

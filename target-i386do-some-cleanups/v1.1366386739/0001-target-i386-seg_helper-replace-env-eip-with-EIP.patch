@@ -1,0 +1,219 @@
+From patches Mon Sep 17 00:00:00 2001
+From: liguang <lig.fnst@cn.fujitsu.com>
+To: peter.maydell@linaro.org, li guang <lig.fnst@cn.fujitsu.com>,
+ qemu-devel@nongnu.org, Richard Henderson <rth@twiddle.net>,
+ liguang <lig.fnst@cn.fujitsu.com>
+Cc: Anthony Liguori <aliguori@us.ibm.com>, peter.maydell@linaro.org,
+ qemu-devel@nongnu.org, liguang <lig.fnst@cn.fujitsu.com>, blauwirbel@gmail.com,
+ pbonzini@redhat.com, afaerber@suse.de
+Date: Fri, 19 Apr 2013 10:52:20 +0800
+Message-id: 1366339945-17151-2-git-send-email-lig.fnst@cn.fujitsu.com
+Subject: [PATCH 1/6] target-i386/seg_helper: replace env->eip with EIP
+
+Signed-off-by: liguang <lig.fnst@cn.fujitsu.com>
+---
+ target-i386/seg_helper.c |   46 +++++++++++++++++++++++-----------------------
+ 1 files changed, 23 insertions(+), 23 deletions(-)
+
+diff --git a/target-i386/seg_helper.c b/target-i386/seg_helper.c
+index 906e4f3..5f7f99d 100644
+--- a/target-i386/seg_helper.c
++++ b/target-i386/seg_helper.c
+@@ -388,7 +388,7 @@ static void switch_tss(CPUX86State *env, int tss_selector,
+ 
+     /* load all registers without an exception, then reload them with
+        possible exception */
+-    env->eip = new_eip;
++    EIP = new_eip;
+     eflags_mask = TF_MASK | AC_MASK | ID_MASK |
+         IF_MASK | IOPL_MASK | VM_MASK | RF_MASK | NT_MASK;
+     if (!(type & 8)) {
+@@ -567,7 +567,7 @@ static void do_interrupt_protected(CPUX86State *env, int intno, int is_int,
+     if (is_int) {
+         old_eip = next_eip;
+     } else {
+-        old_eip = env->eip;
++        old_eip = EIP;
+     }
+ 
+     dt = &env->idt;
+@@ -755,7 +755,7 @@ static void do_interrupt_protected(CPUX86State *env, int intno, int is_int,
+                    get_seg_limit(e1, e2),
+                    e2);
+     cpu_x86_set_cpl(env, dpl);
+-    env->eip = offset;
++    EIP = offset;
+ 
+     /* interrupt gate clear IF mask */
+     if ((type & 1) == 0) {
+@@ -815,7 +815,7 @@ static void do_interrupt64(CPUX86State *env, int intno, int is_int,
+     if (is_int) {
+         old_eip = next_eip;
+     } else {
+-        old_eip = env->eip;
++        old_eip = EIP;
+     }
+ 
+     dt = &env->idt;
+@@ -919,7 +919,7 @@ static void do_interrupt64(CPUX86State *env, int intno, int is_int,
+                    get_seg_limit(e1, e2),
+                    e2);
+     cpu_x86_set_cpl(env, dpl);
+-    env->eip = offset;
++    EIP = offset;
+ 
+     /* interrupt gate clear IF mask */
+     if ((type & 1) == 0) {
+@@ -934,7 +934,7 @@ static void do_interrupt64(CPUX86State *env, int intno, int is_int,
+ void helper_syscall(CPUX86State *env, int next_eip_addend)
+ {
+     env->exception_index = EXCP_SYSCALL;
+-    env->exception_next_eip = env->eip + next_eip_addend;
++    env->exception_next_eip = EIP + next_eip_addend;
+     cpu_loop_exit(env);
+ }
+ #else
+@@ -949,7 +949,7 @@ void helper_syscall(CPUX86State *env, int next_eip_addend)
+     if (env->hflags & HF_LMA_MASK) {
+         int code64;
+ 
+-        ECX = env->eip + next_eip_addend;
++        ECX = EIP + next_eip_addend;
+         env->regs[11] = cpu_compute_eflags(env);
+ 
+         code64 = env->hflags & HF_CS64_MASK;
+@@ -969,12 +969,12 @@ void helper_syscall(CPUX86State *env, int next_eip_addend)
+         env->eflags &= ~env->fmask;
+         cpu_load_eflags(env, env->eflags, 0);
+         if (code64) {
+-            env->eip = env->lstar;
++            EIP = env->lstar;
+         } else {
+-            env->eip = env->cstar;
++            EIP = env->cstar;
+         }
+     } else {
+-        ECX = (uint32_t)(env->eip + next_eip_addend);
++        ECX = (uint32_t)(EIP + next_eip_addend);
+ 
+         cpu_x86_set_cpl(env, 0);
+         cpu_x86_load_seg_cache(env, R_CS, selector & 0xfffc,
+@@ -988,7 +988,7 @@ void helper_syscall(CPUX86State *env, int next_eip_addend)
+                                DESC_S_MASK |
+                                DESC_W_MASK | DESC_A_MASK);
+         env->eflags &= ~(IF_MASK | RF_MASK | VM_MASK);
+-        env->eip = (uint32_t)env->star;
++        EIP = (uint32_t)env->star;
+     }
+ }
+ #endif
+@@ -1015,14 +1015,14 @@ void helper_sysret(CPUX86State *env, int dflag)
+                                    DESC_S_MASK | (3 << DESC_DPL_SHIFT) |
+                                    DESC_CS_MASK | DESC_R_MASK | DESC_A_MASK |
+                                    DESC_L_MASK);
+-            env->eip = ECX;
++            EIP = ECX;
+         } else {
+             cpu_x86_load_seg_cache(env, R_CS, selector | 3,
+                                    0, 0xffffffff,
+                                    DESC_G_MASK | DESC_B_MASK | DESC_P_MASK |
+                                    DESC_S_MASK | (3 << DESC_DPL_SHIFT) |
+                                    DESC_CS_MASK | DESC_R_MASK | DESC_A_MASK);
+-            env->eip = (uint32_t)ECX;
++            EIP = (uint32_t)ECX;
+         }
+         cpu_x86_load_seg_cache(env, R_SS, selector + 8,
+                                0, 0xffffffff,
+@@ -1039,7 +1039,7 @@ void helper_sysret(CPUX86State *env, int dflag)
+                                DESC_G_MASK | DESC_B_MASK | DESC_P_MASK |
+                                DESC_S_MASK | (3 << DESC_DPL_SHIFT) |
+                                DESC_CS_MASK | DESC_R_MASK | DESC_A_MASK);
+-        env->eip = (uint32_t)ECX;
++        EIP = (uint32_t)ECX;
+         cpu_x86_load_seg_cache(env, R_SS, selector + 8,
+                                0, 0xffffffff,
+                                DESC_G_MASK | DESC_B_MASK | DESC_P_MASK |
+@@ -1074,7 +1074,7 @@ static void do_interrupt_real(CPUX86State *env, int intno, int is_int,
+     if (is_int) {
+         old_eip = next_eip;
+     } else {
+-        old_eip = env->eip;
++        old_eip = EIP;
+     }
+     old_cs = env->segs[R_CS].selector;
+     /* XXX: use SS segment size? */
+@@ -1084,7 +1084,7 @@ static void do_interrupt_real(CPUX86State *env, int intno, int is_int,
+ 
+     /* update processor state */
+     ESP = (ESP & ~0xffff) | (esp & 0xffff);
+-    env->eip = offset;
++    EIP = offset;
+     env->segs[R_CS].selector = selector;
+     env->segs[R_CS].base = (selector << 4);
+     env->eflags &= ~(IF_MASK | TF_MASK | AC_MASK | RF_MASK);
+@@ -1185,7 +1185,7 @@ static void do_interrupt_all(CPUX86State *env, int intno, int is_int,
+                 target_ulong ptr;
+ 
+                 qemu_log("       code=");
+-                ptr = env->segs[R_CS].base + env->eip;
++                ptr = env->segs[R_CS].base + EIP;
+                 for (i = 0; i < 16; i++) {
+                     qemu_log(" %02x", ldub(ptr + i));
+                 }
+@@ -1596,7 +1596,7 @@ void helper_ljmp_protected(CPUX86State *env, int new_cs, target_ulong new_eip,
+             if (dpl < cpl || dpl < rpl) {
+                 raise_exception_err(env, EXCP0D_GPF, new_cs & 0xfffc);
+             }
+-            next_eip = env->eip + next_eip_addend;
++            next_eip = EIP + next_eip_addend;
+             switch_tss(env, new_cs, e1, e2, SWITCH_TSS_JMP, next_eip);
+             CC_OP = CC_OP_EFLAGS;
+             break;
+@@ -1665,7 +1665,7 @@ void helper_lcall_real(CPUX86State *env, int new_cs, target_ulong new_eip1,
+     }
+ 
+     SET_ESP(esp, esp_mask);
+-    env->eip = new_eip;
++    EIP = new_eip;
+     env->segs[R_CS].selector = new_cs;
+     env->segs[R_CS].base = (new_cs << 4);
+ }
+@@ -1680,7 +1680,7 @@ void helper_lcall_protected(CPUX86State *env, int new_cs, target_ulong new_eip,
+     uint32_t val, limit, old_sp_mask;
+     target_ulong ssp, old_ssp, next_eip;
+ 
+-    next_eip = env->eip + next_eip_addend;
++    next_eip = EIP + next_eip_addend;
+     LOG_PCALL("lcall %04x:%08x s=%d\n", new_cs, (uint32_t)new_eip, shift);
+     LOG_PCALL_STATE(env);
+     if ((new_cs & 0xfffc) == 0) {
+@@ -1922,7 +1922,7 @@ void helper_iret_real(CPUX86State *env, int shift)
+     ESP = (ESP & ~sp_mask) | (sp & sp_mask);
+     env->segs[R_CS].selector = new_cs;
+     env->segs[R_CS].base = (new_cs << 4);
+-    env->eip = new_eip;
++    EIP = new_eip;
+     if (env->eflags & VM_MASK) {
+         eflags_mask = TF_MASK | AC_MASK | ID_MASK | IF_MASK | RF_MASK |
+             NT_MASK;
+@@ -2140,7 +2140,7 @@ static inline void helper_ret_protected(CPUX86State *env, int shift,
+         sp += addend;
+     }
+     SET_ESP(sp, sp_mask);
+-    env->eip = new_eip;
++    EIP = new_eip;
+     if (is_iret) {
+         /* NOTE: 'cpl' is the _old_ CPL */
+         eflags_mask = TF_MASK | AC_MASK | ID_MASK | RF_MASK | NT_MASK;
+@@ -2178,7 +2178,7 @@ static inline void helper_ret_protected(CPUX86State *env, int shift,
+     load_seg_vm(env, R_FS, new_fs & 0xffff);
+     load_seg_vm(env, R_GS, new_gs & 0xffff);
+ 
+-    env->eip = new_eip & 0xffff;
++    EIP = new_eip & 0xffff;
+     ESP = new_esp;
+ }
+ 
+-- 
+1.7.2.5
+

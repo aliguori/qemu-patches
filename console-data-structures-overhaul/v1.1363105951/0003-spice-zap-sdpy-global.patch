@@ -1,0 +1,83 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Gerd Hoffmann <kraxel@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, Gerd Hoffmann <kraxel@redhat.com>
+Date: Tue, 12 Mar 2013 11:32:34 +0100
+Message-id: 1363084369-27517-4-git-send-email-kraxel@redhat.com
+Subject: [PATCH 03/18] spice: zap sdpy global
+
+DisplayChangeListener is passed now to all DisplayChangeListenerOps
+callbacks, so we can use that to access the spice display state and
+kill the sdpy global variable.
+
+Signed-off-by: Gerd Hoffmann <kraxel@redhat.com>
+---
+ ui/spice-display.c |   30 ++++++++++++++++--------------
+ 1 file changed, 16 insertions(+), 14 deletions(-)
+
+diff --git a/ui/spice-display.c b/ui/spice-display.c
+index b6528fa..b2bda23 100644
+--- a/ui/spice-display.c
++++ b/ui/spice-display.c
+@@ -581,25 +581,26 @@ static const QXLInterface dpy_interface = {
+     .client_monitors_config  = interface_client_monitors_config,
+ };
+ 
+-static SimpleSpiceDisplay sdpy;
+-
+ static void display_update(DisplayChangeListener *dcl,
+                            struct DisplayState *ds,
+                            int x, int y, int w, int h)
+ {
+-    qemu_spice_display_update(&sdpy, x, y, w, h);
++    SimpleSpiceDisplay *ssd = container_of(dcl, SimpleSpiceDisplay, dcl);
++    qemu_spice_display_update(ssd, x, y, w, h);
+ }
+ 
+ static void display_resize(DisplayChangeListener *dcl,
+                            struct DisplayState *ds)
+ {
+-    qemu_spice_display_resize(&sdpy);
++    SimpleSpiceDisplay *ssd = container_of(dcl, SimpleSpiceDisplay, dcl);
++    qemu_spice_display_resize(ssd);
+ }
+ 
+ static void display_refresh(DisplayChangeListener *dcl,
+                             struct DisplayState *ds)
+ {
+-    qemu_spice_display_refresh(&sdpy);
++    SimpleSpiceDisplay *ssd = container_of(dcl, SimpleSpiceDisplay, dcl);
++    qemu_spice_display_refresh(ssd);
+ }
+ 
+ static const DisplayChangeListenerOps display_listener_ops = {
+@@ -611,16 +612,17 @@ static const DisplayChangeListenerOps display_listener_ops = {
+ 
+ void qemu_spice_display_init(DisplayState *ds)
+ {
+-    assert(sdpy.ds == NULL);
+-    qemu_spice_display_init_common(&sdpy, ds);
++    SimpleSpiceDisplay *ssd = g_new0(SimpleSpiceDisplay, 1);
++
++    qemu_spice_display_init_common(ssd, ds);
+ 
+-    sdpy.qxl.base.sif = &dpy_interface.base;
+-    qemu_spice_add_interface(&sdpy.qxl.base);
+-    assert(sdpy.worker);
++    ssd->qxl.base.sif = &dpy_interface.base;
++    qemu_spice_add_interface(&ssd->qxl.base);
++    assert(ssd->worker);
+ 
+-    qemu_spice_create_host_memslot(&sdpy);
+-    qemu_spice_create_host_primary(&sdpy);
++    qemu_spice_create_host_memslot(ssd);
++    qemu_spice_create_host_primary(ssd);
+ 
+-    sdpy.dcl.ops = &display_listener_ops;
+-    register_displaychangelistener(ds, &sdpy.dcl);
++    ssd->dcl.ops = &display_listener_ops;
++    register_displaychangelistener(ds, &ssd->dcl);
+ }
+-- 
+1.7.9.7
+

@@ -1,0 +1,56 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Aurelien Jarno <aurelien@aurel32.net>
+To: Aurelien Jarno <aurelien@aurel32.net>, qemu-devel@nongnu.org
+Cc: Aurelien Jarno <aurelien@aurel32.net>, qemu-devel@nongnu.org
+Date: Sun, 31 Mar 2013 13:02:19 +0200
+Message-id: 1364727746-2686-1-git-send-email-aurelien@aurel32.net
+Subject: [PATCH 0/7] target-i386: add PCLMULQDQ and AES-NI instructions
+
+This patch series adds the PCLMULQDQ and AES-NI instructions to the x86
+emulation. Along with the SSE4.1 and SSE4.2 series, this brings the
+instructions emulation to the level of a Westmere CPU.
+
+It has been tested with the valgrind testsuite and with the kernel
+autotest.
+
+Changes v1 -> v2:
+- Patch 3: Declare all constant tables as static.
+
+Changes v2 -> v3:
+- Use constant tables from aes.c.
+- Fix AES instructions when source and destination registers are the
+  same.
+
+Changes v3 -> v4:
+- Update dissassembler code to support these instructions.
+
+Aurelien Jarno (7):
+  disas/i386.c: disassemble pclmulqdq instruction
+  target-i386: add pclmulqdq instruction
+  target-i386: enable PCLMULQDQ on Westmere CPU
+  disas/i386.c: disassemble aes-ni instructions
+  aes: move aes.h from include/block to include/qemu
+  aes: make Td[0-5] and Te[0-5] tables non static
+  target-i386: add AES-NI instructions
+
+ block/qcow.c                 |    2 +-
+ block/qcow2.c                |    2 +-
+ block/qcow2.h                |    2 +-
+ disas/i386.c                 |   84 ++++++-
+ include/block/aes.h          |   26 ---
+ include/qemu/aes.h           |   45 ++++
+ target-i386/cpu.c            |   19 +-
+ target-i386/fpu_helper.c     |    1 +
+ target-i386/ops_sse.h        |  111 +++++++++
+ target-i386/ops_sse_header.h |   11 +
+ target-i386/translate.c      |   10 +
+ util/aes.c                   |  506 +++++++++++++++++++++---------------------
+ 12 files changed, 517 insertions(+), 302 deletions(-)
+ delete mode 100644 include/block/aes.h
+ create mode 100644 include/qemu/aes.h
+
+Reviewed-by: Richard Henderson <rth@twiddle.net>
+-- 
+1.7.10.4
+
+

@@ -1,0 +1,34 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Alexander Graf <agraf@suse.de>
+To: qemu-ppc@nongnu.org
+Cc: Blue Swirl <blauwirbel@gmail.com>, Aurelien Jarno <aurelien@aurel32.net>,
+ qemu-devel@nongnu.org
+Date: Fri, 26 Apr 2013 20:19:29 +0200
+Message-id: 1367000373-7972-21-git-send-email-agraf@suse.de
+Subject: [PATCH 20/24] S390: CCW: Use new, working firmware by default
+
+Since we now have working firmware for s390-ccw in the tree, we can
+default to it on our s390-ccw machine, rendering it more useful.
+
+Signed-off-by: Alexander Graf <agraf@suse.de>
+---
+ hw/s390x/s390-virtio-ccw.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+diff --git a/hw/s390x/s390-virtio-ccw.c b/hw/s390x/s390-virtio-ccw.c
+index 8ea193e..eb774d9 100644
+--- a/hw/s390x/s390-virtio-ccw.c
++++ b/hw/s390x/s390-virtio-ccw.c
+@@ -83,7 +83,7 @@ static void ccw_init(QEMUMachineInitArgs *args)
+     css_bus = virtual_css_bus_init();
+     s390_sclp_init();
+     s390_init_ipl_dev(args->kernel_filename, args->kernel_cmdline,
+-                      args->initrd_filename, "s390-zipl.rom");
++                      args->initrd_filename, "s390-ccw.img");
+ 
+     /* register hypercalls */
+     virtio_ccw_register_hcalls();
+-- 
+1.6.0.2
+
+

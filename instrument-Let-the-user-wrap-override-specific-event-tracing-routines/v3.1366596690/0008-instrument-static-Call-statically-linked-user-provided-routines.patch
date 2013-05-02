@@ -1,0 +1,371 @@
+From patches Mon Sep 17 00:00:00 2001
+From: =?utf-8?q?Llu=C3=ADs_Vilanova_=3Cvilanova=40ac=2Eupc=2Eedu=3E?=
+To: qemu-devel@nongnu.org
+Cc: 
+Date: Sun, 21 Apr 2013 21:12:14 +0200
+Message-id: 20130421191214.8947.46714.stgit@fimbulvetr.bsc.es
+Subject: [PATCH 08/24] instrument: [static] Call statically linked
+ user-provided routines
+
+Compiles a user-provided static library during QEMU compilation.
+
+This library must provide the implementation of the 'qi_event_*' routines.
+
+Signed-off-by: Lluís Vilanova <vilanova@ac.upc.edu>
+---
+ Makefile.target                           |    2 +
+ configure                                 |   42 +++++++++++++++-
+ instrument/Makefile.objs                  |   27 ++++++++++
+ scripts/tracetool.py                      |   14 ++++-
+ scripts/tracetool/__init__.py             |   10 +++-
+ scripts/tracetool/backend/instr_static.py |   76 +++++++++++++++++++++++++++++
+ 6 files changed, 165 insertions(+), 6 deletions(-)
+ create mode 100644 scripts/tracetool/backend/instr_static.py
+
+diff --git a/Makefile.target b/Makefile.target
+index 2f9675a..114fc39 100644
+--- a/Makefile.target
++++ b/Makefile.target
+@@ -149,6 +149,8 @@ include $(SRC_PATH)/Makefile.objs
+ all-obj-y = $(obj-y)
+ all-obj-y += $(addprefix ../, $(common-obj-y))
+ 
++all-obj-y += $(LIBTRACE_INSTRUMENT)
++
+ ifdef QEMU_PROGW
+ # The linker builds a windows executable. Make also a console executable.
+ $(QEMU_PROGW): $(all-obj-y) ../libqemuutil.a ../libqemustub.a
+diff --git a/configure b/configure
+index 2cddce4..0eafd5a 100755
+--- a/configure
++++ b/configure
+@@ -225,6 +225,7 @@ trace_events=`dirname $0`/trace-events
+ trace_backend="nop"
+ trace_file="trace"
+ trace_instrument="none"
++trace_instrument_path=""
+ spice=""
+ rbd=""
+ smartcard_nss=""
+@@ -649,6 +650,8 @@ for opt do
+   ;;
+   --with-trace-instrument=*) trace_instrument="$optarg"
+   ;;
++  --with-trace-instrument-path=*) trace_instrument_path="$optarg"
++  ;;
+   --enable-gprof) gprof="yes"
+   ;;
+   --enable-gcov) gcov="yes"
+@@ -1170,7 +1173,9 @@ echo "                           Available backends:" $($python "$source_path"/s
+ echo "  --with-trace-file=NAME   Full PATH,NAME of file to store traces"
+ echo "                           Default:trace-<pid>"
+ echo "  --with-trace-instrument=TYPE"
+-echo "                           Trace instrumentation type (none; default: $trace_instrument)"
++echo "                           Trace instrumentation type (none static; default: $trace_instrument)"
++echo "  --with-trace-instrument-path=PATH"
++echo "                           Directory to build user-provided static trace event instrumentation library"
+ echo "  --disable-spice          disable spice"
+ echo "  --enable-spice           enable spice"
+ echo "  --enable-rbd             enable building the rados block device (rbd)"
+@@ -3069,13 +3074,32 @@ fi
+ ##########################################
+ # Check instrumentation type
+ case "$trace_instrument" in
+-none)    ;;
++none|static) ;;
+ *)       echo "Error: invalid trace instrumentation type: $trace_instrument"
+          exit 1
+          ;;
+ esac
+ 
+ ##########################################
++# check for a valid directory for static trace instrumentation
++if test "$trace_instrument" = "static" -a -z "$trace_instrument_path"; then
++    echo "Error: must provide '--with-trace-instrument-path' when using static trace instrumentation"
++    exit 1
++fi
++if test "$trace_instrument" != "static" -a -n "$trace_instrument_path"; then
++    echo "Error: cannot provide '--with-trace-instrument-path' when not using static trace instrumentation"
++    exit 1
++fi
++if test "$trace_instrument" = "static" -a ! -f "$trace_instrument_path/Makefile"; then
++    echo
++    echo "Error: cannot make into '$trace_instrument_path'"
++    echo "Please choose a directory where I can run 'make'"
++    echo
++    exit 1
++fi
++trace_instrument_path=`readlink -f "$trace_instrument_path"`
++
++##########################################
+ # __sync_fetch_and_and requires at least -march=i486. Many toolchains
+ # use i686 as default anyway, but for those that don't, an explicit
+ # specification is necessary
+@@ -3452,6 +3476,9 @@ echo "Trace events      $trace_events"
+ echo "Trace backend     $trace_backend"
+ echo "Trace output file $trace_file-<pid>"
+ echo "Trace instrument  $trace_instrument"
++if test -n "$trace_instrument_path"; then
++echo "Static instrument $trace_instrument_path"
++fi
+ echo "spice support     $spice ($spice_protocol_version/$spice_server_version)"
+ echo "rbd support       $rbd"
+ echo "xfsctl support    $xfs"
+@@ -3888,6 +3915,13 @@ if test "$trace_instrument" = "none"; then
+ else
+     echo "CONFIG_TRACE_INSTRUMENT=y" >> $config_host_mak
+ fi
++if test "$trace_instrument" = "static"; then
++    echo "#define QI_TYPE_CONFIG_STATIC 1" >> $config_qi
++    echo "CONFIG_TRACE_INSTRUMENT_STATIC=y" >> $config_host_mak
++    echo "TRACE_INSTRUMENT_PATH=\"$trace_instrument_path\"" >> $config_host_mak
++    echo "TRACETOOL_INSTR_STATIC=--instr-static-path \"\$(TRACE_INSTRUMENT_PATH)\"" >> $config_host_mak
++    QEMU_CFLAGS="-I\"$trace_instrument_path\" $QEMU_CFLAGS"
++fi
+ ##########################################
+ 
+ echo "TOOLS=$tools" >> $config_host_mak
+@@ -4150,6 +4184,10 @@ if [ "$TARGET_BASE_ARCH" = "" ]; then
+ fi
+ 
+ symlink "$source_path/Makefile.target" "$target_dir/Makefile"
++if test -n "$trace_instrument_path"; then
++    mkdir -p $target_dir/libtrace-instrument
++    symlink $trace_instrument_path/Makefile $target_dir/libtrace-instrument/Makefile
++fi
+ 
+ upper() {
+     echo "$@"| LC_ALL=C tr '[a-z]' '[A-Z]'
+diff --git a/instrument/Makefile.objs b/instrument/Makefile.objs
+index 9c5d5dc..4102b59 100644
+--- a/instrument/Makefile.objs
++++ b/instrument/Makefile.objs
+@@ -8,9 +8,15 @@ $(obj)/generated-tracers.h-timestamp: $(TRACE_EVENTS) $(BUILD_DIR)/config-host.m
+ 	$(call quiet-command,$(TRACETOOL) \
+ 		--format=qemu-h \
+ 		--backend=$(TRACE_INSTRUMENT_BACKEND) \
++		$(TRACETOOL_INSTR_STATIC) \
+ 		< $< > $@,"  GEN   $(patsubst %-timestamp,%,$@)")
+ 	@cmp -s $@ $(patsubst %-timestamp,%,$@) || cp $@ $(patsubst %-timestamp,%,$@)
+ 
++ifdef CONFIG_TRACE_INSTRUMENT_STATIC
++# Rebuild to check for user headers
++.PHONY: $(obj)/generated-tracers.h-timestamp
++endif
++
+ 
+ ######################################################################
+ # User interface
+@@ -20,5 +26,26 @@ $(obj)/qemu-instr/events.h-timestamp: $(TRACE_EVENTS) $(BUILD_DIR)/config-host.m
+ 	$(call quiet-command,$(TRACETOOL) \
+ 		--format=api-h \
+ 		--backend=$(TRACE_INSTRUMENT_BACKEND) \
++		$(TRACETOOL_INSTR_STATIC) \
+ 		< $< > $@,"  GEN   $(patsubst %-timestamp,%,$@)")
+ 	@cmp -s $@ $(patsubst %-timestamp,%,$@) || cp $@ $(patsubst %-timestamp,%,$@)
++
++
++######################################################################
++# User code (static instrumentation)
++
++ifdef CONFIG_TRACE_INSTRUMENT_STATIC
++LIBTRACE_INSTRUMENT = libtrace-instrument/libtrace-instrument.a
++
++.PHONY: force
++force:
++
++_libinstrument_cflags = $(subst libtrace-instrument,.,$(subst libtrace-instrument/,.,$(1)))
++$(LIBTRACE_INSTRUMENT): QEMU_CFLAGS += -I$(BUILD_DIR)/
++$(LIBTRACE_INSTRUMENT): VPATH = $(TRACE_INSTRUMENT_PATH)
++$(LIBTRACE_INSTRUMENT): $(dir $(LIBTRACE_INSTRUMENT))/Makefile force
++	$(call quiet-command,$(MAKE) $(SUBDIR_MAKEFLAGS) -C $(dir $@)      \
++		QEMU_CFLAGS="$(call _libinstrument_cflags,$(QEMU_CFLAGS))" \
++		TARGET_DIR=$(TARGET_DIR)$(dir $@)/ VPATH=$(VPATH)          \
++		SRC_PATH=$(SRC_PATH) V="$(V)" $(notdir $@))
++endif
+diff --git a/scripts/tracetool.py b/scripts/tracetool.py
+index a79ec0f..52d2cf4 100755
+--- a/scripts/tracetool.py
++++ b/scripts/tracetool.py
+@@ -6,7 +6,7 @@ Command-line wrapper for the tracetool machinery.
+ """
+ 
+ __author__     = "Lluís Vilanova <vilanova@ac.upc.edu>"
+-__copyright__  = "Copyright 2012, Lluís Vilanova <vilanova@ac.upc.edu>"
++__copyright__  = "Copyright 2012-2013, Lluís Vilanova <vilanova@ac.upc.edu>"
+ __license__    = "GPL version 2 or (at your option) any later version"
+ 
+ __maintainer__ = "Stefan Hajnoczi"
+@@ -48,7 +48,10 @@ Options:
+     --target-type <type>     QEMU emulator target type ('system' or 'user').
+     --target-arch <arch>     QEMU emulator target arch.
+     --probe-prefix <prefix>  Prefix for dtrace probe names
+-                             (default: qemu-<target-type>-<target-arch>).\
++                             (default: qemu-<target-type>-<target-arch>).
++    --instr-static--path <path>
++                             Path to directory containing static instrumentation
++                             library.\
+ """ % {
+             "script" : _SCRIPT,
+             "backends" : backend_descr,
+@@ -67,6 +70,7 @@ def main(args):
+ 
+     long_opts  = [ "backend=", "format=", "help", "list-backends", "check-backend" ]
+     long_opts += [ "binary=", "target-type=", "target-arch=", "probe-prefix=" ]
++    long_opts += [ "instr-static-path=" ]
+ 
+     try:
+         opts, args = getopt.getopt(args[1:], "", long_opts)
+@@ -80,6 +84,7 @@ def main(args):
+     target_type = None
+     target_arch = None
+     probe_prefix = None
++    instr_static_path = None
+     for opt, arg in opts:
+         if opt == "--help":
+             error_opt()
+@@ -104,6 +109,8 @@ def main(args):
+             target_arch = arg
+         elif opt == '--probe-prefix':
+             probe_prefix = arg
++        elif opt == '--instr-static-path':
++            instr_static_path = arg
+ 
+         else:
+             error_opt("unhandled option: %s" % opt)
+@@ -130,7 +137,8 @@ def main(args):
+ 
+     try:
+         tracetool.generate(sys.stdin, arg_format, arg_backend,
+-                           binary = binary, probe_prefix = probe_prefix)
++                           binary = binary, probe_prefix = probe_prefix,
++                           instr_static_path = instr_static_path)
+     except tracetool.TracetoolError, e:
+         error_opt(str(e))
+ 
+diff --git a/scripts/tracetool/__init__.py b/scripts/tracetool/__init__.py
+index f849e39..5406a2b 100644
+--- a/scripts/tracetool/__init__.py
++++ b/scripts/tracetool/__init__.py
+@@ -180,6 +180,8 @@ class Event(object):
+     QEMU_TRACE              = "trace_%(name)s"
+     QEMU_TRACE_BACKEND      = "trace_%(name)s_backend"
+     QI_TRACE_INSTRUMENT     = "qi_event_%(name)s"
++    QI_TRACE_NOP            = "qi_event_%(name)s_nop"
++    QI_TRACE_BACKEND        = "qi_event_%(name)s_trace"
+ 
+     def api(self, fmt = None):
+         if fmt is None:
+@@ -229,7 +231,8 @@ def try_import(mod_name, attr_name = None, attr_default = None):
+ 
+ 
+ def generate(fevents, format, backend,
+-             binary = None, probe_prefix = None):
++             binary = None, probe_prefix = None,
++             instr_static_path = None):
+     """Generate the output for the given (format, backend) pair.
+ 
+     Parameters
+@@ -244,6 +247,8 @@ def generate(fevents, format, backend,
+         See tracetool.backend.dtrace.BINARY.
+     probe_prefix : str or None
+         See tracetool.backend.dtrace.PROBEPREFIX.
++    instr_static_path : str or None
++        See tracetool.backend.instr_static.PATH.
+     """
+     # fix strange python error (UnboundLocalError tracetool)
+     import tracetool
+@@ -270,6 +275,9 @@ def generate(fevents, format, backend,
+     tracetool.backend.dtrace.BINARY = binary
+     tracetool.backend.dtrace.PROBEPREFIX = probe_prefix
+ 
++    import tracetool.backend.instr_static
++    tracetool.backend.instr_static.PATH = instr_static_path
++
+     events = _read_events(fevents)
+ 
+     if backend == "nop":
+diff --git a/scripts/tracetool/backend/instr_static.py b/scripts/tracetool/backend/instr_static.py
+new file mode 100644
+index 0000000..b010596
+--- /dev/null
++++ b/scripts/tracetool/backend/instr_static.py
+@@ -0,0 +1,76 @@
++#!/usr/bin/env python
++# -*- coding: utf-8 -*-
++
++"""
++Static instrumentation proxy.
++"""
++
++__author__     = "Lluís Vilanova <vilanova@ac.upc.edu>"
++__copyright__  = "Copyright 2012-2013, Lluís Vilanova <vilanova@ac.upc.edu>"
++__license__    = "GPL version 2 or (at your option) any later version"
++
++__maintainer__ = "Stefan Hajnoczi"
++__email__      = "stefanha@linux.vnet.ibm.com"
++
++
++import os
++
++from tracetool import out
++import tracetool.format.qemu_h
++
++
++PATH = None
++
++def _path():
++    if PATH is None:
++        raise ValueError("you must set PATH")
++    return PATH
++
++
++def qemu_h(events):
++    if _path() and os.path.exists(os.sep.join([_path(), "events-pre.h"])):
++        out('#include "events-pre.h"',
++            '',
++            )
++
++    out('#include "instrument/qemu-instr/events.h"',
++        '',
++        )
++    tracetool.format.qemu_h.process_common(events)
++
++    if _path() and os.path.exists(os.sep.join([_path(), "events-post.h"])):
++        out('#include "events-post.h"',
++            '',
++            )
++
++def api_h(events):
++    out('#include "trace/generated-tracers.h"',
++        '',
++        )
++
++    for e in events:
++        if "instrument" not in e.properties:
++            continue
++
++        out('#if defined(QI_EVENT_%(upper_name)s_INLINE)',
++            'static',
++            '#endif',
++            'void %(qi)s(%(args)s);',
++            '',
++            'static inline void %(qi_nop)s(%(args)s)',
++            '{',
++            '}',
++            '',
++            'static inline void %(qi_backend)s(%(args)s)',
++            '{',
++            '    %(qemu_backend)s(%(argnames)s);',
++            '}',
++            '',
++            qi = e.api(e.QI_TRACE_INSTRUMENT),
++            qi_nop = e.api(e.QI_TRACE_NOP),
++            qi_backend = e.api(e.QI_TRACE_BACKEND),
++            qemu_backend = e.api(e.QEMU_TRACE_BACKEND),
++            args = e.args,
++            argnames = ", ".join(e.args.names()),
++            upper_name = e.name.upper(),
++            )
+
+

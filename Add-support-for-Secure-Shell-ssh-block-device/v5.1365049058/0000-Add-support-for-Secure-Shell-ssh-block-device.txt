@@ -1,0 +1,28 @@
+From patches Mon Sep 17 00:00:00 2001
+From: "Richard W.M. Jones" <rjones@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: 
+Date: Wed,  3 Apr 2013 23:17:38 +0100
+Message-id: 1365027461-8884-1-git-send-email-rjones@redhat.com
+Subject: [PATCH 0/3] Add support for Secure Shell (ssh) block device.
+
+This is version 5 of the patch to add a Secure Shell (ssh) block
+device to qemu.  Most recently this was discussed here:
+
+http://lists.nongnu.org/archive/html/qemu-devel/2013-03/threads.html#04845
+
+Some changes since last time:
+
+ - I have addressed almost all of Stefan comments, but see my email to
+   him above.
+
+ - ./check -ssh can be used to run io tests.  Note the -qcow2 ones
+   won't work.
+
+I haven't done anything about authentication, so this patch still
+requires ssh-agent to be set up, and the right key to be present in
+known_hosts.
+
+Rich.
+
+

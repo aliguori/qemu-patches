@@ -1,0 +1,1 @@
+../Fix-versatile_pci-now-without-breaking-linux/v2.1364311320/0004-versatile_pci-Change-to-subclassing-TYPE_PCI_HOST_BRIDGE.patch

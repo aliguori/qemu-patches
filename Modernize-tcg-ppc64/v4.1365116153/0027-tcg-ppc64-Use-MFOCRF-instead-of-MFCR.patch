@@ -1,0 +1,60 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Richard Henderson <rth@twiddle.net>
+To: qemu-devel@nongnu.org, Richard Henderson <rth@twiddle.net>
+Cc: Aurelien Jarno <aurelien@aurel32.net>, av1474@comtv.ru,
+ qemu-devel@nongnu.org
+Date: Thu,  4 Apr 2013 17:56:20 -0500
+Message-id: 1365116186-19382-28-git-send-email-rth@twiddle.net
+Subject: [PATCH 27/33] tcg-ppc64: Use MFOCRF instead of MFCR
+
+It takes half the cycles to read one CR register instead of all 8.
+This is a backward compatible addition to the ISA, so chips prior
+to Power 2.00 spec will simply continue to read the entire CR register.
+
+Signed-off-by: Richard Henderson <rth@twiddle.net>
+Reviewed-by: Aurelien Jarno <aurelien@aurel32.net>
+---
+ tcg/ppc64/tcg-target.c | 12 ++++++++----
+ 1 file changed, 8 insertions(+), 4 deletions(-)
+
+diff --git a/tcg/ppc64/tcg-target.c b/tcg/ppc64/tcg-target.c
+index 806f3e2..f0ed698 100644
+--- a/tcg/ppc64/tcg-target.c
++++ b/tcg/ppc64/tcg-target.c
+@@ -382,6 +382,7 @@ static int tcg_target_const_match (tcg_target_long val,
+ #define SRAWI  XO31(824)
+ #define NEG    XO31(104)
+ #define MFCR   XO31( 19)
++#define MFOCRF (MFCR | (1u << 20))
+ #define NOR    XO31(124)
+ #define CNTLZW XO31( 26)
+ #define CNTLZD XO31( 58)
+@@ -430,6 +431,7 @@ static int tcg_target_const_match (tcg_target_long val,
+ #define ME(e) ((e)<<1)
+ #define BO(o) ((o)<<21)
+ #define MB64(b) ((b)<<5)
++#define FXM(b) (1 << (19 - (b)))
+ 
+ #define LK    1
+ 
+@@ -1226,10 +1228,12 @@ static void tcg_out_setcond (TCGContext *s, TCGType type, TCGCond cond,
+         sh = 31;
+         crop = CRNOR | BT (7, CR_EQ) | BA (7, CR_GT) | BB (7, CR_GT);
+     crtest:
+-        tcg_out_cmp (s, cond, arg1, arg2, const_arg2, 7, type);
+-        if (crop) tcg_out32 (s, crop);
+-        tcg_out32 (s, MFCR | RT (0));
+-        tcg_out_rlw(s, RLWINM, arg0, 0, sh, 31, 31);
++        tcg_out_cmp(s, cond, arg1, arg2, const_arg2, 7, type);
++        if (crop) {
++            tcg_out32(s, crop);
++        }
++        tcg_out32(s, MFOCRF | RT(TCG_REG_R0) | FXM(7));
++        tcg_out_rlw(s, RLWINM, arg0, TCG_REG_R0, sh, 31, 31);
+         break;
+ 
+     default:
+-- 
+1.8.1.4
+
+

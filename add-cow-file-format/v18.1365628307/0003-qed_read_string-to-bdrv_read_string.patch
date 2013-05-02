@@ -1,0 +1,126 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Dong Xu Wang <wdongxu@linux.vnet.ibm.com>
+To: qemu-devel@nongnu.org
+Cc: kwol@redhat.com, wdongxu@cn.ibm.com,
+ Dong Xu Wang <wdongxu@linux.vnet.ibm.com>, stefanha@redhat.com
+Date: Wed, 10 Apr 2013 16:11:50 +0800
+Message-id: 1365581513-3475-4-git-send-email-wdongxu@linux.vnet.ibm.com
+Subject: [PATCH 3/6] qed_read_string to bdrv_read_string
+
+Make qed_read_string function to a common interface, so move it to
+block.c.
+
+Signed-off-by: Dong Xu Wang <wdongxu@linux.vnet.ibm.com>
+---
+ block.c               | 27 +++++++++++++++++++++++++++
+ block/qed.c           | 34 ++++------------------------------
+ include/block/block.h |  2 ++
+ 3 files changed, 33 insertions(+), 30 deletions(-)
+
+diff --git a/block.c b/block.c
+index 1e7dab5..6aad45b 100644
+--- a/block.c
++++ b/block.c
+@@ -210,6 +210,33 @@ int path_has_protocol(const char *path)
+     return *p == ':';
+ }
+ 
++/**
++ * Read a string of known length from the image file
++ *
++ * @bs:         Image file
++ * @offset:     File offset to start of string, in bytes
++ * @n:          String length in bytes
++ * @buf:        Destination buffer
++ * @buflen:     Destination buffer length in bytes
++ * @ret:        0 on success, -errno on failure
++ *
++ * The string is NUL-terminated.
++ */
++int bdrv_read_string(BlockDriverState *bs, uint64_t offset, size_t n,
++                     char *buf, size_t buflen)
++{
++    int ret;
++    if (n >= buflen) {
++        return -EINVAL;
++    }
++    ret = bdrv_pread(bs, offset, buf, n);
++    if (ret < 0) {
++        return ret;
++    }
++    buf[n] = '\0';
++    return 0;
++}
++
+ int path_is_absolute(const char *path)
+ {
+ #ifdef _WIN32
+diff --git a/block/qed.c b/block/qed.c
+index acffc2d..d647792 100644
+--- a/block/qed.c
++++ b/block/qed.c
+@@ -217,33 +217,6 @@ static bool qed_is_image_size_valid(uint64_t image_size, uint32_t cluster_size,
+ }
+ 
+ /**
+- * Read a string of known length from the image file
+- *
+- * @file:       Image file
+- * @offset:     File offset to start of string, in bytes
+- * @n:          String length in bytes
+- * @buf:        Destination buffer
+- * @buflen:     Destination buffer length in bytes
+- * @ret:        0 on success, -errno on failure
+- *
+- * The string is NUL-terminated.
+- */
+-static int qed_read_string(BlockDriverState *file, uint64_t offset, size_t n,
+-                           char *buf, size_t buflen)
+-{
+-    int ret;
+-    if (n >= buflen) {
+-        return -EINVAL;
+-    }
+-    ret = bdrv_pread(file, offset, buf, n);
+-    if (ret < 0) {
+-        return ret;
+-    }
+-    buf[n] = '\0';
+-    return 0;
+-}
+-
+-/**
+  * Allocate new clusters
+  *
+  * @s:          QED state
+@@ -437,9 +410,10 @@ static int bdrv_qed_open(BlockDriverState *bs, QDict *options, int flags)
+             return -EINVAL;
+         }
+ 
+-        ret = qed_read_string(bs->file, s->header.backing_filename_offset,
+-                              s->header.backing_filename_size, bs->backing_file,
+-                              sizeof(bs->backing_file));
++        ret = bdrv_read_string(bs->file, s->header.backing_filename_offset,
++                               s->header.backing_filename_size,
++                               bs->backing_file,
++                               sizeof(bs->backing_file));
+         if (ret < 0) {
+             return ret;
+         }
+diff --git a/include/block/block.h b/include/block/block.h
+index 7d34aa2..e737c9c 100644
+--- a/include/block/block.h
++++ b/include/block/block.h
+@@ -173,6 +173,8 @@ int bdrv_pwrite_sync(BlockDriverState *bs, int64_t offset,
+     const void *buf, int count);
+ int coroutine_fn bdrv_co_readv(BlockDriverState *bs, int64_t sector_num,
+     int nb_sectors, QEMUIOVector *qiov);
++int bdrv_read_string(BlockDriverState *bs, uint64_t offset, size_t n,
++                     char *buf, size_t buflen);
+ int coroutine_fn bdrv_co_copy_on_readv(BlockDriverState *bs,
+     int64_t sector_num, int nb_sectors, QEMUIOVector *qiov);
+ int coroutine_fn bdrv_co_writev(BlockDriverState *bs, int64_t sector_num,
+-- 
+1.7.11.7
+
+

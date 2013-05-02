@@ -1,0 +1,34 @@
+From patches Mon Sep 17 00:00:00 2001
+From: liguang <lig.fnst@cn.fujitsu.com>
+To: qemu-devel@nongnu.org
+Cc: liguang <lig.fnst@cn.fujitsu.com>
+Date: Thu, 11 Apr 2013 11:41:52 +0800
+Message-id: 1365651722-11241-6-git-send-email-lig.fnst@cn.fujitsu.com
+Subject: [PATCH 06/16] target-cris/translate: mininally change
+ gen_intermediate_code_internal
+
+Signed-off-by: liguang <lig.fnst@cn.fujitsu.com>
+---
+ target-cris/translate.c |    5 ++---
+ 1 files changed, 2 insertions(+), 3 deletions(-)
+
+diff --git a/target-cris/translate.c b/target-cris/translate.c
+index dbcb811..a1016be 100644
+--- a/target-cris/translate.c
++++ b/target-cris/translate.c
+@@ -3258,9 +3258,8 @@ gen_intermediate_code_internal(CPUCRISState *env, TranslationBlock *tb,
+         if (search_pc) {
+             j = tcg_ctx.gen_opc_ptr - tcg_ctx.gen_opc_buf;
+             if (lj < j) {
+-                lj++;
+-                while (lj < j) {
+-                    tcg_ctx.gen_opc_instr_start[lj++] = 0;
++                while (++lj < j) {
++                    tcg_ctx.gen_opc_instr_start[lj] = 0;
+                 }
+             }
+             if (dc->delayed_branch == 1) {
+-- 
+1.7.2.5
+
+

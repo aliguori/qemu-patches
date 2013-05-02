@@ -1,0 +1,189 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Liu Yuan <namei.unix@gmail.com>
+To: qemu-devel@nongnu.org
+Cc: MORITA Kazutaka <morita.kazutaka@lab.ntt.co.jp>,
+ Paolo Bonzini <pbonzini@redhat.com>, sheepdog@lists.wpkg.org,
+ Stefan Hajnoczi <stefanha@redhat.com>, Kevin Wolf <kwolf@redhat.com>
+Date: Thu, 18 Apr 2013 13:44:21 +0800
+Message-id: 1366263861-30146-1-git-send-email-namei.unix@gmail.com
+Subject: [PATCH 1/1] sheepdog: add discard/trim support for sheepdog
+
+From: Liu Yuan <tailai.ly@taobao.com>
+
+The 'TRIM' command from VM that is to release underlying data storage for
+better thin-provision is already supported by the Sheepdog.
+
+This patch adds the TRIM support at QEMU part.
+
+For older Sheepdog that doesn't support it, we return 0(success) to upper layer.
+
+Cc: MORITA Kazutaka <morita.kazutaka@lab.ntt.co.jp>
+Cc: Kevin Wolf <kwolf@redhat.com>
+Cc: Stefan Hajnoczi <stefanha@redhat.com>
+Cc: Paolo Bonzini <pbonzini@redhat.com>
+Signed-off-by: Liu Yuan <tailai.ly@taobao.com>
+---
+v6:
+ - add boolean indicator to disable discard operation when not supported by the
+   server
+v5:
+ - adjust macro numbering
+v4:
+ - adjust discard macro
+ - return success when operation is not supported by sheep
+ - add coroutine_fn marker
+v3:
+ - fix a silly accidental deletion of 'default' in switch clause.
+v2:
+ - skip the object when it is not allocated
+
+ block/sheepdog.c |   62 +++++++++++++++++++++++++++++++++++++++++++++++++++++-
+ 1 file changed, 61 insertions(+), 1 deletion(-)
+
+diff --git a/block/sheepdog.c b/block/sheepdog.c
+index 1c5b532..57858b6 100644
+--- a/block/sheepdog.c
++++ b/block/sheepdog.c
+@@ -27,6 +27,8 @@
+ #define SD_OP_CREATE_AND_WRITE_OBJ  0x01
+ #define SD_OP_READ_OBJ       0x02
+ #define SD_OP_WRITE_OBJ      0x03
++/* 0x04 is used internally by Sheepdog */
++#define SD_OP_DISCARD_OBJ    0x05
+ 
+ #define SD_OP_NEW_VDI        0x11
+ #define SD_OP_LOCK_VDI       0x12
+@@ -184,6 +186,8 @@ typedef struct SheepdogInode {
+     uint32_t data_vdi_id[MAX_DATA_OBJS];
+ } SheepdogInode;
+ 
++static bool discard_supported = true;
++
+ /*
+  * 64 bit FNV-1a non-zero initial basis
+  */
+@@ -269,6 +273,7 @@ enum AIOCBState {
+     AIOCB_WRITE_UDATA,
+     AIOCB_READ_UDATA,
+     AIOCB_FLUSH_CACHE,
++    AIOCB_DISCARD_OBJ,
+ };
+ 
+ struct SheepdogAIOCB {
+@@ -656,7 +661,7 @@ static void coroutine_fn aio_read_response(void *opaque)
+     int ret;
+     AIOReq *aio_req = NULL;
+     SheepdogAIOCB *acb;
+-    unsigned long idx;
++    uint64_t idx;
+ 
+     if (QLIST_EMPTY(&s->inflight_aio_head)) {
+         goto out;
+@@ -727,6 +732,21 @@ static void coroutine_fn aio_read_response(void *opaque)
+             rsp.result = SD_RES_SUCCESS;
+         }
+         break;
++    case AIOCB_DISCARD_OBJ:
++        switch (rsp.result) {
++        case SD_RES_INVALID_PARMS:
++            error_report("you are running the old sheep that doesn't support "
++                         "discard command.\n");
++            rsp.result = SD_RES_SUCCESS;
++            discard_supported = false;
++            break;
++        case SD_RES_SUCCESS:
++            idx = data_oid_to_idx(aio_req->oid);
++            s->inode.data_vdi_id[idx] = 0;
++            break;
++        default:
++            break;
++        }
+     }
+ 
+     if (rsp.result != SD_RES_SUCCESS) {
+@@ -1016,6 +1036,9 @@ static int coroutine_fn add_aio_request(BDRVSheepdogState *s, AIOReq *aio_req,
+         wlen = datalen;
+         hdr.flags = SD_FLAG_CMD_WRITE | flags;
+         break;
++    case AIOCB_DISCARD_OBJ:
++        hdr.opcode = SD_OP_DISCARD_OBJ;
++        break;
+     }
+ 
+     if (s->cache_flags) {
+@@ -1633,6 +1656,15 @@ static int coroutine_fn sd_co_rw_vector(void *p)
+                 flags = SD_FLAG_CMD_COW;
+             }
+             break;
++        case AIOCB_DISCARD_OBJ:
++            /*
++             * We discard the object only when the whole object is
++             * 1) allocated 2) trimmed. Otherwise, simply skip it.
++             */
++            if (len != SD_DATA_OBJ_SIZE || inode->data_vdi_id[idx] == 0) {
++                goto done;
++            }
++            break;
+         default:
+             break;
+         }
+@@ -2078,6 +2110,31 @@ static int sd_load_vmstate(BlockDriverState *bs, uint8_t *data,
+ }
+ 
+ 
++static coroutine_fn int sd_co_discard(BlockDriverState *bs, int64_t sector_num,
++                                      int nb_sectors)
++{
++    SheepdogAIOCB *acb;
++    QEMUIOVector dummy;
++    int ret;
++
++    if (!discard_supported)
++            return 0;
++
++    acb = sd_aio_setup(bs, &dummy, sector_num, nb_sectors);
++    acb->aiocb_type = AIOCB_DISCARD_OBJ;
++    acb->aio_done_func = sd_finish_aiocb;
++
++    ret = sd_co_rw_vector(acb);
++    if (ret <= 0) {
++        qemu_aio_release(acb);
++        return ret;
++    }
++
++    qemu_coroutine_yield();
++
++    return acb->ret;
++}
++
+ static QEMUOptionParameter sd_create_options[] = {
+     {
+         .name = BLOCK_OPT_SIZE,
+@@ -2110,6 +2167,7 @@ static BlockDriver bdrv_sheepdog = {
+     .bdrv_co_readv  = sd_co_readv,
+     .bdrv_co_writev = sd_co_writev,
+     .bdrv_co_flush_to_disk  = sd_co_flush_to_disk,
++    .bdrv_co_discard = sd_co_discard,
+ 
+     .bdrv_snapshot_create   = sd_snapshot_create,
+     .bdrv_snapshot_goto     = sd_snapshot_goto,
+@@ -2135,6 +2193,7 @@ static BlockDriver bdrv_sheepdog_tcp = {
+     .bdrv_co_readv  = sd_co_readv,
+     .bdrv_co_writev = sd_co_writev,
+     .bdrv_co_flush_to_disk  = sd_co_flush_to_disk,
++    .bdrv_co_discard = sd_co_discard,
+ 
+     .bdrv_snapshot_create   = sd_snapshot_create,
+     .bdrv_snapshot_goto     = sd_snapshot_goto,
+@@ -2160,6 +2219,7 @@ static BlockDriver bdrv_sheepdog_unix = {
+     .bdrv_co_readv  = sd_co_readv,
+     .bdrv_co_writev = sd_co_writev,
+     .bdrv_co_flush_to_disk  = sd_co_flush_to_disk,
++    .bdrv_co_discard = sd_co_discard,
+ 
+     .bdrv_snapshot_create   = sd_snapshot_create,
+     .bdrv_snapshot_goto     = sd_snapshot_goto,
+-- 
+1.7.9.5
+
+

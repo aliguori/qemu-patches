@@ -1,0 +1,63 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Dominik Dingel <dingel@linux.vnet.ibm.com>
+To: Anthony Liguori <anthony@codemonkey.ws>,
+ Dominik Dingel <dingel@linux.vnet.ibm.com>, Alexander Graf <agraf@suse.de>,
+ qemu-devel@nongnu.org
+Cc: Anthony Liguori <anthony@codemonkey.ws>,
+ Christian Borntraeger <borntraeger@de.ibm.com>, Alexander Graf <agraf@suse.de>,
+ qemu-devel@nongnu.org, Dominik Dingel <dingel@linux.vnet.ibm.com>
+Date: Fri, 26 Apr 2013 14:12:51 +0200
+Message-id: 1366978377-16823-5-git-send-email-dingel@linux.vnet.ibm.com
+Subject: [PATCH 04/10] S390: check if BIOS is available and create links
+
+Signed-off-by: Dominik Dingel <dingel@linux.vnet.ibm.com>
+
+Check if the BIOS is available before loading it into the memory.
+Create the needed Links for build.
+
+Add a if the BIOS is available, also add the needed links for the build
+process.
+
+diff --git a/configure b/configure
+index 19777de..2bbbd54 100755
+--- a/configure
++++ b/configure
+@@ -4541,6 +4541,7 @@ for bios_file in \
+     $source_path/pc-bios/*.aml \
+     $source_path/pc-bios/*.rom \
+     $source_path/pc-bios/*.dtb \
++    $source_path/pc-bios/*.img \
+     $source_path/pc-bios/openbios-* \
+     $source_path/pc-bios/palcode-*
+ do
+diff --git a/hw/s390x/ipl.c b/hw/s390x/ipl.c
+index 9758529..36daa67 100644
+--- a/hw/s390x/ipl.c
++++ b/hw/s390x/ipl.c
+@@ -95,6 +95,10 @@ static int s390_ipl_init(SysBusDevice *dev)
+         }
+ 
+         bios_filename = qemu_find_file(QEMU_FILE_TYPE_BIOS, bios_name);
++        if (bios_filename == NULL) {
++            hw_error("could not find stage1 bootloader\n");
++        }
++        
+         bios_size = load_elf(bios_filename, NULL, NULL, &ipl->start_addr, NULL,
+                              NULL, 1, ELF_MACHINE, 0);
+         if (bios_size == -1UL) {
+diff --git a/pc-bios/s390-ccw/Makefile b/pc-bios/s390-ccw/Makefile
+index ad55a14..1e6ab1e 100644
+--- a/pc-bios/s390-ccw/Makefile
++++ b/pc-bios/s390-ccw/Makefile
+@@ -21,6 +21,7 @@ s390-ccw.elf: $(OBJECTS)
+ 
+ s390-ccw.img: s390-ccw.elf
+ 	$(call quiet-command,strip $< -o $@,"  Stripping $(TARGET_DIR)$@")
++	ln -s -f  `pwd`/$@ ../$@ 
+ 
+ clean:
+ 	rm -f *.o *.d *.img *.elf *~
+-- 
+1.7.9.5
+
+

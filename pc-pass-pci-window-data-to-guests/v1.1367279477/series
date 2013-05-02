@@ -1,0 +1,4 @@
+0000-pc-pass-pci-window-data-to-guests.txt
+0001-range-add-structure-to-pass-ranges-around.patch
+0002-pc-factor-out-pci-hole-math.patch
+0003-pc-pass-PCI-hole-ranges-to-Guests.patch

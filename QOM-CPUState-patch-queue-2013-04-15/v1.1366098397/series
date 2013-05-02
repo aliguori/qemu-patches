@@ -1,0 +1,13 @@
+0000-QOM-CPUState-patch-queue-2013-04-15.txt
+0001-target-i386-Fix-including-host-in--cpu--output.patch
+0002-target-i386-Improve--cpu--features-output.patch
+0003-qdev-Add-qdev-property-for-bool-type.patch
+0004-target-i386-Consolidate-error-propagation-in-x86_cpu_realizefn.patch
+0005-target-i386-Split-APIC-creation-from-initialization-in-x86_cpu_realizefn.patch
+0006-kvmvapic-Replace-FROM_SYSBUS-with-QOM-type-cast.patch
+0007-ioapic-Replace-FROM_SYSBUS-with-QOM-type-cast.patch
+0008-target-i386-cpuc-Coding-style-fixes.patch
+0009-target-i386-Split-out-CPU-creation-and-features-parsing.patch
+0010-cpu-Pass-CPUState-to-cpu_synchronize_post.patch
+0011-qdev-Set-devices-parent-before-calling-realize-down-inheritance-chain.patch
+0012-target-cris-Override-do_interrupt-for-pre-v32-CPU-cores.patch

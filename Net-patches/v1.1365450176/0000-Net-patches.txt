@@ -1,0 +1,23 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Stefan Hajnoczi <stefanha@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>,
+ Stefan Hajnoczi <stefanha@redhat.com>, rth@twiddle.net
+Date: Mon, 8 Apr 2013 14:42:56 +0200
+Message-id: 1365424978-4348-1-git-send-email-stefanha@redhat.com
+Subject: [PATCH 0/2] Net patches
+
+These vmxnet3 fixes solve big-endian host build failures and make iPXE's
+vmxnet3 driver work.
+
+Dmitry Fleytman (2):
+  vmxnet3: iPXE compatibility fixes
+  vmxnet3: const_cpu_to_le64 wrapping for feature bits dropped
+
+ hw/vmxnet3.c | 11 +++++++++++
+ hw/vmxnet3.h | 11 ++++-------
+ 2 files changed, 15 insertions(+), 7 deletions(-)
+
+-- 
+1.8.1.4
+

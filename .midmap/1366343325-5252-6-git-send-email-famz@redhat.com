@@ -1,0 +1,1 @@
+../vmdk-zeroed-grain-GTE-support/v1.1366390120/0005-vmdk-add-bdrv_co_write_zeroes.patch

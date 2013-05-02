@@ -1,0 +1,47 @@
+From patches Mon Sep 17 00:00:00 2001
+From: =?utf-8?q?Andreas_F=C3=A4rber_=3Cafaerber=40suse=2Ede=3E?=
+To: qemu-devel@nongnu.org
+Cc: Eduardo Habkost <ehabkost@redhat.com>,
+ =?UTF-8?q?Andreas=20F=C3=A4rber?= <afaerber@suse.de>
+Date: Tue, 16 Apr 2013 02:46:45 +0200
+Message-id: 1366073209-27119-9-git-send-email-afaerber@suse.de
+Subject: [PATCH 08/12] target-i386/cpu.c: Coding style fixes
+
+From: Eduardo Habkost <ehabkost@redhat.com>
+
+ * Add braces to 'if' statements;
+ * Remove last TAB character from the source.
+
+Signed-off-by: Eduardo Habkost <ehabkost@redhat.com>
+[AF: Changed whitespace]
+Reviewed-by: Igor Mammedov <imammedo@redhat.com>
+Signed-off-by: Andreas Färber <afaerber@suse.de>
+---
+ target-i386/cpu.c | 7 ++++---
+ 1 file changed, 4 insertions(+), 3 deletions(-)
+
+diff --git a/target-i386/cpu.c b/target-i386/cpu.c
+index 5d05803..0a84000 100644
+--- a/target-i386/cpu.c
++++ b/target-i386/cpu.c
+@@ -1869,12 +1869,13 @@ void cpu_x86_cpuid(CPUX86State *env, uint32_t index, uint32_t count,
+         if (env->cpuid_ext2_features & CPUID_EXT2_LM) {
+             /* 64 bit processor */
+ /* XXX: The physical address space is limited to 42 bits in exec.c. */
+-            *eax = 0x00003028;	/* 48 bits virtual, 40 bits physical */
++            *eax = 0x00003028; /* 48 bits virtual, 40 bits physical */
+         } else {
+-            if (env->cpuid_features & CPUID_PSE36)
++            if (env->cpuid_features & CPUID_PSE36) {
+                 *eax = 0x00000024; /* 36 bits physical */
+-            else
++            } else {
+                 *eax = 0x00000020; /* 32 bits physical */
++            }
+         }
+         *ebx = 0;
+         *ecx = 0;
+-- 
+1.8.1.4
+
+

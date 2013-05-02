@@ -1,0 +1,44 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Alexander Graf <agraf@suse.de>
+To: qemu-ppc@nongnu.org
+Cc: Blue Swirl <blauwirbel@gmail.com>, Aurelien Jarno <aurelien@aurel32.net>,
+ qemu-devel@nongnu.org
+Date: Fri, 26 Apr 2013 20:19:13 +0200
+Message-id: 1367000373-7972-5-git-send-email-agraf@suse.de
+Subject: [PATCH 04/24] S390: ccw firmware: Add start assembly
+
+We want to write most of our code in C, so add a small assembly
+stub that jumps straight into C code for us to continue booting.
+
+Signed-off-by: Alexander Graf <agraf@suse.de>
+---
+ pc-bios/s390-ccw/start.S |   16 ++++++++++++++++
+ 1 files changed, 16 insertions(+), 0 deletions(-)
+ create mode 100644 pc-bios/s390-ccw/start.S
+
+diff --git a/pc-bios/s390-ccw/start.S b/pc-bios/s390-ccw/start.S
+new file mode 100644
+index 0000000..c2b9a19
+--- /dev/null
++++ b/pc-bios/s390-ccw/start.S
+@@ -0,0 +1,16 @@
++/*
++ * First stage boot loader for virtio devices. The compiled output goes
++ * into the pc-bios directory of qemu.
++ *
++ * Copyright (c) 2013 Alexander Graf <agraf@suse.de>
++ *
++ * This work is licensed under the terms of the GNU GPL, version 2 or (at
++ * your option) any later version. See the COPYING file in the top-level
++ * directory.
++ */
++
++        .globl _start
++_start:
++
++larl	%r15, stack + 0x8000    /* Set up stack */
++j	main                    /* And call C */
+-- 
+1.6.0.2
+
+

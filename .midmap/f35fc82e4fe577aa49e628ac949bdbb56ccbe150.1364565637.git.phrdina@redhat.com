@@ -1,0 +1,1 @@
+../convert-savevm-to-use-qapi-and-introduce-qmp-command/v4.1364587947/0010-savevm-update-return-value-from-qemu_savevm_state.patch

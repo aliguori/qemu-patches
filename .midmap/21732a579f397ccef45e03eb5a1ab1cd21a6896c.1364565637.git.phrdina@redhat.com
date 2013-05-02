@@ -1,0 +1,1 @@
+../convert-savevm-to-use-qapi-and-introduce-qmp-command/v4.1364587947/0009-block-update-return-value-from-bdrv_snapshot_create.patch

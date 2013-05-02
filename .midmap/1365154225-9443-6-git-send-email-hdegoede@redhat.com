@@ -1,0 +1,1 @@
+../usb-redir-chardev-flowcontrol-patches-v4/v1.1365179418/0005-spice-qemu-char-Remove-intermediate-buffer.patch

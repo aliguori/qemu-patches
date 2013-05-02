@@ -1,0 +1,87 @@
+From patches Mon Sep 17 00:00:00 2001
+From: mrhines@linux.vnet.ibm.com
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, mst@redhat.com,
+ Michael R Hines <mrhines@us.ibm.com>, Bulent Abali <abali@us.ibm.com>,
+ owasserm@redhat.com, pbonzini@redhat.com, Gokul B Kandiraju <gokul@us.ibm.com>
+Date: Wed, 10 Apr 2013 18:28:12 -0400
+Message-id: 1365632901-15470-5-git-send-email-mrhines@linux.vnet.ibm.com
+Subject: [PATCH 04/13] update QEMUFileOps with new hooks
+
+From: "Michael R. Hines" <mrhines@us.ibm.com>
+
+These are just the prototypes for optional new hooks that RDMA
+takes advantage of to perform dynamic page registration.
+
+An optional hook is also introduce for a custom function
+to be able to override the default save_page function.
+
+Signed-off-by: Michael R. Hines <mrhines@us.ibm.com>
+---
+ include/migration/qemu-file.h |   30 ++++++++++++++++++++++++++++++
+ 1 file changed, 30 insertions(+)
+
+diff --git a/include/migration/qemu-file.h b/include/migration/qemu-file.h
+index 623c434..e2eca28 100644
+--- a/include/migration/qemu-file.h
++++ b/include/migration/qemu-file.h
+@@ -23,6 +23,7 @@
+  */
+ #ifndef QEMU_FILE_H
+ #define QEMU_FILE_H 1
++#include "exec/cpu-common.h"
+ 
+ /* This function writes a chunk of data to a file at the given position.
+  * The pos argument can be ignored if the file is only being used for
+@@ -57,12 +58,39 @@ typedef int (QEMUFileGetFD)(void *opaque);
+ typedef ssize_t (QEMUFileWritevBufferFunc)(void *opaque, struct iovec *iov,
+                                            int iovcnt);
+ 
++/*
++ * This function provides hooks around different
++ * stages of RAM migration.
++ */
++typedef int (QEMURamHookFunc)(QEMUFile *f, void *opaque, uint32_t flags);
++
++/*
++ * Constants used by QEMURamFunc.
++ */
++#define RAM_CONTROL_SETUP    0
++#define RAM_CONTROL_ROUND    1
++#define RAM_CONTROL_REGISTER 2
++#define RAM_CONTROL_FINISH   3
++
++/*
++ * This function allows override of where the RAM page
++ * is saved (such as RDMA, for example.)
++ */
++typedef size_t (QEMURamSaveFunc)(QEMUFile *f, void *opaque,
++                               ram_addr_t block_offset, 
++                               ram_addr_t offset,
++                               int cont, size_t size, bool zero);
++
+ typedef struct QEMUFileOps {
+     QEMUFilePutBufferFunc *put_buffer;
+     QEMUFileGetBufferFunc *get_buffer;
+     QEMUFileCloseFunc *close;
+     QEMUFileGetFD *get_fd;
+     QEMUFileWritevBufferFunc *writev_buffer;
++    QEMURamHookFunc *before_ram_iterate;
++    QEMURamHookFunc *after_ram_iterate;
++    QEMURamHookFunc *hook_ram_load;
++    QEMURamSaveFunc *save_page;
+ } QEMUFileOps;
+ 
+ QEMUFile *qemu_fopen_ops(void *opaque, const QEMUFileOps *ops);
+@@ -81,6 +109,8 @@ void qemu_put_byte(QEMUFile *f, int v);
+  */
+ void qemu_put_buffer_async(QEMUFile *f, const uint8_t *buf, int size);
+ 
++bool qemu_file_mode_is_not_valid(const char * mode);
++
+ static inline void qemu_put_ubyte(QEMUFile *f, unsigned int v)
+ {
+     qemu_put_byte(f, (int)v);
+-- 
+1.7.10.4
+

@@ -1,0 +1,283 @@
+From patches Mon Sep 17 00:00:00 2001
+From: liguang <lig.fnst@cn.fujitsu.com>
+To: Andreas =?ISO-8859-1?Q?F=E4rber?= <afaerber@suse.de>,
+ Aurelien Jarno <aurelien@aurel32.net>, qemu-devel@nongnu.org,
+ liguang <lig.fnst@cn.fujitsu.com>, li guang <lig.fnst@cn.fujitsu.com>,
+ Peter Maydell <peter.maydell@linaro.org>,
+ Andreas =?iso-8859-15?Q?F=E4rber?= <afaerber@suse.de>
+Cc: peter.maydell@linaro.org, Laurent@vivier.eu, jan.kiszka@siemens.com,
+ green@moxielogic.com, qemu-devel@nongnu.org, Laurent@Vivier.EU,
+ blauwirbel@gmail.com, jcmvbkbc@gmail.com,
+ Peter Maydell <peter.maydell@linaro.org>, edgar.iglesias@gmail.com,
+ gxt@mprc.pku.edu.cn, Anthony Liguori <aliguori@us.ibm.com>, proljc@gmail.com,
+ agraf@suse.de, li guang <lig.fnst@cn.fujitsu.com>, evgenyvoevodin@gmail.com,
+ ehabkost@redhat.com, sw@weilnetz.de, liguang <lig.fnst@cn.fujitsu.com>,
+ paul@codesourcery.com, stefanha@redhat.com, pbonzini@redhat.com,
+ rth@twiddle.net, michael@walle.cc, qemu-ppc@nongnu.org, imammedo@redhat.com,
+ afaerber@suse.de, aurelien@aurel32.net
+Date: Wed, 24 Apr 2013 09:48:16 +0800
+Message-id: 1366768096-2846-2-git-send-email-lig.fnst@cn.fujitsu.com
+Subject: [PATCH 2/2] target-*/cpu.h: remove cs_base for other targets
+
+Signed-off-by: liguang <lig.fnst@cn.fujitsu.com>
+---
+ target-alpha/cpu.h      |    3 +--
+ target-arm/cpu.h        |    3 +--
+ target-cris/cpu.h       |    3 +--
+ target-lm32/cpu.h       |    3 +--
+ target-m68k/cpu.h       |    3 +--
+ target-microblaze/cpu.h |    3 +--
+ target-mips/cpu.h       |    3 +--
+ target-moxie/cpu.h      |    3 +--
+ target-openrisc/cpu.h   |    3 +--
+ target-ppc/cpu.h        |    3 +--
+ target-s390x/cpu.h      |    3 +--
+ target-sh4/cpu.h        |    3 +--
+ target-sparc/cpu.h      |    2 +-
+ target-unicore32/cpu.h  |    3 +--
+ target-xtensa/cpu.h     |    3 +--
+ 15 files changed, 15 insertions(+), 29 deletions(-)
+
+diff --git a/target-alpha/cpu.h b/target-alpha/cpu.h
+index 2156a1e..2d5af9b 100644
+--- a/target-alpha/cpu.h
++++ b/target-alpha/cpu.h
+@@ -478,12 +478,11 @@ enum {
+ };
+ 
+ static inline void cpu_get_tb_cpu_state(CPUAlphaState *env, target_ulong *pc,
+-                                        target_ulong *cs_base, int *pflags)
++                                        int *pflags)
+ {
+     int flags = 0;
+ 
+     *pc = env->pc;
+-    *cs_base = 0;
+ 
+     if (env->pal_mode) {
+         flags = TB_FLAGS_PAL_MODE;
+diff --git a/target-arm/cpu.h b/target-arm/cpu.h
+index 2b97221..e8a9aae 100644
+--- a/target-arm/cpu.h
++++ b/target-arm/cpu.h
+@@ -696,11 +696,10 @@ static inline void cpu_clone_regs(CPUARMState *env, target_ulong newsp)
+     (((F) & ARM_TBFLAG_BSWAP_CODE_MASK) >> ARM_TBFLAG_BSWAP_CODE_SHIFT)
+ 
+ static inline void cpu_get_tb_cpu_state(CPUARMState *env, target_ulong *pc,
+-                                        target_ulong *cs_base, int *flags)
++                                        int *flags)
+ {
+     int privmode;
+     *pc = env->regs[15];
+-    *cs_base = 0;
+     *flags = (env->thumb << ARM_TBFLAG_THUMB_SHIFT)
+         | (env->vfp.vec_len << ARM_TBFLAG_VECLEN_SHIFT)
+         | (env->vfp.vec_stride << ARM_TBFLAG_VECSTRIDE_SHIFT)
+diff --git a/target-cris/cpu.h b/target-cris/cpu.h
+index dbd7d36..41aeebf 100644
+--- a/target-cris/cpu.h
++++ b/target-cris/cpu.h
+@@ -274,10 +274,9 @@ static inline void cpu_set_tls(CPUCRISState *env, target_ulong newtls)
+ #include "exec/cpu-all.h"
+ 
+ static inline void cpu_get_tb_cpu_state(CPUCRISState *env, target_ulong *pc,
+-                                        target_ulong *cs_base, int *flags)
++                                        int *flags)
+ {
+     *pc = env->pc;
+-    *cs_base = 0;
+     *flags = env->dslot |
+             (env->pregs[PR_CCS] & (S_FLAG | P_FLAG | U_FLAG
+ 				     | X_FLAG | PFIX_FLAG));
+diff --git a/target-lm32/cpu.h b/target-lm32/cpu.h
+index bfb9150..8721cb9 100644
+--- a/target-lm32/cpu.h
++++ b/target-lm32/cpu.h
+@@ -232,10 +232,9 @@ static inline void cpu_set_tls(CPULM32State *env, target_ulong newtls)
+ #include "exec/cpu-all.h"
+ 
+ static inline void cpu_get_tb_cpu_state(CPULM32State *env, target_ulong *pc,
+-                                        target_ulong *cs_base, int *flags)
++                                        int *flags)
+ {
+     *pc = env->pc;
+-    *cs_base = 0;
+     *flags = 0;
+ }
+ 
+diff --git a/target-m68k/cpu.h b/target-m68k/cpu.h
+index c90c40c..5b48d87 100644
+--- a/target-m68k/cpu.h
++++ b/target-m68k/cpu.h
+@@ -253,10 +253,9 @@ static inline void cpu_clone_regs(CPUM68KState *env, target_ulong newsp)
+ #include "exec/cpu-all.h"
+ 
+ static inline void cpu_get_tb_cpu_state(CPUM68KState *env, target_ulong *pc,
+-                                        target_ulong *cs_base, int *flags)
++                                        int *flags)
+ {
+     *pc = env->pc;
+-    *cs_base = 0;
+     *flags = (env->fpcr & M68K_FPCR_PREC)       /* Bit  6 */
+             | (env->sr & SR_S)                  /* Bit  13 */
+             | ((env->macsr >> 4) & 0xf);        /* Bits 0-3 */
+diff --git a/target-microblaze/cpu.h b/target-microblaze/cpu.h
+index 1813939..a87d9ef 100644
+--- a/target-microblaze/cpu.h
++++ b/target-microblaze/cpu.h
+@@ -358,10 +358,9 @@ static inline target_ulong cpu_get_pc(CPUMBState *env)
+ }
+ 
+ static inline void cpu_get_tb_cpu_state(CPUMBState *env, target_ulong *pc,
+-                                        target_ulong *cs_base, int *flags)
++                                        int *flags)
+ {
+     *pc = env->sregs[SR_PC];
+-    *cs_base = 0;
+     *flags = (env->iflags & IFLAGS_TB_MASK) |
+                  (env->sregs[SR_MSR] & (MSR_UM | MSR_VM | MSR_EE));
+ }
+diff --git a/target-mips/cpu.h b/target-mips/cpu.h
+index cedf03d..b8d00fb 100644
+--- a/target-mips/cpu.h
++++ b/target-mips/cpu.h
+@@ -670,10 +670,9 @@ hwaddr cpu_mips_translate_address (CPUMIPSState *env, target_ulong address,
+ #endif
+ 
+ static inline void cpu_get_tb_cpu_state(CPUMIPSState *env, target_ulong *pc,
+-                                        target_ulong *cs_base, int *flags)
++                                        int *flags)
+ {
+     *pc = env->active_tc.PC;
+-    *cs_base = 0;
+     *flags = env->hflags & (MIPS_HFLAG_TMASK | MIPS_HFLAG_BMASK);
+ }
+ 
+diff --git a/target-moxie/cpu.h b/target-moxie/cpu.h
+index a9d9ace..7ae375f 100644
+--- a/target-moxie/cpu.h
++++ b/target-moxie/cpu.h
+@@ -147,10 +147,9 @@ static inline void cpu_pc_from_tb(CPUMoxieState *env, TranslationBlock *tb)
+ }
+ 
+ static inline void cpu_get_tb_cpu_state(CPUMoxieState *env, target_ulong *pc,
+-                                        target_ulong *cs_base, int *flags)
++                                        int *flags)
+ {
+     *pc = env->pc;
+-    *cs_base = 0;
+     *flags = 0;
+ }
+ 
+diff --git a/target-openrisc/cpu.h b/target-openrisc/cpu.h
+index b9c55ba..f57c76e 100644
+--- a/target-openrisc/cpu.h
++++ b/target-openrisc/cpu.h
+@@ -404,10 +404,9 @@ static inline void cpu_clone_regs(CPUOpenRISCState *env, target_ulong newsp)
+ 
+ static inline void cpu_get_tb_cpu_state(CPUOpenRISCState *env,
+                                         target_ulong *pc,
+-                                        target_ulong *cs_base, int *flags)
++                                        int *flags)
+ {
+     *pc = env->pc;
+-    *cs_base = 0;
+     /* D_FLAG -- branch instruction exception */
+     *flags = (env->flags & D_FLAG);
+ }
+diff --git a/target-ppc/cpu.h b/target-ppc/cpu.h
+index 42c36e2..8a3dbeb 100644
+--- a/target-ppc/cpu.h
++++ b/target-ppc/cpu.h
+@@ -2022,10 +2022,9 @@ static inline void cpu_write_xer(CPUPPCState *env, target_ulong xer)
+ }
+ 
+ static inline void cpu_get_tb_cpu_state(CPUPPCState *env, target_ulong *pc,
+-                                        target_ulong *cs_base, int *flags)
++                                        int *flags)
+ {
+     *pc = env->nip;
+-    *cs_base = 0;
+     *flags = env->hflags;
+ }
+ 
+diff --git a/target-s390x/cpu.h b/target-s390x/cpu.h
+index e351005..6e33400 100644
+--- a/target-s390x/cpu.h
++++ b/target-s390x/cpu.h
+@@ -278,10 +278,9 @@ static inline int cpu_mmu_index (CPUS390XState *env)
+ }
+ 
+ static inline void cpu_get_tb_cpu_state(CPUS390XState* env, target_ulong *pc,
+-                                        target_ulong *cs_base, int *flags)
++                                        int *flags)
+ {
+     *pc = env->psw.addr;
+-    *cs_base = 0;
+     *flags = ((env->psw.mask >> 32) & ~FLAG_MASK_CC) |
+              ((env->psw.mask & PSW_MASK_32) ? FLAG_MASK_32 : 0);
+ }
+diff --git a/target-sh4/cpu.h b/target-sh4/cpu.h
+index fd7da92..a2dbd98 100644
+--- a/target-sh4/cpu.h
++++ b/target-sh4/cpu.h
+@@ -354,10 +354,9 @@ static inline int cpu_ptel_pr (uint32_t ptel)
+ #define TB_FLAG_PENDING_MOVCA  (1 << 4)
+ 
+ static inline void cpu_get_tb_cpu_state(CPUSH4State *env, target_ulong *pc,
+-                                        target_ulong *cs_base, int *flags)
++                                        int *flags)
+ {
+     *pc = env->pc;
+-    *cs_base = 0;
+     *flags = (env->flags & (DELAY_SLOT | DELAY_SLOT_CONDITIONAL
+                     | DELAY_SLOT_TRUE | DELAY_SLOT_CLEARME))   /* Bits  0- 3 */
+             | (env->fpscr & (FPSCR_FR | FPSCR_SZ | FPSCR_PR))  /* Bits 19-21 */
+diff --git a/target-sparc/cpu.h b/target-sparc/cpu.h
+index 6fa7778..5331ad5 100644
+--- a/target-sparc/cpu.h
++++ b/target-sparc/cpu.h
+@@ -715,7 +715,7 @@ trap_state* cpu_tsptr(CPUSPARCState* env);
+ #define TB_FLAG_AM_ENABLED (1 << 5)
+ 
+ static inline void cpu_get_tb_cpu_state(CPUSPARCState *env, target_ulong *pc,
+-                                        target_ulong *cs_base, int *flags)
++                                        int *flags)
+ {
+     *pc = env->pc;
+     *cs_base = env->npc;
+diff --git a/target-unicore32/cpu.h b/target-unicore32/cpu.h
+index 5b2b9d1..7b46696 100644
+--- a/target-unicore32/cpu.h
++++ b/target-unicore32/cpu.h
+@@ -165,10 +165,9 @@ static inline void cpu_pc_from_tb(CPUUniCore32State *env, TranslationBlock *tb)
+ }
+ 
+ static inline void cpu_get_tb_cpu_state(CPUUniCore32State *env, target_ulong *pc,
+-                                        target_ulong *cs_base, int *flags)
++                                        int *flags)
+ {
+     *pc = env->regs[31];
+-    *cs_base = 0;
+     *flags = 0;
+     if ((env->uncached_asr & ASR_M) != ASR_MODE_USER) {
+         *flags |= (1 << 6);
+diff --git a/target-xtensa/cpu.h b/target-xtensa/cpu.h
+index 6c9fc35..d6e00f6 100644
+--- a/target-xtensa/cpu.h
++++ b/target-xtensa/cpu.h
+@@ -486,10 +486,9 @@ static inline int cpu_mmu_index(CPUXtensaState *env)
+ #define XTENSA_TBFLAG_CPENABLE_SHIFT 6
+ 
+ static inline void cpu_get_tb_cpu_state(CPUXtensaState *env, target_ulong *pc,
+-        target_ulong *cs_base, int *flags)
++        int *flags)
+ {
+     *pc = env->pc;
+-    *cs_base = 0;
+     *flags = 0;
+     *flags |= xtensa_get_ring(env);
+     if (env->sregs[PS] & PS_EXCM) {
+-- 
+1.7.2.5
+

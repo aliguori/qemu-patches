@@ -1,0 +1,40 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: blauwirbel@gmail.com, sw@weilnetz.de
+Date: Sat, 27 Apr 2013 13:48:36 +0200
+Message-id: 1367063321-19196-1-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 0/5] fix win32 compilation
+
+Here is a fix for the Win32 compilation problem that Blue reported,
+and another two nits I found while testing.  After these patches, a
+cross libtool is not needed anymore to build on Win32.
+
+Paolo Bonzini (5):
+  win32: add generic RC rules to rules.mak
+  win32: move Makefile dependencies on version-obj-y to rules.mak
+  win32: generate console executable again
+  add missing inclusions of config-host.h
+  win32: add readv/writev emulation
+
+ Makefile                    |  5 +----
+ Makefile.target             |  2 +-
+ include/qemu-common.h       | 22 ++--------------------
+ include/qemu/osdep.h        | 16 ++++++++++++++++
+ qga/channel-posix.c         |  1 +
+ rules.mak                   |  7 +++++++
+ tests/libi2c-omap.c         |  1 +
+ tests/libqtest.c            |  1 +
+ tests/tcg/test-i386-fprem.c |  1 +
+ tests/test-mul64.c          |  1 +
+ ui/sdl_zoom.c               |  1 +
+ ui/vnc.c                    |  1 +
+ util/hbitmap.c              |  1 +
+ util/iov.c                  |  2 +-
+ util/osdep.c                | 43 +++++++++++++++++++++++++++++++++++++++++++
+ 15 files changed, 79 insertions(+), 26 deletions(-)
+
+-- 
+1.8.2
+
+

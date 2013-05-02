@@ -1,0 +1,124 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Igor Mammedov <imammedo@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, ehabkost@redhat.com, mst@redhat.com,
+ jan.kiszka@siemens.com, claudio.fontana@huawei.com, aderumier@odiso.com,
+ lcapitulino@redhat.com, jfrei@linux.vnet.ibm.com, yang.z.zhang@intel.com,
+ pbonzini@redhat.com, eblake@redhat.com, afaerber@suse.de,
+ lig.fnst@cn.fujitsu.com, rth@twiddle.net
+Date: Mon, 29 Apr 2013 17:02:49 +0200
+Message-id: 1367247776-7695-1-git-send-email-imammedo@redhat.com
+Subject: [PATCH 0/7] target-i386: CPU hot-add with cpu-add QMP command
+
+Implements alternative way for hot-adding CPU using cpu-add QMP command,
+which could be useful until it would be possible to add CPUs via device_add.
+
+To hot-add CPU use following command from qmp-shell:
+ cpu-add id=[0..max-cpus - 1)
+
+git tree for testing: https://github.com/imammedo/qemu/tree/cpu_add.v7
+
+based on qom-cpu tree
+
+v7->v6:
+  * skip already applied patches
+  * rename icc-bus instance name to "icc"
+  * pass icc_bridge from board as argument down CPU creation call chain,
+    instead of dynamically resolving it for each CPU.
+
+v6->v5:
+  * override hot_add_cpu hook statically
+  * extend and use memory_region_find() in IOAPIC
+  * s/signal_cpu_creation/tcg_signal_cpu_creation/
+  * add "since 1.5 to cpu-addQAPI schema description
+
+v5->v4:
+  * style fixes
+  * new helper qemu_for_each_cpu()
+  * switch to qemu_for_each_cpu() in cpu_exists()
+  * "pc: update rtc ..." patch make depend it on "mc146818rtc: QOM'ify"
+    and use QOM cast style
+  * call CPU added notifier right before CPU becomes runable
+  * s/resume_vcpu/cpu_resume/
+  * acpi/piix4: add spec documentation for QEMU<->Seabios CPU hotplug
+    interface
+  * use error_propagate() in pc_new_cpu()
+  * skip cpu_exists() check in apic-id property setter if new value is
+    the same as current
+  * embed icc-bus inside icc-bridge and use qbus_create_inplace()
+  * move include/hw/i386/icc_bus.h into include/hw/cpu/
+  * make missing icc-bus fatal error for softmmu target
+  * split "move APIC to ICC bus" and "move IOAPIC to ICC bus" on smaller
+    patches
+  * use qdev_get_parent_bus() to get parent bus
+  * split "add cpu-add command..." on smaller patches
+
+v4->v3:
+  * 'id' in cpu-add command will be a thread number instead of APIC ID
+  * split off resume_vcpu() into separate patch
+  * move notifier from rtc code into pc.c
+
+v2->v3:
+  * use local error & propagate_error() instead of operating on
+    passed in errp in several places
+  * replace CPUClass.get_firmware_id() with CPUClass.get_arch_id()
+  * leave IOAPIC creation to board and just set bus to icc-bus
+  * include kvm-stub.o in cpu libary if no KVM is configured
+  * create resume_vcpu() stub and include it in libqemustub,
+    and use it directly instead of CPU method
+  * acpi_piix4: s/cpu_add_notifier/cpu_added_notifier/
+
+v1->v2:
+  * generalize cpu sync to KVM, resume and hot-plug notification and
+    invoke them form CPUClass, to make available to all targets.
+  * introduce cpu_exists() and CPUClass.get_firmware_id() and use
+    the last one in acpi_piix to make code target independent.
+  * move IOAPIC to ICC bus, it was suggested and easy to convert.
+  * leave kvmvapic as SysBusDevice, it doesn't affect hot-plug and
+    created only once for all APIC instances. I haven't found yet
+    good/clean enough way to convert it to ICCDevice. May be follow-up
+    though.
+  * split one big ICC patch into several, one per converted device
+  * add cpu_hot_add hook to machine and implement it for target-i386,
+    instead of adding stabs. Could be used by other targets to
+    implement cpu-add.
+  * pre-allocate links<CPU> for all possible CPUs and make them available
+    at /machine/icc-bridge/cpu[0..N] QOM path, so users could find out
+    possible/free CPU IDs to use in cpu-add command.
+
+
+Igor Mammedov (7):
+  target-i386: Introduce ICC bus/device/bridge
+  target-i386: Attach ICC bus to CPU on its creation
+  target-i386: Move APIC to ICC bus
+  pc: pass QEMUMachineInitArgs down to pc_cpus_init()
+  add hot_add_cpu hook to QEMUMachine and export machine_args
+  target-i386: implement machine->hot_add_cpu hook
+  QMP: add cpu-add command
+
+ MAINTAINERS                        |   6 ++
+ default-configs/i386-softmmu.mak   |   1 +
+ default-configs/x86_64-softmmu.mak |   1 +
+ hw/cpu/Makefile.objs               |   1 +
+ hw/cpu/icc_bus.c                   | 119 +++++++++++++++++++++++++++++++++++++
+ hw/i386/pc.c                       |  47 ++++++++++++---
+ hw/i386/pc_piix.c                  |  74 ++++++++---------------
+ hw/i386/pc_q35.c                   |  31 +++++-----
+ hw/intc/apic_common.c              |  18 ++++--
+ include/hw/boards.h                |   3 +
+ include/hw/cpu/icc_bus.h           |  82 +++++++++++++++++++++++++
+ include/hw/i386/apic_internal.h    |   6 +-
+ include/hw/i386/pc.h               |   4 +-
+ qapi-schema.json                   |  13 ++++
+ qmp-commands.hx                    |  23 +++++++
+ qmp.c                              |  10 ++++
+ target-i386/cpu.c                  |  27 ++++-----
+ target-i386/cpu.h                  |   3 +-
+ vl.c                               |   8 ++-
+ 19 files changed, 378 insertions(+), 99 deletions(-)
+ create mode 100644 hw/cpu/icc_bus.c
+ create mode 100644 include/hw/cpu/icc_bus.h
+
+-- 
+1.8.2.1
+

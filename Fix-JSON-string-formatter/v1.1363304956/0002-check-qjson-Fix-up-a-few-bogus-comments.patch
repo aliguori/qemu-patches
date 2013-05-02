@@ -1,0 +1,43 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Markus Armbruster <armbru@redhat.com>
+To: Laszlo Ersek <lersek@redhat.com>, Markus Armbruster <armbru@redhat.com>,
+ qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, blauwirbel@gmail.com,
+ qemu-devel@nongnu.org
+Date: Thu, 14 Mar 2013 18:49:18 +0100
+Message-id: 1363283360-26220-3-git-send-email-armbru@redhat.com
+Subject: [PATCH 2/4] check-qjson: Fix up a few bogus comments
+
+
+Signed-off-by: Markus Armbruster <armbru@redhat.com>
+Reviewed-by: Laszlo Ersek <lersek@redhat.com>
+---
+ tests/check-qjson.c | 5 ++---
+ 1 file changed, 2 insertions(+), 3 deletions(-)
+
+diff --git a/tests/check-qjson.c b/tests/check-qjson.c
+index ec85a0c..852124a 100644
+--- a/tests/check-qjson.c
++++ b/tests/check-qjson.c
+@@ -4,7 +4,7 @@
+  *
+  * Authors:
+  *  Anthony Liguori   <aliguori@us.ibm.com>
+- *  Markus Armbruster <armbru@redhat.com>,
++ *  Markus Armbruster <armbru@redhat.com>
+  *
+  * This work is licensed under the terms of the GNU LGPL, version 2.1 or later.
+  * See the COPYING.LIB file in the top-level directory.
+@@ -462,8 +462,7 @@ static void utf8_string(void)
+         },
+         /* 3.3.4  5-byte sequence with last byte missing (U+0000) */
+         {
+-            /* invalid */
+-            "\"\xF8\x80\x80\x80\"", /* bug: not corrected */
++            "\"\xF8\x80\x80\x80\"",
+             NULL,                   /* bug: rejected */
+             "\"\\u8000\\uFFFF\"",   /* bug: want "\"\\uFFFF\"" */
+             "\xF8\x80\x80\x80",
+-- 
+1.7.11.7
+

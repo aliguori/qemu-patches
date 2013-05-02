@@ -1,0 +1,43 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: 
+Date: Fri, 27 Jul 2012 17:02:49 +0200
+Message-id: 1343401379-19495-23-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 22/32] scsi: add tracepoint for scsi_req_cancel
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ hw/scsi-bus.c |    1 +
+ trace-events  |    1 +
+ 2 files changed, 2 insertions(+)
+
+diff --git a/hw/scsi-bus.c b/hw/scsi-bus.c
+index dd0cdd0..543d9d2 100644
+--- a/hw/scsi-bus.c
++++ b/hw/scsi-bus.c
+@@ -1496,6 +1496,7 @@ void scsi_req_complete(SCSIRequest *req, int status)
+ 
+ void scsi_req_cancel(SCSIRequest *req)
+ {
++    trace_scsi_req_cancel(req->dev->id, req->lun, req->tag);
+     if (!req->enqueued) {
+         return;
+     }
+diff --git a/trace-events b/trace-events
+index 6fb5eb5..7aa28b1 100644
+--- a/trace-events
++++ b/trace-events
+@@ -403,6 +403,7 @@ usb_host_parse_error(int bus, int addr, const char *errmsg) "dev %d:%d, msg %s"
+ 
+ # hw/scsi-bus.c
+ scsi_req_alloc(int target, int lun, int tag) "target %d lun %d tag %d"
++scsi_req_cancel(int target, int lun, int tag) "target %d lun %d tag %d"
+ scsi_req_data(int target, int lun, int tag, int len) "target %d lun %d tag %d len %d"
+ scsi_req_data_canceled(int target, int lun, int tag, int len) "target %d lun %d tag %d len %d"
+ scsi_req_dequeue(int target, int lun, int tag) "target %d lun %d tag %d"
+-- 
+1.7.10.4
+
+
+

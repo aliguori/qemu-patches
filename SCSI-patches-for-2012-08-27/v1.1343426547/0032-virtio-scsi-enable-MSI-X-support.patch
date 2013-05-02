@@ -1,0 +1,48 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: 
+Date: Fri, 27 Jul 2012 17:02:59 +0200
+Message-id: 1343401379-19495-33-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 32/32] virtio-scsi: enable MSI-X support
+
+While virtio-scsi does support multiqueue, the default number of
+interrupt vectors is not enough to actually enable usage of
+multiple queues in the driver; this is because with only 2
+vectors the driver will not be able to use a separate
+interrupt for each request queue.  Derive the desired number
+of vectors from the number of request queues.
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ hw/virtio-pci.c |    6 ++++--
+ 1 file changed, 4 insertions(+), 2 deletions(-)
+
+diff --git a/hw/virtio-pci.c b/hw/virtio-pci.c
+index 82859a5..1109467 100644
+--- a/hw/virtio-pci.c
++++ b/hw/virtio-pci.c
+@@ -1023,7 +1023,9 @@ static int virtio_scsi_init_pci(PCIDevice *pci_dev)
+         return -EINVAL;
+     }
+ 
+-    vdev->nvectors = proxy->nvectors;
++    vdev->nvectors = proxy->nvectors == DEV_NVECTORS_UNSPECIFIED
++                                        ? proxy->scsi.num_queues + 3
++                                        : proxy->nvectors;
+     virtio_init_pci(proxy, vdev);
+ 
+     /* make the actual value visible */
+@@ -1041,7 +1043,7 @@ static int virtio_scsi_exit_pci(PCIDevice *pci_dev)
+ 
+ static Property virtio_scsi_properties[] = {
+     DEFINE_PROP_BIT("ioeventfd", VirtIOPCIProxy, flags, VIRTIO_PCI_FLAG_USE_IOEVENTFD_BIT, true),
+-    DEFINE_PROP_UINT32("vectors", VirtIOPCIProxy, nvectors, 2),
++    DEFINE_PROP_UINT32("vectors", VirtIOPCIProxy, nvectors, DEV_NVECTORS_UNSPECIFIED),
+     DEFINE_VIRTIO_SCSI_PROPERTIES(VirtIOPCIProxy, host_features, scsi),
+     DEFINE_PROP_END_OF_LIST(),
+ };
+-- 
+1.7.10.4
+
+

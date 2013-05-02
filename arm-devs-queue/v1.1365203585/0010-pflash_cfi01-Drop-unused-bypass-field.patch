@@ -1,0 +1,57 @@
+From patches Mon Sep 17 00:00:00 2001
+From: "Peter Maydell" <peter.maydell@linaro.org>
+To: Anthony Liguori <aliguori@us.ibm.com>, Blue Swirl <blauwirbel@gmail.com>
+Cc: Paul Brook <paul@codesourcery.com>, qemu-devel@nongnu.org
+Date: Fri,  5 Apr 2013 18:13:15 +0100
+Message-id: 1365181999-15387-11-git-send-email-peter.maydell@linaro.org
+Subject: [PATCH 10/14] pflash_cfi01: Drop unused 'bypass' field
+
+For pflash_cfi01 the 'bypass' field is set to zero and never changes,
+so remove it (it is a leftover from pflash_cfi02, where bypass is
+implemented).
+
+Signed-off-by: Peter Maydell <peter.maydell@linaro.org>
+Message-id: 1363717469-30980-2-git-send-email-peter.maydell@linaro.org
+---
+ hw/pflash_cfi01.c |   10 ++--------
+ 1 file changed, 2 insertions(+), 8 deletions(-)
+
+diff --git a/hw/pflash_cfi01.c b/hw/pflash_cfi01.c
+index 5d57bab..20d10b3 100644
+--- a/hw/pflash_cfi01.c
++++ b/hw/pflash_cfi01.c
+@@ -68,7 +68,6 @@ struct pflash_t {
+     uint8_t width;
+     uint8_t be;
+     int wcycle; /* if 0, the flash is read normally */
+-    int bypass;
+     int ro;
+     uint8_t cmd;
+     uint8_t status;
+@@ -93,12 +92,8 @@ static void pflash_timer (void *opaque)
+     DPRINTF("%s: command %02x done\n", __func__, pfl->cmd);
+     /* Reset flash */
+     pfl->status ^= 0x80;
+-    if (pfl->bypass) {
+-        pfl->wcycle = 2;
+-    } else {
+-        memory_region_rom_device_set_readable(&pfl->mem, true);
+-        pfl->wcycle = 0;
+-    }
++    memory_region_rom_device_set_readable(&pfl->mem, true);
++    pfl->wcycle = 0;
+     pfl->cmd = 0;
+ }
+ 
+@@ -452,7 +447,6 @@ static void pflash_write(pflash_t *pfl, hwaddr offset,
+  reset_flash:
+     memory_region_rom_device_set_readable(&pfl->mem, true);
+ 
+-    pfl->bypass = 0;
+     pfl->wcycle = 0;
+     pfl->cmd = 0;
+ }
+-- 
+1.7.9.5
+
+

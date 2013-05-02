@@ -1,0 +1,1 @@
+../qapi-and-snapshot-code-clean-up-in-block-layer/v1.1367015468/0004-block-distinguish-id-and-name-in-bdrv_find_snapshot.patch

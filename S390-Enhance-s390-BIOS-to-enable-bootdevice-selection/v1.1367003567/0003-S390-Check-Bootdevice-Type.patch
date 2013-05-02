@@ -1,0 +1,85 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Dominik Dingel <dingel@linux.vnet.ibm.com>
+To: Dominik Dingel <dingel@linux.vnet.ibm.com>, Alexander Graf <agraf@suse.de>,
+ qemu-devel@nongnu.org, Christian Borntraeger <borntraeger@de.ibm.com>
+Cc: Christian Borntraeger <borntraeger@de.ibm.com>,
+ Alexander Graf <agraf@suse.de>, qemu-devel@nongnu.org,
+ Christian Paro <cparo@us.ibm.com>, Dominik Dingel <dingel@linux.vnet.ibm.com>
+Date: Fri, 26 Apr 2013 14:12:50 +0200
+Message-id: 1366978377-16823-4-git-send-email-dingel@linux.vnet.ibm.com
+Subject: [PATCH 03/10] S390: Check Bootdevice Type
+
+Check for a kernel IPL entry and load kernel image if one was
+specified.
+If no kernel image was supplied and the first boot device
+is not a virtio-ccw-blk device, print error message and exit.
+
+In case it is a virtio-ccw-blk device store the dev_no in reg[7]
+
+Signed-off-by: Christian Paro <cparo@us.ibm.com>
+Signed-off-by: Dominik Dingel <dingel@linux.vnet.ibm.com>
+
+diff --git a/hw/s390x/ipl.c b/hw/s390x/ipl.c
+index ace5ff5..9758529 100644
+--- a/hw/s390x/ipl.c
++++ b/hw/s390x/ipl.c
+@@ -16,6 +16,8 @@
+ #include "elf.h"
+ #include "hw/loader.h"
+ #include "hw/sysbus.h"
++#include "hw/s390x/virtio-ccw.h"
++#include "hw/s390x/css.h"
+ 
+ #define KERN_IMAGE_START                0x010000UL
+ #define KERN_PARM_AREA                  0x010480UL
+@@ -56,14 +58,25 @@ typedef struct S390IPLState {
+     char *firmware;
+ } S390IPLState;
+ 
++static void s390_ipl_kernel(uint64_t pswaddr)
++{
++    S390CPU *cpu = S390_CPU(qemu_get_cpu(0));
++    CPUS390XState *env = &cpu->env;
++
++    env->psw.addr = pswaddr;
++    env->psw.mask = IPL_PSW_MASK;
++    s390_add_running_cpu(cpu);
++}
+ 
+-static void s390_ipl_cpu(uint64_t pswaddr)
++static void s390_ipl_from_disk(VirtIOBlkCcw *dev, uint64_t pswaddr)
+ {
+     S390CPU *cpu = S390_CPU(qemu_get_cpu(0));
+     CPUS390XState *env = &cpu->env;
++    VirtioCcwDevice *ccw_dev = &(dev->parent_obj);
+ 
+     env->psw.addr = pswaddr;
+     env->psw.mask = IPL_PSW_MASK;
++    env->regs[7] = ccw_dev->sch->devno;
+     s390_add_running_cpu(cpu);
+ }
+ 
+@@ -152,7 +165,18 @@ static void s390_ipl_reset(DeviceState *dev)
+ {
+     S390IPLState *ipl = S390_IPL(dev);
+ 
+-    s390_ipl_cpu(ipl->start_addr);
++    if (ipl->kernel) {
++        return s390_ipl_kernel(ipl->start_addr);
++    }
++
++    DeviceState *boot_device = get_boot_device(0);
++    if (object_dynamic_cast(OBJECT(boot_device), TYPE_VIRTIO_BLK) != NULL) {
++        s390_ipl_from_disk(VIRTIO_BLK_CCW(boot_device->parent_obj.parent),
++                           ipl->start_addr);
++    } else {
++        fprintf(stderr, "qemu: s390x only supports boot from virtio-ccw-blk\n");
++        exit(1);
++    }
+ }
+ 
+ static void s390_ipl_class_init(ObjectClass *klass, void *data)
+-- 
+1.7.9.5
+
+

@@ -1,0 +1,52 @@
+From patches Mon Sep 17 00:00:00 2001
+From: liguang <lig.fnst@cn.fujitsu.com>
+To: Jesse Larrew <jlarrew@linux.vnet.ibm.com>, qemu-devel@nongnu.org,
+ liguang <lig.fnst@cn.fujitsu.com>
+Cc: Anthony Liguori <aliguori@us.ibm.com>, qemu-devel@nongnu.org,
+ liguang <lig.fnst@cn.fujitsu.com>
+Date: Mon, 15 Apr 2013 10:14:25 +0800
+Message-id: 1365992066-24348-2-git-send-email-lig.fnst@cn.fujitsu.com
+Subject: [PATCH 2/3] debugcon: make debug message more readable
+
+before change:
+Bdebugcon: write addr=0x0000 val=0x6f
+odebugcon: write addr=0x0000 val=0x6f
+odebugcon: write addr=0x0000 val=0x74
+tdebugcon: write addr=0x0000 val=0x69
+idebugcon: write addr=0x0000 val=0x6e
+ndebugcon: write addr=0x0000 val=0x67
+gdebugcon: write addr=0x0000 val=0x20
+ debugcon: write addr=0x0000 val=0x66
+
+after change:
+B [debugcon: write addr=0x0000 val=0x6f]
+o [debugcon: write addr=0x0000 val=0x6f]
+o [debugcon: write addr=0x0000 val=0x74]
+t [debugcon: write addr=0x0000 val=0x69]
+i [debugcon: write addr=0x0000 val=0x6e]
+n [debugcon: write addr=0x0000 val=0x67]
+g [debugcon: write addr=0x0000 val=0x20]
+  [debugcon: write addr=0x0000 val=0x66]
+
+Signed-off-by: liguang <lig.fnst@cn.fujitsu.com>
+---
+ hw/char/debugcon.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+diff --git a/hw/char/debugcon.c b/hw/char/debugcon.c
+index 44c93e1..b6f2b06 100644
+--- a/hw/char/debugcon.c
++++ b/hw/char/debugcon.c
+@@ -55,7 +55,7 @@ static void debugcon_ioport_write(void *opaque, hwaddr addr, uint64_t val,
+     unsigned char ch = val;
+ 
+ #ifdef DEBUG_DEBUGCON
+-    printf("debugcon: write addr=0x%04" HWADDR_PRIx " val=0x%02x\n", addr, val);
++    printf(" [debugcon: write addr=0x%04" HWADDR_PRIx " val=0x%02]\n", addr, val);
+ #endif
+ 
+     qemu_chr_fe_write(s->chr, &ch, 1);
+-- 
+1.7.2.5
+
+

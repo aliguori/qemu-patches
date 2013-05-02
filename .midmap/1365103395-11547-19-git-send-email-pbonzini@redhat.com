@@ -1,0 +1,1 @@
+../hw--reorganization-part-2/v3.1365128560/0018-hw-move-SCSI-controllers-to-hw-scsi--configure-via-default-configs-.patch

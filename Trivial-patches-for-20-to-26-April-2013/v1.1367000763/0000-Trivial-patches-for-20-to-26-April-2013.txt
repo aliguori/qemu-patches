@@ -1,0 +1,47 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Stefan Hajnoczi <stefanha@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>,
+ Stefan Hajnoczi <stefanha@redhat.com>
+Date: Fri, 26 Apr 2013 13:26:03 +0200
+Message-id: 1366975563-16216-1-git-send-email-stefanha@redhat.com
+Subject: [PATCH 0/5] Trivial patches for 20 to 26 April 2013
+
+The following changes since commit e3351000cd682200835763caca87adf708ed1c65:
+
+  Makefile: Use QEMU_FLAGS for DTC compilation (2013-04-26 02:48:10 +0200)
+
+are available in the git repository at:
+
+  git://github.com/stefanha/qemu.git trivial-patches
+
+for you to fetch changes up to 6ea8430d98c48eb67e47d14dfe8c0fdb86413555:
+
+  bsd-user: Track change in FreeBSD SYSCTL(9) types (2013-04-26 13:23:52 +0200)
+
+----------------------------------------------------------------
+Ed Maste (2):
+      virtio: Fix compilation without CONFIG_VHOST_SCSI
+      bsd-user: Track change in FreeBSD SYSCTL(9) types
+
+Gabriel Kerneis (1):
+      s390x: use CONFIG_INT128 to detect __uint128_t
+
+Peter Maydell (1):
+      linux-user: fix compile error due to stray colon at end of #ifdef line
+
+Thomas Schwinge (1):
+      qemu-doc: Option -ignore-environment removed.
+
+ bsd-user/syscall.c         | 4 ++++
+ hw/s390x/s390-virtio-bus.c | 2 ++
+ hw/s390x/virtio-ccw.c      | 2 ++
+ hw/s390x/virtio-ccw.h      | 2 ++
+ linux-user/syscall.c       | 2 +-
+ qemu-doc.texi              | 3 ---
+ target-s390x/int_helper.c  | 3 +--
+ 7 files changed, 12 insertions(+), 6 deletions(-)
+
+-- 
+1.8.1.4
+

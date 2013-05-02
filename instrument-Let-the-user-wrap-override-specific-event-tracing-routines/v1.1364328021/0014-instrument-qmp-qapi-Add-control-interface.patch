@@ -1,0 +1,268 @@
+From patches Mon Sep 17 00:00:00 2001
+From: =?utf-8?q?Llu=C3=ADs_Vilanova_=3Cvilanova=40ac=2Eupc=2Eedu=3E?=
+To: Eric Blake <eblake@redhat.com>, qemu-devel@nongnu.org
+Cc: qemu-devel@nongnu.org
+Date: Tue, 26 Mar 2013 15:01:39 +0100
+Message-id: 20130326140139.4471.51043.stgit@fimbulvetr.bsc.es
+Subject: [PATCH 14/22] instrument: [qmp, qapi] Add control interface
+
+Add QMP commands to control (un)loading of dynamic instrumentation library.
+
+Signed-off-by: Lluís Vilanova <vilanova@ac.upc.edu>
+---
+ include/qapi/qmp/qerror.h   |    9 +++++
+ instrument/Makefile.objs    |    1 +
+ instrument/qapi-schema.json |   33 ++++++++++++++++++++
+ instrument/qmp.c            |   59 ++++++++++++++++++++++++++++++++++++
+ qapi-schema.json            |    2 +
+ qmp-commands.hx             |   71 +++++++++++++++++++++++++++++++++++++++++++
+ qmp.c                       |    4 ++
+ 7 files changed, 179 insertions(+)
+ create mode 100644 instrument/qapi-schema.json
+ create mode 100644 instrument/qmp.c
+
+diff --git a/include/qapi/qmp/qerror.h b/include/qapi/qmp/qerror.h
+index 6c0a18d..67b4528 100644
+--- a/include/qapi/qmp/qerror.h
++++ b/include/qapi/qmp/qerror.h
+@@ -129,6 +129,15 @@ void assert_no_error(Error *err);
+ #define QERR_FEATURE_DISABLED \
+     ERROR_CLASS_GENERIC_ERROR, "The feature '%s' is not enabled"
+ 
++#define QERR_INSTR_LOAD_DL \
++    ERROR_CLASS_GENERIC_ERROR, "Error loading dynamic library: %s"
++
++#define QERR_INSTR_LOAD_LOADED \
++    ERROR_CLASS_GENERIC_ERROR, "Already loaded"
++
++#define QERR_INSTR_LOAD_UNLOADED \
++    ERROR_CLASS_GENERIC_ERROR, "Already unloaded"
++
+ #define QERR_INVALID_BLOCK_FORMAT \
+     ERROR_CLASS_GENERIC_ERROR, "Invalid block format '%s'"
+ 
+diff --git a/instrument/Makefile.objs b/instrument/Makefile.objs
+index adae4a9..ad9ca6d 100644
+--- a/instrument/Makefile.objs
++++ b/instrument/Makefile.objs
+@@ -67,3 +67,4 @@ endif
+ target-obj-y += control.o
+ 
+ common-obj-$(CONFIG_SOFTMMU) += hmp.o
++common-obj-$(CONFIG_SOFTMMU) += qmp.o
+diff --git a/instrument/qapi-schema.json b/instrument/qapi-schema.json
+new file mode 100644
+index 0000000..bf970f6
+--- /dev/null
++++ b/instrument/qapi-schema.json
+@@ -0,0 +1,33 @@
++# *-*- Mode: Python -*-*
++
++##
++# @instr-dynamic:
++#
++# Whether dynamic trace instrumentation is available.
++#
++# Since: 1.4
++##
++{ 'command': 'instr-dynamic',
++  'returns': 'bool' }
++
++##
++# @instr-load:
++#
++# Load a dynamic instrumentation library.
++#
++# @path: path to the dynamic instrumentation library
++# @args: arguments to the dynamic instrumentation library
++#
++# Since: 1.4
++##
++{ 'command': 'instr-load',
++  'data':    { 'path': 'str', 'args_': 'str' } }
++
++##
++# @instr-unload:
++#
++# Unload the current dynamic instrumentation library.
++#
++# Since: 1.4
++##
++{ 'command': 'instr-unload' }
+diff --git a/instrument/qmp.c b/instrument/qmp.c
+new file mode 100644
+index 0000000..2c369aa
+--- /dev/null
++++ b/instrument/qmp.c
+@@ -0,0 +1,59 @@
++/*
++ * QMP interface for dynamic trace instrumentation control commands.
++ *
++ * Copyright (C) 2012 Lluís Vilanova <vilanova@ac.upc.edu>
++ *
++ * This work is licensed under the terms of the GNU GPL, version 2 or later.
++ * See the COPYING file in the top-level directory.
++ */
++
++#include "qemu-common.h"
++#include "qapi/qmp/qerror.h"
++#include "qmp-commands.h"
++
++#include <dlfcn.h>
++
++#include "instrument/control.h"
++
++
++
++bool qmp_instr_dynamic(Error **errp)
++{
++    return instr_dynamic();
++}
++
++void qmp_instr_load(const char * path, const char *args, Error **errp)
++{
++    InstrLoadError err = instr_load(path, args);
++    switch (err) {
++    case INSTR_LOAD_OK:
++        break;
++    case INSTR_LOAD_UNAVAILABLE:
++        error_set(errp, QERR_UNSUPPORTED);
++        break;
++    case INSTR_LOAD_LOADED:
++        error_set(errp, QERR_INSTR_LOAD_LOADED);
++        break;
++    case INSTR_LOAD_DL:
++        error_set(errp, QERR_INSTR_LOAD_DL, dlerror());
++        break;
++    }
++}
++
++void qmp_instr_unload(Error **errp)
++{
++    InstrLoadError err = instr_unload();
++    switch (err) {
++    case INSTR_UNLOAD_OK:
++        break;
++    case INSTR_UNLOAD_UNAVAILABLE:
++        error_set(errp, QERR_UNSUPPORTED);
++        break;
++    case INSTR_UNLOAD_UNLOADED:
++        error_set(errp, QERR_INSTR_LOAD_UNLOADED);
++        break;
++    case INSTR_UNLOAD_DL:
++        error_set(errp, QERR_INSTR_LOAD_DL, dlerror());
++        break;
++    }
++}
+diff --git a/qapi-schema.json b/qapi-schema.json
+index 28b070f..1c8ba7d 100644
+--- a/qapi-schema.json
++++ b/qapi-schema.json
+@@ -2360,6 +2360,8 @@
+ ##
+ { 'command': 'device_del', 'data': {'id': 'str'} }
+ 
++input("instrument/qapi-schema.json")
++
+ ##
+ # @dump-guest-memory
+ #
+diff --git a/qmp-commands.hx b/qmp-commands.hx
+index 799adea..f704221 100644
+--- a/qmp-commands.hx
++++ b/qmp-commands.hx
+@@ -1488,6 +1488,77 @@ Notes:
+     o Commands that prompt the user for data (eg. 'cont' when the block
+       device is encrypted) don't currently work
+ 
++instr-dynamic
++-------------
++
++Whether dynamic trace instrumentation is available.
++
++Arguments: None.
++
++Example:
++
++-> { "execute": "instr-dyanmic" }
++<- { "return": true }
++
++EQMP
++
++    {
++        .name       = "instr-dynamic",
++        .args_type  = "",
++        .mhandler.cmd_new = qmp_marshal_input_instr_dynamic,
++    },
++
++
++SQMP
++
++instr-load
++----------
++
++Load a dynamic instrumentation library.
++
++Arguments:
++
++- path: path to the dynamic instrumentation library
++
++Example:
++
++-> { "execute": "instr-load", "arguments": { "path": "/tmp/libtrace-instrument.so" } }
++<- { "return": {} }
++
++EQMP
++
++    {
++        .name       = "instr-load",
++        .args_type  = "path:s",
++        .params     = "path",
++        .mhandler.cmd_new = qmp_marshal_input_instr_load,
++    },
++
++
++SQMP
++
++instr-unload
++------------
++
++Unload the current dynamic instrumentation library.
++
++Arguments: None.
++
++Example:
++
++-> { "execute": "instr-unload" }
++<- { "return": {} }
++
++EQMP
++
++    {
++        .name       = "instr-unload",
++        .args_type  = "",
++        .mhandler.cmd_new = qmp_marshal_input_instr_unload,
++    },
++
++
++SQMP
+ 3. Query Commands
+ =================
+ 
+diff --git a/qmp.c b/qmp.c
+index 55b056b..72abe03 100644
+--- a/qmp.c
++++ b/qmp.c
+@@ -24,6 +24,10 @@
+ #include "hw/qdev.h"
+ #include "sysemu/blockdev.h"
+ #include "qom/qom-qobject.h"
++#if defined(TRACE_INSTRUMENT_DYNAMIC)
++#include "instrument/qi-qmp-commands.h"
++#endif
++
+ 
+ NameInfo *qmp_query_name(Error **errp)
+ {
+
+

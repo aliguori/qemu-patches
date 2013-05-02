@@ -1,0 +1,1 @@
+../i386-ROR-r8-r16-instruction-fix/v1.1366041555/0001-i386-ROR-r8-r16-instruction-fix.patch

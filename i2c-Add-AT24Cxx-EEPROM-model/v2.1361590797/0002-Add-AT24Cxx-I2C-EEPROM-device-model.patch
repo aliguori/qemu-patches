@@ -1,0 +1,415 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Jan Kiszka <jan.kiszka@siemens.com>
+To: Anthony Liguori <aliguori@us.ibm.com>, Paolo Bonzini <pbonzini@redhat.com>,
+ qemu-devel <qemu-devel@nongnu.org>,
+ Peter Crosthwaite <peter.crosthwaite@xilinx.com>,
+ Jan Kiszka <jan.kiszka@siemens.com>,
+ Andreas =?utf-8?Q?F=C3=A4rber?= <afaerber@suse.de>,
+ =?ISO-8859-15?Q?Andreas_F=E4rber?= <afaerber@suse.de>
+Cc: Anthony Liguori <aliguori@us.ibm.com>, Paolo Bonzini <pbonzini@redhat.com>,
+ Jan Kiszka <jan.kiszka@siemens.com>, qemu-devel <qemu-devel@nongnu.org>,
+ =?utf-8?b?IkFuZHJlYXMgRsOkcmJlciI=?= <afaerber@suse.de>
+Date: Fri, 22 Feb 2013 21:39:59 +0100
+Message-id: 661021052fba1fed3d9d872b47ae050c5593ebfc.1361565596.git.jan.kiszka@siemens.com
+Subject: [PATCH 2/2] Add AT24Cxx I2C EEPROM device model
+
+This implements I2C EEPROMs of the AT24Cxx series. Sizes from 1Kbit to
+1024Kbit are supported. Each EEPROM is backed by a block device. Its
+size can be explicitly specified by the "size" property (required for
+sizes < 512, the blockdev sector size) or is derived from the size of
+the backing block device. Device addresses are built from the device
+number property. Write protection can be configured by declaring the
+block device read-only.
+
+Signed-off-by: Jan Kiszka <jan.kiszka@siemens.com>
+---
+ hw/Makefile.objs |    2 +-
+ hw/at24.c        |  363 ++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 364 insertions(+), 1 deletions(-)
+ create mode 100644 hw/at24.c
+
+diff --git a/hw/Makefile.objs b/hw/Makefile.objs
+index a1f3a80..a64700c 100644
+--- a/hw/Makefile.objs
++++ b/hw/Makefile.objs
+@@ -178,7 +178,7 @@ common-obj-$(CONFIG_SSD0323) += ssd0323.o
+ common-obj-$(CONFIG_ADS7846) += ads7846.o
+ common-obj-$(CONFIG_MAX111X) += max111x.o
+ common-obj-$(CONFIG_DS1338) += ds1338.o
+-common-obj-y += i2c.o smbus.o smbus_eeprom.o
++common-obj-y += i2c.o smbus.o smbus_eeprom.o at24.o
+ common-obj-y += eeprom93xx.o
+ common-obj-y += scsi-disk.o cdrom.o hd-geometry.o block-common.o
+ common-obj-y += scsi-generic.o scsi-bus.o
+diff --git a/hw/at24.c b/hw/at24.c
+new file mode 100644
+index 0000000..0dfefd4
+--- /dev/null
++++ b/hw/at24.c
+@@ -0,0 +1,363 @@
++/*
++ * AT24Cxx EEPROM emulation
++ *
++ * Copyright (c) Siemens AG, 2012
++ * Author: Jan Kiszka
++ *
++ * Permission is hereby granted, free of charge, to any person obtaining a copy
++ * of this software and associated documentation files (the "Software"), to deal
++ * in the Software without restriction, including without limitation the rights
++ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
++ * copies of the Software, and to permit persons to whom the Software is
++ * furnished to do so, subject to the following conditions:
++ *
++ * The above copyright notice and this permission notice shall be included in
++ * all copies or substantial portions of the Software.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
++ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
++ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
++ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
++ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
++ * THE SOFTWARE.
++ */
++
++#include "hw.h"
++#include "i2c.h"
++#include "sysemu/blockdev.h"
++#include "hw/block-common.h"
++
++#define AT24_BASE_ADDRESS   0x50
++#define AT24_MAX_PAGE_LEN   256
++
++typedef enum AT24TransferState {
++    AT24_IDLE,
++    AT24_RD_ADDR,
++    AT24_WR_ADDR_HI,
++    AT24_WR_ADDR_LO,
++    AT24_RW_DATA0,
++    AT24_RD_DATA,
++    AT24_WR_DATA,
++} AT24TransferState;
++
++typedef struct AT24State {
++    I2CSlave i2c;
++    BlockConf block_conf;
++    BlockDriverState *bs;
++    uint32_t size;
++    bool wp;
++    unsigned int addr_mask;
++    unsigned int page_mask;
++    bool addr16;
++    unsigned int hi_addr_mask;
++    uint8_t device;
++    AT24TransferState transfer_state;
++    uint8_t sector_buffer[BDRV_SECTOR_SIZE];
++    int cached_sector;
++    bool cache_dirty;
++    uint32_t transfer_addr;
++} AT24State;
++
++static void at24_flush_transfer_buffer(AT24State *s)
++{
++    if (s->cached_sector < 0 || !s->cache_dirty) {
++        return;
++    }
++    bdrv_write(s->bs, s->cached_sector, s->sector_buffer, 1);
++    s->cache_dirty = false;
++}
++
++static void at24_event(I2CSlave *i2c, enum i2c_event event, uint8_t param)
++{
++    AT24State *s = DO_UPCAST(AT24State, i2c, i2c);
++
++    switch (event) {
++    case I2C_START_SEND:
++        switch (s->transfer_state) {
++        case AT24_IDLE:
++            if (s->addr16) {
++                s->transfer_addr = (param & s->hi_addr_mask) << 16;
++                s->transfer_state = AT24_WR_ADDR_HI;
++            } else {
++                s->transfer_addr = (param & s->hi_addr_mask) << 8;
++                s->transfer_state = AT24_WR_ADDR_LO;
++            }
++            break;
++        default:
++            s->transfer_state = AT24_IDLE;
++            break;
++        }
++        break;
++    case I2C_START_RECV:
++        switch (s->transfer_state) {
++        case AT24_IDLE:
++            s->transfer_state = AT24_RD_ADDR;
++            break;
++        case AT24_RW_DATA0:
++            s->transfer_state = AT24_RD_DATA;
++            break;
++        default:
++            s->transfer_state = AT24_IDLE;
++            break;
++        }
++        break;
++    case I2C_FINISH:
++        switch (s->transfer_state) {
++        case AT24_WR_DATA:
++            at24_flush_transfer_buffer(s);
++            /* fall through */
++        default:
++            s->transfer_state = AT24_IDLE;
++            break;
++        }
++        break;
++    default:
++        s->transfer_state = AT24_IDLE;
++        break;
++    }
++}
++
++static int at24_cache_sector(AT24State *s, int sector)
++{
++    int ret;
++
++    if (s->cached_sector == sector) {
++        return 0;
++    }
++    ret = bdrv_read(s->bs, sector, s->sector_buffer, 1);
++    if (ret < 0) {
++        s->cached_sector = -1;
++        return ret;
++    }
++    s->cached_sector = sector;
++    s->cache_dirty = false;
++    return 0;
++}
++
++static int at24_tx(I2CSlave *i2c, uint8_t data)
++{
++    AT24State *s = DO_UPCAST(AT24State, i2c, i2c);
++
++    switch (s->transfer_state) {
++    case AT24_WR_ADDR_HI:
++        s->transfer_addr |= (data << 8) & s->addr_mask;
++        s->transfer_state = AT24_WR_ADDR_LO;
++        break;
++    case AT24_WR_ADDR_LO:
++        s->transfer_addr |= data & s->addr_mask;
++        s->transfer_state = AT24_RW_DATA0;
++        break;
++    case AT24_RW_DATA0:
++        s->transfer_state = AT24_WR_DATA;
++        if (at24_cache_sector(s, s->transfer_addr >> BDRV_SECTOR_BITS) < 0) {
++            s->transfer_state = AT24_IDLE;
++            return -1;
++        }
++        /* fall through */
++    case AT24_WR_DATA:
++        if (!s->wp) {
++            s->sector_buffer[s->transfer_addr & ~BDRV_SECTOR_MASK] = data;
++            s->cache_dirty = true;
++        }
++        s->transfer_addr = (s->transfer_addr & s->page_mask) |
++            ((s->transfer_addr + 1) & ~s->page_mask);
++        break;
++    default:
++        s->transfer_state = AT24_IDLE;
++        return -1;
++    }
++    return 0;
++}
++
++static int at24_rx(I2CSlave *i2c)
++{
++    AT24State *s = DO_UPCAST(AT24State, i2c, i2c);
++    unsigned int sector, offset;
++    int result;
++
++    switch (s->transfer_state) {
++    case AT24_RD_ADDR:
++        s->transfer_state = AT24_IDLE;
++        result = s->transfer_addr;
++        break;
++    case AT24_RD_DATA:
++        sector = s->transfer_addr >> BDRV_SECTOR_BITS;
++        offset = s->transfer_addr & ~BDRV_SECTOR_MASK;
++        s->transfer_addr = (s->transfer_addr + 1) & s->addr_mask;
++        if (at24_cache_sector(s, sector) < 0) {
++            result = 0;
++            break;
++        }
++        result = s->sector_buffer[offset];
++        break;
++    default:
++        s->transfer_state = AT24_IDLE;
++        result = 0;
++        break;
++    }
++    return result;
++}
++
++static void at24_reset(DeviceState *d)
++{
++    AT24State *s = DO_UPCAST(AT24State, i2c.qdev, d);
++
++    s->transfer_state = AT24_IDLE;
++    s->cached_sector = -1;
++}
++
++static int at24_init(I2CSlave *i2c)
++{
++    AT24State *s = DO_UPCAST(AT24State, i2c, i2c);
++    unsigned int page_size;
++    int64_t image_size;
++    int device_bits;
++    int hi_addr_bits;
++    int dev_no;
++
++    assert(AT24_MAX_PAGE_LEN <= BDRV_SECTOR_SIZE);
++
++    s->bs = s->block_conf.bs;
++    if (!s->bs) {
++        error_report("drive property not set");
++        return -1;
++    }
++
++    s->wp = bdrv_is_read_only(s->bs);
++
++    image_size = bdrv_getlength(s->bs);
++    if (s->size == 0) {
++        s->size = image_size;
++    } else if (image_size < s->size) {
++        error_report("image file smaller than specified EEPROM size");
++        return -1;
++    }
++
++    switch (s->size * 8) {
++    case 1*1024:
++    case 2*1024:
++        page_size = 8;
++        device_bits = 3;
++        hi_addr_bits = 0;
++        break;
++    case 4*1024:
++        page_size = 16;
++        device_bits = 2;
++        hi_addr_bits = 1;
++        break;
++    case 8*1024:
++        page_size = 16;
++        device_bits = 1;
++        hi_addr_bits = 2;
++        break;
++    case 16*1024:
++        page_size = 16;
++        device_bits = 0;
++        hi_addr_bits = 3;
++        break;
++    case 32*1024:
++    case 64*1024:
++        page_size = 32;
++        device_bits = 3;
++        hi_addr_bits = 0;
++        s->addr16 = true;
++        break;
++    case 128*1024:
++    case 256*1024:
++        page_size = 64;
++        device_bits = 2;
++        hi_addr_bits = 0;
++        s->addr16 = true;
++        break;
++    case 512*1024:
++        page_size = 128;
++        device_bits = 2;
++        hi_addr_bits = 0;
++        s->addr16 = true;
++        break;
++    case 1024*1024:
++        page_size = 256;
++        device_bits = 1;
++        hi_addr_bits = 1;
++        s->addr16 = true;
++        break;
++    default:
++        error_report("invalid EEPROM size, must be 2^(10..17)");
++        return -1;
++    }
++    s->addr_mask = s->size - 1;
++    s->page_mask = ~(page_size - 1);
++    s->hi_addr_mask = (1 << hi_addr_bits) - 1;
++
++    dev_no = (s->device & ((1 << device_bits) - 1)) << hi_addr_bits;
++    i2c->address = AT24_BASE_ADDRESS | dev_no;
++    i2c->address_mask &= ~s->hi_addr_mask;
++
++    return 0;
++}
++
++static void at24_pre_save(void *opaque)
++{
++    AT24State *s = opaque;
++
++    at24_flush_transfer_buffer(s);
++}
++
++static int at24_post_load(void *opaque, int version_id)
++{
++    AT24State *s = opaque;
++
++    s->cached_sector = -1;
++    return 0;
++}
++
++static const VMStateDescription vmstate_at24 = {
++    .name = "at24",
++    .version_id = 1,
++    .minimum_version_id = 1,
++    .minimum_version_id_old = 1,
++    .pre_save = at24_pre_save,
++    .post_load = at24_post_load,
++    .fields = (VMStateField[]) {
++        VMSTATE_UINT32(transfer_state, AT24State),
++        VMSTATE_UINT32(transfer_addr, AT24State),
++        VMSTATE_END_OF_LIST()
++    }
++};
++
++static Property at24_properties[] = {
++    DEFINE_BLOCK_PROPERTIES(AT24State, block_conf),
++    DEFINE_PROP_UINT8("device", AT24State, device, 0),
++    DEFINE_PROP_UINT32("size", AT24State, size, 0),
++    DEFINE_PROP_END_OF_LIST(),
++};
++
++static void at24_class_init(ObjectClass *klass, void *data)
++{
++    DeviceClass *dc = DEVICE_CLASS(klass);
++    I2CSlaveClass *sc = I2C_SLAVE_CLASS(klass);
++
++    sc->init = at24_init;
++    sc->event = at24_event;
++    sc->recv = at24_rx;
++    sc->send = at24_tx;
++    dc->desc = "AT24Cxx EEPROM";
++    dc->reset = at24_reset;
++    dc->vmsd = &vmstate_at24;
++    dc->props = at24_properties;
++}
++
++static TypeInfo at24_info = {
++    .name          = "at24",
++    .parent        = TYPE_I2C_SLAVE,
++    .instance_size = sizeof(AT24State),
++    .class_init    = at24_class_init,
++};
++
++static void at24_register_types(void)
++{
++    type_register_static(&at24_info);
++}
++
++type_init(at24_register_types)
+-- 
+1.7.3.4
+

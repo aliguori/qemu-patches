@@ -1,0 +1,1 @@
+../build-ACPI-MADT-for-fw_cfg-clients/v1.1363843392/0006-acpi_table_add-extract-and-reimplement-internals.patch

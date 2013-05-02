@@ -1,0 +1,1 @@
+../trim-down-config-targetmak/v1.1364939055/0001-configure-move-TARGET__ALIGNMENT-to-target--cpuh.patch

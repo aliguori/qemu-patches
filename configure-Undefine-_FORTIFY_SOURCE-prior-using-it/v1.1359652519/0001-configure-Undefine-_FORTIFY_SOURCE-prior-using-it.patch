@@ -1,0 +1,43 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Michal Privoznik <mprivozn@redhat.com>
+To: Paolo Bonzini <pbonzini@redhat.com>, Stefan Hajnoczi <stefanha@gmail.com>,
+ Michal Privoznik <mprivozn@redhat.com>, qemu-devel@nongnu.org,
+ =?UTF-8?B?QW5kcmVhcyBGw6RyYmVy?= <afaerber@suse.de>
+Cc: Paolo Bonzini <pbonzini@redhat.com>, qemu-trivial@nongnu.org,
+ Stefan Hajnoczi <stefanha@gmail.com>, qemu-devel@nongnu.org,
+ Richard Henderson <rth@twiddle.net>,
+ Andreas =?iso-8859-1?Q?F=E4rber?= <afaerber@suse.de>,
+ Michal Privoznik <mprivozn@redhat.com>,
+ =?ISO-8859-1?Q?Andreas_F=E4rber?= <afaerber@suse.de>,
+ Andreas =?utf-8?Q?F=C3=A4rber?= <afaerber@suse.de>,
+ =?ISO-8859-1?Q?Andreas_F=E4?= =?ISO-8859-1?Q?rber?= <afaerber@suse.de>
+Date: Thu, 31 Jan 2013 11:15:19 +0100
+Message-id: 9021f2f9e51e4c7a253d1993ea05f87d0718752f.1359627279.git.mprivozn@redhat.com
+Subject: [PATCH 1/1] configure: Undefine _FORTIFY_SOURCE prior using it
+
+Currently, we are enforcing the _FORTIFY_SOURCE=2 without any
+previous detection if the macro has been already defined, e.g.
+by environment, or is just enabled by compiler by default.
+
+Signed-off-by: Michal Privoznik <mprivozn@redhat.com>
+---
+ configure | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/configure b/configure
+index b7635e4..97070eb 100755
+--- a/configure
++++ b/configure
+@@ -3159,7 +3159,7 @@ if test "$gcov" = "yes" ; then
+   CFLAGS="-fprofile-arcs -ftest-coverage -g $CFLAGS"
+   LDFLAGS="-fprofile-arcs -ftest-coverage $LDFLAGS"
+ elif test "$debug" = "no" ; then
+-  CFLAGS="-O2 -D_FORTIFY_SOURCE=2 $CFLAGS"
++  CFLAGS="-O2 -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=2 $CFLAGS"
+ fi
+ 
+ 
+-- 
+1.8.0.2
+
+

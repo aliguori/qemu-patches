@@ -1,0 +1,87 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: 
+Date: Fri, 27 Jul 2012 17:02:27 +0200
+Message-id: 1343401379-19495-1-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 00/32] SCSI patches for 2012-08-27
+
+Anthony,
+
+The following changes since commit a21143486b9c6d7a50b7b62877c02b3c686943cb:
+
+  Merge remote-tracking branch 'stefanha/net' into staging (2012-07-23 13:15:34 -0500)
+
+are available in the git repository at:
+
+  git://github.com/bonzini/qemu.git scsi-next
+
+for you to fetch changes up to 4c205d0cb1c8bde5a53f6acceda74dae1043a197:
+
+  virtio-scsi: enable MSI-X support (2012-07-27 15:47:30 +0200)
+
+The main changes here are virtio-scsi event support (including
+hotplug from Cong Meng and block_resize), cache toggle (and large
+refactoring required for it), a few other scsi-disk improvements, and
+two small preparatory patches for virtio-scsi multiqueue.
+
+Paolo
+
+----------------------------------------------------------------
+Cong Meng (2):
+      scsi: introduce hotplug() and hot_unplug() interfaces for SCSI bus
+      virtio-scsi: Implement hotplug support for virtio-scsi
+
+Dmitry Fleytman (2):
+      cutils: add strpadcpy()
+      scsi-disk: let the user customize vendor and product name
+
+Hannes Reinecke (1):
+      megasas: Replace trace_megasas_dcmd_dump_frame()
+
+Paolo Bonzini (24):
+      megasas: fix misuse of scsi_req_abort
+      lsi: use qdev_reset_all
+      lsi: introduce lsi_request_free
+      lsi: avoid redundant tests of s->current != NULL
+      scsi-block: remove properties that are not relevant for passthrough
+      scsi-disk: make discard asynchronous
+      scsi-disk: move all non-DMA commands to scsi_disk_emulate_command
+      scsi-disk: split scsi-disk reqops
+      scsi-disk: separate read_data/write_data implementation for emulate_reqops
+      scsi-disk: support emulated TO_DEV requests
+      scsi-disk: adjust offsets in MODE SENSE by 2
+      scsi-disk: fix changeable values for MODE_PAGE_R_W_ERROR
+      scsi-disk: parse MODE SELECT commands and parameters
+      scsi-disk: support toggling the write cache
+      scsi-disk: removable hard disks support load/eject
+      scsi: add tracepoint for scsi_req_cancel
+      scsi: establish precedence levels for unit attention
+      scsi-disk: report resized disk via sense codes
+      scsi: report parameter changes to HBA drivers
+      virtio-scsi: Report missed events
+      virtio-scsi: do not report dropped events after reset
+      virtio-scsi: report parameter change events
+      virtio-scsi: add ioeventfd support
+      virtio-scsi: enable MSI-X support
+
+Ronnie Sahlberg (3):
+      scsi-disk: rd/wr/vr-protect !=0 is an error
+      scsi-disk: improve the lba-out-of-range tests for read/write/verify
+      scsi-disk: Fail medium writes with proper sense for readonly LUNs
+
+ cutils.c         |    7 +
+ hw/lsi53c895a.c  |   51 ++--
+ hw/megasas.c     |   41 +--
+ hw/scsi-bus.c    |  100 ++++++-
+ hw/scsi-disk.c   |  774 +++++++++++++++++++++++++++++++++++++-----------------
+ hw/scsi.h        |   13 +
+ hw/virtio-pci.c  |    7 +-
+ hw/virtio-scsi.c |  115 +++++++-
+ qemu-common.h    |    1 +
+ trace-events     |    4 +-
+ 10 files changed, 796 insertions(+), 317 deletions(-)
+-- 
+1.7.10.4
+
+

@@ -1,0 +1,46 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: av1474@comtv.ru
+Date: Tue,  2 Apr 2013 16:51:01 +0200
+Message-id: 1364914261-4237-7-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 6/6] audio: move PCI audio cards to pci.mak
+
+This way, all PCI targets get them.
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ default-configs/pci.mak   | 3 +++
+ default-configs/sound.mak | 3 ---
+ 2 files changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/default-configs/pci.mak b/default-configs/pci.mak
+index ce56d58..d32ddee 100644
+--- a/default-configs/pci.mak
++++ b/default-configs/pci.mak
+@@ -9,6 +9,9 @@ CONFIG_NE2000_PCI=y
+ CONFIG_EEPRO100_PCI=y
+ CONFIG_PCNET_PCI=y
+ CONFIG_PCNET_COMMON=y
++CONFIG_AC97=y
++CONFIG_HDA=y
++CONFIG_ES1370=y
+ CONFIG_LSI_SCSI_PCI=y
+ CONFIG_MEGASAS_SCSI_PCI=y
+ CONFIG_RTL8139_PCI=y
+diff --git a/default-configs/sound.mak b/default-configs/sound.mak
+index ed20388..ff69c4d 100644
+--- a/default-configs/sound.mak
++++ b/default-configs/sound.mak
+@@ -1,7 +1,4 @@
+ CONFIG_SB16=y
+-CONFIG_AC97=y
+-CONFIG_HDA=y
+-CONFIG_ES1370=y
+ #CONFIG_ADLIB=y
+ #CONFIG_GUS=y
+ #CONFIG_CS4231A=y
+-- 
+1.8.1.4
+
+

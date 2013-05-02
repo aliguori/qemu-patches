@@ -1,0 +1,67 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: Paolo Bonzini <pbonzini@redhat.com>, qemu-devel@nongnu.org
+Cc: armbru@redhat.com, qemu-devel@nongnu.org
+Date: Tue, 16 Apr 2013 10:50:38 +0200
+Message-id: 1366102238-12374-1-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 1/1] build: include config-{,
+ all-}devices.mak after defining CONFIG_SOFTMMU and CONFIG_USER_ONLY
+
+Moving the inclusions closer to Makefile, and before rules.mak, makes
+Makefile and Makefile.target more consistent with each other.
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+Tested-by: Markus Armbruster <armbru@redhat.com>
+---
+ Makefile        | 12 ++++++------
+ Makefile.target |  2 +-
+ 2 files changed, 7 insertions(+), 7 deletions(-)
+
+diff --git a/Makefile b/Makefile
+index 67f19f2..516ccbb 100644
+--- a/Makefile
++++ b/Makefile
+@@ -19,6 +19,12 @@ seems to have been used for an in-tree build. You can fix this by running \
+ endif
+ endif
+ 
++CONFIG_SOFTMMU := $(if $(filter %-softmmu,$(TARGET_DIRS)),y)
++CONFIG_USER_ONLY := $(if $(filter %-user,$(TARGET_DIRS)),y)
++CONFIG_ALL=y
++-include config-all-devices.mak
++-include config-all-disas.mak
++
+ include $(SRC_PATH)/rules.mak
+ config-host.mak: $(SRC_PATH)/configure
+ 	@echo $@ is out-of-date, running configure
+@@ -107,12 +113,6 @@ endif
+ defconfig:
+ 	rm -f config-all-devices.mak $(SUBDIR_DEVICES_MAK)
+ 
+--include config-all-devices.mak
+--include config-all-disas.mak
+-CONFIG_SOFTMMU := $(if $(filter %-softmmu,$(TARGET_DIRS)),y)
+-CONFIG_USER_ONLY := $(if $(filter %-user,$(TARGET_DIRS)),y)
+-CONFIG_ALL=y
+-
+ ifneq ($(wildcard config-host.mak),)
+ include $(SRC_PATH)/Makefile.objs
+ include $(SRC_PATH)/tests/Makefile
+diff --git a/Makefile.target b/Makefile.target
+index 2bd6d14..121bcdc 100644
+--- a/Makefile.target
++++ b/Makefile.target
+@@ -1,8 +1,8 @@
+ # -*- Mode: makefile -*-
+ 
+ include ../config-host.mak
+-include config-devices.mak
+ include config-target.mak
++include config-devices.mak
+ include $(SRC_PATH)/rules.mak
+ 
+ $(call set-vpath, $(SRC_PATH))
+-- 
+1.8.1.4
+
+

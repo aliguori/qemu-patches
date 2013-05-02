@@ -1,0 +1,78 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Alon Levy <alevy@redhat.com>
+To: qemu list <qemu-devel@nongnu.org>, Alon Levy <alevy@redhat.com>
+Cc: Anthony Liguori <aliguori@us.ibm.com>, qemu list <qemu-devel@nongnu.org>
+Date: Wed, 24 Apr 2013 04:06:29 -0400 (EDT)
+Message-id: 921423767.1475937.1366790789930.JavaMail.root@redhat.com
+Subject: [PATCH 1/1] libcacard and ccid fixes
+
+The following changes since commit bb71623811686ce3c34ce724f073f5c5dd95f51b:
+
+  Move TPM passthrough specific command line options to backend structure (2013-04-23 10:40:40 -0500)
+
+are available in the git repository at:
+
+  git://people.freedesktop.org/~alon/qemu libcacard_ccid.1
+
+for you to fetch changes up to 203a368e66f5211b832e17b85c6f5dacfc8d7bf9:
+
+  libcacard/cac: change big switch functions to single return point (2013-04-24 10:57:48 +0300)
+
+----------------------------------------------------------------
+Alon Levy (15):
+      dev-smartcard-reader: white space fixes
+      dev-smartcard-reader: nicer debug messages
+      dev-smartcard-reader: remove aborts (never triggered, but just in case)
+      dev-smartcard-reader: support windows guest
+      dev-smartcard-reader: reuse usb.h definitions
+      libcacard: change default ATR
+      ccid-card-passthru: add atr check
+      ccid-card-passthru, dev-smartcard-reader: add debug environment variables
+      dev-smartcard-reader: define structs for CCID_Parameter internals
+      dev-smartcard-reader: change default protocol to T=0
+      dev-smartcard-reader: copy atr protocol to ccid parameters
+      libcacard/vreader: add debugging messages for apdu
+      libcacard: move atr setting from macro to function
+      dev-smartcard-reader: empty implementation for Mechanical (fail correctly)
+      libcacard/cac: change big switch functions to single return point
+
+Jim Meyering (2):
+      ccid: make backend_enum_table "static const" and adjust users
+      ccid: declare DEFAULT_ATR table to be "static const"
+
+Marc-André Lureau (11):
+      libcacard: correct T0 historical bytes size
+      ccid-card-emul: do not crash if backend is not provided
+      libcacard: use system config directory for nss db on win32
+      util: move socket_init() to osdep.c
+      build-sys: must link with -fstack-protector
+      libcacard: fix mingw64 cross-compilation
+      libcacard: split vscclient main() from socket reading
+      libcacard: vscclient to use QemuThread for portability
+      libcacard: teach vscclient to use GMainLoop for portability
+      libcacard: remove sql: prefix
+      libcacard: remove default libcoolkey loading
+
+ Makefile                      |   8 +-
+ Makefile.objs                 |   1 +
+ configure                     |   8 +-
+ hw/usb/ccid-card-emulated.c   |   9 +-
+ hw/usb/ccid-card-passthru.c   |  63 +++++-
+ hw/usb/dev-smartcard-reader.c | 243 +++++++++++++++-----
+ include/qemu-common.h         |   5 +
+ libcacard/cac.c               |  80 ++++---
+ libcacard/cac.h               |   8 +
+ libcacard/vcard_emul_nss.c    |  47 ++--
+ libcacard/vcardt.c            |  40 ++++
+ libcacard/vcardt.h            |   5 -
+ libcacard/vcardt_internal.h   |   6 +
+ libcacard/vreader.c           |  77 +++++++
+ libcacard/vscclient.c         | 506 +++++++++++++++++++++++++-----------------
+ rules.mak                     |   4 +-
+ util/cutils.c                 |  23 ++
+ util/osdep.c                  |  23 ++
+ util/qemu-sockets.c           |  24 --
+ 19 files changed, 838 insertions(+), 342 deletions(-)
+ create mode 100644 libcacard/vcardt.c
+ create mode 100644 libcacard/vcardt_internal.h
+

@@ -1,0 +1,3 @@
+0000-correctly-reset-the-CPU-on-INIT-interrupts.txt
+0001-kvm-reset-state-from-the-CPUs-reset-method.patch
+0002-kvm-forward-INIT-signals-coming-from-the-chipset.patch

@@ -1,0 +1,1 @@
+../qmp-hmp-interfaces-for-internal-snapshot-info/v11.1364950033/0005-block-add-snapshot-info-query-function-bdrv_query_snapshot_info_list.patch

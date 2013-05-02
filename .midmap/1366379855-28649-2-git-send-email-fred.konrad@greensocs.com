@@ -1,0 +1,1 @@
+../virtio-rng-refactoring/v4.1366405047/0001-virtio-rng-dont-use-pointer-for-configuration.patch

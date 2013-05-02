@@ -1,0 +1,70 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Gerd Hoffmann <kraxel@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, Gerd Hoffmann <kraxel@redhat.com>
+Date: Thu, 4 Apr 2013 09:29:05 +0200
+Message-id: 1365060546-24638-24-git-send-email-kraxel@redhat.com
+Subject: [PATCH 23/24] gtk: custom cursor support
+
+Makes gtk ui play nicely with qxl (and vmware_svga)
+as you can actually see your pointer now ;)
+
+Signed-off-by: Gerd Hoffmann <kraxel@redhat.com>
+---
+ ui/gtk.c |   33 +++++++++++++++++++++++++++++++++
+ 1 file changed, 33 insertions(+)
+
+diff --git a/ui/gtk.c b/ui/gtk.c
+index 3c23ce7..927b88a 100644
+--- a/ui/gtk.c
++++ b/ui/gtk.c
+@@ -330,6 +330,37 @@ static void gd_refresh(DisplayChangeListener *dcl)
+     graphic_hw_update(dcl->con);
+ }
+ 
++static void gd_mouse_set(DisplayChangeListener *dcl,
++                         int x, int y, int visible)
++{
++    GtkDisplayState *s = container_of(dcl, GtkDisplayState, dcl);
++    gint x_root, y_root;
++
++    gdk_window_get_root_coords(s->drawing_area->window,
++                               x, y, &x_root, &y_root);
++    gdk_display_warp_pointer(gtk_widget_get_display(s->drawing_area),
++                             gtk_widget_get_screen(s->drawing_area),
++                             x_root, y_root);
++}
++
++static void gd_cursor_define(DisplayChangeListener *dcl,
++                             QEMUCursor *c)
++{
++    GtkDisplayState *s = container_of(dcl, GtkDisplayState, dcl);
++    GdkPixbuf *pixbuf;
++    GdkCursor *cursor;
++
++    pixbuf = gdk_pixbuf_new_from_data((guchar *)(c->data),
++                                      GDK_COLORSPACE_RGB, true, 8,
++                                      c->width, c->height, c->width * 4,
++                                      NULL, NULL);
++    cursor = gdk_cursor_new_from_pixbuf(gtk_widget_get_display(s->drawing_area),
++                                        pixbuf, c->hot_x, c->hot_y);
++    gdk_window_set_cursor(s->drawing_area->window, cursor);
++    g_object_unref(pixbuf);
++    g_object_unref(cursor);
++}
++
+ static void gd_switch(DisplayChangeListener *dcl,
+                       DisplaySurface *surface)
+ {
+@@ -1358,6 +1389,8 @@ static const DisplayChangeListenerOps dcl_ops = {
+     .dpy_gfx_update    = gd_update,
+     .dpy_gfx_switch    = gd_switch,
+     .dpy_refresh       = gd_refresh,
++    .dpy_mouse_set     = gd_mouse_set,
++    .dpy_cursor_define = gd_cursor_define,
+ };
+ 
+ void gtk_display_init(DisplayState *ds)
+-- 
+1.7.9.7
+

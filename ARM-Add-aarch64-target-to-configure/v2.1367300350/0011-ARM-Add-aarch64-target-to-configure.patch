@@ -1,0 +1,53 @@
+From patches Mon Sep 17 00:00:00 2001
+From: John Rigby <john.rigby@linaro.org>
+To: qemu-devel <qemu-devel@nongnu.org>
+Cc: Peter Maydell <peter.maydell@linaro.org>, Alexander Graf <agraf@suse.de>
+Date: Tue, 30 Apr 2013 00:39:10 -0600
+Message-id: 1367303950-9879-1-git-send-email-john.rigby@linaro.org
+Subject: [PATCH 11/12] ARM: Add aarch64 target to configure
+
+From: Alexander Graf <agraf@suse.de>
+
+If we want to compile a target machine type that is AArch64 capable,
+we need to add a new 64-bit capable ARM target. Use AArch64 since that
+is the official ARM LTD name.
+
+Signed-off-by: Alexander Graf <agraf@suse.de>
+---
+ configure                |    8 ++++++++
+ linux-user/Makefile.objs |    1 +
+ 2 files changed, 9 insertions(+)
+
+diff --git a/configure b/configure
+index 21438d4..87ed42d 100755
+--- a/configure
++++ b/configure
+@@ -4185,6 +4185,14 @@ case "$target_arch2" in
+     target_nptl="yes"
+     gdb_xml_files="arm-core.xml arm-vfp.xml arm-vfp3.xml arm-neon.xml"
+   ;;
++  aarch64)
++    TARGET_BASE_ARCH=arm
++    TARGET_ABI_DIR=arm
++    bflt="yes"
++    target_nptl="yes"
++    gdb_xml_files="aarch64-core.xml aarch64-fpu.xml"
++    target_long_alignment=8
++  ;;
+   cris)
+     target_nptl="yes"
+   ;;
+diff --git a/linux-user/Makefile.objs b/linux-user/Makefile.objs
+index 5899d72..c8709d6 100644
+--- a/linux-user/Makefile.objs
++++ b/linux-user/Makefile.objs
+@@ -4,4 +4,5 @@ obj-y = main.o syscall.o strace.o mmap.o signal.o \
+ obj-$(TARGET_HAS_BFLT) += flatload.o
+ obj-$(TARGET_I386) += vm86.o
+ obj-$(TARGET_ARM) += arm/nwfpe/
++obj-$(TARGET_AARCH64) += arm/nwfpe/
+ obj-$(TARGET_M68K) += m68k-sim.o
+-- 
+1.7.9.5
+
+

@@ -1,0 +1,661 @@
+From patches Mon Sep 17 00:00:00 2001
+From: =?utf-8?q?Llu=C3=ADs_Vilanova_=3Cvilanova=40ac=2Eupc=2Eedu=3E?=
+To: Paolo Bonzini <pbonzini@redhat.com>,
+ =?UTF-8?B?TGx1w61zIFZpbGFub3Zh?= <vilanova@ac.upc.edu>, qemu-devel@nongnu.org
+Cc: qemu-devel@nongnu.org
+Date: Sun, 21 Apr 2013 21:12:48 +0200
+Message-id: 20130421191248.8947.60085.stgit@fimbulvetr.bsc.es
+Subject: [PATCH 14/24] instrument: Add internal control interface
+
+This interface provides two sets of operations:
+
+* Loading/unloading a trace instrumentation library.
+
+* Controls the instrumentation callbacks of the tracing events.
+
+Note that in the case of static instrumentation, the library is not
+loaded/unloaded, but is still properly (de)initialized when QEMU starts and
+exits.
+
+Signed-off-by: Lluís Vilanova <vilanova@ac.upc.edu>
+---
+ Makefile.objs                              |    2 
+ configure                                  |    3 
+ instrument/Makefile.objs                   |    6 +
+ instrument/control-internal.h              |   40 +++++
+ instrument/control.c                       |  226 ++++++++++++++++++++++++++++
+ instrument/control.h                       |  148 ++++++++++++++++++
+ instrument/qapi-schema.json                |   26 +++
+ qapi-schema.json                           |    2 
+ rules.mak                                  |    3 
+ scripts/tracetool/backend/instr_dynamic.py |    3 
+ scripts/tracetool/backend/instr_static.py  |    3 
+ scripts/tracetool/format/events_c.py       |    6 +
+ trace/event-internal.h                     |    5 +
+ 13 files changed, 473 insertions(+)
+ create mode 100644 instrument/control-internal.h
+ create mode 100644 instrument/control.c
+ create mode 100644 instrument/control.h
+ create mode 100644 instrument/qapi-schema.json
+
+diff --git a/Makefile.objs b/Makefile.objs
+index 5f8ea2d..4fb565b 100644
+--- a/Makefile.objs
++++ b/Makefile.objs
+@@ -94,6 +94,7 @@ common-obj-y += disas/
+ # instrumentation
+ 
+ tools-obj-y += instrument/
++target-obj-y += instrument/
+ 
+ ######################################################################
+ # guest agent
+@@ -114,5 +115,6 @@ nested-vars += \
+ 	qga-obj-y \
+ 	block-obj-y \
+ 	tools-obj-y \
++	target-obj-y \
+ 	common-obj-y
+ dummy := $(call unnest-vars)
+diff --git a/configure b/configure
+index b51436f..2be915c 100755
+--- a/configure
++++ b/configure
+@@ -3925,7 +3925,10 @@ fi
+ if test "$trace_instrument" = "dynamic"; then
+     echo "#define QI_TYPE_CONFIG_DYNAMIC 1" >> $config_qi
+     echo "CONFIG_TRACE_INSTRUMENT_DYNAMIC=y" >> $config_host_mak
++    libs_qga="-ldl $libs_qga"
+ fi
++# code requiring it is always compiled-in
++LIBS="-ldl $LIBS"
+ ##########################################
+ 
+ echo "TOOLS=$tools" >> $config_host_mak
+diff --git a/instrument/Makefile.objs b/instrument/Makefile.objs
+index cae520d..e571c71 100644
+--- a/instrument/Makefile.objs
++++ b/instrument/Makefile.objs
+@@ -60,3 +60,9 @@ $(LIBTRACE_INSTRUMENT): $(dir $(LIBTRACE_INSTRUMENT))/Makefile force
+ 		TARGET_DIR=$(TARGET_DIR)$(dir $@)/ VPATH=$(VPATH)          \
+ 		SRC_PATH=$(SRC_PATH) V="$(V)" $(notdir $@))
+ endif
++
++
++######################################################################
++# Control code
++
++target-obj-y += control.o
+diff --git a/instrument/control-internal.h b/instrument/control-internal.h
+new file mode 100644
+index 0000000..68fc69c
+--- /dev/null
++++ b/instrument/control-internal.h
+@@ -0,0 +1,40 @@
++/*
++ * Interface for controlling dynamic trace instrumentation.
++ *
++ * Copyright (C) 2012-2013 Lluís Vilanova <vilanova@ac.upc.edu>
++ *
++ * This work is licensed under the terms of the GNU GPL, version 2 or later.
++ * See the COPYING file in the top-level directory.
++ */
++
++#ifndef INSTRUMENT__CONTROL_INTERNAL_H
++#define INSTRUMENT__CONTROL_INTERNAL_H
++
++#include <assert.h>
++#include <stdlib.h>
++
++#include "config-host.h"
++
++
++static inline InstrType instr_type(void)
++{
++#if defined(CONFIG_TRACE_INSTRUMENT_DYNAMIC)
++    return INSTR_TYPE_DYNAMIC;
++#elif defined(CONFIG_TRACE_INSTRUMENT_STATE)
++    return INSTR_TYPE_STATIC;
++#else
++    return INSTR_TYPE_NONE;
++#endif
++}
++
++static inline bool instr_event_available(TraceEvent *ev)
++{
++    assert(ev != NULL);
++#if defined(CONFIG_TRACE_INSTRUMENT)
++    return ev->instr;
++#else
++    return false;
++#endif
++}
++
++#endif  /* INSTRUMENT__CONTROL_INTERNAL_H */
+diff --git a/instrument/control.c b/instrument/control.c
+new file mode 100644
+index 0000000..7921bf3
+--- /dev/null
++++ b/instrument/control.c
+@@ -0,0 +1,226 @@
++/*
++ * Interface for controlling dynamic trace instrumentation.
++ *
++ * Copyright (C) 2012-2013 Lluís Vilanova <vilanova@ac.upc.edu>
++ *
++ * This work is licensed under the terms of the GNU GPL, version 2 or later.
++ * See the COPYING file in the top-level directory.
++ */
++
++#include "instrument/control.h"
++
++#include <dlfcn.h>
++
++#include "qemu-common.h"
++#include "trace/control.h"
++
++
++typedef int64_t HandleID;
++
++typedef struct Handle
++{
++    HandleID id;
++    void *dlhandle;
++    void (*init)(int, const char **);
++    void (*fini)(void);
++    QSLIST_ENTRY(Handle) list;
++} Handle;
++
++HandleID handle_last_id;
++QSLIST_HEAD(, Handle) handles = QSLIST_HEAD_INITIALIZER(handles);
++
++
++static Handle *handle_get(void)
++{
++    Handle *res = g_malloc0(sizeof(Handle));
++    res->id = handle_last_id++;
++    QSLIST_INSERT_HEAD(&handles, res, list);
++    return res;
++}
++
++static bool handle_put(HandleID id)
++{
++    Handle *prev = NULL;
++    Handle *handle;
++    QSLIST_FOREACH(handle, &handles, list) {
++        if (handle->id == id) {
++            break;
++        }
++        prev = handle;
++    }
++    if (handle == NULL) {
++        return false;
++    } else {
++        if (prev == NULL) {
++            QSLIST_REMOVE_HEAD(&handles, list);
++        } else {
++            QSLIST_REMOVE_AFTER(prev, list);
++        }
++        g_free(handle);
++        return true;
++    }
++}
++
++static Handle *handle_find(HandleID id)
++{
++    Handle *handle;
++    QSLIST_FOREACH(handle, &handles, list) {
++        if (handle->id == id) {
++            return handle;
++        }
++    }
++    return NULL;
++}
++
++
++bool instr_active(void)
++{
++    switch (instr_type()) {
++    case INSTR_TYPE_NONE:
++        return false;
++        break;
++    case INSTR_TYPE_STATIC:
++        return true;
++        break;
++    case INSTR_TYPE_DYNAMIC:
++        return !QSLIST_EMPTY(&handles);
++    case INSTR_TYPE_MAX:
++        assert(false);
++    }
++    return false;
++}
++
++
++InstrLoadError instr_load(const char * path, int argc, const char ** argv,
++                          int64_t *handle_id)
++{
++    /* TODO: not thread safe */
++
++    *handle_id = -1;
++    if (instr_type() != INSTR_TYPE_DYNAMIC) {
++        return INSTR_LOAD_UNAVAILABLE;
++    }
++
++    if (!QSLIST_EMPTY(&handles) > 0) {
++        /* XXX: This is in fact a hard-coded limit, but there's no reason why a
++         *      real multi-library implementation should fail with something lie
++         *      "too many open libraries".
++         */
++        return INSTR_LOAD_UNAVAILABLE;
++    }
++
++    Handle * handle = handle_get();
++    handle->dlhandle = dlopen(path, RTLD_NOW);
++    if (handle->dlhandle == NULL) {
++        goto err;
++    }
++
++    handle->init = dlsym(handle->dlhandle, "qi_init");
++    if (handle->init == NULL) {
++        goto err;
++    }
++    handle->fini = dlsym(handle->dlhandle, "qi_fini");
++    if (handle->fini == NULL) {
++        goto err;
++    }
++
++    handle->init(argc, argv);
++
++    *handle_id = handle->id;
++    return INSTR_LOAD_OK;
++
++err:
++    handle_put(handle->id);
++    return INSTR_LOAD_ERROR;
++}
++
++InstrUnloadError instr_unload(int64_t handle_id)
++{
++    /* TODO: not thread safe */
++
++    if (instr_type() != INSTR_TYPE_DYNAMIC) {
++        return INSTR_UNLOAD_UNAVAILABLE;
++    }
++
++    Handle *handle = handle_find(handle_id);
++    if (handle == NULL) {
++        return INSTR_UNLOAD_INVALID;
++    }
++
++    handle->fini();
++
++    TraceEvent *ev = NULL;
++    while ((ev = trace_event_pattern("*", ev)) != NULL) {
++        if (instr_event_available(ev)) {
++            instr_event_set(ev, INSTR_CB_NOP);
++        }
++    }
++
++    /* this should never fail */
++    if (dlclose(handle->dlhandle) < 0) {
++        handle_put(handle->id);
++        return INSTR_UNLOAD_ERROR;
++    }
++
++    handle_put(handle->id);
++    return INSTR_UNLOAD_OK;
++}
++
++#if defined(CONFIG_TRACE_INSTRUMENT_DYNAMIC)
++static Handle *get_current_handle(void)
++{
++    /* XXX: We currently have only one */
++    return handle_find(handle_last_id - 1);
++}
++
++static void *get_event_symbol(Handle *handle, TraceEvent *ev, const char *fmt)
++{
++    assert(handle != NULL);
++    assert(ev != NULL);
++
++    char name[1024];
++    assert(strlen(trace_event_get_name(ev)) + strlen(fmt) < 1024);
++    sprintf(name, fmt, trace_event_get_name(ev));
++    return dlsym(handle->dlhandle, name);
++}
++
++static void event_set(TraceEvent *ev, void *cb)
++{
++    if (ev->instr_cb == cb) {
++        return;
++    }
++    assert(instr_event_available(ev));
++    *ev->instr_cb = cb;
++}
++#endif  /* defined(CONFIG_TRACE_INSTRUMENT_DYNAMIC) */
++
++bool instr_event_set(TraceEvent *ev, void *cb)
++{
++    assert(instr_type() == INSTR_TYPE_DYNAMIC);
++    assert(ev != NULL);
++    assert(instr_event_available(ev));
++
++#if defined(CONFIG_TRACE_INSTRUMENT_DYNAMIC)
++    if (cb == INSTR_CB_NOP) {
++        event_set(ev, ev->instr_cb_nop);
++        return true;
++    } else if (cb == INSTR_CB_NEXT) {
++        event_set(ev, ev->instr_cb_backend);
++        return true;
++    } else if (cb == INSTR_CB_AUTO) {
++        void *ptr = get_event_symbol(get_current_handle(),
++                                     ev, "qi_event_%s");
++        if (ptr != NULL) {
++            event_set(ev, ptr);
++            return true;
++        } else {
++            return false;
++        }
++    } else {
++        event_set(ev, cb);
++        return true;
++    }
++#else
++    assert(false);
++#endif  /* defined(CONFIG_TRACE_INSTRUMENT_DYNAMIC) */
++}
+diff --git a/instrument/control.h b/instrument/control.h
+new file mode 100644
+index 0000000..a6a648a
+--- /dev/null
++++ b/instrument/control.h
+@@ -0,0 +1,148 @@
++/*
++ * Interface for controlling dynamic trace instrumentation.
++ *
++ * Copyright (C) 2012-2013 Lluís Vilanova <vilanova@ac.upc.edu>
++ *
++ * This work is licensed under the terms of the GNU GPL, version 2 or later.
++ * See the COPYING file in the top-level directory.
++ */
++
++#ifndef INSTRUMENT__CONTROL_H
++#define INSTRUMENT__CONTROL_H
++
++#include "qapi-types.h"
++#include "trace/generated-events.h"
++
++
++/**
++ * InstrLoadError:
++ * @INSTR_LOAD_OK: Correctly loaded.
++ * @INSTR_LOAD_UNAVAILABLE: Service not available.
++ * @INSTR_LOAD_ERROR: Error with libdl (see dlerror).
++ *
++ * Error codes for instr_load().
++ */
++typedef enum {
++    INSTR_LOAD_OK,
++    INSTR_LOAD_UNAVAILABLE,
++    INSTR_LOAD_ERROR,
++} InstrLoadError;
++
++/**
++ * InstrUnloadError:
++ * @INSTR_UNLOAD_OK: Correctly unloaded.
++ * @INSTR_UNLOAD_UNAVAILABLE: Service not available.
++ * @INSTR_UNLOAD_INVALID: Invalid handle.
++ * @INSTR_UNLOAD_ERROR: Error with libdl (see dlerror).
++ *
++ * Error codes for instr_unload().
++ */
++typedef enum {
++    INSTR_UNLOAD_OK,
++    INSTR_UNLOAD_UNAVAILABLE,
++    INSTR_UNLOAD_INVALID,
++    INSTR_UNLOAD_ERROR,
++} InstrUnloadError;
++
++/**
++ * instr_load:
++ * @path: Path to the shared library to load.
++ * @argc: Number of arguments passed to the initialization function of the library.
++ * @argv: Arguments passed to the initialization function of the library.
++ * @handle: Instrumentation library handle (undefined in case of error).
++ *
++ * Load a dynamic trace instrumentation library.
++ *
++ * Returns: Whether the library could be loaded.
++ */
++InstrLoadError instr_load(const char * path, int argc, const char ** argv,
++                          int64_t *handle);
++
++/**
++ * instr_unload:
++ * @handle: Instrumentation library handle returned by instr_load().
++ *
++ * Unload the given instrumentation library.
++ *
++ * Returns: Whether the library could be unloaded.
++ */
++InstrUnloadError instr_unload(int64_t handle);
++
++
++/**
++ * instr_type:
++ *
++ * Types are defined in QAPI's "instrument/qapi-schema.json"
++ *
++ * Returns: The system's #InstrType.
++ */
++static InstrType instr_type(void);
++
++/**
++ * instr_active:
++ *
++ * Always false when instr_type() is #INSTR_TYPE_NONE; always true when
++ * instr_type() is #INSTR_TYPE_STATIC.
++ *
++ * Returns: Whether an instrumentation library is currently active.
++ */
++bool instr_active(void);
++
++/**
++ * instr_event_available:
++ *
++ * Returns: Whether the given event has the 'instrument' property.
++ */
++static bool instr_event_available(TraceEvent *ev);
++
++
++/**
++ * INSTR_CB_NOP:
++ *
++ * Set callback to no-operation.
++ * (qi_event_${name}_nop).
++ */
++#define INSTR_CB_NOP ((void*)NULL)
++
++/**
++ * INSTR_CB_NEXT:
++ *
++ * Set callback to the "next logical step"
++ * (qi_event_${name}_trace).
++ */
++#define INSTR_CB_NEXT ((void*)1)
++
++/**
++ * INSTR_CB_AUTO:
++ *
++ * Automatically set callback to proper routine.
++ *
++ * Looks for a symbol name in the instrumentation library matching the event
++ * name (qi_event_${name}).
++ */
++#define INSTR_CB_AUTO    ((void*)2)
++
++/**
++ * instr_event_set:
++ * @ev: Tracing event descriptor.
++ * @cb: Pointer to instrumentation callback.
++ *
++ * Set the instrumentation callback for the given event.
++ *
++ * Argument cb can also be set to any of the INSTR_CB_* special values.
++ *
++ * A negative return value indicates that the instrumentation library does not
++ * export the appropriate symbol for the instrumentation routine.
++ *
++ * Pre-condition: instr_type() == #INSTR_TYPE_DYNAMIC
++ * Pre-condition: instr_event_available(ev) == true
++ *
++ * Returns: Whether the callback could be set (if cb == INSTR_CB_AUTO, always
++ *          true otherwise).
++ */
++bool instr_event_set(TraceEvent *ev, void *cb);
++
++
++#include "instrument/control-internal.h"
++
++#endif  /* INSTRUMENT__CONTROL_H */
+diff --git a/instrument/qapi-schema.json b/instrument/qapi-schema.json
+new file mode 100644
+index 0000000..e450ddf
+--- /dev/null
++++ b/instrument/qapi-schema.json
+@@ -0,0 +1,26 @@
++# *-*- Mode: Python -*-*
++#
++# QAPI trace instrumentation control commands.
++#
++# Copyright (C) 2012-2013 Lluís Vilanova <vilanova@ac.upc.edu>
++#
++# This work is licensed under the terms of the GNU GPL, version 2 or later.
++# See the COPYING file in the top-level directory.
++
++##
++# @InstrType
++#
++# Instrumentation type supported by the system.
++#
++# @None: No instrumentation support.
++#
++# @Static: Static instrumentation support.
++#
++# @Dynamic: Dynamic instrumentation support.
++#
++# Warning: Keep in sync with #QIType.
++#
++# Since: 1.5
++##
++{ 'enum': 'InstrType',
++  'data': [ 'None', 'Static', 'Dynamic' ] }
+diff --git a/qapi-schema.json b/qapi-schema.json
+index db542f6..36e5cbf 100644
+--- a/qapi-schema.json
++++ b/qapi-schema.json
+@@ -3513,3 +3513,5 @@
+     '*asl_compiler_rev':  'uint32',
+     '*file':              'str',
+     '*data':              'str' }}
++
++include("instrument/qapi-schema.json")
+diff --git a/rules.mak b/rules.mak
+index edc2552..e0767a9 100644
+--- a/rules.mak
++++ b/rules.mak
+@@ -51,6 +51,9 @@ endif
+ %.o: %.dtrace
+ 	$(call quiet-command,dtrace -o $@ -G -s $<, "  GEN   $(TARGET_DIR)$@")
+ 
++ifdef CONFIG_TRACE_INSTRUMENT_DYNAMIC
++%$(EXESUF): LDFLAGS+=-rdynamic
++endif
+ %$(EXESUF): %.o
+ 	$(call LINK,$^)
+ 
+diff --git a/scripts/tracetool/backend/instr_dynamic.py b/scripts/tracetool/backend/instr_dynamic.py
+index a07ee64..12d0503 100644
+--- a/scripts/tracetool/backend/instr_dynamic.py
++++ b/scripts/tracetool/backend/instr_dynamic.py
+@@ -40,6 +40,9 @@ def qemu_h(events):
+ def api_h(events):
+     out('#include <qemu-instr/visibility-internal.h>',
+         '',
++        'QI_VPUBLIC void qi_init(int argc, const char **argv);',
++        'QI_VPUBLIC void qi_fini(void);',
++        '',
+         )
+ 
+     for e in events:
+diff --git a/scripts/tracetool/backend/instr_static.py b/scripts/tracetool/backend/instr_static.py
+index b010596..ecebbda 100644
+--- a/scripts/tracetool/backend/instr_static.py
++++ b/scripts/tracetool/backend/instr_static.py
+@@ -46,6 +46,9 @@ def qemu_h(events):
+ def api_h(events):
+     out('#include "trace/generated-tracers.h"',
+         '',
++        'void qi_init(int argc, const char **argv);',
++        'void qi_fini(void);',
++        '',
+         )
+ 
+     for e in events:
+diff --git a/scripts/tracetool/format/events_c.py b/scripts/tracetool/format/events_c.py
+index 7531c66..d7b4f86 100644
+--- a/scripts/tracetool/format/events_c.py
++++ b/scripts/tracetool/format/events_c.py
+@@ -44,14 +44,19 @@ def begin(events):
+     out('TraceEvent trace_events[TRACE_EVENT_COUNT] = {')
+ 
+     for e in events:
++        instr = "false"
+         cb = cb_nop = cb_backend = "NULL"
+ 
+         if "instrument" in e.properties:
++            instr = "true"
+             cb = "&%s_cb" % e.api(e.QI_TRACE_INSTRUMENT)
+             cb_nop = e.api(e.QI_TRACE_NOP)
+             cb_backend = e.api(e.QI_TRACE_BACKEND)
+ 
+         out('    { .id = %(id)s, .name = \"%(name)s\", .sstate = %(sstate)s, .dstate = 0,',
++            '#if !defined(CONFIG_TRACE_INSTRUMENT_NONE)',
++            '      .instr = %(instr)s,',
++            '#endif',
+             '#if defined(CONFIG_TRACE_INSTRUMENT_DYNAMIC)',
+             '      .instr_cb = %(cb)s,',
+             '      .instr_cb_nop = %(cb_nop)s,',
+@@ -59,6 +64,7 @@ def begin(events):
+             '#endif',
+             '    },',
+             id = "TRACE_" + e.name.upper(),
++            instr = instr,
+             cb = cb,
+             cb_nop = cb_nop,
+             cb_backend = cb_backend,
+diff --git a/trace/event-internal.h b/trace/event-internal.h
+index aed4050..7110886 100644
+--- a/trace/event-internal.h
++++ b/trace/event-internal.h
+@@ -20,6 +20,7 @@
+  * @name: Event name.
+  * @sstate: Static tracing state.
+  * @dstate: Dynamic tracing state.
++ * @instr: Whether the event is instrumentable.
+  * @instr_cb: Instrumentation callback pointer.
+  * @instr_cb_nop: Instrumentation callback pointer to no-operation.
+  * @instr_cb_backend: Instrumentation callback pointer to tracing backend.
+@@ -32,6 +33,10 @@ typedef struct TraceEvent {
+     const bool sstate;
+     bool dstate;
+ 
++#if defined(CONFIG_TRACE_INSTRUMENT)
++    const bool instr;
++#endif
++
+ #if defined(CONFIG_TRACE_INSTRUMENT_DYNAMIC)
+     void **instr_cb;
+     void *instr_cb_nop;
+
+

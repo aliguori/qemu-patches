@@ -1,0 +1,53 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Wenchao Xia <xiawenc@linux.vnet.ibm.com>
+To: qemu-devel@nongnu.org
+Cc: kwolf@redhat.com, phrdina@redhat.com,
+ Wenchao Xia <xiawenc@linux.vnet.ibm.com>, stefanha@gmail.com,
+ armbru@redhat.com, lcapitulino@redhat.com, pbonzini@redhat.com
+Date: Sat, 13 Apr 2013 16:56:46 +0800
+Message-id: 1365843407-16504-18-git-send-email-xiawenc@linux.vnet.ibm.com
+Subject: [PATCH 17/18] hmp: show ImageInfo in 'info block'
+
+  Now human monitor can show image details, include internal
+snapshot and backing chain info for every block device.
+
+Signed-off-by: Wenchao Xia <xiawenc@linux.vnet.ibm.com>
+---
+ hmp.c |   12 ++++++++++++
+ 1 files changed, 12 insertions(+), 0 deletions(-)
+
+diff --git a/hmp.c b/hmp.c
+index cef5eee..1d13030 100644
+--- a/hmp.c
++++ b/hmp.c
+@@ -278,6 +278,7 @@ void hmp_info_cpus(Monitor *mon, const QDict *qdict)
+ void hmp_info_block(Monitor *mon, const QDict *qdict)
+ {
+     BlockInfoList *block_list, *info;
++    ImageInfo *image_info;
+ 
+     block_list = qmp_query_block(NULL);
+ 
+@@ -319,6 +320,17 @@ void hmp_info_block(Monitor *mon, const QDict *qdict)
+                             info->value->inserted->iops,
+                             info->value->inserted->iops_rd,
+                             info->value->inserted->iops_wr);
++
++            monitor_printf(mon, " images:\n");
++            image_info = info->value->inserted->image;
++            while (1) {
++                bdrv_image_info_dump(image_info);
++                if (image_info->has_backing_image) {
++                    image_info = image_info->backing_image;
++                } else {
++                    break;
++                }
++            }
+         } else {
+             monitor_printf(mon, " [not inserted]");
+         }
+-- 
+1.7.1
+
+
+

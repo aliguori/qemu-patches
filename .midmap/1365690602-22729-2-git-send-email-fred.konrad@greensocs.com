@@ -1,0 +1,1 @@
+../virtio-net-refactoring/v3.1365715795/0001-virtio-add-two-functions-to-VirtioDeviceClass.patch

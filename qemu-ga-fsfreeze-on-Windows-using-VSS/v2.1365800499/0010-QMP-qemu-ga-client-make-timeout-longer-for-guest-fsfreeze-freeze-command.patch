@@ -1,0 +1,36 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Tomoki Sekiyama <tsekiyam@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: mdroth@linux.vnet.ibm.com, pbonzini@redhat.com, vrozenfe@redhat.com,
+ Tomoki Sekiyama <tomoki.sekiyama@hds.com>, lcapitulino@redhat.com
+Date: Fri, 12 Apr 2013 16:02:12 -0400
+Message-id: 20130412200212.20814.98501.stgit@corona
+Subject: [PATCH 10/11] QMP/qemu-ga-client: make timeout longer for
+ guest-fsfreeze-freeze command
+
+guest-fsfreeze-freeze command can take longer than 3 seconds when heavy
+disk I/O is running. To avoid unexpected timeout, this changes the timeout
+to 30 seconds.
+
+Signed-off-by: Tomoki Sekiyama <tomoki.sekiyama@hds.com>
+---
+ QMP/qemu-ga-client |    4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/QMP/qemu-ga-client b/QMP/qemu-ga-client
+index 46676c3..1f7011a 100755
+--- a/QMP/qemu-ga-client
++++ b/QMP/qemu-ga-client
+@@ -267,7 +267,9 @@ def main(address, cmd, args):
+             print('Hint: qemu is not running?')
+         sys.exit(1)
+ 
+-    if cmd != 'ping':
++    if cmd == 'fsfreeze' and args[0] == 'freeze':
++        client.sync(30)
++    elif cmd != 'ping':
+         client.sync()
+ 
+     globals()['_cmd_' + cmd](client, args)
+
+

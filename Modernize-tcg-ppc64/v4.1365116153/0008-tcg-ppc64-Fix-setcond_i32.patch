@@ -1,0 +1,38 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Richard Henderson <rth@twiddle.net>
+To: qemu-devel@nongnu.org, Richard Henderson <rth@twiddle.net>
+Cc: Aurelien Jarno <aurelien@aurel32.net>, av1474@comtv.ru,
+ qemu-devel@nongnu.org
+Date: Thu,  4 Apr 2013 17:56:01 -0500
+Message-id: 1365116186-19382-9-git-send-email-rth@twiddle.net
+Subject: [PATCH 08/33] tcg-ppc64: Fix setcond_i32
+
+We weren't ignoring the high 32 bits during a NE comparison.
+
+Signed-off-by: Richard Henderson <rth@twiddle.net>
+Reviewed-by: Aurelien Jarno <aurelien@aurel32.net>
+---
+ tcg/ppc64/tcg-target.c | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/tcg/ppc64/tcg-target.c b/tcg/ppc64/tcg-target.c
+index b12cbec..822eb07 100644
+--- a/tcg/ppc64/tcg-target.c
++++ b/tcg/ppc64/tcg-target.c
+@@ -1129,6 +1129,12 @@ static void tcg_out_setcond (TCGContext *s, TCGType type, TCGCond cond,
+             tcg_out32 (s, XOR | SAB (arg1, 0, arg2));
+         }
+ 
++        /* Make sure and discard the high 32-bits of the input.  */
++        if (type == TCG_TYPE_I32) {
++            tcg_out32(s, EXTSW | RA(TCG_REG_R0) | RS(arg));
++            arg = TCG_REG_R0;
++        }
++
+         if (arg == arg1 && arg1 == arg0) {
+             tcg_out32(s, ADDIC | TAI(0, arg, -1));
+             tcg_out32(s, SUBFE | TAB(arg0, 0, arg));
+-- 
+1.8.1.4
+
+

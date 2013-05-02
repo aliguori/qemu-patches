@@ -1,0 +1,129 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Dong Xu Wang <wdongxu@linux.vnet.ibm.com>
+To: qemu-devel@nongnu.org
+Cc: kwolf@redhat.com, wdongxu@cn.ibm.com,
+ Dong Xu Wang <wdongxu@linux.vnet.ibm.com>, stefanha@redhat.com,
+ armbru@redhat.com
+Date: Wed, 10 Apr 2013 14:25:06 +0800
+Message-id: 1365575111-4476-2-git-send-email-wdongxu@linux.vnet.ibm.com
+Subject: [PATCH 1/6] add def_value_str in QemuOptDesc struct and rewrite
+ qemu_opts_print
+
+qemu_opts_print has no user now, so can re-write the function safely.
+
+qemu_opts_print will be used while using "qemu-img create", it will
+produce the same output as previous code.
+
+The behavior of this function has changed:
+
+1. Print every possible option, whether a value has been set or not.
+2. Option descriptors may provide a default value.
+3. Print to stdout instead of stderr.
+
+Previously the behavior was to print every option that has been set.
+Options that have not been set would be skipped.
+
+Signed-off-by: Dong Xu Wang <wdongxu@linux.vnet.ibm.com>
+---
+v12->v13
+1) re-write commit message.
+
+v11->v12
+1) make def_value_str become the real default value string in opt_set
+function.
+
+v10->v11:
+1) print all values that have actually been assigned while accept-any
+cases.
+
+v7->v8:
+1) print "elements => accept any params" while opts_accepts_any() ==
+true.
+2) since def_print_str is the default value if an option isn't set,
+so rename it to def_value_str.
+
+
+ include/qemu/option.h |  3 ++-
+ util/qemu-option.c    | 33 +++++++++++++++++++++++++++------
+ 2 files changed, 29 insertions(+), 7 deletions(-)
+
+diff --git a/include/qemu/option.h b/include/qemu/option.h
+index bdb6d21..b928ab0 100644
+--- a/include/qemu/option.h
++++ b/include/qemu/option.h
+@@ -96,6 +96,7 @@ typedef struct QemuOptDesc {
+     const char *name;
+     enum QemuOptType type;
+     const char *help;
++    const char *def_value_str;
+ } QemuOptDesc;
+ 
+ struct QemuOptsList {
+@@ -152,7 +153,7 @@ QDict *qemu_opts_to_qdict(QemuOpts *opts, QDict *qdict);
+ void qemu_opts_absorb_qdict(QemuOpts *opts, QDict *qdict, Error **errp);
+ 
+ typedef int (*qemu_opts_loopfunc)(QemuOpts *opts, void *opaque);
+-int qemu_opts_print(QemuOpts *opts, void *dummy);
++int qemu_opts_print(QemuOpts *opts);
+ int qemu_opts_foreach(QemuOptsList *list, qemu_opts_loopfunc func, void *opaque,
+                       int abort_on_failure);
+ 
+diff --git a/util/qemu-option.c b/util/qemu-option.c
+index 8b74bf1..57cdd57 100644
+--- a/util/qemu-option.c
++++ b/util/qemu-option.c
+@@ -646,6 +646,7 @@ static void opt_set(QemuOpts *opts, const char *name, const char *value,
+     }
+     opt->desc = desc;
+     opt->str = g_strdup(value);
++    opt->str = g_strdup(value ?: desc->def_value_str);
+     qemu_opt_parse(opt, &local_err);
+     if (error_is_set(&local_err)) {
+         error_propagate(errp, local_err);
+@@ -860,16 +861,36 @@ void qemu_opts_del(QemuOpts *opts)
+     g_free(opts);
+ }
+ 
+-int qemu_opts_print(QemuOpts *opts, void *dummy)
++int qemu_opts_print(QemuOpts *opts)
+ {
+     QemuOpt *opt;
++    QemuOptDesc *desc = opts->list->desc;
+ 
+-    fprintf(stderr, "%s: %s:", opts->list->name,
+-            opts->id ? opts->id : "<noid>");
+-    QTAILQ_FOREACH(opt, &opts->head, next) {
+-        fprintf(stderr, " %s=\"%s\"", opt->name, opt->str);
++    if (desc[0].name == NULL) {
++        QTAILQ_FOREACH(opt, &opts->head, next) {
++            printf("%s=\"%s\" ", opt->name, opt->str);
++        }
++        return 0;
++    }
++    for (; desc && desc->name; desc++) {
++        const char *value = desc->def_value_str;
++        QemuOpt *opt;
++
++        opt = qemu_opt_find(opts, desc->name);
++        if (opt) {
++            value = opt->str;
++        }
++
++        if (!value) {
++            continue;
++        }
++
++        if (desc->type == QEMU_OPT_STRING) {
++            printf("%s='%s' ", desc->name, value);
++        } else {
++            printf("%s=%s ", desc->name, value);
++        }
+     }
+-    fprintf(stderr, "\n");
+     return 0;
+ }
+ 
+-- 
+1.7.11.7
+
+

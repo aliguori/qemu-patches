@@ -1,0 +1,40 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Hans de Goede <hdegoede@redhat.com>, peter.maydell@linaro.org,
+ mst@redhat.com
+Date: Thu, 11 Apr 2013 18:10:23 +0200
+Message-id: 1365696633-30727-3-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 02/12] virtio-9p: Fix virtio-9p no longer building after
+ hw-dirs branch merge
+
+From: Hans de Goede <hdegoede@redhat.com>
+
+Signed-off-by: Hans de Goede <hdegoede@redhat.com>
+Cc: Paolo Bonzini <pbonzini@redhat.com>
+---
+ hw/9pfs/virtio-9p-device.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/hw/9pfs/virtio-9p-device.c b/hw/9pfs/virtio-9p-device.c
+index 43f930e..b476b81 100644
+--- a/hw/9pfs/virtio-9p-device.c
++++ b/hw/9pfs/virtio-9p-device.c
+@@ -12,11 +12,11 @@
+  */
+ 
+ #include "hw/virtio/virtio.h"
++#include "hw/virtio/virtio-9p.h"
+ #include "hw/i386/pc.h"
+ #include "qemu/sockets.h"
+ #include "virtio-9p.h"
+ #include "fsdev/qemu-fsdev.h"
+-#include "virtio-9p-device.h"
+ #include "virtio-9p-xattr.h"
+ #include "virtio-9p-coth.h"
+ 
+-- 
+1.8.1.4
+
+
+

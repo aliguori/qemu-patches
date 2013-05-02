@@ -1,0 +1,6 @@
+0000-usb-QOM-realize-support-for-SysBus-EHCI-and-FUSBH200.txt
+0001-usb-hcd-ehci-sysbus-Convert-to-QOM-realize.patch
+0002-usb-hcd-ehci-Split-off-instance_init-from-realize.patch
+0003-usb-hcd-ehci-Add-Tegra2-SysBus-EHCI-device.patch
+0004-usb-hcd-ehci-Replace-PORTSC-macros-with-variables.patch
+0005-usb-hcd-ehci-Add-Faraday-FUSBH200-support.patch

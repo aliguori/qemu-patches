@@ -1,0 +1,1 @@
+../qtest-add-libqos/v1.1366123514/0004-libqos-add-malloc-support.patch

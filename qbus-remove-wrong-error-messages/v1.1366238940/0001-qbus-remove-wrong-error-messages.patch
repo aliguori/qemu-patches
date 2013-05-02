@@ -1,0 +1,87 @@
+From patches Mon Sep 17 00:00:00 2001
+From: "Alexey Kardashevskiy" <aik@ozlabs.ru>
+To: Alexey Kardashevskiy <aik@ozlabs.ru>, qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, Paolo Bonzini <pbonzini@redhat.com>,
+ =?utf-8?b?IkFuZHJlYXMgRsOkcmJlciI=?= <afaerber@suse.de>,
+ Alexey Kardashevskiy <aik@ozlabs.ru>,
+ David Gibson <david@gibson.dropbear.id.au>,
+ Luiz Capitulino <lcapitulino@redhat.com>, None <afaerber@suse.de>,
+ Peter Maydell <peter.maydell@linaro.org>
+Date: Wed, 17 Apr 2013 17:49:00 +1000
+Message-id: 1366184940-13516-1-git-send-email-aik@ozlabs.ru
+Subject: [PATCH 1/1] qbus: remove wrong error messages
+
+The existing code shows the "Bus '%s' is full" message even if name
+is specified and different from bus->name (i.e. match=0).
+
+The patch excludes unnecessary error message.
+
+Signed-off-by: Alexey Kardashevskiy <aik@ozlabs.ru>
+---
+
+I added traces (trivial, not in the patch) into qbus_find_recursive and
+run QEMU with the command line below.
+
+Without the patch, the output is:
+
+bus->name=main-system-bus name=usb1.0 bus_typename=(null)   continue
+	bus->name=pci name=usb1.0 bus_typename=(null)   continue
+		bus->name=virtio_scsi_pci0.0 name=usb1.0 bus_typename=(null) --- max_dev=1, max_index=1 match=0
+qemu-system-ppc64: -device usb-tablet,id=usb-tablet1,bus=usb1.0,port=1: Bus 'virtio_scsi_pci0.0' is full
+		bus->name=usb1.0 name=usb1.0 bus_typename=(null)   MATCH
+
+
+With the patch, it is:
+
+bus->name=main-system-bus name=usb1.0 bus_typename=(null)   continue
+	bus->name=pci name=usb1.0 bus_typename=(null)   continue
+		bus->name=virtio_scsi_pci0.0 name=usb1.0 bus_typename=(null)   continue
+			bus->name=scsi.0 name=usb1.0 bus_typename=(null)   continue
+		bus->name=usb1.0 name=usb1.0 bus_typename=(null)   MATCH
+
+The final behaviour does not change and the requested bus is found but
+without confusing messages. However I am not sure that is the right thing
+to continue looking down the bus instead of going to the next sibling.
+What would the community say?
+
+
+/home/aik/qemu-system-ppc64 -L qemu-ppc64-bios/
+	-trace events=trace_events -S -name virt-tests-vm1 -nodefaults
+	-chardev stdio,id=char1,signal=off,mux=on
+	-device spapr-vty,id=ser1,chardev=char1
+	-mon chardev=char1,mode=readline,id=mon1
+	-device ich9-usb-uhci1,id=usb1,bus=pci
+	-drive file=/home/aik/virtimg/test1,index=0,if=scsi
+	-drive file=/home/aik/virtimg/test2,index=2,if=scsi
+	-device virtio-scsi-pci,id=virtio_scsi_pci0
+	-drive file=/home/aik/virtimg/test4,if=none,id=virtio-scsi4
+	-device scsi-hd,drive=virtio-scsi4
+	-drive file=/home/aik/virtimg/test5,if=none,id=usb2.5
+	-device usb-tablet,id=usb-tablet1,bus=usb1.0,port=1
+	-m 1024 -machine pseries -nographic -vga none -enable-kvm
+
+---
+ qdev-monitor.c |    6 ++----
+ 1 file changed, 2 insertions(+), 4 deletions(-)
+
+diff --git a/qdev-monitor.c b/qdev-monitor.c
+index 9a78ccf..551f81f 100644
+--- a/qdev-monitor.c
++++ b/qdev-monitor.c
+@@ -291,11 +291,9 @@ static BusState *qbus_find_recursive(BusState *bus, const char *name,
+ 
+     if (name && (strcmp(bus->name, name) != 0)) {
+         match = 0;
+-    }
+-    if (bus_typename && !object_dynamic_cast(OBJECT(bus), bus_typename)) {
++    } else if (bus_typename && !object_dynamic_cast(OBJECT(bus), bus_typename)) {
+         match = 0;
+-    }
+-    if ((bus_class->max_dev != 0) && (bus_class->max_dev <= bus->max_index)) {
++    } else if ((bus_class->max_dev != 0) && (bus_class->max_dev <= bus->max_index)) {
+         if (name != NULL) {
+             /* bus was explicitly specified: return an error. */
+             qerror_report(ERROR_CLASS_GENERIC_ERROR, "Bus '%s' is full",
+-- 
+1.7.10.4
+

@@ -1,0 +1,4 @@
+0000-qdev-switch-reset-to-post-order.txt
+0001-pci-do-not-export-pci_bus_reset.patch
+0002-qdev-allow-both-pre--and-post-order-vists-in-qdev-walking-functions.patch
+0003-qdev-switch-reset-to-post-order.patch

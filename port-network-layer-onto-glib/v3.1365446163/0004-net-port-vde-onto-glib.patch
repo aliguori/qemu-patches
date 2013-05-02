@@ -1,0 +1,58 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Liu Ping Fan <pingfank@linux.vnet.ibm.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <anthony@codemonkey.ws>,
+ Paolo Bonzini <pbonzini@redhat.com>, mdroth <mdroth@linux.vnet.ibm.com>,
+ Stefan Hajnoczi <stefanha@redhat.com>
+Date: Mon,  8 Apr 2013 13:36:07 +0800
+Message-id: 1365399368-26967-5-git-send-email-pingfank@linux.vnet.ibm.com
+Subject: [PATCH 4/5] net: port vde onto glib
+
+Signed-off-by: Liu Ping Fan <pingfank@linux.vnet.ibm.com>
+---
+ net/vde.c |   15 ++++++++++++++-
+ 1 files changed, 14 insertions(+), 1 deletions(-)
+
+diff --git a/net/vde.c b/net/vde.c
+index 4dea32d..be5a032 100644
+--- a/net/vde.c
++++ b/net/vde.c
+@@ -60,6 +60,16 @@ static ssize_t vde_receive(NetClientState *nc, const uint8_t *buf, size_t size)
+     return ret;
+ }
+ 
++static gboolean vde_handler(gpointer data)
++{
++    NetClientSource *nsrc = (NetClientSource *)data;
++
++    if (nsrc->gfd.revents & G_IO_IN) {
++        vde_to_qemu(nsrc->opaque);
++    }
++    return true;
++}
++
+ static void vde_cleanup(NetClientState *nc)
+ {
+     VDEState *s = DO_UPCAST(VDEState, nc, nc);
+@@ -83,6 +93,7 @@ static int net_vde_init(NetClientState *peer, const char *model,
+     VDECONN *vde;
+     char *init_group = (char *)group;
+     char *init_sock = (char *)sock;
++    NetClientSource *nsrc;
+ 
+     struct vde_open_args args = {
+         .port = port,
+@@ -104,7 +115,9 @@ static int net_vde_init(NetClientState *peer, const char *model,
+ 
+     s->vde = vde;
+ 
+-    qemu_set_fd_handler(vde_datafd(s->vde), vde_to_qemu, NULL, s);
++    nsrc = net_source_new(vde_datafd(vde), vde_handler, s);
++    nc.nsrc = nsrc;
++    nsrc->gfd.events = G_IO_IN;
+ 
+     return 0;
+ }
+-- 
+1.7.4.4
+

@@ -1,0 +1,110 @@
+From patches Mon Sep 17 00:00:00 2001
+From: "Igor Mammedov" <imammedo@redhat.com>
+To: Eduardo Habkost <ehabkost@redhat.com>, Igor Mammedov <imammedo@redhat.com>,
+ qemu-devel@nongnu.org, Paolo Bonzini <pbonzini@redhat.com>
+Cc: Anthony Liguori <aliguori@us.ibm.com>,
+ Eduardo Habkost <ehabkost@redhat.com>, aliguori@us.ibm.com,
+ ehabkost@redhat.com, Paolo Bonzini <pbonzini@redhat.com>,
+ claudio.fontana@huawei.com, qemu-devel@nongnu.org, aderumier@odiso.com,
+ lcapitulino@redhat.com, Igor Mammedov <imammedo@redhat.com>,
+ jfrei@linux.vnet.ibm.com, yang.z.zhang@intel.com, pbonzini@redhat.com,
+ afaerber@suse.de, lig.fnst@cn.fujitsu.com, rth@twiddle.net
+Date: Fri,  5 Apr 2013 16:36:55 +0200
+Message-id: 1365172636-28628-4-git-send-email-imammedo@redhat.com
+Subject: [PATCH 03/22] target-i386: split out CPU creation and features
+ parsing into cpu_x86_create()
+
+Move CPU creation and features parsing into a separate cpu_x86_create()
+function, so that board would be able to set board specific CPU
+properties before CPU is realized.
+
+Keep cpu_x86_init() for compatibility with the code that uses cpu_init()
+and doesn't need to modify CPU properties.
+
+Signed-off-by: Igor Mammedov <imammedo@redhat.com>
+---
+ target-i386/cpu.c | 28 +++++++++++++++++++---------
+ target-i386/cpu.h |  1 +
+ 2 files changed, 20 insertions(+), 9 deletions(-)
+
+diff --git a/target-i386/cpu.c b/target-i386/cpu.c
+index 41f0f47..269a681 100644
+--- a/target-i386/cpu.c
++++ b/target-i386/cpu.c
+@@ -1563,17 +1563,16 @@ static void cpu_x86_register(X86CPU *cpu, const char *name, Error **errp)
+     object_property_set_str(OBJECT(cpu), def->model_id, "model-id", errp);
+ }
+ 
+-X86CPU *cpu_x86_init(const char *cpu_model)
++X86CPU *cpu_x86_create(const char *cpu_model, Error **errp)
+ {
+     X86CPU *cpu = NULL;
+     CPUX86State *env;
+     gchar **model_pieces;
+     char *name, *features;
+-    Error *error = NULL;
+ 
+     model_pieces = g_strsplit(cpu_model, ",", 2);
+     if (!model_pieces[0]) {
+-        error_setg(&error, "Invalid/empty CPU model name");
++        error_setg(errp, "Invalid/empty CPU model name");
+         goto out;
+     }
+     name = model_pieces[0];
+@@ -1583,23 +1582,34 @@ X86CPU *cpu_x86_init(const char *cpu_model)
+     env = &cpu->env;
+     env->cpu_model_str = cpu_model;
+ 
+-    cpu_x86_register(cpu, name, &error);
+-    if (error) {
++    cpu_x86_register(cpu, name, errp);
++    if (error_is_set(errp)) {
+         goto out;
+     }
+ 
+-    cpu_x86_parse_featurestr(cpu, features, &error);
+-    if (error) {
++    cpu_x86_parse_featurestr(cpu, features, errp);
++    if (error_is_set(errp)) {
+         goto out;
+     }
+ 
+-    object_property_set_bool(OBJECT(cpu), true, "realized", &error);
++out:
++    g_strfreev(model_pieces);
++    return cpu;
++}
++
++X86CPU *cpu_x86_init(const char *cpu_model)
++{
++    Error *error = NULL;
++    X86CPU *cpu;
++
++    cpu = cpu_x86_create(cpu_model, &error);
+     if (error) {
+         goto out;
+     }
+ 
++    object_property_set_bool(OBJECT(cpu), true, "realized", &error);
++
+ out:
+-    g_strfreev(model_pieces);
+     if (error) {
+         fprintf(stderr, "%s\n", error_get_pretty(error));
+         error_free(error);
+diff --git a/target-i386/cpu.h b/target-i386/cpu.h
+index 069a2e2..b98efd2 100644
+--- a/target-i386/cpu.h
++++ b/target-i386/cpu.h
+@@ -896,6 +896,7 @@ typedef struct CPUX86State {
+ #include "cpu-qom.h"
+ 
+ X86CPU *cpu_x86_init(const char *cpu_model);
++X86CPU *cpu_x86_create(const char *cpu_model, Error **errp);
+ int cpu_x86_exec(CPUX86State *s);
+ void x86_cpu_list(FILE *f, fprintf_function cpu_fprintf);
+ void x86_cpudef_setup(void);
+-- 
+1.8.1.4
+
+

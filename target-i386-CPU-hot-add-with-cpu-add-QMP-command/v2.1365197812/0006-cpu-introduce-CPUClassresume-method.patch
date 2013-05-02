@@ -1,0 +1,112 @@
+From patches Mon Sep 17 00:00:00 2001
+From: "Igor Mammedov" <imammedo@redhat.com>
+To: Paolo Bonzini <pbonzini@redhat.com>, Eduardo Habkost <ehabkost@redhat.com>,
+ Igor Mammedov <imammedo@redhat.com>, qemu-devel@nongnu.org,
+ pbonzini@redhat.com
+Cc: Anthony Liguori <aliguori@us.ibm.com>,
+ Eduardo Habkost <ehabkost@redhat.com>, aliguori@us.ibm.com,
+ ehabkost@redhat.com, claudio.fontana@huawei.com, qemu-devel@nongnu.org,
+ aderumier@odiso.com, lcapitulino@redhat.com,
+ Igor Mammedov <imammedo@redhat.com>, jfrei@linux.vnet.ibm.com,
+ yang.z.zhang@intel.com, pbonzini@redhat.com, eblake@redhat.com,
+ afaerber@suse.de, lig.fnst@cn.fujitsu.com, rth@twiddle.net
+Date: Fri,  5 Apr 2013 16:36:58 +0200
+Message-id: 1365172636-28628-7-git-send-email-imammedo@redhat.com
+Subject: [PATCH 06/22] cpu: introduce CPUClass.resume() method
+
+... and call it if defined from CPUClass.realize() if CPU was hotplugged
+
+by default leave .resume() unset (i.e. NULL) and override it for softmmu
+in qemu_init_vcpu() if it's still unset.
+
+Signed-off-by: Igor Mammedov <imammedo@redhat.com>
+Reviewed-by: liguang <lig.fnst@cn.fujitsu.com>
+---
+ cpus.c            | 15 ++++++++++++---
+ include/qom/cpu.h |  2 ++
+ qom/cpu.c         |  5 +++++
+ 3 files changed, 19 insertions(+), 3 deletions(-)
+
+diff --git a/cpus.c b/cpus.c
+index 9b9a32f..6b793c5 100644
+--- a/cpus.c
++++ b/cpus.c
+@@ -973,6 +973,13 @@ void pause_all_vcpus(void)
+     }
+ }
+ 
++static void resume_vcpu(CPUState *cpu)
++{
++    cpu->stop = false;
++    cpu->stopped = false;
++    qemu_cpu_kick(cpu);
++}
++
+ void resume_all_vcpus(void)
+ {
+     CPUArchState *penv = first_cpu;
+@@ -980,9 +987,7 @@ void resume_all_vcpus(void)
+     qemu_clock_enable(vm_clock, true);
+     while (penv) {
+         CPUState *pcpu = ENV_GET_CPU(penv);
+-        pcpu->stop = false;
+-        pcpu->stopped = false;
+-        qemu_cpu_kick(pcpu);
++        resume_vcpu(pcpu);
+         penv = penv->next_cpu;
+     }
+ }
+@@ -1042,7 +1047,11 @@ void qemu_init_vcpu(void *_env)
+ {
+     CPUArchState *env = _env;
+     CPUState *cpu = ENV_GET_CPU(env);
++    CPUClass *klass = CPU_GET_CLASS(cpu);
+ 
++    if (klass->resume == NULL) {
++        klass->resume = resume_vcpu;
++    }
+     cpu->nr_cores = smp_cores;
+     cpu->nr_threads = smp_threads;
+     cpu->stopped = true;
+diff --git a/include/qom/cpu.h b/include/qom/cpu.h
+index 3664a1b..6d6eb7a 100644
+--- a/include/qom/cpu.h
++++ b/include/qom/cpu.h
+@@ -45,6 +45,7 @@ typedef struct CPUState CPUState;
+  * instantiatable CPU type.
+  * @reset: Callback to reset the #CPUState to its initial state.
+  * @do_interrupt: Callback for interrupt handling.
++ * @resume: Callback for putting CPU in runable state
+  * @vmsd: State description for migration.
+  *
+  * Represents a CPU family or model.
+@@ -58,6 +59,7 @@ typedef struct CPUClass {
+ 
+     void (*reset)(CPUState *cpu);
+     void (*do_interrupt)(CPUState *cpu);
++    void (*resume)(CPUState *cpu);
+ 
+     const struct VMStateDescription *vmsd;
+ } CPUClass;
+diff --git a/qom/cpu.c b/qom/cpu.c
+index 0c76712..c062e00 100644
+--- a/qom/cpu.c
++++ b/qom/cpu.c
+@@ -58,8 +58,13 @@ static ObjectClass *cpu_common_class_by_name(const char *cpu_model)
+ 
+ static void cpu_common_realizefn(DeviceState *dev, Error **errp)
+ {
++    CPUClass *klass = CPU_GET_CLASS(dev);
++
+     if (dev->hotplugged) {
+         cpu_synchronize_post_init(CPU(dev));
++        if (klass->resume != NULL) {
++            klass->resume(CPU(dev));
++        }
+     }
+ }
+ 
+-- 
+1.8.1.4
+
+

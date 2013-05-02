@@ -1,0 +1,1 @@
+../TARGET__ALIGNMENT-cleanup-and-config-targetmak-trimming/v3.1366233994/0011-configure-eliminate-target_libs_softmmu.patch

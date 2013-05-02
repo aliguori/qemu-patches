@@ -1,0 +1,1 @@
+../target-i386-CPU-hot-add-with-cpu-add-QMP-command/v9.1367354483/0004-target-i386-get-default-cpu_model-from-QEMUMachine.patch

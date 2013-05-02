@@ -1,0 +1,47 @@
+From patches Mon Sep 17 00:00:00 2001
+From: liguang <lig.fnst@cn.fujitsu.com>
+To: Anthony Liguori <aliguori@us.ibm.com>, peter.maydell@linaro.org,
+ Paolo Bonzini <pbonzini@redhat.com>, stefanha@gmail.com,
+ guang li <liguangbz@gmail.com>, qemu-devel@nongnu.org,
+ liguang <lig.fnst@cn.fujitsu.com>, li guang <lig.fnst@cn.fujitsu.com>,
+ pbonzini@redhat.com, afaerber@suse.de
+Cc: Anthony Liguori <aliguori@us.ibm.com>, peter.maydell@linaro.org,
+ =?utf-8?b?IkFuZHJlYXMgRsOkcmJlciI=?= <afaerber@suse.de>,
+ Paolo Bonzini <pbonzini@redhat.com>, stefanha@gmail.com,
+ guang li <liguangbz@gmail.com>, qemu-devel@nongnu.org,
+ liguang <lig.fnst@cn.fujitsu.com>, li guang <lig.fnst@cn.fujitsu.com>,
+ Andreas =?utf-8?Q?F=C3=A4rber?= <afaerber@suse.de>, afaerber@suse.de
+Date: Fri, 5 Apr 2013 12:28:07 +0800
+Message-id: 1365136091-26148-4-git-send-email-lig.fnst@cn.fujitsu.com
+Subject: [PATCH 3/7] vl: create power chip device
+
+Signed-off-by: liguang <lig.fnst@cn.fujitsu.com>
+---
+ vl.c |    4 ++++
+ 1 files changed, 4 insertions(+), 0 deletions(-)
+
+diff --git a/vl.c b/vl.c
+index aeed7f4..a14549e 100644
+--- a/vl.c
++++ b/vl.c
+@@ -171,6 +171,8 @@ int main(int argc, char **argv)
+ #include "ui/qemu-spice.h"
+ #include "qapi/string-input-visitor.h"
+ 
++#include "hw/power.h"
++
+ //#define DEBUG_NET
+ //#define DEBUG_SLIRP
+ 
+@@ -4295,6 +4297,8 @@ int main(int argc, char **argv, char **envp)
+ 
+     qdev_machine_init();
+ 
++    qdev_init_nofail(qdev_create(NULL, TYPE_POWER_CHIP));
++
+     QEMUMachineInitArgs args = { .ram_size = ram_size,
+                                  .boot_device = (boot_devices[0] == '\0') ?
+                                                 machine->boot_order :
+-- 
+1.7.2.5
+

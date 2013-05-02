@@ -1,0 +1,65 @@
+From patches Mon Sep 17 00:00:00 2001
+From: fred.konrad@greensocs.com
+To: Anthony Liguori <aliguori@us.ibm.com>,
+ Cornelia Huck <cornelia.huck@de.ibm.com>, qemu-devel@nongnu.org,
+ fred.konrad@greensocs.com
+Cc: Anthony Liguori <aliguori@us.ibm.com>, peter.maydell@linaro.org,
+ mark.burton@greensocs.com, agraf@suse.de, qemu-devel@nongnu.org,
+ Libaiqing <libaiqing@huawei.com>, amit.shah@redhat.com,
+ Michal Privoznik <mprivozn@redhat.com>, cornelia.huck@de.ibm.com,
+ pbonzini@redhat.com, afaerber@suse.de, fred.konrad@greensocs.com
+Date: Tue, 30 Apr 2013 16:08:46 +0200
+Message-id: 1367330931-12994-1-git-send-email-fred.konrad@greensocs.com
+Subject: [PATCH 0/5] virtio: fix bus command line compatibility.
+
+From: KONRAD Frederic <fred.konrad@greensocs.com>
+
+Cc: Libaiqing <libaiqing@huawei.com>
+Cc: Michal Privoznik <mprivozn@redhat.com>
+
+This fixes the bus name for virtio-serial-device and virtio-scsi-device.
+
+The bus name for virtio-serial-device and virtio-scsi-device is not "id.0" as it
+was the case before the refactoring.
+
+This trigger the error:
+
+qemu-system-xxx -device virtio-serial-pci,id=virtio-serial0
+                -device virtserialport,bus=virtio-serial0.0
+
+Bus 'virtio-serial0.0' is full
+Bus 'virtio-serial0.0' not found
+
+So this sets the name of those bus before the virtio-device's init.
+
+KONRAD Frederic (5):
+  virtio-x-bus: force bus name to virtio-bus.
+  virtio: add virtio_device_set_child_bus_name.
+  scsi: add bus_name parameter to scsi_bus_new.
+  virtio-serial: fix command line compatibility.
+  virtio-scsi: fix the command line compatibility.
+
+ hw/char/virtio-serial-bus.c     |  3 ++-
+ hw/s390x/s390-virtio-bus.c      | 28 +++++++++++++++++++++++++++-
+ hw/s390x/virtio-ccw.c           | 28 +++++++++++++++++++++++++++-
+ hw/scsi/esp-pci.c               |  2 +-
+ hw/scsi/esp.c                   |  2 +-
+ hw/scsi/lsi53c895a.c            |  2 +-
+ hw/scsi/megasas.c               |  2 +-
+ hw/scsi/scsi-bus.c              |  5 +++--
+ hw/scsi/spapr_vscsi.c           |  2 +-
+ hw/scsi/virtio-scsi.c           |  3 ++-
+ hw/scsi/vmw_pvscsi.c            |  2 +-
+ hw/usb/dev-storage.c            |  4 ++--
+ hw/usb/dev-uas.c                |  2 +-
+ hw/virtio/virtio-pci.c          | 29 ++++++++++++++++++++++++++++-
+ hw/virtio/virtio.c              | 24 ++++++++++++++++++++++++
+ include/hw/scsi/scsi.h          |  3 ++-
+ include/hw/virtio/virtio-scsi.h |  1 -
+ include/hw/virtio/virtio.h      |  4 ++++
+ 18 files changed, 128 insertions(+), 18 deletions(-)
+
+Tested-by: Cornelia Huck <cornelia.huck@de.ibm.com>
+-- 
+1.8.1.4
+

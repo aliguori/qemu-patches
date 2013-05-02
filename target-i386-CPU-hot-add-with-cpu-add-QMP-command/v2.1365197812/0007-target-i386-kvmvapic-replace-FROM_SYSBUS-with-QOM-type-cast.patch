@@ -1,0 +1,63 @@
+From patches Mon Sep 17 00:00:00 2001
+From: "Igor Mammedov" <imammedo@redhat.com>
+To: Igor Mammedov <imammedo@redhat.com>, qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, aliguori@us.ibm.com,
+ ehabkost@redhat.com, claudio.fontana@huawei.com, qemu-devel@nongnu.org,
+ aderumier@odiso.com, lcapitulino@redhat.com, jfrei@linux.vnet.ibm.com,
+ yang.z.zhang@intel.com, pbonzini@redhat.com, afaerber@suse.de,
+ lig.fnst@cn.fujitsu.com, rth@twiddle.net
+Date: Fri,  5 Apr 2013 16:36:59 +0200
+Message-id: 1365172636-28628-8-git-send-email-imammedo@redhat.com
+Subject: [PATCH 07/22] target-i386: kvmvapic: replace FROM_SYSBUS() with QOM
+ type cast
+
+... and define type name and type cast macro for kvmvapic according
+to accepted convention.
+
+Signed-off-by: Igor Mammedov <imammedo@redhat.com>
+---
+v2:
+  * s/VAPIC_DEVICE/VAPIC/; s/TYPE_VAPIC_DEVICE/TYPE_VAPIC/
+
+Note: stray cleanup, since I excluded following patch that converted
+kvmvapic to ICCDevice
+---
+ hw/i386/kvmvapic.c | 7 +++++--
+ 1 file changed, 5 insertions(+), 2 deletions(-)
+
+diff --git a/hw/i386/kvmvapic.c b/hw/i386/kvmvapic.c
+index cc95e5c..c4be882 100644
+--- a/hw/i386/kvmvapic.c
++++ b/hw/i386/kvmvapic.c
+@@ -60,6 +60,9 @@ typedef struct VAPICROMState {
+     bool rom_mapped_writable;
+ } VAPICROMState;
+ 
++#define TYPE_VAPIC "kvmvapic"
++#define VAPIC(obj) OBJECT_CHECK(VAPICROMState, (obj), TYPE_VAPIC)
++
+ #define TPR_INSTR_ABS_MODRM             0x1
+ #define TPR_INSTR_MATCH_MODRM_REG       0x2
+ 
+@@ -690,7 +693,7 @@ static const MemoryRegionOps vapic_ops = {
+ 
+ static int vapic_init(SysBusDevice *dev)
+ {
+-    VAPICROMState *s = FROM_SYSBUS(VAPICROMState, dev);
++    VAPICROMState *s = VAPIC(dev);
+ 
+     memory_region_init_io(&s->io, &vapic_ops, s, "kvmvapic", 2);
+     sysbus_add_io(dev, VAPIC_IO_PORT, &s->io);
+@@ -806,7 +809,7 @@ static void vapic_class_init(ObjectClass *klass, void *data)
+ }
+ 
+ static const TypeInfo vapic_type = {
+-    .name          = "kvmvapic",
++    .name          = TYPE_VAPIC,
+     .parent        = TYPE_SYS_BUS_DEVICE,
+     .instance_size = sizeof(VAPICROMState),
+     .class_init    = vapic_class_init,
+-- 
+1.8.1.4
+
+

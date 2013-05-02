@@ -1,0 +1,256 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Eiichi Tsukata <eiichi.tsukata.xh@hitachi.com>
+To: qemu-devel@nongnu.org, stefanha@redhat.com
+Cc: Eiichi Tsukata <eiichi.tsukata.xh@hitachi.com>
+Date: Wed,  3 Apr 2013 12:41:08 +0900
+Message-id: 1364960469-4462-2-git-send-email-eiichi.tsukata.xh@hitachi.com
+Subject: [PATCH 1/2] trace: Add ftrace tracing backend
+
+This patch adds a ftrace tracing backend which sends trace event to
+ftrace marker file. You can effectively compare qemu trace data and
+kernel(especially, kvm.ko when using KVM) trace data.
+The ftrace backend is restricted to Linux only.
+
+To try out the ftrace backend:
+
+ $ ./configure --trace-backend=ftrace
+ $ make
+
+if you use KVM, enable kvm events in ftrace:
+
+ # sudo echo 1 > /sys/kernel/debug/tracing/events/kvm/enable
+
+After running qemu by root user, you can get the trace:
+
+ # cat /sys/kernel/debug/tracing/trace
+
+Signed-off-by: Eiichi Tsukata <eiichi.tsukata.xh@hitachi.com>
+---
+ configure                           |   8 +++
+ scripts/tracetool/backend/ftrace.py |  53 +++++++++++++++++++
+ trace/Makefile.objs                 |   1 +
+ trace/ftrace.c                      | 102 ++++++++++++++++++++++++++++++++++++
+ trace/ftrace.h                      |  10 ++++
+ 5 files changed, 174 insertions(+)
+ create mode 100644 scripts/tracetool/backend/ftrace.py
+ create mode 100644 trace/ftrace.c
+ create mode 100644 trace/ftrace.h
+
+diff --git a/configure b/configure
+index f2af714..6cbed00 100755
+--- a/configure
++++ b/configure
+@@ -3848,6 +3848,14 @@ if test "$trace_backend" = "dtrace"; then
+     echo "CONFIG_TRACE_SYSTEMTAP=y" >> $config_host_mak
+   fi
+ fi
++if test "$trace_backend" = "ftrace"; then
++  if test "$linux" = "yes" ; then
++    echo "CONFIG_TRACE_FTRACE=y" >> $config_host_mak
++    trace_default=no
++  else
++    feature_not_found "ftrace(trace backend)"
++  fi
++fi
+ echo "CONFIG_TRACE_FILE=$trace_file" >> $config_host_mak
+ if test "$trace_default" = "yes"; then
+   echo "CONFIG_TRACE_DEFAULT=y" >> $config_host_mak
+diff --git a/scripts/tracetool/backend/ftrace.py b/scripts/tracetool/backend/ftrace.py
+new file mode 100644
+index 0000000..e02f0ca
+--- /dev/null
++++ b/scripts/tracetool/backend/ftrace.py
+@@ -0,0 +1,53 @@
++#!/usr/bin/env python
++# -*- coding: utf-8 -*-
++
++"""
++Ftrace built-in backend.
++"""
++
++__author__     = "Eiichi Tsukata <eiichi.tsukata.xh@hitachi.com>"
++__copyright__  = "Copyright (C) 2013 Hitachi, Ltd."
++__license__    = "GPL version 2 or (at your option) any later version"
++
++__maintainer__ = "Stefan Hajnoczi"
++__email__      = "stefanha@linux.vnet.ibm.com"
++
++
++from tracetool import out
++
++
++PUBLIC = True
++
++
++def c(events):
++    pass
++
++def h(events):
++    out('#include "trace/ftrace.h"',
++        '#include "trace/control.h"',
++        '',
++        )
++
++    for e in events:
++        argnames = ", ".join(e.args.names())
++        if len(e.args) > 0:
++            argnames = ", " + argnames
++
++        out('static inline void trace_%(name)s(%(args)s)',
++            '{',
++            '    char ftrace_buf[MAX_TRACE_STRLEN];',
++            '    int unused __attribute__ ((unused));'
++            '    bool _state = trace_event_get_state(%(event_id)s);',
++            '    if (_state) {',
++            '        snprintf(ftrace_buf, MAX_TRACE_STRLEN,',
++            '                 "%(name)s " %(fmt)s "\\n" %(argnames)s);',
++            '        unused = write(trace_marker_fd, ftrace_buf,',
++            '                       MAX_TRACE_STRLEN);',
++            '    }',
++            '}',
++            name = e.name,
++            args = e.args,
++            event_id = "TRACE_" + e.name.upper(),
++            fmt = e.fmt.rstrip("\n"),
++            argnames = argnames,
++            )
+diff --git a/trace/Makefile.objs b/trace/Makefile.objs
+index a043072..3b88e49 100644
+--- a/trace/Makefile.objs
++++ b/trace/Makefile.objs
+@@ -76,5 +76,6 @@ endif
+ util-obj-$(CONFIG_TRACE_DEFAULT) += default.o
+ util-obj-$(CONFIG_TRACE_SIMPLE) += simple.o
+ util-obj-$(CONFIG_TRACE_STDERR) += stderr.o
++util-obj-$(CONFIG_TRACE_FTRACE) += ftrace.o
+ util-obj-y += control.o
+ util-obj-y += generated-tracers.o
+diff --git a/trace/ftrace.c b/trace/ftrace.c
+new file mode 100644
+index 0000000..46b7fdb
+--- /dev/null
++++ b/trace/ftrace.c
+@@ -0,0 +1,102 @@
++/*
++ * Ftrace trace backend
++ *
++ * Copyright (C) 2013 Hitachi, Ltd.
++ * Created by Eiichi Tsukata <eiichi.tsukata.xh@hitachi.com>
++ *
++ * This work is licensed under the terms of the GNU GPL, version 2.  See
++ * the COPYING file in the top-level directory.
++ *
++ */
++
++#include <stdio.h>
++#include <string.h>
++#include <fcntl.h>
++#include <limits.h>
++#include "trace.h"
++#include "trace/control.h"
++
++int trace_marker_fd;
++
++static int find_debugfs(char *debugfs)
++{
++    char type[100];
++    FILE *fp;
++
++    fp = fopen("/proc/mounts", "r");
++    if (fp == NULL) {
++        return 0;
++    }
++
++    while (fscanf(fp, "%*s %" STR(PATH_MAX) "s %99s %*s %*d %*d\n",
++                  debugfs, type) == 2) {
++        if (strcmp(type, "debugfs") == 0) {
++            break;
++        }
++    }
++    fclose(fp);
++
++    if (strcmp(type, "debugfs") != 0) {
++        return 0;
++    }
++    return 1;
++}
++
++void trace_print_events(FILE *stream, fprintf_function stream_printf)
++{
++    TraceEventID i;
++
++    for (i = 0; i < trace_event_count(); i++) {
++        TraceEvent *ev = trace_event_id(i);
++        stream_printf(stream, "%s [Event ID %u] : state %u\n",
++                      trace_event_get_name(ev), i, trace_event_get_state_dynamic(ev));
++    }
++}
++
++void trace_event_set_state_dynamic_backend(TraceEvent *ev, bool state)
++{
++    ev->dstate = state;
++}
++
++bool trace_backend_init(const char *events, const char *file)
++{
++    char debugfs[PATH_MAX];
++    char path[PATH_MAX];
++    int debugfs_found;
++    int trace_fd = -1;
++
++    if (file) {
++        fprintf(stderr, "error: -trace file=...: "
++                "option not supported by the selected tracing backend\n");
++        return false;
++    }
++
++    debugfs_found = find_debugfs(debugfs);
++    if (debugfs_found) {
++        snprintf(path, PATH_MAX, "%s/tracing/tracing_on", debugfs);
++        trace_fd = open(path, O_WRONLY);
++        if (trace_fd < 0) {
++            perror("Could not open ftrace 'tracing_on' file");
++            return false;
++        } else {
++            if (write(trace_fd, "1", 1) < 0) {
++                perror("Could not write to 'tracing_on' file");
++                close(trace_fd);
++                return false;
++            }
++            close(trace_fd);
++        }
++        snprintf(path, PATH_MAX, "%s/tracing/trace_marker", debugfs);
++        trace_marker_fd = open(path, O_WRONLY);
++        if (trace_marker_fd < 0) {
++            perror("Could not open ftrace 'trace_marker' file");
++            return false;
++        }
++    } else {
++        fprintf(stderr, "debugfs is not mounted\n");
++        return false;
++    }
++
++    trace_backend_init_events(events);
++    return true;
++}
+diff --git a/trace/ftrace.h b/trace/ftrace.h
+new file mode 100644
+index 0000000..94cb8d5
+--- /dev/null
++++ b/trace/ftrace.h
+@@ -0,0 +1,10 @@
++#ifndef TRACE_FTRACE_H
++#define TRACE_FTRACE_H
++
++#define MAX_TRACE_STRLEN 512
++#define _STR(x) #x
++#define STR(x) _STR(x)
++
++extern int trace_marker_fd;
++
++#endif /* ! TRACE_FTRACE_H */
+-- 
+1.8.1.4
+
+
+

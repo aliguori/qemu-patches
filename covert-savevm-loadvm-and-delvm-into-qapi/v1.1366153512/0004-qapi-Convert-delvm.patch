@@ -1,0 +1,293 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Pavel Hrdina <phrdina@redhat.com>
+To: qemu-devel@nongnu.org, Pavel Hrdina <phrdina@redhat.com>
+Cc: qemu-devel@nongnu.org, phrdina@redhat.com, armbru@redhat.com,
+ lcapitulino@redhat.com
+Date: Tue, 16 Apr 2013 18:05:16 +0200
+Message-id: 35a7188b135544116c0c8e954c8aa20bd88b54bb.1366127809.git.phrdina@redhat.com
+Subject: [PATCH 04/11] qapi: Convert delvm
+
+QMP command vm-snapshot-delete no takes two parameters name and id. They are
+optional, but one of the name or id must be provided. If both are provided they
+will match only the snapshot with the same name and id. The command returns
+SnapshotInfo only if the snapshot exists, if snapshot doesn't exist it returns
+nothing. If something goes wrong, it returns an error message.
+
+HMP command delvm now uses the new vm-snapshot-delete, but behave slightly
+different. The delvm takes one optional flag -i and one parameter name. If you
+provide only the name parameter, it will match only snapshots with that name.
+If you also provide the flag, it will match only snapshots with name as id.
+Information about successfully deleted snapshot will be printed, if there is no
+snapshot with that name or id, the appropriate message will be printed. If
+something goes wrong, an error message will be printed.
+
+These improves behavior of the command to be more strict on selecting snapshots
+because actual behavior is wrong. Now if you want to delete snapshot with name '2'
+but there is no snapshot with that name it could delete snapshot with id '2' and
+that isn't what you want.
+
+Signed-off-by: Pavel Hrdina <phrdina@redhat.com>
+---
+ hmp-commands.hx         | 14 ++++++++------
+ hmp.c                   | 35 ++++++++++++++++++++++++++++++++++
+ hmp.h                   |  1 +
+ include/sysemu/sysemu.h |  1 -
+ qapi-schema.json        | 17 +++++++++++++++++
+ qmp-commands.hx         | 50 ++++++++++++++++++++++++++++++++++++++++++++++++-
+ savevm.c                | 49 +++++++++++++++++++++++++++++++++++-------------
+ 7 files changed, 146 insertions(+), 21 deletions(-)
+
+diff --git a/hmp-commands.hx b/hmp-commands.hx
+index df44906..d1701ce 100644
+--- a/hmp-commands.hx
++++ b/hmp-commands.hx
+@@ -339,16 +339,18 @@ ETEXI
+ 
+     {
+         .name       = "delvm",
+-        .args_type  = "name:s",
+-        .params     = "tag|id",
+-        .help       = "delete a VM snapshot from its tag or id",
+-        .mhandler.cmd = do_delvm,
++        .args_type  = "id:-i,name:s",
++        .params     = "[-i] tag|[id]",
++        .help       = "delete a VM snapshot from its tag or id if -i flag is provided",
++        .mhandler.cmd = hmp_vm_snapshot_delete,
+     },
+ 
+ STEXI
+-@item delvm @var{tag}|@var{id}
++@item delvm [-i] @var{tag}|[@var{id}]
+ @findex delvm
+-Delete the snapshot identified by @var{tag} or @var{id}.
++Delete a snapshot identified by @var{tag}. If flag -i is provided, delete
++a snapshot indentified by @var{id}.
++
+ ETEXI
+ 
+     {
+diff --git a/hmp.c b/hmp.c
+index 4fb76ec..2c754b3 100644
+--- a/hmp.c
++++ b/hmp.c
+@@ -1425,3 +1425,38 @@ void hmp_chardev_remove(Monitor *mon, const QDict *qdict)
+     qmp_chardev_remove(qdict_get_str(qdict, "id"), &local_err);
+     hmp_handle_error(mon, &local_err);
+ }
++
++void hmp_vm_snapshot_delete(Monitor *mon, const QDict *qdict)
++{
++    const char *name = qdict_get_try_str(qdict, "name");
++    const bool id = qdict_get_try_bool(qdict, "id", false);
++    Error *local_err = NULL;
++    SnapshotInfo *info;
++
++    if (id) {
++        info = qmp_vm_snapshot_delete(false, NULL, true, name, &local_err);
++    } else {
++        info = qmp_vm_snapshot_delete(true, name, false, NULL, &local_err);
++    }
++
++    if (info) {
++        char buf[256];
++        QEMUSnapshotInfo sn = {
++            .vm_state_size = info->vm_state_size,
++            .date_sec = info->date_sec,
++            .date_nsec = info->date_nsec,
++            .vm_clock_nsec = info->vm_clock_sec * 1000000000 +
++                             info->vm_clock_nsec,
++        };
++        pstrcpy(sn.id_str, sizeof(sn.id_str), info->id);
++        pstrcpy(sn.name, sizeof(sn.name), info->name);
++        monitor_printf(mon, "Deleted snapshot info:\n");
++        monitor_printf(mon, "%s\n", bdrv_snapshot_dump(buf, sizeof(buf), NULL));
++        monitor_printf(mon, "%s\n", bdrv_snapshot_dump(buf, sizeof(buf), &sn));
++    } else if (!error_is_set(&local_err)) {
++        monitor_printf(mon, "Snapshot '%s' not found.\n", name);
++    }
++
++    qapi_free_SnapshotInfo(info);
++    hmp_handle_error(mon, &local_err);
++}
+diff --git a/hmp.h b/hmp.h
+index 95fe76e..b0667b3 100644
+--- a/hmp.h
++++ b/hmp.h
+@@ -85,5 +85,6 @@ void hmp_nbd_server_add(Monitor *mon, const QDict *qdict);
+ void hmp_nbd_server_stop(Monitor *mon, const QDict *qdict);
+ void hmp_chardev_add(Monitor *mon, const QDict *qdict);
+ void hmp_chardev_remove(Monitor *mon, const QDict *qdict);
++void hmp_vm_snapshot_delete(Monitor *mon, const QDict *qdict);
+ 
+ #endif
+diff --git a/include/sysemu/sysemu.h b/include/sysemu/sysemu.h
+index 6578782..f46f9d2 100644
+--- a/include/sysemu/sysemu.h
++++ b/include/sysemu/sysemu.h
+@@ -67,7 +67,6 @@ void qemu_add_machine_init_done_notifier(Notifier *notify);
+ 
+ void do_savevm(Monitor *mon, const QDict *qdict);
+ int load_vmstate(const char *name);
+-void do_delvm(Monitor *mon, const QDict *qdict);
+ void do_info_snapshots(Monitor *mon, const QDict *qdict);
+ 
+ void qemu_announce_self(void);
+diff --git a/qapi-schema.json b/qapi-schema.json
+index 751d3c2..641f3ac 100644
+--- a/qapi-schema.json
++++ b/qapi-schema.json
+@@ -3505,3 +3505,20 @@
+     '*asl_compiler_rev':  'uint32',
+     '*file':              'str',
+     '*data':              'str' }}
++
++##
++# @vm-snapshot-delete:
++#
++# Delete a snapshot identified by name or id or both. One of the name or id
++# is required. It will returns SnapshotInfo of successfully deleted snapshot.
++#
++# @name: tag of an existing snapshot
++#
++# @id: id of an existing snapshot
++#
++# Returns: SnapshotInfo on success
++#
++# Since: 1.5
++##
++{ 'command': 'vm-snapshot-delete', 'data': {'*name': 'str', '*id': 'str'},
++  'returns': 'SnapshotInfo' }
+diff --git a/qmp-commands.hx b/qmp-commands.hx
+index 4d65422..86f399d 100644
+--- a/qmp-commands.hx
++++ b/qmp-commands.hx
+@@ -1419,7 +1419,55 @@ Example:
+ 
+ -> { "execute": "add_client", "arguments": { "protocol": "vnc",
+                                              "fdname": "myclient" } }
+-<- { "return": {} }
++<- {
++      "return": {
++         "id": "1",
++         "name": "my_snapshot",
++         "date-sec": 1364480534,
++         "date-nsec": 978215000,
++         "vm-clock-sec": 5,
++         "vm-clock-nsec": 153620449,
++        "vm-state-size": 5709953
++      }
++   }
++
++EQMP
++    {
++        .name       = "vm-snapshot-delete",
++        .args_type  = "name:s?,id:s?",
++        .params     = "[tag] [id]",
++        .help       = "delete a VM snapshot from its tag or id",
++        .mhandler.cmd_new = qmp_marshal_input_vm_snapshot_delete
++    },
++
++SQMP
++vm-snapshot-delete
++------
++
++Delete a snapshot identified by name or id or both. One of the name or id
++is required. It will returns SnapshotInfo of successfully deleted snapshot.
++
++Arguments:
++
++- "name": tag of an existing snapshot (json-string, optional)
++
++- "id": id of an existing snapshot (json-string, optional)
++
++Example:
++
++-> { "execute": "vm-snapshot-delete", "arguments": { "name": "my_snapshot" } }
++<- {
++      "return": {
++         "id": "1",
++         "name": "my_snapshot",
++         "date-sec": 1364480534,
++         "date-nsec": 978215000,
++         "vm-clock-sec": 5,
++         "vm-clock-nsec": 153620449,
++         "vm-state-size": 5709953
++      }
++   }
++
+ 
+ EQMP
+     {
+diff --git a/savevm.c b/savevm.c
+index 96a2340..4af7d2d 100644
+--- a/savevm.c
++++ b/savevm.c
+@@ -2473,28 +2473,51 @@ int load_vmstate(const char *name)
+     return 0;
+ }
+ 
+-void do_delvm(Monitor *mon, const QDict *qdict)
++SnapshotInfo *qmp_vm_snapshot_delete(const bool has_name, const char *name,
++                                     const bool has_id, const char *id,
++                                     Error **errp)
+ {
+-    BlockDriverState *bs, *bs1;
+-    Error *local_err = NULL;
+-    const char *name = qdict_get_str(qdict, "name");
++    BlockDriverState *bs;
++    SnapshotInfo *info = NULL;
++    QEMUSnapshotInfo sn;
++
++    if (!has_name && !has_id) {
++        error_setg(errp, "name or id must be provided");
++        return NULL;
++    }
+ 
+     bs = bdrv_snapshots();
+     if (!bs) {
+-        monitor_printf(mon, "No block device supports snapshots\n");
+-        return;
++        error_setg(errp, "no block device supports snapshots");
++        return NULL;
+     }
+ 
+-    bs1 = NULL;
+-    while ((bs1 = bdrv_next(bs1))) {
+-        if (bdrv_can_snapshot(bs1)) {
+-            bdrv_snapshot_delete(bs1, name, &local_err);
+-            if (error_is_set(&local_err)) {
+-                monitor_printf(mon, "%s\n", error_get_pretty(local_err));
+-                error_free(local_err);
++    if (!bdrv_snapshot_find(bs, &sn, name, id, false)) {
++        /* no need to set an error if snapshot doesn't exist */
++        return NULL;
++    }
++
++    info = g_malloc0(sizeof(SnapshotInfo));
++    info->id = g_strdup(sn.id_str);
++    info->name = g_strdup(sn.name);
++    info->date_nsec = sn.date_nsec;
++    info->date_sec = sn.date_sec;
++    info->vm_state_size = sn.vm_state_size;
++    info->vm_clock_nsec = sn.vm_clock_nsec % 1000000000;
++    info->vm_clock_sec = sn.vm_clock_nsec / 1000000000;
++
++    bs = NULL;
++    while ((bs = bdrv_next(bs))) {
++        if (bdrv_can_snapshot(bs)
++                && bdrv_snapshot_find(bs, &sn, name, id, false)) {
++            bdrv_snapshot_delete(bs, sn.name, errp);
++            if (error_is_set(errp)) {
++                return NULL;
+             }
+         }
+     }
++
++    return info;
+ }
+ 
+ void do_info_snapshots(Monitor *mon, const QDict *qdict)
+-- 
+1.8.1.4
+
+

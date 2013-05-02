@@ -1,0 +1,109 @@
+From patches Mon Sep 17 00:00:00 2001
+From: John Rigby <john.rigby@linaro.org>
+To: qemu-devel@nongnu.org
+Cc: Peter Maydell <peter.maydell@linaro.org>,
+ John Rigby <john.rigby@linaro.org>, patches@linaro.org
+Date: Tue, 30 Apr 2013 09:47:17 -0600
+Message-id: 1367336838-23742-2-git-send-email-john.rigby@linaro.org
+Subject: [PATCH 1/2] ARM: Allow boards to provide an fdt blob
+
+If no fdt is provided on command line and the new field
+get_dtb in struct arm_boot_info is set then call it to
+get a device tree blob.
+
+Also allow dumping of device tree by calling qemu_devtree_dumpdtb
+near the end of load_dtb.
+
+Signed-off-by: John Rigby <john.rigby@linaro.org>
+---
+ hw/arm/boot.c        |   31 ++++++++++++++++++++-----------
+ include/hw/arm/arm.h |    6 ++++++
+ 2 files changed, 26 insertions(+), 11 deletions(-)
+
+diff --git a/hw/arm/boot.c b/hw/arm/boot.c
+index f451529..de71edf 100644
+--- a/hw/arm/boot.c
++++ b/hw/arm/boot.c
+@@ -235,19 +235,27 @@ static int load_dtb(hwaddr addr, const struct arm_boot_info *binfo)
+     int size, rc;
+     uint32_t acells, scells, hival;
+ 
+-    filename = qemu_find_file(QEMU_FILE_TYPE_BIOS, binfo->dtb_filename);
+-    if (!filename) {
+-        fprintf(stderr, "Couldn't open dtb file %s\n", binfo->dtb_filename);
+-        return -1;
+-    }
++    if (binfo->dtb_filename) {
++        filename = qemu_find_file(QEMU_FILE_TYPE_BIOS, binfo->dtb_filename);
++        if (!filename) {
++            fprintf(stderr, "Couldn't open dtb file %s\n", binfo->dtb_filename);
++            return -1;
++        }
+ 
+-    fdt = load_device_tree(filename, &size);
+-    if (!fdt) {
+-        fprintf(stderr, "Couldn't open dtb file %s\n", filename);
++        fdt = load_device_tree(filename, &size);
++        if (!fdt) {
++            fprintf(stderr, "Couldn't open dtb file %s\n", filename);
++            g_free(filename);
++            return -1;
++        }
+         g_free(filename);
+-        return -1;
++    } else if (binfo->get_dtb) {
++        fdt = binfo->get_dtb(addr, binfo, &size);
++        if (!fdt) {
++            fprintf(stderr, "Couldn't get dtb blob from board func\n");
++            return -1;
++        }
+     }
+-    g_free(filename);
+ 
+     acells = qemu_devtree_getprop_cell(fdt, "/", "#address-cells");
+     scells = qemu_devtree_getprop_cell(fdt, "/", "#size-cells");
+@@ -304,6 +312,7 @@ static int load_dtb(hwaddr addr, const struct arm_boot_info *binfo)
+             fprintf(stderr, "couldn't set /chosen/linux,initrd-end\n");
+         }
+     }
++    qemu_devtree_dumpdtb(fdt, size);
+ 
+     cpu_physical_memory_write(addr, fdt, size);
+ 
+@@ -440,7 +449,7 @@ void arm_load_kernel(ARMCPU *cpu, struct arm_boot_info *info)
+         /* for device tree boot, we pass the DTB directly in r2. Otherwise
+          * we point to the kernel args.
+          */
+-        if (info->dtb_filename) {
++        if (info->dtb_filename || info->get_dtb) {
+             /* Place the DTB after the initrd in memory. Note that some
+              * kernels will trash anything in the 4K page the initrd
+              * ends in, so make sure the DTB isn't caught up in that.
+diff --git a/include/hw/arm/arm.h b/include/hw/arm/arm.h
+index 7b2b02d..4c56a1b 100644
+--- a/include/hw/arm/arm.h
++++ b/include/hw/arm/arm.h
+@@ -31,6 +31,10 @@ struct arm_boot_info {
+     const char *kernel_cmdline;
+     const char *initrd_filename;
+     const char *dtb_filename;
++    /* if a board is able to create a dtb without a dtb file then it
++     * sets get_dtb.  This will only be used if no dtb file is provided.
++     */
++    void *(*get_dtb)(hwaddr addr, const struct arm_boot_info *binfo, int *size);
+     hwaddr loader_start;
+     /* multicore boards that use the default secondary core boot functions
+      * need to put the address of the secondary boot code, the boot reg,
+@@ -59,6 +63,8 @@ struct arm_boot_info {
+     int is_linux;
+     hwaddr initrd_start;
+     hwaddr initrd_size;
++    void *dtb_blob;
++    int dtb_blob_size;
+     hwaddr entry;
+ };
+ void arm_load_kernel(ARMCPU *cpu, struct arm_boot_info *info);
+-- 
+1.7.9.5
+
+

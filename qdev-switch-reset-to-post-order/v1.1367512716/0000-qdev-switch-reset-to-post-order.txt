@@ -1,0 +1,42 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: Paolo Bonzini <pbonzini@redhat.com>, qemu-devel@nongnu.org,
+ "Michael S. Tsirkin" <mst@redhat.com>
+Cc: qemu-devel@nongnu.org, mst@redhat.com
+Date: Thu,  2 May 2013 11:38:36 +0200
+Message-id: 1367487519-17332-1-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 0/3] qdev: switch reset to post-order
+
+I was going to keep these for 1.6, but since they have been tested
+by the user and myself, and they fix a regression, it can be worthwhile
+to include these in 1.5.
+
+qdev reset (qdev_reset_all/qbus_reset_all) is currently done in
+pre-order.  This is not right, because it means the parent devices
+cannot expect anything about the children devices' state during the
+reset callback.
+
+With the traversal done *before* invoking the bus-reset callback,
+there is no way for the bus-reset callback to take care of the device
+tree traversal.  This is currently done only for PCI, which requires
+some adjustments.
+
+This fixes a crash in resetting the LSI SCSI adapter, as reported and
+tested by Claudio Bley.
+
+Paolo Bonzini (3):
+  pci: do not export pci_bus_reset
+  qdev: allow both pre- and post-order vists in qdev walking functions
+  qdev: switch reset to post-order
+
+ hw/core/qdev.c         | 47 ++++++++++++++++++++++++++++++++++-------------
+ hw/pci/pci.c           | 37 +++++++++++++++++--------------------
+ hw/pci/pci_bridge.c    |  2 +-
+ include/hw/pci/pci.h   |  1 -
+ include/hw/qdev-core.h | 15 ++++++++++-----
+ 5 files changed, 62 insertions(+), 40 deletions(-)
+
+-- 
+1.8.2
+
+

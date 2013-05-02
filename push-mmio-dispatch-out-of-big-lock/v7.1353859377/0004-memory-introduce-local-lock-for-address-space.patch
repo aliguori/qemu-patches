@@ -1,0 +1,65 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Liu Ping Fan <qemulist@gmail.com>
+To: qemu-devel@nongnu.org
+Cc: Paolo Bonzini <pbonzini@redhat.com>, gleb@redhat.com,
+ Anthony Liguori <anthony@codemonkey.ws>, Stefan Hajnoczi <stefanha@gmail.com>,
+ Marcelo Tosatti <mtosatti@redhat.com>,
+ Peter Maydell <peter.maydell@linaro.org>, Jan Kiszka <jan.kiszka@siemens.com>
+Date: Sun, 25 Nov 2012 10:03:01 +0800
+Message-id: 1353808984-22368-5-git-send-email-qemulist@gmail.com
+Subject: [PATCH 4/7] memory: introduce local lock for address space
+
+From: Liu Ping Fan <pingfank@linux.vnet.ibm.com>
+
+For those address spaces which want to be able out of big lock, they
+will be protected by their own local.
+
+Signed-off-by: Liu Ping Fan <pingfank@linux.vnet.ibm.com>
+---
+ memory.c |    1 +
+ memory.h |    3 +++
+ 2 files changed, 4 insertions(+), 0 deletions(-)
+
+diff --git a/memory.c b/memory.c
+index 2f68d67..18425fd 100644
+--- a/memory.c
++++ b/memory.c
+@@ -1535,6 +1535,7 @@ void memory_listener_unregister(MemoryListener *listener)
+ void address_space_init(AddressSpace *as, MemoryRegion *root)
+ {
+     memory_region_transaction_begin();
++    qemu_mutex_init(&as->lock);
+     as->root = root;
+     as->current_map = g_new(FlatView, 1);
+     flatview_init(as->current_map);
+diff --git a/memory.h b/memory.h
+index 79393f1..13a9e3e 100644
+--- a/memory.h
++++ b/memory.h
+@@ -22,6 +22,7 @@
+ #include "cpu-common.h"
+ #include "targphys.h"
+ #include "qemu-queue.h"
++#include "qemu-thread.h"
+ #include "iorange.h"
+ #include "ioport.h"
+ #include "int128.h"
+@@ -164,6 +165,7 @@ typedef struct AddressSpace AddressSpace;
+  */
+ struct AddressSpace {
+     /* All fields are private. */
++    QemuMutex lock;
+     const char *name;
+     MemoryRegion *root;
+     struct FlatView *current_map;
+@@ -801,6 +803,7 @@ void mtree_info(fprintf_function mon_printf, void *f);
+  *
+  * @as: an uninitialized #AddressSpace
+  * @root: a #MemoryRegion that routes addesses for the address space
++ * @lock: if true, the physmap protected by local lock, otherwise big lock
+  */
+ void address_space_init(AddressSpace *as, MemoryRegion *root);
+ 
+-- 
+1.7.4.4
+

@@ -1,0 +1,35 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+To: peter.maydell@linaro.org, qemu-devel@nongnu.org
+Cc: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+Date: Wed,  3 Apr 2013 14:27:35 +1000
+Message-id: 13e853a73a594ffb37d08295692153798c5e70d7.1364962908.git.peter.crosthwaite@xilinx.com
+Subject: [PATCH 02/15] xilinx_spips: Make interrupts clear on read
+
+By default these interrupts are clear on read.
+
+Signed-off-by: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+---
+
+ hw/xilinx_spips.c |    4 ++++
+ 1 files changed, 4 insertions(+), 0 deletions(-)
+
+diff --git a/hw/xilinx_spips.c b/hw/xilinx_spips.c
+index 734adf0..261d948 100644
+--- a/hw/xilinx_spips.c
++++ b/hw/xilinx_spips.c
+@@ -330,6 +330,10 @@ static uint64_t xilinx_spips_read(void *opaque, hwaddr addr,
+         mask = 0x0002FFFF;
+         break;
+     case R_INTR_STATUS:
++        ret = s->regs[addr] & IXR_ALL;
++        s->regs[addr] = 0;
++        DB_PRINT("addr=" TARGET_FMT_plx " = %x\n", addr * 4, ret);
++        return ret;
+     case R_INTR_MASK:
+         mask = IXR_ALL;
+         break;
+-- 
+1.7.0.4
+
+

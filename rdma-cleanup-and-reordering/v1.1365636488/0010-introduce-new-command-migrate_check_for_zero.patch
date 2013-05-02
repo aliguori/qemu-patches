@@ -1,0 +1,169 @@
+From patches Mon Sep 17 00:00:00 2001
+From: mrhines@linux.vnet.ibm.com
+To: Paolo Bonzini <pbonzini@redhat.com>,
+ "Michael R. Hines" <mrhines@linux.vnet.ibm.com>, qemu-devel@nongnu.org,
+ "Michael S. Tsirkin" <mst@redhat.com>, Eric Blake <eblake@redhat.com>,
+ mrhines@linux.vnet.ibm.com, Orit Wasserman <owasserm@redhat.com>
+Cc: Anthony Liguori <aliguori@us.ibm.com>, Paolo Bonzini <pbonzini@redhat.com>,
+ "Michael R. Hines" <mrhines@linux.vnet.ibm.com>, mst@redhat.com,
+ qemu-devel@nongnu.org, mrhines@linux.vnet.ibm.com,
+ Michael R Hines <mrhines@us.ibm.com>, Bulent Abali <abali@us.ibm.com>,
+ owasserm@redhat.com, Eric Blake <eblake@redhat.com>,
+ "Michael S. Tsirkin" <mst@redhat.com>, pbonzini@redhat.com,
+ Gokul B Kandiraju <gokul@us.ibm.com>
+Date: Wed, 10 Apr 2013 18:28:18 -0400
+Message-id: 1365632901-15470-11-git-send-email-mrhines@linux.vnet.ibm.com
+Subject: [PATCH 10/13] introduce new command migrate_check_for_zero
+
+From: "Michael R. Hines" <mrhines@us.ibm.com>
+
+This allows the user to disable zero page checking during migration
+
+Signed-off-by: Michael R. Hines <mrhines@us.ibm.com>
+---
+ hmp-commands.hx  |   14 ++++++++++++++
+ hmp.c            |    6 ++++++
+ hmp.h            |    1 +
+ migration.c      |   12 ++++++++++++
+ qapi-schema.json |   13 +++++++++++++
+ qmp-commands.hx  |   23 +++++++++++++++++++++++
+ 6 files changed, 69 insertions(+)
+
+diff --git a/hmp-commands.hx b/hmp-commands.hx
+index 3d98604..b593095 100644
+--- a/hmp-commands.hx
++++ b/hmp-commands.hx
+@@ -962,6 +962,20 @@ Set maximum tolerated downtime (in seconds) for migration.
+ ETEXI
+ 
+     {
++        .name       = "migrate_check_for_zero",
++        .args_type  = "value:b",
++        .params     = "value",
++        .help       = "Control whether or not to check for zero pages",
++        .mhandler.cmd = hmp_migrate_check_for_zero,
++    },
++
++STEXI
++@item migrate_check_for_zero @var{value}
++@findex migrate_check_for_zero
++Control whether or not to check for zero pages.
++ETEXI
++
++    {
+         .name       = "migrate_set_capability",
+         .args_type  = "capability:s,state:b",
+         .params     = "capability state",
+diff --git a/hmp.c b/hmp.c
+index dbe9b90..68ba93a 100644
+--- a/hmp.c
++++ b/hmp.c
+@@ -909,6 +909,12 @@ void hmp_migrate_set_downtime(Monitor *mon, const QDict *qdict)
+     qmp_migrate_set_downtime(value, NULL);
+ }
+ 
++void hmp_migrate_check_for_zero(Monitor *mon, const QDict *qdict)
++{
++    bool value = qdict_get_bool(qdict, "value");
++    qmp_migrate_check_for_zero(value, NULL);
++}
++
+ void hmp_migrate_set_cache_size(Monitor *mon, const QDict *qdict)
+ {
+     int64_t value = qdict_get_int(qdict, "value");
+diff --git a/hmp.h b/hmp.h
+index 80e8b41..a6595da 100644
+--- a/hmp.h
++++ b/hmp.h
+@@ -58,6 +58,7 @@ void hmp_snapshot_blkdev(Monitor *mon, const QDict *qdict);
+ void hmp_drive_mirror(Monitor *mon, const QDict *qdict);
+ void hmp_migrate_cancel(Monitor *mon, const QDict *qdict);
+ void hmp_migrate_set_downtime(Monitor *mon, const QDict *qdict);
++void hmp_migrate_check_for_zero(Monitor *mon, const QDict *qdict);
+ void hmp_migrate_set_speed(Monitor *mon, const QDict *qdict);
+ void hmp_migrate_set_capability(Monitor *mon, const QDict *qdict);
+ void hmp_migrate_set_cache_size(Monitor *mon, const QDict *qdict);
+diff --git a/migration.c b/migration.c
+index a2fcacf..9072479 100644
+--- a/migration.c
++++ b/migration.c
+@@ -485,6 +485,18 @@ void qmp_migrate_set_downtime(double value, Error **errp)
+     max_downtime = (uint64_t)value;
+ }
+ 
++static bool check_for_zero = true;
++
++void qmp_migrate_check_for_zero(bool value, Error **errp)
++{
++    check_for_zero = value;
++}
++
++bool migrate_check_for_zero(void)
++{
++    return check_for_zero;
++}
++
+ bool migrate_chunk_register_destination(void)
+ {
+     MigrationState *s;
+diff --git a/qapi-schema.json b/qapi-schema.json
+index 7fe7e5c..1ca939f 100644
+--- a/qapi-schema.json
++++ b/qapi-schema.json
+@@ -1792,6 +1792,19 @@
+ { 'command': 'migrate_set_downtime', 'data': {'value': 'number'} }
+ 
+ ##
++# @migrate_check_for_zero
++#
++# Control whether or not to check for zero pages during migration.
++#
++# @value: on|off 
++#
++# Returns: nothing on success
++#
++# Since: 1.5.0
++##
++{ 'command': 'migrate_check_for_zero', 'data': {'value': 'bool'} }
++
++##
+ # @migrate_set_speed
+ #
+ # Set maximum speed for migration.
+diff --git a/qmp-commands.hx b/qmp-commands.hx
+index 1e0e11e..78cda67 100644
+--- a/qmp-commands.hx
++++ b/qmp-commands.hx
+@@ -750,6 +750,29 @@ Example:
+ EQMP
+ 
+     {
++        .name       = "migrate_check_for_zero",
++        .args_type  = "value:b",
++        .mhandler.cmd_new = qmp_marshal_input_migrate_check_for_zero,
++    },
++
++SQMP
++migrate_check_for_zero
++----------------------
++
++Control whether or not to check for zero pages.
++
++Arguments:
++
++- "value": true or false (json-bool) 
++
++Example:
++
++-> { "execute": "migrate_check_for_zero", "arguments": { "value": true } }
++<- { "return": {} }
++
++EQMP
++
++    {
+         .name       = "client_migrate_info",
+         .args_type  = "protocol:s,hostname:s,port:i?,tls-port:i?,cert-subject:s?",
+         .params     = "protocol hostname port tls-port cert-subject",
+-- 
+1.7.10.4
+

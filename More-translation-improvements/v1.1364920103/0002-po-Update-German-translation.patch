@@ -1,0 +1,55 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Kevin Wolf <kwolf@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: kwolf@redhat.com, aurelien@aurel32.net
+Date: Tue,  2 Apr 2013 11:28:25 +0200
+Message-id: 1364894905-12955-3-git-send-email-kwolf@redhat.com
+Subject: [PATCH 2/2] po: Update German translation
+
+Signed-off-by: Kevin Wolf <kwolf@redhat.com>
+---
+ po/de_DE.po | 12 ++++++------
+ 1 file changed, 6 insertions(+), 6 deletions(-)
+
+diff --git a/po/de_DE.po b/po/de_DE.po
+index 2566674..92c5df5 100644
+--- a/po/de_DE.po
++++ b/po/de_DE.po
+@@ -18,27 +18,27 @@ msgstr ""
+ 
+ #: ../ui/gtk.c:213
+ msgid " - Press Ctrl+Alt+G to release grab"
+-msgstr ""
++msgstr "- Strg+Alt+G drücken, um Eingabegeräte freizugeben"
+ 
+ #: ../ui/gtk.c:217
+ msgid " [Paused]"
+-msgstr ""
++msgstr "[Angehalten]"
+ 
+ #: ../ui/gtk.c:1250
+ msgid "_Machine"
+-msgstr ""
++msgstr "_Maschine"
+ 
+ #: ../ui/gtk.c:1252
+ msgid "_Pause"
+-msgstr ""
++msgstr "_Angehalten"
+ 
+ #: ../ui/gtk.c:1258
+ msgid "_Reset"
+-msgstr ""
++msgstr "_Reset"
+ 
+ #: ../ui/gtk.c:1261
+ msgid "Power _Down"
+-msgstr ""
++msgstr "_Herunterfahren"
+ 
+ #: ../ui/gtk.c:1276
+ msgid "_View"
+-- 
+1.8.1.4
+
+

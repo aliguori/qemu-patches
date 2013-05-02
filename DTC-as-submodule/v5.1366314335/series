@@ -1,0 +1,4 @@
+0000-DTC-as-submodule.txt
+0001-configure-Put-cross-compile-flags-in-EXTRA_CFLAGS.patch
+0002-dtc-add-submodule.patch
+0003-configure-Make-Build-libfdt-from-submodule-DTC.patch

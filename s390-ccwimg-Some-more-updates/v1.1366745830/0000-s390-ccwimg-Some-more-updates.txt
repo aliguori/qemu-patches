@@ -1,0 +1,29 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Cornelia Huck <cornelia.huck@de.ibm.com>
+To: Cornelia Huck <cornelia.huck@de.ibm.com>, Alexander Graf <agraf@suse.de>
+Cc: Christian Borntraeger <borntraeger@de.ibm.com>,
+ Cornelia Huck <cornelia.huck@de.ibm.com>, qemu-devel@nongnu.org,
+ Dominik Dingel <dingel@linux.vnet.ibm.com>
+Date: Tue, 23 Apr 2013 14:37:10 +0200
+Message-id: 1366720634-13184-1-git-send-email-cornelia.huck@de.ibm.com
+Subject: [PATCH 0/4] s390-ccw.img: Some more updates.
+
+Some changes I hacked up quickly for the ccw loader.
+
+Only compile tested as my main test system is currently unavailable.
+
+Cornelia Huck (4):
+  s390-ccw.img: Detect devices with stsch.
+  s390-ccw.img: Enhance drain_irqs().
+  s390-ccw.img: Rudimentary error checking.
+  s390-ccw.img: Get queue config from host.
+
+ pc-bios/s390-ccw/main.c   |  9 +++++---
+ pc-bios/s390-ccw/virtio.c | 52 ++++++++++++++++++++++++++++++++++++-----------
+ pc-bios/s390-ccw/virtio.h |  5 +++++
+ 3 files changed, 51 insertions(+), 15 deletions(-)
+
+-- 
+1.7.12.4
+
+

@@ -1,0 +1,82 @@
+From patches Mon Sep 17 00:00:00 2001
+From: =?utf-8?q?Andreas_F=C3=A4rber_=3Cafaerber=40suse=2Ede=3E?=
+To: qemu-devel@nongnu.org
+Cc: Blue Swirl <blauwirbel@gmail.com>, Eduardo Habkost <ehabkost@redhat.com>,
+ Anthony Liguori <anthony@codemonkey.ws>,
+ =?UTF-8?q?Aur=C3=A9lien=20Jarno?= <aurelien@aurel32.net>,
+ Igor Mammedov <imammedo@redhat.com>,
+ =?UTF-8?q?Andreas=20F=C3=A4rber?= <afaerber@suse.de>
+Date: Tue, 16 Apr 2013 02:46:37 +0200
+Message-id: 1366073209-27119-1-git-send-email-afaerber@suse.de
+Subject: [PATCH 00/12] QOM CPUState patch queue 2013-04-15
+
+Hello,
+
+This is my current QOM CPU patch queue. Please pull.
+
+It includes:
+* -cpu ? fixes,
+* preparations for x86 CPU static properties,
+* preparations for x86 CPU hot-plug,
+* preparations for x86 CPUID features array cleanup,
+* do_interrupt cleanup for cris.
+
+Regards,
+Andreas
+
+Cc: Anthony Liguori <anthony@codemonkey.ws>
+Cc: Blue Swirl <blauwirbel@gmail.com>
+Cc: Aurélien Jarno <aurelien@aurel32.net>
+
+Cc: Eduardo Habkost <ehabkost@redhat.com>
+Cc: Igor Mammedov <imammedo@redhat.com>
+
+
+The following changes since commit 24a6e7f4d91e9ed5f8117ecb083431a23f8609a0:
+
+  virtio-balloon: fix dynamic properties. (2013-04-15 17:06:58 -0500)
+
+are available in the git repository at:
+
+  git://github.com/afaerber/qemu-cpu.git qom-cpu
+
+for you to fetch changes up to b21bfeead284cf212d88dfa25171fee122407bc2:
+
+  target-cris: Override do_interrupt for pre-v32 CPU cores (2013-04-16 02:45:11 +0200)
+
+----------------------------------------------------------------
+Andreas Färber (1):
+      target-cris: Override do_interrupt for pre-v32 CPU cores
+
+Eduardo Habkost (1):
+      target-i386/cpu.c: Coding style fixes
+
+Igor Mammedov (8):
+      qdev: Add qdev property for bool type
+      target-i386: Consolidate error propagation in x86_cpu_realizefn()
+      target-i386: Split APIC creation from initialization in x86_cpu_realizefn()
+      kvmvapic: Replace FROM_SYSBUS() with QOM type cast
+      ioapic: Replace FROM_SYSBUS() with QOM type cast
+      target-i386: Split out CPU creation and features parsing
+      cpu: Pass CPUState to *cpu_synchronize_post*()
+      qdev: Set device's parent before calling realize() down inheritance chain
+
+Jan Kiszka (2):
+      target-i386: Fix including "host" in -cpu ? output
+      target-i386: Improve -cpu ? features output
+
+ cpus.c                       |  4 +-
+ hw/core/qdev-properties.c    | 33 ++++++++++++++++
+ hw/core/qdev.c               |  8 ++--
+ hw/i386/kvmvapic.c           |  7 +++-
+ hw/intc/ioapic_common.c      |  2 +-
+ include/hw/qdev-properties.h | 10 +++++
+ include/sysemu/kvm.h         | 12 +++---
+ kvm-all.c                    |  8 +---
+ kvm-stub.c                   |  4 +-
+ target-cris/cpu-qom.h        |  1 +
+ target-cris/cpu.c            |  8 ++++
+ target-cris/helper.c         | 14 ++++---
+ target-i386/cpu.c            | 89 ++++++++++++++++++++++++++++++--------------
+ target-i386/cpu.h            |  1 +
+ 14 files changed, 145 insertions(+), 56 deletions(-)

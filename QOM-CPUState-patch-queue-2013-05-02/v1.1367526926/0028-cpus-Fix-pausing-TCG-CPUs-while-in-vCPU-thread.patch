@@ -1,0 +1,43 @@
+From patches Mon Sep 17 00:00:00 2001
+From: =?utf-8?q?Andreas_F=C3=A4rber_=3Cafaerber=40suse=2Ede=3E?=
+To: qemu-devel@nongnu.org
+Cc: =?UTF-8?q?Andreas=20F=C3=A4rber?= <afaerber@suse.de>
+Date: Thu,  2 May 2013 15:35:54 +0200
+Message-id: 1367501755-32272-29-git-send-email-afaerber@suse.de
+Subject: [PATCH 28/29] cpus: Fix pausing TCG CPUs while in vCPU thread
+
+Due to a preceding while loop, no CPU would've been put into stopped
+state. Reinitialize the variable.
+This fixes commit d798e97456658ea7605303b7c69b04ec7df95c10 (Allow to use
+pause_all_vcpus from VCPU context) for non-KVM case.
+
+While at it, change a 0 to false, amending commit
+4fdeee7cd4c8f90ef765537b9346a195d9483ab5 (cpu: Move stop field to
+CPUState).
+
+Reviewed-by: Jan Kiszka <jan.kiszka@siemens.com>
+Signed-off-by: Andreas Färber <afaerber@suse.de>
+---
+ cpus.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/cpus.c b/cpus.c
+index a2d92c7..c232265 100644
+--- a/cpus.c
++++ b/cpus.c
+@@ -974,9 +974,10 @@ void pause_all_vcpus(void)
+     if (qemu_in_vcpu_thread()) {
+         cpu_stop_current();
+         if (!kvm_enabled()) {
++            penv = first_cpu;
+             while (penv) {
+                 CPUState *pcpu = ENV_GET_CPU(penv);
+-                pcpu->stop = 0;
++                pcpu->stop = false;
+                 pcpu->stopped = true;
+                 penv = penv->next_cpu;
+             }
+-- 
+1.8.1.4
+
+

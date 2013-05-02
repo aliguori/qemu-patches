@@ -1,0 +1,50 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Hans de Goede <hdegoede@redhat.com>
+To: Hans de Goede <hdegoede@redhat.com>, qemu-devel@nongnu.org
+Cc: Hans de Goede <hdegoede@redhat.com>, Paolo Bonzini <pbonzini@redhat.com>
+Date: Wed, 27 Mar 2013 20:29:38 +0100
+Message-id: 1364412581-3672-1-git-send-email-hdegoede@redhat.com
+Subject: [PATCH 0/3] chardev-frontends: Explicitly check,
+ inc and dec avail_connections v2
+
+Hi All,
+
+Here is v2 of my "chardev-frontends: Explicitly check, inc and dec
+avail_connections" patch, which now actuall is a patch series.
+
+Changes since v1:
+-Add qemu_chr_fe_claim / _release helper functions for the avail_connections
+ manipulations
+-Drop the changes to hw/serial.c
+-Add a bonus patch changing ipoctal232 to properly use chardev qdev-properties
+
+Regards,
+
+Hans
+
+Hans de Goede (3):
+  qemu-char: Add qemu_chr_fe_claim / _release helper functions
+  qemu-char: Call fe_claim / fe_release when not using qdev chr
+    properties
+  ipoctal232: Convert to use chardev properties directly
+
+ backends/rng-egd.c          |  6 ++++++
+ gdbstub.c                   |  1 +
+ hw/arm/pxa2xx.c             |  4 +++-
+ hw/bt-hci-csr.c             |  1 +
+ hw/ipoctal232.c             | 42 ++++++++++++++----------------------------
+ hw/ivshmem.c                |  1 +
+ hw/mcf_uart.c               |  1 +
+ hw/qdev-properties-system.c |  5 ++---
+ hw/sh_serial.c              |  4 +++-
+ hw/xen_console.c            | 18 ++++++++++++++----
+ include/char/char.h         | 29 +++++++++++++++++++++++++++++
+ net/slirp.c                 |  1 +
+ qemu-char.c                 | 33 ++++++++++++++++++++++++++++++++-
+ vl.c                        |  1 +
+ 14 files changed, 109 insertions(+), 38 deletions(-)
+
+-- 
+1.8.1.4
+
+

@@ -1,0 +1,91 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Fabien Chouteau <chouteau@adacore.com>
+To: Alexander Graf <agraf@suse.de>, Fabien Chouteau <chouteau@adacore.com>,
+ qemu-devel@nongnu.org, =?iso-8859-1?Q?Andreas_F=E4rber?= <afaerber@suse.de>,
+ Scott Wood <scottwood@freescale.com>,
+ =?ISO-8859-1?Q?Andreas_F=E4rber?= <afaerber@suse.de>,
+ "Edgar E. Iglesias" <edgar.iglesias@gmail.com>,
+ Peter Maydell <peter.maydell@linaro.org>,
+ Artyom Tarasenko <atar4qemu@gmail.com>,
+ =?UTF-8?Q?Andreas_F=C3=A4rber?= <afaerber@suse.de>
+Cc: qemu-devel <qemu-devel@nongnu.org>, qemu-devel@nongnu.org,
+ Peter Crosthwaite <peter.crosthwaite@xilinx.com>,
+ =?utf-8?Q?Herv=C3=A9_Poussineau?= <hpoussin@reactos.org>,
+ Fabien Chouteau <chouteau@adacore.com>,
+ =?ISO-8859-1?Q?Andreas_?= =?ISO-8859-1?Q?F=E4rber?= <afaerber@suse.de>,
+ agraf@suse.de, Andreas =?iso-8859-1?q?F=E4rber?= <afaerber@suse.de>,
+ =?iso-8859-1?b?SGVyduk=?= Poussineau <hpoussin@reactos.org>,
+ Peter Maydell <peter.maydell@linaro.org>,
+ =?UTF-8?B?SGVydg==?= =?UTF-8?B?w6kgUG91c3NpbmVhdQ==?= <hpoussin@reactos.org>,
+ =?ISO-8859-1?Q?Herv=E9_Poussineau?= <hpoussin@reactos.org>,
+ "<qemu-ppc@nongnu.org>" <qemu-ppc@nongnu.org>, Alexander Graf <agraf@suse.de>,
+ =?iso-8859-1?Q?Herv=E9?= Poussineau <hpoussin@reactos.org>,
+ =?ISO-8859-1?Q?Andreas_F=E4rber?= <afaerber@suse.de>,
+ Scott Wood <scottwood@freescale.com>,
+ Andreas =?iso-8859-1?Q?F=E4rber?= <afaerber@suse.de>,
+ Artyom Tarasenko <atar4qemu@gmail.com>,
+ =?UTF-8?Q?Andreas_F=C3=A4rber?= <afaerber@suse.de>,
+ =?iso-8859-1?Q?Herv=E9_Poussineau?= <hpoussin@reactos.org>,
+ =?iso-8859-1?Q?Andreas_F=E4rber?= <afaerber@suse.de>,
+ "qemu-ppc@nongnu.org" <qemu-ppc@nongnu.org>, qemu-ppc@nongnu.org,
+ =?UTF-8?Q?Herv=C3=A9_Poussineau?= <hpoussin@reactos.org>,
+ =?UTF-8?B?QW5kcmVhcyBGw6RyYmVy?= <afaerber@suse.de>,
+ =?utf-8?Q?Andreas_F=C3=A4rber?= <afaerber@suse.de>
+Date: Wed,  3 Apr 2013 18:40:13 +0200
+Message-id: 1365007213-27603-4-git-send-email-chouteau@adacore.com
+Subject: [PATCH 3/3] PPC PReP: can run without bios image
+
+If we use an ELF kernel there's no need for bios. '-bios -' means no
+bios.
+
+Signed-off-by: Fabien Chouteau <chouteau@adacore.com>
+---
+ hw/ppc/prep.c |   23 ++++++++++++++++-------
+ 1 file changed, 16 insertions(+), 7 deletions(-)
+
+diff --git a/hw/ppc/prep.c b/hw/ppc/prep.c
+index 12198ff..8acec46 100644
+--- a/hw/ppc/prep.c
++++ b/hw/ppc/prep.c
+@@ -517,13 +517,22 @@ static void ppc_prep_init(QEMUMachineInitArgs *args)
+     memory_region_set_readonly(bios, true);
+     memory_region_add_subregion(sysmem, (uint32_t)(-BIOS_SIZE), bios);
+     vmstate_register_ram_global(bios);
+-    if (bios_name == NULL)
+-        bios_name = BIOS_FILENAME;
+-    filename = qemu_find_file(QEMU_FILE_TYPE_BIOS, bios_name);
+-    if (filename) {
+-        bios_size = get_image_size(filename);
+-    } else {
++
++    if (bios_name != NULL && strcmp(bios_name, "-") == 0) {
++        /* No bios */
+         bios_size = -1;
++        filename = NULL;
++    } else {
++        if (bios_name == NULL) {
++            /* Default bios */
++            bios_name = BIOS_FILENAME;
++        }
++        filename = qemu_find_file(QEMU_FILE_TYPE_BIOS, bios_name);
++        if (filename != NULL) {
++            bios_size = get_image_size(filename);
++        } else {
++            bios_size = -1;
++        }
+     }
+     if (bios_size > 0 && bios_size <= BIOS_SIZE) {
+         hwaddr bios_addr;
+@@ -531,7 +540,7 @@ static void ppc_prep_init(QEMUMachineInitArgs *args)
+         bios_addr = (uint32_t)(-bios_size);
+         bios_size = load_image_targphys(filename, bios_addr, bios_size);
+     }
+-    if (bios_size < 0 || bios_size > BIOS_SIZE) {
++    if (filename != NULL && (bios_size < 0 || bios_size > BIOS_SIZE)) {
+         hw_error("qemu: could not load PPC PREP bios '%s'\n", bios_name);
+     }
+     if (filename) {
+-- 
+1.7.9.5
+
+

@@ -1,0 +1,375 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Jens Freimann <jfrei@linux.vnet.ibm.com>
+To: Alexander Graf <agraf@suse.de>
+Cc: qemu-devel <qemu-devel@nongnu.org>,
+ Christian Borntraeger <borntraeger@de.ibm.com>,
+ Cornelia Huck <cornelia.huck@de.ibm.com>,
+ =?UTF-8?q?Andreas=20F=C3=A4rber?= <afaerber@suse.de>,
+ Ekaterina Tumanova <tumanova@linux.vnet.ibm.com>, Rabin Vincent <rabin@rab.in>,
+ Jens Freimann <jfrei@linux.vnet.ibm.com>
+Date: Thu, 28 Mar 2013 17:35:58 +0100
+Message-id: 1364488560-16265-2-git-send-email-jfrei@linux.vnet.ibm.com
+Subject: [PATCH 1/3] s390: dump-guest-memory implementation
+
+From: Ekaterina Tumanova <tumanova@linux.vnet.ibm.com>
+
+dump-guest-memory QEMU monitor command didn't work for s390 architecture.
+The result of the command is supposed to be ELF format crash-readable
+dump.
+In order to implement this, the arch-specific part of dump-guest-memory
+was added:
+target-s390x/arch_dump.c contains the whole set of function for writing
+Elf note sections of all types for s390x.
+arch_memory_mapping.c is created to make the patch compile and run. 
+
+Signed-off-by: Ekaterina Tumanova <tumanova@linux.vnet.ibm.com>
+Signed-off-by: Jens Freimann <jfrei@linux.vnet.ibm.com>
+---
+ configure                          |   4 +-
+ include/elf.h                      |   6 +
+ target-s390x/Makefile.objs         |   2 +-
+ target-s390x/arch_dump.c           | 243 +++++++++++++++++++++++++++++++++++++
+ target-s390x/arch_memory_mapping.c |  26 ++++
+ 5 files changed, 278 insertions(+), 3 deletions(-)
+ create mode 100644 target-s390x/arch_dump.c
+ create mode 100644 target-s390x/arch_memory_mapping.c
+
+diff --git a/configure b/configure
+index f2af714..c082917 100755
+--- a/configure
++++ b/configure
+@@ -4178,7 +4178,7 @@ case "$target_arch2" in
+     fi
+ esac
+ case "$target_arch2" in
+-  i386|x86_64)
++  i386|x86_64|s390x)
+     echo "CONFIG_HAVE_GET_MEMORY_MAPPING=y" >> $config_target_mak
+ esac
+ if test "$target_bigendian" = "yes" ; then
+@@ -4188,7 +4188,7 @@ if test "$target_softmmu" = "yes" ; then
+   echo "CONFIG_SOFTMMU=y" >> $config_target_mak
+   echo "LIBS+=$libs_softmmu $target_libs_softmmu" >> $config_target_mak
+   case "$target_arch2" in
+-    i386|x86_64)
++    i386|x86_64|s390x)
+       echo "CONFIG_HAVE_CORE_DUMP=y" >> $config_target_mak
+   esac
+ fi
+diff --git a/include/elf.h b/include/elf.h
+index a21ea53..ba4b3a7 100644
+--- a/include/elf.h
++++ b/include/elf.h
+@@ -1219,11 +1219,17 @@ typedef struct elf64_shdr {
+ 
+ /* Notes used in ET_CORE */
+ #define NT_PRSTATUS	1
++#define NT_FPREGSET     2
+ #define NT_PRFPREG	2
+ #define NT_PRPSINFO	3
+ #define NT_TASKSTRUCT	4
+ #define NT_AUXV		6
+ #define NT_PRXFPREG     0x46e62b7f      /* copied from gdb5.1/include/elf/common.h */
++#define NT_S390_PREFIX  0x305           /* s390 prefix register */
++#define NT_S390_CTRS    0x304           /* s390 control registers */
++#define NT_S390_TODPREG 0x303           /* s390 TOD programmable register */
++#define NT_S390_TODCMP  0x302           /* s390 TOD clock comparator register */
++#define NT_S390_TIMER   0x301           /* s390 timer register */
+ 
+ 
+ /* Note header in a PT_NOTE section */
+diff --git a/target-s390x/Makefile.objs b/target-s390x/Makefile.objs
+index 4e63417..82c79c4 100644
+--- a/target-s390x/Makefile.objs
++++ b/target-s390x/Makefile.objs
+@@ -1,4 +1,4 @@
+ obj-y += translate.o helper.o cpu.o interrupt.o
+ obj-y += int_helper.o fpu_helper.o cc_helper.o mem_helper.o misc_helper.o
+-obj-$(CONFIG_SOFTMMU) += ioinst.o
++obj-$(CONFIG_SOFTMMU) += ioinst.o arch_dump.o arch_memory_mapping.o
+ obj-$(CONFIG_KVM) += kvm.o
+diff --git a/target-s390x/arch_dump.c b/target-s390x/arch_dump.c
+new file mode 100644
+index 0000000..d8fa158
+--- /dev/null
++++ b/target-s390x/arch_dump.c
+@@ -0,0 +1,243 @@
++/*
++ * writing ELF notes for s390x arch
++ *
++ *  
++ * Copyright IBM Corp. 2012
++ *
++ *     Ekaterina Tumanova <tumanova@linux.vnet.ibm.com>
++ *
++ * This work is licensed under the terms of the GNU GPL, version 2 or later.
++ * See the COPYING file in the top-level directory.
++ *
++ */
++
++#include "cpu.h"
++#include "elf.h"
++#include "exec/cpu-all.h"
++#include "sysemu/dump.h"
++#include "sysemu/kvm.h"
++
++
++struct s390x_user_regs_struct {
++    uint64_t        psw[2];
++    uint64_t        gprs[16];
++    uint32_t        acrs[16];
++} QEMU_PACKED;
++
++typedef struct s390x_user_regs_struct s390x_user_regs;
++
++struct s390x_elf_prstatus_struct {
++    uint8_t pad1[32];
++    uint32_t pid;
++    uint8_t pad2[76];
++    s390x_user_regs regs;
++    uint8_t pad3[16];
++} QEMU_PACKED;
++
++typedef struct s390x_elf_prstatus_struct s390x_elf_prstatus;
++
++struct s390x_elf_fpregset_struct {
++        uint32_t        fpc;
++        uint32_t        pad;
++        uint64_t        fprs[16];
++} QEMU_PACKED;
++
++typedef struct s390x_elf_fpregset_struct s390x_elf_fpregset;
++
++    typedef struct note_struct {
++        Elf64_Nhdr hdr;
++        char name[5];
++        char pad3[3];
++	union {
++            s390x_elf_prstatus prstatus;
++            s390x_elf_fpregset fpregset;
++            uint32_t prefix;
++            uint64_t timer;
++            uint64_t todcmp;
++            uint32_t todpreg;
++            uint64_t ctrs[16];
++        } contents;
++    } QEMU_PACKED note_t;
++
++static int s390x_write_elf64_prstatus(note_t *note, CPUArchState *env)
++{
++    int i;
++    s390x_user_regs *regs;
++
++    note->hdr.n_type = cpu_to_be32(NT_PRSTATUS);
++
++    regs = &(note->contents.prstatus.regs);
++    regs->psw[0] =  cpu_to_be32(env->psw.mask);
++    regs->psw[1] =  cpu_to_be32(env->psw.addr);
++    for (i = 0; i <= 15; i++) {
++        regs->acrs[i] = cpu_to_be32(env->aregs[i]);
++        regs->gprs[i] = cpu_to_be32(env->regs[i]);
++    }
++
++    return 0;
++}
++
++static int s390x_write_elf64_fpregset(note_t *note, CPUArchState *env)
++{
++    int i;
++
++    note->hdr.n_type = cpu_to_be32(NT_FPREGSET);
++
++    note->contents.fpregset.fpc = cpu_to_be32(env->fpc);
++    for (i = 0; i <= 15; i++) {
++        note->contents.fpregset.fprs[i] =  cpu_to_be64(env->fregs[i].ll);
++    }
++
++    return 0;
++}
++
++
++static int s390x_write_elf64_timer(note_t *note, CPUArchState *env)
++{
++    note->hdr.n_type = cpu_to_be32(NT_S390_TIMER);
++
++    note->contents.timer = cpu_to_be64((uint64_t)(env->cputm));
++
++    return 0;
++}
++
++static int s390x_write_elf64_todcmp(note_t *note, CPUArchState *env)
++{
++    note->hdr.n_type = cpu_to_be32(NT_S390_TODCMP);
++
++    note->contents.todcmp = cpu_to_be64((uint64_t)(env->ckc));
++
++    return 0;
++}
++
++static int s390x_write_elf64_todpreg(note_t *note, CPUArchState *env)
++{
++    note->hdr.n_type = cpu_to_be32(NT_S390_TODPREG);
++
++    note->contents.todpreg = cpu_to_be32((uint32_t)(env->todpr));
++
++    return 0;
++}
++
++static int s390x_write_elf64_ctrs(note_t *note, CPUArchState *env)
++{
++    int i;
++
++    note->hdr.n_type = cpu_to_be32(NT_S390_CTRS);
++
++    for (i = 0; i <= 15; i++) {
++        note->contents.ctrs[i] =  cpu_to_be32(env->cregs[i]);
++    }
++
++    return 0;
++}
++
++static int s390x_write_elf64_prefix(note_t *note, CPUArchState *env)
++{
++    note->hdr.n_type = cpu_to_be32(NT_S390_PREFIX);
++
++    note->contents.prefix = cpu_to_be32((uint32_t)(env->psa));
++
++    return 0;
++}
++
++
++struct note_func_desc_struct {
++    int contents_size;
++    int (*note_contents_func)(note_t *note, CPUArchState *env);
++} note_func[] = {
++                   { sizeof(((note_t *)0)->contents.prstatus), s390x_write_elf64_prstatus },
++                   { sizeof(((note_t *)0)->contents.prefix),   s390x_write_elf64_prefix },
++                   { sizeof(((note_t *)0)->contents.fpregset), s390x_write_elf64_fpregset },
++                   { sizeof(((note_t *)0)->contents.ctrs),     s390x_write_elf64_ctrs },
++                   { sizeof(((note_t *)0)->contents.timer),    s390x_write_elf64_timer },
++                   { sizeof(((note_t *)0)->contents.todcmp),   s390x_write_elf64_todcmp },
++                   { sizeof(((note_t *)0)->contents.todpreg),  s390x_write_elf64_todpreg },
++
++                   { 0, NULL}
++                 };
++
++
++static int s390x_write_all_elf64_notes(const char *note_name, write_core_dump_function f,
++                                   CPUArchState *env, int id,
++                                   void *opaque)
++{
++    note_t note;
++    struct note_func_desc_struct *nf;
++    int note_size;
++    int ret = -1;
++
++    for (nf = note_func; nf->note_contents_func; nf++) {
++        note.hdr.n_namesz = cpu_to_be32(sizeof(note.name));
++        note.hdr.n_descsz = cpu_to_be32(nf->contents_size);
++        strncpy(note.name, note_name, sizeof(note.name));
++        ret = (*nf->note_contents_func)(&note, env);
++
++        note_size = cpu_to_be32(sizeof(note) - sizeof(note.contents) + nf->contents_size);
++        ret = f(&note, note_size, opaque);
++
++        if (ret < 0) {
++            return -1;
++        }
++
++    }
++
++    return 0;
++}
++
++
++int cpu_write_elf64_note(write_core_dump_function f, CPUArchState *env,
++                         int cpuid, void *opaque)
++{
++    return s390x_write_all_elf64_notes("CORE", f, env, cpuid, opaque);
++}
++
++int cpu_get_dump_info(ArchDumpInfo *info)
++{
++    info->d_machine = EM_S390;
++    info->d_endian = ELFDATA2MSB;
++    info->d_class = ELFCLASS64;
++
++    return 0;
++}
++
++ssize_t cpu_get_note_size(int class, int machine, int nr_cpus)
++{
++    int name_size = 8; /* "CORE" or "QEMU" rounded*/
++    size_t elf_note_size = 0;
++    int note_head_size;
++    struct note_func_desc_struct *nf;
++
++    assert (class == ELFCLASS64);
++    note_head_size = sizeof(Elf64_Nhdr);
++
++    assert (machine == EM_S390);
++
++    for (nf = note_func; nf->note_contents_func; nf++) {
++         elf_note_size = elf_note_size + note_head_size + name_size + nf->contents_size;
++
++    }
++
++    return (elf_note_size) * nr_cpus;
++
++}
++
++int cpu_write_elf32_note(write_core_dump_function f, CPUArchState *env,
++                         int cpuid, void *opaque)
++{
++    return 0;
++}
++
++
++int cpu_write_elf64_qemunote(write_core_dump_function f, CPUArchState *env,
++                             void *opaque)
++{
++    return 0;
++}
++
++int cpu_write_elf32_qemunote(write_core_dump_function f, CPUArchState *env,
++                             void *opaque)
++{
++    return 0;
++}
++
+diff --git a/target-s390x/arch_memory_mapping.c b/target-s390x/arch_memory_mapping.c
+new file mode 100644
+index 0000000..3dad3b9
+--- /dev/null
++++ b/target-s390x/arch_memory_mapping.c
+@@ -0,0 +1,26 @@
++/*
++ * s390x memory mapping
++ *
++ * Copyright IBM Corp. 2012
++ *
++ * Authors:
++ *     Ekaterina Tumanova <tumanova@linux.vnet.ibm.com>
++ *
++ * This work is licensed under the terms of the GNU GPL, version 2 or later.
++ * See the COPYING file in the top-level directory.
++ *
++ */
++
++#include "cpu.h"
++#include "exec/cpu-all.h"
++#include "sysemu/memory_mapping.h"
++
++int cpu_get_memory_mapping(MemoryMappingList *list, CPUArchState *env)
++{
++    return 0;
++}
++
++bool cpu_paging_enabled(CPUArchState *env)
++{
++    return false;
++}
+-- 
+1.7.12.4
+
+

@@ -1,0 +1,1 @@
+../ccid-and-libcacard-fixes-for-windows-mingw/v3.1366671870/0002-ccid-card-emul-do-not-crash-if-backend-is-not-provided.patch

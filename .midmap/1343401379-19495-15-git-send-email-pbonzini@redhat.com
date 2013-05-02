@@ -1,0 +1,1 @@
+../SCSI-patches-for-2012-08-27/v1.1343426547/0014-scsi-disk-adjust-offsets-in-MODE-SENSE-by-2.patch

@@ -1,0 +1,65 @@
+From patches Mon Sep 17 00:00:00 2001
+From: "Michael S. Tsirkin" <mst@redhat.com>
+To: "Fred ." <eldmannen@gmail.com>, seabios@seabios.org,
+ "Michael S. Tsirkin" <mst@redhat.com>
+Cc: "Fred ." <eldmannen@gmail.com>, seabios <seabios@seabios.org>,
+ qemu-devel@nongnu.org, "qemu-devel@nongnu.org" <qemu-devel@nongnu.org>
+Date: Thu, 25 Apr 2013 12:02:20 +0300
+Message-id: cover.1366879705.git.mst@redhat.com
+Subject: [PATCH 0/3] seabios: move acpi table formatting out of bios
+
+Untested yet, but I thought I'd share the
+BIOS bits so we can agree on direction.
+
+In particular check out ROM sizes:
+- Before patchset with DSDT enabled
+    Total size: 127880  Fixed: 59060  Free: 3192 (used 97.6% of 128KiB rom)
+- Before patchset with DSDT disabled
+    Total size: 122844  Fixed: 58884  Free: 8228 (used 93.7% of 128KiB rom)
+- After patchset:
+    Total size: 128776  Fixed: 59100  Free: 2296 (used 98.2% of 128KiB rom)
+- Legacy disabled at build time:
+    Total size: 119836  Fixed: 58996  Free: 11236 (used 91.4% of 128KiB rom)
+
+As can be seen from this, most size savings come
+from dropping DSDT, but we do save a bit by removing
+other tables. Of course the real reason to move tables to QEMU
+is so that ACPI can better match hardware.
+
+This patchset adds an option to move all code for formatting acpi tables
+out of BIOS. With this, QEMU has full control over the table layout.
+All tables are loaded from the new "/etc/acpi/" directory.
+Any entries in this directory cause BIOS to disable
+ACPI table generation completely.
+A generic linker script, controlled by QEMU, is
+loaded from "/etc/linker-script". It is used to
+patch in table pointers and checksums.
+
+BIOS still has limited ability to parse the tables,
+for the following purposes:
+	- locate resume vector
+	- allocate RSDP in FSEG
+	- allocate FACS at an aligned address
+
+-- 
+MST
+
+
+Michael S. Tsirkin (3):
+  linker: utility to patch in-memory ROM files
+  acpi: load and link tables from /etc/acpi/
+  acpi: add an option to disable builtin tables
+
+ Makefile     |  2 +-
+ src/Kconfig  | 12 +++++++-
+ src/acpi.c   | 67 +++++++++++++++++++++++++++++++++++++++++++-
+ src/linker.c | 90 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ src/linker.h | 50 +++++++++++++++++++++++++++++++++
+ src/util.h   |  1 +
+ 6 files changed, 219 insertions(+), 3 deletions(-)
+ create mode 100644 src/linker.c
+ create mode 100644 src/linker.h
+
+-- 
+MST
+

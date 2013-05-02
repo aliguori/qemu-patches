@@ -1,0 +1,211 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Pavel Hrdina <phrdina@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: kwolf@redhat.com, xiawenc@linux.vnet.ibm.com, phrdina@redhat.com,
+ armbru@redhat.com, lcapitulino@redhat.com
+Date: Wed, 24 Apr 2013 17:32:05 +0200
+Message-id: 291f8782cd40a200837caac08c7fbeb5c03a0f78.1366817130.git.phrdina@redhat.com
+Subject: [PATCH 07/12] savevm: update error reporting for qemu_loadvm_state()
+
+Signed-off-by: Pavel Hrdina <phrdina@redhat.com>
+---
+ include/sysemu/sysemu.h |  2 +-
+ migration.c             | 11 ++++++---
+ savevm.c                | 65 ++++++++++++++++++++++++-------------------------
+ 3 files changed, 40 insertions(+), 38 deletions(-)
+
+diff --git a/include/sysemu/sysemu.h b/include/sysemu/sysemu.h
+index f46f9d2..70c6927 100644
+--- a/include/sysemu/sysemu.h
++++ b/include/sysemu/sysemu.h
+@@ -78,7 +78,7 @@ int qemu_savevm_state_iterate(QEMUFile *f);
+ void qemu_savevm_state_complete(QEMUFile *f);
+ void qemu_savevm_state_cancel(void);
+ uint64_t qemu_savevm_state_pending(QEMUFile *f, uint64_t max_size);
+-int qemu_loadvm_state(QEMUFile *f);
++void qemu_loadvm_state(QEMUFile *f, Error **errp);
+ 
+ /* SLIRP */
+ void do_info_slirp(Monitor *mon);
+diff --git a/migration.c b/migration.c
+index 3eb0fad..0279911 100644
+--- a/migration.c
++++ b/migration.c
+@@ -93,12 +93,15 @@ void qemu_start_incoming_migration(const char *uri, Error **errp)
+ static void process_incoming_migration_co(void *opaque)
+ {
+     QEMUFile *f = opaque;
+-    int ret;
++    Error *local_err = NULL;
+ 
+-    ret = qemu_loadvm_state(f);
++    qemu_loadvm_state(f, &local_err);
+     qemu_fclose(f);
+-    if (ret < 0) {
+-        fprintf(stderr, "load of migration failed\n");
++    if (error_is_set(&local_err)) {
++        qerror_report(ERROR_CLASS_GENERIC_ERROR,
++                      "Incoming migration failed: %s",
++                      error_get_pretty(local_err));
++        error_free(local_err);
+         exit(EXIT_FAILURE);
+     }
+     qemu_announce_self();
+diff --git a/savevm.c b/savevm.c
+index 25fc7cc..54eb61c 100644
+--- a/savevm.c
++++ b/savevm.c
+@@ -2144,7 +2144,7 @@ typedef struct LoadStateEntry {
+     int version_id;
+ } LoadStateEntry;
+ 
+-int qemu_loadvm_state(QEMUFile *f)
++void qemu_loadvm_state(QEMUFile *f, Error **errp)
+ {
+     QLIST_HEAD(, LoadStateEntry) loadvm_handlers =
+         QLIST_HEAD_INITIALIZER(loadvm_handlers);
+@@ -2153,21 +2153,26 @@ int qemu_loadvm_state(QEMUFile *f)
+     unsigned int v;
+     int ret;
+ 
+-    if (qemu_savevm_state_blocked(NULL)) {
+-        return -EINVAL;
++    if (qemu_savevm_state_blocked(errp)) {
++        return;
+     }
+ 
+     v = qemu_get_be32(f);
+-    if (v != QEMU_VM_FILE_MAGIC)
+-        return -EINVAL;
++    if (v != QEMU_VM_FILE_MAGIC) {
++        error_setg(errp, "Unknown vmstate file magic");
++        return;
++    }
+ 
+     v = qemu_get_be32(f);
+     if (v == QEMU_VM_FILE_VERSION_COMPAT) {
+-        fprintf(stderr, "SaveVM v2 format is obsolete and don't work anymore\n");
+-        return -ENOTSUP;
++        error_setg(errp, "vmstate v2 format is obsolete and doesn't work "
++                   "anymore");
++        return;
++    }
++    if (v != QEMU_VM_FILE_VERSION) {
++        error_setg(errp, "Unknown vmstate file version");
++        return;
+     }
+-    if (v != QEMU_VM_FILE_VERSION)
+-        return -ENOTSUP;
+ 
+     while ((section_type = qemu_get_byte(f)) != QEMU_VM_EOF) {
+         uint32_t instance_id, version_id, section_id;
+@@ -2189,16 +2194,15 @@ int qemu_loadvm_state(QEMUFile *f)
+             /* Find savevm section */
+             se = find_se(idstr, instance_id);
+             if (se == NULL) {
+-                fprintf(stderr, "Unknown savevm section or instance '%s' %d\n", idstr, instance_id);
+-                ret = -EINVAL;
++                error_setg(errp, "Unknown vmstate section or instance '%s' %d",
++                           idstr, instance_id);
+                 goto out;
+             }
+ 
+             /* Validate version */
+             if (version_id > se->version_id) {
+-                fprintf(stderr, "savevm: unsupported version %d for '%s' v%d\n",
+-                        version_id, idstr, se->version_id);
+-                ret = -EINVAL;
++                error_setg(errp, "Unsupported version %d for '%s' v%d",
++                           version_id, idstr, se->version_id);
+                 goto out;
+             }
+ 
+@@ -2212,8 +2216,8 @@ int qemu_loadvm_state(QEMUFile *f)
+ 
+             ret = vmstate_load(f, le->se, le->version_id);
+             if (ret < 0) {
+-                fprintf(stderr, "qemu: warning: error while loading state for instance 0x%x of device '%s'\n",
+-                        instance_id, idstr);
++                error_setg(errp, "Error while loading state for instance "
++                           "0x%x of device '%s'", instance_id, idstr);
+                 goto out;
+             }
+             break;
+@@ -2227,40 +2231,35 @@ int qemu_loadvm_state(QEMUFile *f)
+                 }
+             }
+             if (le == NULL) {
+-                fprintf(stderr, "Unknown savevm section %d\n", section_id);
+-                ret = -EINVAL;
++                error_setg(errp, "Unknown vmstate section %d", section_id);
+                 goto out;
+             }
+ 
+             ret = vmstate_load(f, le->se, le->version_id);
+             if (ret < 0) {
+-                fprintf(stderr, "qemu: warning: error while loading state section id %d\n",
++                error_setg(errp, "Error while loading state section id %d",
+                         section_id);
+                 goto out;
+             }
+             break;
+         default:
+-            fprintf(stderr, "Unknown savevm section type %d\n", section_type);
+-            ret = -EINVAL;
++            error_setg(errp, "Unknown vmstate section type %d", section_type);
+             goto out;
+         }
+     }
+ 
+     cpu_synchronize_all_post_init();
+ 
+-    ret = 0;
++    ret = qemu_file_get_error(f);
++    if (ret < 0) {
++        error_setg_errno(errp, -ret, "Failed to load vmstate");
++    }
+ 
+ out:
+     QLIST_FOREACH_SAFE(le, &loadvm_handlers, entry, new_le) {
+         QLIST_REMOVE(le, entry);
+         g_free(le);
+     }
+-
+-    if (ret == 0) {
+-        ret = qemu_file_get_error(f);
+-    }
+-
+-    return ret;
+ }
+ 
+ static bool bdrv_snapshot_find(BlockDriverState *bs, QEMUSnapshotInfo *sn_info,
+@@ -2482,7 +2481,6 @@ int load_vmstate(const char *name)
+     QEMUSnapshotInfo sn;
+     QEMUFile *f;
+     Error *local_err = NULL;
+-    int ret;
+ 
+     bs_vm_state = bdrv_snapshots();
+     if (!bs_vm_state) {
+@@ -2547,12 +2545,13 @@ int load_vmstate(const char *name)
+     }
+ 
+     qemu_system_reset(VMRESET_SILENT);
+-    ret = qemu_loadvm_state(f);
++    qemu_loadvm_state(f, &local_err);
+ 
+     qemu_fclose(f);
+-    if (ret < 0) {
+-        error_report("Error %d while loading VM state", ret);
+-        return ret;
++    if (error_is_set(&local_err)) {
++        qerror_report_err(local_err);
++        error_free(local_err);
++        return -1;
+     }
+ 
+     return 0;
+-- 
+1.8.1.4
+
+

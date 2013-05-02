@@ -1,0 +1,41 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Stefano Stabellini <Stefano.Stabellini@eu.citrix.com>
+To: Anthony Liguori <anthony@codemonkey.ws>,
+ Stefano Stabellini <Stefano.Stabellini@eu.citrix.com>,
+ Alex Bligh <alex@alex.org.uk>,
+ Stefano Stabellini <stefano.stabellini@eu.citrix.com>
+Cc: Alex Bligh <alex@alex.org.uk>,
+ Felipe Franciosi <felipe.franciosi@citrix.com>,
+ Anthony Liguori <anthony@codemonkey.ws>, qemu-devel@nongnu.org,
+ "qemu-devel@nongnu.org" <qemu-devel@nongnu.org>,
+ Stefano Stabellini <Stefano.Stabellini@eu.citrix.com>,
+ xen-devel@lists.xensource.com,
+ "xen-devel@lists.xensource.com" <xen-devel@lists.xensource.com>
+Date: Fri, 5 Apr 2013 16:51:24 +0100
+Message-id: alpine.DEB.2.02.1304051640120.5078@kaball.uk.xensource.com
+Subject: [PATCH 1/1] xen_disk fixes 2013-04-05
+
+Hi Anthony,
+please pull from the following tree based on
+d05ef160453e98546a4197496dc8a3cb2defac53:
+
+git://xenbits.xen.org/people/sstabellini/qemu-dm.git xen-2013-04-05
+
+
+Alex Bligh (2):
+      Xen PV backend: Move call to bdrv_new from blk_init to blk_connect
+      Xen PV backend: Disable use of O_DIRECT by default as it results in crashes.
+
+Felipe Franciosi (2):
+      Introduce 64 bit integer write interface to xenstore
+      Allow xen guests to plug disks of 1 TiB or more
+
+ hw/xen_backend.c |   15 ++++++++++-
+ hw/xen_backend.h |    2 +
+ hw/xen_disk.c    |   76 +++++++++++++++++++++++++++++------------------------
+ 3 files changed, 58 insertions(+), 35 deletions(-)
+
+
+Cheers,
+
+Stefano

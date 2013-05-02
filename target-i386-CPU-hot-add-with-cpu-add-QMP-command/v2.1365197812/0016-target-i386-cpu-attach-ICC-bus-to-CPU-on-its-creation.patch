@@ -1,0 +1,63 @@
+From patches Mon Sep 17 00:00:00 2001
+From: "Igor Mammedov" <imammedo@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: aliguori@us.ibm.com, ehabkost@redhat.com, claudio.fontana@huawei.com,
+ aderumier@odiso.com, lcapitulino@redhat.com, jfrei@linux.vnet.ibm.com,
+ yang.z.zhang@intel.com, pbonzini@redhat.com, afaerber@suse.de,
+ lig.fnst@cn.fujitsu.com, rth@twiddle.net
+Date: Fri,  5 Apr 2013 16:37:08 +0200
+Message-id: 1365172636-28628-17-git-send-email-imammedo@redhat.com
+Subject: [PATCH 16/22] target-i386: cpu: attach ICC bus to CPU on its creation
+
+... during startup,  so it would be possible to uplug it later
+and set bus_type to TYPE_ICC_BUS for X86CPU type to make device_add
+attach hotplugged CPU to ICC bus.
+
+Signed-off-by: Igor Mammedov <imammedo@redhat.com>
+---
+ target-i386/cpu.c | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/target-i386/cpu.c b/target-i386/cpu.c
+index db56b52..2b3c1f3 100644
+--- a/target-i386/cpu.c
++++ b/target-i386/cpu.c
+@@ -41,6 +41,7 @@
+ #endif
+ 
+ #include "sysemu/sysemu.h"
++#include "hw/icc_bus.h"
+ #ifndef CONFIG_USER_ONLY
+ #include "hw/xen.h"
+ #include "hw/sysbus.h"
+@@ -1604,6 +1605,7 @@ X86CPU *cpu_x86_create(const char *cpu_model, Error **errp)
+     CPUX86State *env;
+     gchar **model_pieces;
+     char *name, *features;
++    Object *icc_bus = object_resolve_path_type("icc-bus", TYPE_ICC_BUS, NULL);
+ 
+     model_pieces = g_strsplit(cpu_model, ",", 2);
+     if (!model_pieces[0]) {
+@@ -1614,6 +1616,10 @@ X86CPU *cpu_x86_create(const char *cpu_model, Error **errp)
+     features = model_pieces[1];
+ 
+     cpu = X86_CPU(object_new(TYPE_X86_CPU));
++    if (icc_bus) {
++        qdev_set_parent_bus(DEVICE(cpu), BUS(icc_bus));
++        object_unref(OBJECT(cpu));
++    }
+     env = &cpu->env;
+     env->cpu_model_str = cpu_model;
+ 
+@@ -2323,6 +2329,7 @@ static void x86_cpu_common_class_init(ObjectClass *oc, void *data)
+ 
+     xcc->parent_realize = dc->realize;
+     dc->realize = x86_cpu_realizefn;
++    dc->bus_type = TYPE_ICC_BUS;
+ 
+     xcc->parent_reset = cc->reset;
+     cc->reset = x86_cpu_reset;
+-- 
+1.8.1.4
+
+

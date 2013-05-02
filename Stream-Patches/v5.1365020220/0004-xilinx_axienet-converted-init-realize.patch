@@ -1,0 +1,110 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+To: edgar.iglesias@gmail.com, qemu-devel@nongnu.org
+Cc: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+Date: Wed,  3 Apr 2013 15:17:04 +1000
+Message-id: 3b30c1820c6e345ee3adc4d9d1f3e25cfb9f2bfc.1364965814.git.peter.crosthwaite@xilinx.com
+Subject: [PATCH 04/16] xilinx_axienet: converted init->realize
+
+The prescribed transition from SysBusDevice::init to Device::realize. Im going
+with Andreas suggestion to move the sysbus foo to Object::init for early IRQ
+visibility.
+
+Signed-off-by: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+Reviewed-by: Andreas Färber <afaerber@suse.de>
+Acked-by: Edgar E. Iglesias <edgar.iglesias@xilinx.com>
+---
+Changed from v3: Added missing include of qerror
+
+ hw/xilinx_axidma.c  |    1 +
+ hw/xilinx_axienet.c |   24 +++++++++++-------------
+ 2 files changed, 12 insertions(+), 13 deletions(-)
+
+diff --git a/hw/xilinx_axidma.c b/hw/xilinx_axidma.c
+index 8db1a74..5d2b33a 100644
+--- a/hw/xilinx_axidma.c
++++ b/hw/xilinx_axidma.c
+@@ -27,6 +27,7 @@
+ #include "hw/ptimer.h"
+ #include "qemu/log.h"
+ #include "hw/qdev-addr.h"
++#include "qapi/qmp/qerror.h"
+ 
+ #include "hw/stream.h"
+ 
+diff --git a/hw/xilinx_axienet.c b/hw/xilinx_axienet.c
+index 35b4e4f..ec1e893 100644
+--- a/hw/xilinx_axienet.c
++++ b/hw/xilinx_axienet.c
+@@ -851,18 +851,13 @@ static NetClientInfo net_xilinx_enet_info = {
+     .cleanup = eth_cleanup,
+ };
+ 
+-static int xilinx_enet_init(SysBusDevice *dev)
++static void xilinx_enet_realize(DeviceState *dev, Error **errp)
+ {
+     XilinxAXIEnet *s = XILINX_AXI_ENET(dev);
+ 
+-    sysbus_init_irq(dev, &s->irq);
+-
+-    memory_region_init_io(&s->iomem, &enet_ops, s, "enet", 0x40000);
+-    sysbus_init_mmio(dev, &s->iomem);
+-
+     qemu_macaddr_default_if_unset(&s->conf.macaddr);
+     s->nic = qemu_new_nic(&net_xilinx_enet_info, &s->conf,
+-                          object_get_typename(OBJECT(dev)), dev->qdev.id, s);
++                          object_get_typename(OBJECT(dev)), dev->id, s);
+     qemu_format_nic_info_str(qemu_get_queue(s->nic), s->conf.macaddr.a);
+ 
+     tdk_init(&s->TEMAC.phy);
+@@ -871,18 +866,22 @@ static int xilinx_enet_init(SysBusDevice *dev)
+     s->TEMAC.parent = s;
+ 
+     s->rxmem = g_malloc(s->c_rxmem);
+-
+-    return 0;
+ }
+ 
+-static void xilinx_enet_initfn(Object *obj)
++static void xilinx_enet_init(Object *obj)
+ {
+     XilinxAXIEnet *s = XILINX_AXI_ENET(obj);
++    SysBusDevice *sbd = SYS_BUS_DEVICE(obj);
+     Error *errp = NULL;
+ 
+     object_property_add_link(obj, "axistream-connected", TYPE_STREAM_SLAVE,
+                              (Object **) &s->tx_dev, &errp);
+     assert_no_error(errp);
++
++    sysbus_init_irq(sbd, &s->irq);
++
++    memory_region_init_io(&s->iomem, &enet_ops, s, "enet", 0x40000);
++    sysbus_init_mmio(sbd, &s->iomem);
+ }
+ 
+ static Property xilinx_enet_properties[] = {
+@@ -896,10 +895,9 @@ static Property xilinx_enet_properties[] = {
+ static void xilinx_enet_class_init(ObjectClass *klass, void *data)
+ {
+     DeviceClass *dc = DEVICE_CLASS(klass);
+-    SysBusDeviceClass *k = SYS_BUS_DEVICE_CLASS(klass);
+     StreamSlaveClass *ssc = STREAM_SLAVE_CLASS(klass);
+ 
+-    k->init = xilinx_enet_init;
++    dc->realize = xilinx_enet_realize;
+     dc->props = xilinx_enet_properties;
+     dc->reset = xilinx_axienet_reset;
+     ssc->push = axienet_stream_push;
+@@ -910,7 +908,7 @@ static const TypeInfo xilinx_enet_info = {
+     .parent        = TYPE_SYS_BUS_DEVICE,
+     .instance_size = sizeof(XilinxAXIEnet),
+     .class_init    = xilinx_enet_class_init,
+-    .instance_init = xilinx_enet_initfn,
++    .instance_init = xilinx_enet_init,
+     .interfaces = (InterfaceInfo[]) {
+             { TYPE_STREAM_SLAVE },
+             { }
+-- 
+1.7.0.4
+
+

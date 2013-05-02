@@ -1,0 +1,110 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Markus Armbruster <armbru@redhat.com>
+To: Eric Blake <eblake@redhat.com>, qemu-devel@nongnu.org,
+ Markus Armbruster <armbru@redhat.com>
+Cc: aik@ozlabs.ru, pbonzini@redhat.com, aliguori@us.ibm.com,
+ qemu-devel@nongnu.org, Anthony Liguori <aliguori@us.ibm.com>
+Date: Tue, 16 Apr 2013 13:51:06 +0200
+Message-id: 1366113066-1340-1-git-send-email-armbru@redhat.com
+Subject: [PATCH 1/1] Fix warnings suppressors to honor --disable-werror
+
+Replace
+
+    #pragma GCC diagnostic ignored FOO
+    [Troublesome code...]
+    #pragma GCC diagnostic error FOO
+
+by
+
+    #pragma GCC diagnostic push
+    #pragma GCC diagnostic ignored FOO
+    [Troublesome code...]
+    #pragma GCC diagnostic pop
+
+Broken in commit 3f4349d, commit 092bb30, and commit c95e308.
+
+Signed-off-by: Markus Armbruster <armbru@redhat.com>
+Tested-by: Alexey Kardashevskiy <aik@ozlabs.ru>
+Reviewed-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ configure                | 2 ++
+ coroutine-ucontext.c     | 3 ++-
+ include/ui/qemu-pixman.h | 3 ++-
+ ui/gtk.c                 | 3 ++-
+ 4 files changed, 8 insertions(+), 3 deletions(-)
+
+diff --git a/configure b/configure
+index 0788e27..41097a2 100755
+--- a/configure
++++ b/configure
+@@ -3244,8 +3244,10 @@ fi
+ 
+ pragma_disable_unused_but_set=no
+ cat > $TMPC << EOF
++#pragma GCC diagnostic push
+ #pragma GCC diagnostic ignored "-Wunused-but-set-variable"
+ #pragma GCC diagnostic ignored "-Wstrict-prototypes"
++#pragma GCC diagnostic pop
+ 
+ int main(void) {
+     return 0;
+diff --git a/coroutine-ucontext.c b/coroutine-ucontext.c
+index 867a662..4bf2cde 100644
+--- a/coroutine-ucontext.c
++++ b/coroutine-ucontext.c
+@@ -169,6 +169,7 @@ Coroutine *qemu_coroutine_new(void)
+ #ifdef CONFIG_VALGRIND_H
+ #ifdef CONFIG_PRAGMA_DIAGNOSTIC_AVAILABLE
+ /* Work around an unused variable in the valgrind.h macro... */
++#pragma GCC diagnostic push
+ #pragma GCC diagnostic ignored "-Wunused-but-set-variable"
+ #endif
+ static inline void valgrind_stack_deregister(CoroutineUContext *co)
+@@ -176,7 +177,7 @@ static inline void valgrind_stack_deregister(CoroutineUContext *co)
+     VALGRIND_STACK_DEREGISTER(co->valgrind_stack_id);
+ }
+ #ifdef CONFIG_PRAGMA_DIAGNOSTIC_AVAILABLE
+-#pragma GCC diagnostic error "-Wunused-but-set-variable"
++#pragma GCC diagnostic pop
+ #endif
+ #endif
+ 
+diff --git a/include/ui/qemu-pixman.h b/include/ui/qemu-pixman.h
+index b032f52..882e2a3 100644
+--- a/include/ui/qemu-pixman.h
++++ b/include/ui/qemu-pixman.h
+@@ -8,11 +8,12 @@
+ 
+ /* pixman-0.16.0 headers have a redundant declaration */
+ #ifdef CONFIG_PRAGMA_DIAGNOSTIC_AVAILABLE
++#pragma GCC diagnostic push
+ #pragma GCC diagnostic ignored "-Wredundant-decls"
+ #endif
+ #include <pixman.h>
+ #ifdef CONFIG_PRAGMA_DIAGNOSTIC_AVAILABLE
+-#pragma GCC diagnostic error "-Wredundant-decls"
++#pragma GCC diagnostic pop
+ #endif
+ 
+ #include "qemu/typedefs.h"
+diff --git a/ui/gtk.c b/ui/gtk.c
+index 1e105e2..c2c6e38 100644
+--- a/ui/gtk.c
++++ b/ui/gtk.c
+@@ -38,11 +38,12 @@
+ 
+ #ifdef CONFIG_PRAGMA_DIAGNOSTIC_AVAILABLE
+ /* Work around an -Wstrict-prototypes warning in GTK headers */
++#pragma GCC diagnostic push
+ #pragma GCC diagnostic ignored "-Wstrict-prototypes"
+ #endif
+ #include <gtk/gtk.h>
+ #ifdef CONFIG_PRAGMA_DIAGNOSTIC_AVAILABLE
+-#pragma GCC diagnostic error "-Wstrict-prototypes"
++#pragma GCC diagnostic pop
+ #endif
+ 
+ 
+-- 
+1.7.11.7
+

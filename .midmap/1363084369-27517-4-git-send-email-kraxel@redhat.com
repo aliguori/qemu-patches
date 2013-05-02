@@ -1,0 +1,1 @@
+../console-data-structures-overhaul/v1.1363105951/0003-spice-zap-sdpy-global.patch

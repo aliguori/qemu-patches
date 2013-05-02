@@ -1,0 +1,51 @@
+From patches Mon Sep 17 00:00:00 2001
+From: =?utf-8?q?Llu=C3=ADs_Vilanova_=3Cvilanova=40ac=2Eupc=2Eedu=3E?=
+To: qemu-devel@nongnu.org
+Cc: 
+Date: Tue, 16 Apr 2013 15:51:56 +0200
+Message-id: 20130416135156.21588.35519.stgit@fimbulvetr.bsc.es
+Subject: [PATCH 22/23] instrument: Install headers for dynamic instrumentation
+ clients
+
+Signed-off-by: Lluís Vilanova <vilanova@ac.upc.edu>
+---
+ Makefile |   24 +++++++++++++++++++++++-
+ 1 file changed, 23 insertions(+), 1 deletion(-)
+
+diff --git a/Makefile b/Makefile
+index ccf6760..3fc5fb6 100644
+--- a/Makefile
++++ b/Makefile
+@@ -324,7 +324,29 @@ install-confdir:
+ install-sysconfig: install-datadir install-confdir
+ 	$(INSTALL_DATA) $(SRC_PATH)/sysconfigs/target/target-x86_64.conf "$(DESTDIR)$(qemu_confdir)"
+ 
+-install: all $(if $(BUILD_DOCS),install-doc) install-sysconfig install-datadir
++install_instrument_find=$(shell find $(1)/instrument/qemu-instr -type f -name \*.h)
++
++install-instrument: INSTALL_FILES =$(call install_instrument_find,$(SRC_PATH))
++install-instrument: INSTALL_FILES+=$(call install_instrument_find,$(BUILD_DIR))
++install-instrument: INSTALL_DIRS:=$(dir $(INSTALL_FILES))
++install-instrument: INSTALL_DIRS:=$(patsubst $(SRC_PATH)/instrument/%,$(DESTDIR)$(includedir)/%,$(INSTALL_DIRS))
++install-instrument: INSTALL_DIRS:=$(patsubst $(BUILD_DIR)/instrument/%,$(DESTDIR)$(includedir)/%,$(INSTALL_DIRS))
++install-instrument: INSTALL_DIRS:=$(sort $(INSTALL_DIRS))
++install-instrument:
++	@for d in $(INSTALL_DIRS); do \
++		echo "$(INSTALL_DIR) \"$$d\""; \
++		$(INSTALL_DIR) "$$d"; \
++	done
++	@for f in $(INSTALL_FILES); do \
++		echo "$(INSTALL_DATA) \"$$f\" \"$(DESTDIR)$(includedir)/qemu-instr/$${f##*qemu-instr/}\""; \
++		$(INSTALL_DATA) "$$f" "$(DESTDIR)$(includedir)/qemu-instr/$${f##*qemu-instr/}"; \
++	done
++
++ifdef CONFIG_TRACE_INSTRUMENT_DYNAMIC
++INSTALL_INSTRUMENT=install-instrument
++endif
++
++install: all $(if $(BUILD_DOCS),install-doc) install-sysconfig install-datadir $(INSTALL_INSTRUMENT)
+ 	$(INSTALL_DIR) "$(DESTDIR)$(bindir)"
+ ifneq ($(TOOLS),)
+ 	$(INSTALL_PROG) $(STRIP_OPT) $(TOOLS) "$(DESTDIR)$(bindir)"
+
+

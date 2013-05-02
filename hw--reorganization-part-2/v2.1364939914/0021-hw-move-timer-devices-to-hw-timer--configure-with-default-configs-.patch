@@ -1,0 +1,299 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: 
+Date: Tue,  2 Apr 2013 16:58:55 +0200
+Message-id: 1364914749-11141-22-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 21/35] hw: move timer devices to hw/timer/,
+ configure with default-configs/
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ default-configs/arm-softmmu.mak    |  4 ++++
+ default-configs/sparc-softmmu.mak  |  1 +
+ hw/arm/Makefile.objs               | 17 +++++++----------
+ hw/cris/Makefile.objs              |  1 -
+ hw/input/Makefile.objs             |  4 ++++
+ hw/{ => input}/milkymist-softusb.c |  0
+ hw/{ => input}/pxa2xx_keypad.c     |  0
+ hw/{ => input}/tsc210x.c           |  0
+ hw/lm32/Makefile.objs              |  3 ---
+ hw/sh4/Makefile.objs               |  2 +-
+ hw/sparc/Makefile.objs             |  4 ++--
+ hw/timer/Makefile.objs             | 16 ++++++++++++++++
+ hw/{ => timer}/arm_mptimer.c       |  0
+ hw/{ => timer}/etraxfs_timer.c     |  0
+ hw/{ => timer}/exynos4210_mct.c    |  0
+ hw/{ => timer}/exynos4210_pwm.c    |  0
+ hw/{ => timer}/exynos4210_rtc.c    |  0
+ hw/{ => timer}/grlib_gptimer.c     |  0
+ hw/{ => timer}/imx_timer.c         |  0
+ hw/{ => timer}/lm32_timer.c        |  0
+ hw/{ => timer}/milkymist-sysctl.c  |  0
+ hw/{ => timer}/omap_gptimer.c      |  0
+ hw/{ => timer}/omap_synctimer.c    |  0
+ hw/{ => timer}/pxa2xx_timer.c      |  0
+ hw/{ => timer}/sh_timer.c          |  0
+ hw/{ => timer}/slavio_timer.c      |  0
+ hw/{ => timer}/tusb6010.c          |  0
+ 27 files changed, 35 insertions(+), 17 deletions(-)
+ rename hw/{ => input}/milkymist-softusb.c (100%)
+ rename hw/{ => input}/pxa2xx_keypad.c (100%)
+ rename hw/{ => input}/tsc210x.c (100%)
+ rename hw/{ => timer}/arm_mptimer.c (100%)
+ rename hw/{ => timer}/etraxfs_timer.c (100%)
+ rename hw/{ => timer}/exynos4210_mct.c (100%)
+ rename hw/{ => timer}/exynos4210_pwm.c (100%)
+ rename hw/{ => timer}/exynos4210_rtc.c (100%)
+ rename hw/{ => timer}/grlib_gptimer.c (100%)
+ rename hw/{ => timer}/imx_timer.c (100%)
+ rename hw/{ => timer}/lm32_timer.c (100%)
+ rename hw/{ => timer}/milkymist-sysctl.c (100%)
+ rename hw/{ => timer}/omap_gptimer.c (100%)
+ rename hw/{ => timer}/omap_synctimer.c (100%)
+ rename hw/{ => timer}/pxa2xx_timer.c (100%)
+ rename hw/{ => timer}/sh_timer.c (100%)
+ rename hw/{ => timer}/slavio_timer.c (100%)
+ rename hw/{ => timer}/tusb6010.c (100%)
+
+diff --git a/default-configs/arm-softmmu.mak b/default-configs/arm-softmmu.mak
+index 8da5ec8..94b52da 100644
+--- a/default-configs/arm-softmmu.mak
++++ b/default-configs/arm-softmmu.mak
+@@ -34,6 +34,7 @@ CONFIG_MICRODRIVE=y
+ CONFIG_USB_MUSB=y
+ 
+ CONFIG_ARM_TIMER=y
++CONFIG_ARM_MPTIMER=y
+ CONFIG_PL011=y
+ CONFIG_PL022=y
+ CONFIG_PL031=y
+@@ -53,10 +54,13 @@ CONFIG_PXA2XX=y
+ CONFIG_BITBANG_I2C=y
+ CONFIG_FRAMEBUFFER=y
+ CONFIG_XILINX_SPIPS=y
++
+ CONFIG_MARVELL_88W8618=y
+ CONFIG_OMAP=y
++CONFIG_TSC210X=y
+ CONFIG_BLIZZARD=y
+ CONFIG_ONENAND=y
++CONFIG_TUSB6010=y
+ CONFIG_IMX=y
+ CONFIG_ZAURUS=y
+ 
+diff --git a/default-configs/sparc-softmmu.mak b/default-configs/sparc-softmmu.mak
+index da5b02d..6a2bad3 100644
+--- a/default-configs/sparc-softmmu.mak
++++ b/default-configs/sparc-softmmu.mak
+@@ -10,5 +10,6 @@ CONFIG_EMPTY_SLOT=y
+ CONFIG_PCNET_COMMON=y
+ CONFIG_LANCE=y
+ CONFIG_TCX=y
++CONFIG_SLAVIO=y
+ CONFIG_CS4231=y
+ CONFIG_GRLIB=y
+diff --git a/hw/arm/Makefile.objs b/hw/arm/Makefile.objs
+index 26e107f..7691540 100644
+--- a/hw/arm/Makefile.objs
++++ b/hw/arm/Makefile.objs
+@@ -3,23 +3,20 @@ obj-y += arm_gic.o arm_gic_common.o
+ obj-y += a9scu.o
+ obj-y += realview_gic.o arm_sysctl.o arm11mpcore.o a9mpcore.o
+ obj-y += exynos4210_gic.o exynos4210_combiner.o
+-obj-y += exynos4210_pwm.o
+-obj-y += exynos4210_pmu.o exynos4210_mct.o
+-obj-y += exynos4210_rtc.o
+-obj-y += arm_mptimer.o a15mpcore.o
++obj-y += exynos4210_pmu.o
++obj-y += a15mpcore.o
+ obj-y += armv7m_nvic.o
+-obj-y += pxa2xx_timer.o pxa2xx_dma.o
+-obj-y += pxa2xx_mmci.o pxa2xx_pcmcia.o pxa2xx_keypad.o
++obj-y += pxa2xx_dma.o
++obj-y += pxa2xx_mmci.o pxa2xx_pcmcia.o
+ obj-y += zaurus.o
+ obj-y += omap_dma.o omap_clk.o omap_mmc.o \
+                 omap_gpio.o omap_intc.o
+-obj-y += soc_dma.o omap_gptimer.o omap_synctimer.o \
++obj-y += soc_dma.o \
+                 omap_gpmc.o omap_sdrc.o omap_tap.o omap_l4.o
+-obj-y += tsc210x.o
+-obj-y += cbus.o tusb6010.o
++obj-y += cbus.o
+ obj-y += mst_fpga.o
+ obj-y += strongarm.o
+-obj-y += imx_ccm.o imx_timer.o imx_avic.o
++obj-y += imx_ccm.o imx_avic.o
+ obj-$(CONFIG_KVM) += kvm/arm_gic.o
+ 
+ obj-y := $(addprefix ../,$(obj-y))
+diff --git a/hw/cris/Makefile.objs b/hw/cris/Makefile.objs
+index c4d5189..a8a4a9e 100644
+--- a/hw/cris/Makefile.objs
++++ b/hw/cris/Makefile.objs
+@@ -1,7 +1,6 @@
+ # IO blocks
+ obj-y += etraxfs_dma.o
+ obj-y += etraxfs_pic.o
+-obj-y += etraxfs_timer.o
+ 
+ obj-y := $(addprefix ../,$(obj-y))
+ 
+diff --git a/hw/input/Makefile.objs b/hw/input/Makefile.objs
+index 824997e..e8c80b9 100644
+--- a/hw/input/Makefile.objs
++++ b/hw/input/Makefile.objs
+@@ -7,3 +7,7 @@ common-obj-y += ps2.o
+ common-obj-$(CONFIG_STELLARIS_INPUT) += stellaris_input.o
+ common-obj-$(CONFIG_TSC2005) += tsc2005.o
+ common-obj-$(CONFIG_VMMOUSE) += vmmouse.o
++
++obj-$(CONFIG_MILKYMIST) += milkymist-softusb.o
++obj-$(CONFIG_PXA2XX) += pxa2xx_keypad.o
++obj-$(CONFIG_TSC210X) += tsc210x.o
+diff --git a/hw/milkymist-softusb.c b/hw/input/milkymist-softusb.c
+similarity index 100%
+rename from hw/milkymist-softusb.c
+rename to hw/input/milkymist-softusb.c
+diff --git a/hw/pxa2xx_keypad.c b/hw/input/pxa2xx_keypad.c
+similarity index 100%
+rename from hw/pxa2xx_keypad.c
+rename to hw/input/pxa2xx_keypad.c
+diff --git a/hw/tsc210x.c b/hw/input/tsc210x.c
+similarity index 100%
+rename from hw/tsc210x.c
+rename to hw/input/tsc210x.c
+diff --git a/hw/lm32/Makefile.objs b/hw/lm32/Makefile.objs
+index e116156..f911ac6 100644
+--- a/hw/lm32/Makefile.objs
++++ b/hw/lm32/Makefile.objs
+@@ -1,12 +1,9 @@
+ # LM32 peripherals
+ obj-y += lm32_pic.o
+-obj-y += lm32_timer.o
+ obj-y += lm32_sys.o
+ obj-y += milkymist-hpdmc.o
+ obj-y += milkymist-memcard.o
+ obj-y += milkymist-pfpu.o
+-obj-y += milkymist-softusb.o
+-obj-y += milkymist-sysctl.o
+ 
+ obj-y := $(addprefix ../,$(obj-y))
+ 
+diff --git a/hw/sh4/Makefile.objs b/hw/sh4/Makefile.objs
+index 10c971a..76b37bb 100644
+--- a/hw/sh4/Makefile.objs
++++ b/hw/sh4/Makefile.objs
+@@ -1,4 +1,4 @@
+-obj-y += sh_timer.o sh_intc.o sh_pci.o
++obj-y += sh_intc.o sh_pci.o
+ 
+ obj-y := $(addprefix ../,$(obj-y))
+ 
+diff --git a/hw/sparc/Makefile.objs b/hw/sparc/Makefile.objs
+index e18bc67..ab1d91c 100644
+--- a/hw/sparc/Makefile.objs
++++ b/hw/sparc/Makefile.objs
+@@ -1,9 +1,9 @@
+ obj-y = sun4m_iommu.o slavio_intctl.o
+-obj-y += slavio_timer.o slavio_misc.o sparc32_dma.o
++obj-y += slavio_misc.o sparc32_dma.o
+ obj-y += eccmemctl.o sbi.o sun4c_intctl.o
+ 
+ # GRLIB
+-obj-y += grlib_gptimer.o grlib_irqmp.o
++obj-y += grlib_irqmp.o
+ 
+ obj-y := $(addprefix ../,$(obj-y))
+ 
+diff --git a/hw/timer/Makefile.objs b/hw/timer/Makefile.objs
+index a1ef26c..094b20e 100644
+--- a/hw/timer/Makefile.objs
++++ b/hw/timer/Makefile.objs
+@@ -9,4 +9,20 @@ common-obj-$(CONFIG_PUV3) += puv3_ost.o
+ common-obj-$(CONFIG_TWL92230) += twl92230.o
+ common-obj-$(CONFIG_XILINX) += xilinx_timer.o
+ 
++obj-$(CONFIG_SLAVIO) += slavio_timer.o
++obj-$(CONFIG_ETRAXFS) += etraxfs_timer.o
++obj-$(CONFIG_EXYNOS4) += exynos4210_mct.o
++obj-$(CONFIG_EXYNOS4) += exynos4210_pwm.o
++obj-$(CONFIG_EXYNOS4) += exynos4210_rtc.o
++obj-$(CONFIG_GRLIB) += grlib_gptimer.o
++obj-$(CONFIG_IMX) += imx_timer.o
++obj-$(CONFIG_LM32) += lm32_timer.o
++obj-$(CONFIG_MILKYMIST) += milkymist-sysctl.o
++obj-$(CONFIG_OMAP) += omap_gptimer.o
++obj-$(CONFIG_OMAP) += omap_synctimer.o
++obj-$(CONFIG_PXA2XX) += pxa2xx_timer.o
++obj-$(CONFIG_SH4) += sh_timer.o
++obj-$(CONFIG_TUSB6010) += tusb6010.o
++
++obj-$(CONFIG_ARM_MPTIMER) += arm_mptimer.o
+ obj-$(CONFIG_MC146818RTC) += mc146818rtc.o
+diff --git a/hw/arm_mptimer.c b/hw/timer/arm_mptimer.c
+similarity index 100%
+rename from hw/arm_mptimer.c
+rename to hw/timer/arm_mptimer.c
+diff --git a/hw/etraxfs_timer.c b/hw/timer/etraxfs_timer.c
+similarity index 100%
+rename from hw/etraxfs_timer.c
+rename to hw/timer/etraxfs_timer.c
+diff --git a/hw/exynos4210_mct.c b/hw/timer/exynos4210_mct.c
+similarity index 100%
+rename from hw/exynos4210_mct.c
+rename to hw/timer/exynos4210_mct.c
+diff --git a/hw/exynos4210_pwm.c b/hw/timer/exynos4210_pwm.c
+similarity index 100%
+rename from hw/exynos4210_pwm.c
+rename to hw/timer/exynos4210_pwm.c
+diff --git a/hw/exynos4210_rtc.c b/hw/timer/exynos4210_rtc.c
+similarity index 100%
+rename from hw/exynos4210_rtc.c
+rename to hw/timer/exynos4210_rtc.c
+diff --git a/hw/grlib_gptimer.c b/hw/timer/grlib_gptimer.c
+similarity index 100%
+rename from hw/grlib_gptimer.c
+rename to hw/timer/grlib_gptimer.c
+diff --git a/hw/imx_timer.c b/hw/timer/imx_timer.c
+similarity index 100%
+rename from hw/imx_timer.c
+rename to hw/timer/imx_timer.c
+diff --git a/hw/lm32_timer.c b/hw/timer/lm32_timer.c
+similarity index 100%
+rename from hw/lm32_timer.c
+rename to hw/timer/lm32_timer.c
+diff --git a/hw/milkymist-sysctl.c b/hw/timer/milkymist-sysctl.c
+similarity index 100%
+rename from hw/milkymist-sysctl.c
+rename to hw/timer/milkymist-sysctl.c
+diff --git a/hw/omap_gptimer.c b/hw/timer/omap_gptimer.c
+similarity index 100%
+rename from hw/omap_gptimer.c
+rename to hw/timer/omap_gptimer.c
+diff --git a/hw/omap_synctimer.c b/hw/timer/omap_synctimer.c
+similarity index 100%
+rename from hw/omap_synctimer.c
+rename to hw/timer/omap_synctimer.c
+diff --git a/hw/pxa2xx_timer.c b/hw/timer/pxa2xx_timer.c
+similarity index 100%
+rename from hw/pxa2xx_timer.c
+rename to hw/timer/pxa2xx_timer.c
+diff --git a/hw/sh_timer.c b/hw/timer/sh_timer.c
+similarity index 100%
+rename from hw/sh_timer.c
+rename to hw/timer/sh_timer.c
+diff --git a/hw/slavio_timer.c b/hw/timer/slavio_timer.c
+similarity index 100%
+rename from hw/slavio_timer.c
+rename to hw/timer/slavio_timer.c
+diff --git a/hw/tusb6010.c b/hw/timer/tusb6010.c
+similarity index 100%
+rename from hw/tusb6010.c
+rename to hw/timer/tusb6010.c
+-- 
+1.8.1.4
+
+
+

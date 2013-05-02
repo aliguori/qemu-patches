@@ -1,0 +1,16 @@
+0000-Xilinx-SPIPS-fixes-round-2.txt
+0001-xilinx_spips-seperate-SPI-and-QSPI-as-two-classes.patch
+0002-xilinx_spips-Make-interrupts-clear-on-read.patch
+0003-xilinx_spips-Inhibit-interrupts-in-LQSPI-mode.patch
+0004-xilinx_spips-Add-verbose-LQSPI-debug-output.patch
+0005-xilinx_spips-Fix-QSPI-FIFO-size.patch
+0006-xilinx_spips-Trash-LQ-page-cache-on-mode-change.patch
+0007-xilinx_spips-Add-automatic-start-support.patch
+0008-xilinx_spips-Implement-automatic-CS.patch
+0009-xilinx_spips-lqspi-Dont-touch-config-register.patch
+0010-xilinx_spips-Fix-CTRL-register-RW-bits.patch
+0011-xilinx_spips-Fix-striping-behaviour.patch
+0012-xilinx_spips-Debug-msgs-for-Snoop-state.patch
+0013-xilinx_spips-Multiple-debug-verbosity-levels.patch
+0014-xilinx_spips-lqspi-Push-more-data-to-tx-fifo.patch
+0015-xilinx_spips-lqspi-Fix-byte-misaligned-access.patch

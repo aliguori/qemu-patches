@@ -1,0 +1,337 @@
+From patches Mon Sep 17 00:00:00 2001
+From: "Michael S. Tsirkin" <mst@redhat.com>
+To: Paolo Bonzini <pbonzini@redhat.com>, kvm@vger.kernel.org, gleb@redhat.com,
+ mtosatti@redhat.com, qemu-devel@nongnu.org,
+ "Michael S. Tsirkin" <mst@redhat.com>,
+ Peter Maydell <peter.maydell@linaro.org>, pbonzini@redhat.com
+Cc: kvm@vger.kernel.org, gleb@redhat.com, Avi Kivity <avi.kivity@gmail.com>,
+ mtosatti@redhat.com, qemu-devel@nongnu.org, pbonzini@redhat.com
+Date: Thu, 4 Apr 2013 13:40:19 +0300
+Message-id: 183f242d45ed0e10dd6feb73fd3f434738c08ae4.1365071407.git.mst@redhat.com
+Subject: [PATCH 5/6] kvm: add PV MMIO
+
+Add an option for users to specify PV eventfd
+listeners, and utilize KVM's PV MMIO underneath.
+Upodate all callers.
+
+Signed-off-by: Michael S. Tsirkin <mst@redhat.com>
+---
+ hw/dataplane/hostmem.c    |  1 +
+ hw/ivshmem.c              |  2 ++
+ hw/pci-testdev.c          |  2 ++
+ hw/vhost.c                |  4 ++--
+ hw/virtio-pci.c           |  4 ++--
+ include/exec/memory.h     | 10 ++++++++++
+ kvm-all.c                 | 15 ++++++++++++---
+ linux-headers/linux/kvm.h |  8 ++++++++
+ memory.c                  |  9 +++++++--
+ 9 files changed, 46 insertions(+), 9 deletions(-)
+
+diff --git a/hw/dataplane/hostmem.c b/hw/dataplane/hostmem.c
+index 380537e..41d43e7 100644
+--- a/hw/dataplane/hostmem.c
++++ b/hw/dataplane/hostmem.c
+@@ -126,6 +126,7 @@ static void hostmem_listener_section_dummy(MemoryListener *listener,
+ 
+ static void hostmem_listener_eventfd_dummy(MemoryListener *listener,
+                                            MemoryRegionSection *section,
++                                           bool pv,
+                                            bool match_data, uint64_t data,
+                                            EventNotifier *e)
+ {
+diff --git a/hw/ivshmem.c b/hw/ivshmem.c
+index 68a2cf2..28e5978 100644
+--- a/hw/ivshmem.c
++++ b/hw/ivshmem.c
+@@ -352,6 +352,7 @@ static void ivshmem_add_eventfd(IVShmemState *s, int posn, int i)
+     memory_region_add_eventfd(&s->ivshmem_mmio,
+                               DOORBELL,
+                               4,
++                              false,
+                               true,
+                               (posn << 16) | i,
+                               &s->peers[posn].eventfds[i]);
+@@ -362,6 +363,7 @@ static void ivshmem_del_eventfd(IVShmemState *s, int posn, int i)
+     memory_region_del_eventfd(&s->ivshmem_mmio,
+                               DOORBELL,
+                               4,
++                              false,
+                               true,
+                               (posn << 16) | i,
+                               &s->peers[posn].eventfds[i]);
+diff --git a/hw/pci-testdev.c b/hw/pci-testdev.c
+index 9486624..f0ebf99 100644
+--- a/hw/pci-testdev.c
++++ b/hw/pci-testdev.c
+@@ -80,6 +80,7 @@ static int pci_testdev_start(IOTest *test)
+     memory_region_add_eventfd(test->mr,
+                               le32_to_cpu(test->hdr->offset),
+                               test->size,
++                              false,
+                               test->match_data,
+                               test->hdr->data,
+                               &test->notifier);
+@@ -94,6 +95,7 @@ static void pci_testdev_stop(IOTest *test)
+     memory_region_del_eventfd(test->mr,
+                               le32_to_cpu(test->hdr->offset),
+                               test->size,
++                              false,
+                               test->match_data,
+                               test->hdr->data,
+                               &test->notifier);
+diff --git a/hw/vhost.c b/hw/vhost.c
+index 4d6aee3..9ad7101 100644
+--- a/hw/vhost.c
++++ b/hw/vhost.c
+@@ -750,13 +750,13 @@ static void vhost_virtqueue_stop(struct vhost_dev *dev,
+ }
+ 
+ static void vhost_eventfd_add(MemoryListener *listener,
+-                              MemoryRegionSection *section,
++                              MemoryRegionSection *section, bool pv,
+                               bool match_data, uint64_t data, EventNotifier *e)
+ {
+ }
+ 
+ static void vhost_eventfd_del(MemoryListener *listener,
+-                              MemoryRegionSection *section,
++                              MemoryRegionSection *section, bool pv,
+                               bool match_data, uint64_t data, EventNotifier *e)
+ {
+ }
+diff --git a/hw/virtio-pci.c b/hw/virtio-pci.c
+index 19965e5..f9ff994 100644
+--- a/hw/virtio-pci.c
++++ b/hw/virtio-pci.c
+@@ -189,10 +189,10 @@ static int virtio_pci_set_host_notifier_internal(VirtIOPCIProxy *proxy,
+         }
+         virtio_queue_set_host_notifier_fd_handler(vq, true, set_handler);
+         memory_region_add_eventfd(&proxy->bar, VIRTIO_PCI_QUEUE_NOTIFY, 2,
+-                                  true, n, notifier);
++                                  false, true, n, notifier);
+     } else {
+         memory_region_del_eventfd(&proxy->bar, VIRTIO_PCI_QUEUE_NOTIFY, 2,
+-                                  true, n, notifier);
++                                  false, true, n, notifier);
+         virtio_queue_set_host_notifier_fd_handler(vq, false, false);
+         event_notifier_cleanup(notifier);
+     }
+diff --git a/include/exec/memory.h b/include/exec/memory.h
+index 2322732..3612004 100644
+--- a/include/exec/memory.h
++++ b/include/exec/memory.h
+@@ -215,8 +215,10 @@ struct MemoryListener {
+     void (*log_global_start)(MemoryListener *listener);
+     void (*log_global_stop)(MemoryListener *listener);
+     void (*eventfd_add)(MemoryListener *listener, MemoryRegionSection *section,
++                        bool pv,
+                         bool match_data, uint64_t data, EventNotifier *e);
+     void (*eventfd_del)(MemoryListener *listener, MemoryRegionSection *section,
++                        bool pv,
+                         bool match_data, uint64_t data, EventNotifier *e);
+     void (*coalesced_mmio_add)(MemoryListener *listener, MemoryRegionSection *section,
+                                hwaddr addr, hwaddr len);
+@@ -594,6 +596,9 @@ void memory_region_clear_flush_coalesced(MemoryRegion *mr);
+  * @mr: the memory region being updated.
+  * @addr: the address within @mr that is to be monitored
+  * @size: the size of the access to trigger the eventfd
++ * @pv: set if Guest can promise us that all accesses touching this address
++ *      are writes of specified length, starting at the specified address.
++ *      If not - it's a Guest bug. Might give faster access.
+  * @match_data: whether to match against @data, instead of just @addr
+  * @data: the data to match against the guest write
+  * @fd: the eventfd to be triggered when @addr, @size, and @data all match.
+@@ -601,6 +606,7 @@ void memory_region_clear_flush_coalesced(MemoryRegion *mr);
+ void memory_region_add_eventfd(MemoryRegion *mr,
+                                hwaddr addr,
+                                unsigned size,
++                               bool pv,
+                                bool match_data,
+                                uint64_t data,
+                                EventNotifier *e);
+@@ -614,6 +620,9 @@ void memory_region_add_eventfd(MemoryRegion *mr,
+  * @mr: the memory region being updated.
+  * @addr: the address within @mr that is to be monitored
+  * @size: the size of the access to trigger the eventfd
++ * @pv: set if Guest can promise us that all accesses touching this address
++ *      are writes of specified length, starting at the specified address.
++ *      If not - it's a Guest bug. Might give faster access.
+  * @match_data: whether to match against @data, instead of just @addr
+  * @data: the data to match against the guest write
+  * @fd: the eventfd to be triggered when @addr, @size, and @data all match.
+@@ -621,6 +630,7 @@ void memory_region_add_eventfd(MemoryRegion *mr,
+ void memory_region_del_eventfd(MemoryRegion *mr,
+                                hwaddr addr,
+                                unsigned size,
++                               bool pv,
+                                bool match_data,
+                                uint64_t data,
+                                EventNotifier *e);
+diff --git a/kvm-all.c b/kvm-all.c
+index ce823f9..59835ca 100644
+--- a/kvm-all.c
++++ b/kvm-all.c
+@@ -500,7 +500,7 @@ int kvm_check_extension(KVMState *s, unsigned int extension)
+     return ret;
+ }
+ 
+-static int kvm_set_ioeventfd_mmio(int fd, uint32_t addr, uint32_t val,
++static int kvm_set_ioeventfd_mmio(int fd, uint32_t addr, uint32_t val, bool pv,
+                                   bool assign, uint32_t size, bool datamatch)
+ {
+     int ret;
+@@ -518,6 +518,11 @@ static int kvm_set_ioeventfd_mmio(int fd, uint32_t addr, uint32_t val,
+ 
+     if (datamatch) {
+         iofd.flags |= KVM_IOEVENTFD_FLAG_DATAMATCH;
++        /* Kernel doesn't support data match with PV MMIO. */
++        pv = false;
++    }
++    if (pv) {
++        iofd.flags |= KVM_IOEVENTFD_FLAG_PV_MMIO;
+     }
+     if (!assign) {
+         iofd.flags |= KVM_IOEVENTFD_FLAG_DEASSIGN;
+@@ -802,6 +807,7 @@ static void kvm_log_global_stop(struct MemoryListener *listener)
+ 
+ static void kvm_mem_ioeventfd_add(MemoryListener *listener,
+                                   MemoryRegionSection *section,
++                                  bool pv, 
+                                   bool match_data, uint64_t data,
+                                   EventNotifier *e)
+ {
+@@ -809,7 +815,7 @@ static void kvm_mem_ioeventfd_add(MemoryListener *listener,
+     int r;
+ 
+     r = kvm_set_ioeventfd_mmio(fd, section->offset_within_address_space,
+-                               data, true, section->size, match_data);
++                               data, pv, true, section->size, match_data);
+     if (r < 0) {
+         abort();
+     }
+@@ -817,6 +823,7 @@ static void kvm_mem_ioeventfd_add(MemoryListener *listener,
+ 
+ static void kvm_mem_ioeventfd_del(MemoryListener *listener,
+                                   MemoryRegionSection *section,
++                                  bool pv,
+                                   bool match_data, uint64_t data,
+                                   EventNotifier *e)
+ {
+@@ -824,7 +831,7 @@ static void kvm_mem_ioeventfd_del(MemoryListener *listener,
+     int r;
+ 
+     r = kvm_set_ioeventfd_mmio(fd, section->offset_within_address_space,
+-                               data, false, section->size, match_data);
++                               data, pv, false, section->size, match_data);
+     if (r < 0) {
+         abort();
+     }
+@@ -832,6 +839,7 @@ static void kvm_mem_ioeventfd_del(MemoryListener *listener,
+ 
+ static void kvm_io_ioeventfd_add(MemoryListener *listener,
+                                  MemoryRegionSection *section,
++                                 bool pv,
+                                  bool match_data, uint64_t data,
+                                  EventNotifier *e)
+ {
+@@ -847,6 +855,7 @@ static void kvm_io_ioeventfd_add(MemoryListener *listener,
+ 
+ static void kvm_io_ioeventfd_del(MemoryListener *listener,
+                                  MemoryRegionSection *section,
++                                 bool pv,
+                                  bool match_data, uint64_t data,
+                                  EventNotifier *e)
+ 
+diff --git a/linux-headers/linux/kvm.h b/linux-headers/linux/kvm.h
+index caca979..871cc0a 100644
+--- a/linux-headers/linux/kvm.h
++++ b/linux-headers/linux/kvm.h
+@@ -449,11 +449,19 @@ enum {
+ 	kvm_ioeventfd_flag_nr_datamatch,
+ 	kvm_ioeventfd_flag_nr_pio,
+ 	kvm_ioeventfd_flag_nr_deassign,
++	kvm_ioeventfd_flag_nr_pv_mmio,
+ 	kvm_ioeventfd_flag_nr_max,
+ };
+ 
+ #define KVM_IOEVENTFD_FLAG_DATAMATCH (1 << kvm_ioeventfd_flag_nr_datamatch)
+ #define KVM_IOEVENTFD_FLAG_PIO       (1 << kvm_ioeventfd_flag_nr_pio)
++/*
++ * PV_MMIO - Guest can promise us that all accesses touching this address
++ * are writes of specified length, starting at the specified address.
++ * If not - it's a Guest bug.
++ * Can not be used together with either PIO or DATAMATCH.
++ */
++#define KVM_IOEVENTFD_FLAG_PV_MMIO   (1 << kvm_ioeventfd_flag_nr_pv_mmio)
+ #define KVM_IOEVENTFD_FLAG_DEASSIGN  (1 << kvm_ioeventfd_flag_nr_deassign)
+ 
+ #define KVM_IOEVENTFD_VALID_FLAG_MASK  ((1 << kvm_ioeventfd_flag_nr_max) - 1)
+diff --git a/memory.c b/memory.c
+index 92a2196..5a64b3c 100644
+--- a/memory.c
++++ b/memory.c
+@@ -162,6 +162,7 @@ struct CoalescedMemoryRange {
+ 
+ struct MemoryRegionIoeventfd {
+     AddrRange addr;
++    bool pv;
+     bool match_data;
+     uint64_t data;
+     EventNotifier *e;
+@@ -600,7 +601,7 @@ static void address_space_add_del_ioeventfds(AddressSpace *as,
+                 .offset_within_address_space = int128_get64(fd->addr.start),
+                 .size = int128_get64(fd->addr.size),
+             };
+-            MEMORY_LISTENER_CALL(eventfd_del, Forward, &section,
++            MEMORY_LISTENER_CALL(eventfd_del, Forward, &section, fd->pv,
+                                  fd->match_data, fd->data, fd->e);
+             ++iold;
+         } else if (inew < fds_new_nb
+@@ -613,7 +614,7 @@ static void address_space_add_del_ioeventfds(AddressSpace *as,
+                 .offset_within_address_space = int128_get64(fd->addr.start),
+                 .size = int128_get64(fd->addr.size),
+             };
+-            MEMORY_LISTENER_CALL(eventfd_add, Reverse, &section,
++            MEMORY_LISTENER_CALL(eventfd_add, Reverse, &section, fd->pv,
+                                  fd->match_data, fd->data, fd->e);
+             ++inew;
+         } else {
+@@ -1243,6 +1244,7 @@ void memory_region_clear_flush_coalesced(MemoryRegion *mr)
+ void memory_region_add_eventfd(MemoryRegion *mr,
+                                hwaddr addr,
+                                unsigned size,
++                               bool pv,
+                                bool match_data,
+                                uint64_t data,
+                                EventNotifier *e)
+@@ -1250,6 +1252,7 @@ void memory_region_add_eventfd(MemoryRegion *mr,
+     MemoryRegionIoeventfd mrfd = {
+         .addr.start = int128_make64(addr),
+         .addr.size = int128_make64(size),
++        .pv = pv,
+         .match_data = match_data,
+         .data = data,
+         .e = e,
+@@ -1276,6 +1279,7 @@ void memory_region_add_eventfd(MemoryRegion *mr,
+ void memory_region_del_eventfd(MemoryRegion *mr,
+                                hwaddr addr,
+                                unsigned size,
++                               bool pv,
+                                bool match_data,
+                                uint64_t data,
+                                EventNotifier *e)
+@@ -1283,6 +1287,7 @@ void memory_region_del_eventfd(MemoryRegion *mr,
+     MemoryRegionIoeventfd mrfd = {
+         .addr.start = int128_make64(addr),
+         .addr.size = int128_make64(size),
++        .pv = pv,
+         .match_data = match_data,
+         .data = data,
+         .e = e,
+-- 
+MST
+
+--
+To unsubscribe from this list: send the line "unsubscribe kvm" in
+the body of a message to majordomo@vger.kernel.org
+More majordomo info at  http://vger.kernel.org/majordomo-info.html

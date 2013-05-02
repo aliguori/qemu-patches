@@ -1,0 +1,344 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Gerd Hoffmann <kraxel@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, Gerd Hoffmann <kraxel@redhat.com>
+Date: Tue, 16 Apr 2013 11:39:33 +0200
+Message-id: 1366105178-26744-20-git-send-email-kraxel@redhat.com
+Subject: [PATCH 19/24] console: gui timer fixes
+
+Make gui update rate adaption code in gui_update() actually work.
+Sprinkle in a tracepoint so you can see the code at work.  Remove
+the update rate adaption code in vnc and make vnc simply use the
+generic bits instead.
+
+Signed-off-by: Gerd Hoffmann <kraxel@redhat.com>
+---
+ include/ui/console.h |    9 ++++---
+ trace-events         |    1 +
+ ui/console.c         |   34 ++++++++++++++++++++----
+ ui/sdl.c             |   10 +++----
+ ui/vnc.c             |   71 ++++++++++++++------------------------------------
+ ui/vnc.h             |    2 --
+ 6 files changed, 60 insertions(+), 67 deletions(-)
+
+diff --git a/include/ui/console.h b/include/ui/console.h
+index f3e7791..3cb0018 100644
+--- a/include/ui/console.h
++++ b/include/ui/console.h
+@@ -21,7 +21,8 @@
+ #define QEMU_CAPS_LOCK_LED   (1 << 2)
+ 
+ /* in ms */
+-#define GUI_REFRESH_INTERVAL 30
++#define GUI_REFRESH_INTERVAL_DEFAULT    30
++#define GUI_REFRESH_INTERVAL_IDLE     3000
+ 
+ typedef void QEMUPutKBDEvent(void *opaque, int keycode);
+ typedef void QEMUPutLEDEvent(void *opaque, int ledstate);
+@@ -174,8 +175,7 @@ typedef struct DisplayChangeListenerOps {
+ } DisplayChangeListenerOps;
+ 
+ struct DisplayChangeListener {
+-    int idle;
+-    uint64_t gui_timer_interval;
++    uint64_t update_interval;
+     const DisplayChangeListenerOps *ops;
+     DisplayState *ds;
+ 
+@@ -207,12 +207,13 @@ static inline int is_buffer_shared(DisplaySurface *surface)
+ 
+ void register_displaychangelistener(DisplayState *ds,
+                                     DisplayChangeListener *dcl);
++void update_displaychangelistener(DisplayChangeListener *dcl,
++                                  uint64_t interval);
+ void unregister_displaychangelistener(DisplayChangeListener *dcl);
+ 
+ void dpy_gfx_update(QemuConsole *con, int x, int y, int w, int h);
+ void dpy_gfx_replace_surface(QemuConsole *con,
+                              DisplaySurface *surface);
+-void dpy_refresh(DisplayState *s);
+ void dpy_gfx_copy(QemuConsole *con, int src_x, int src_y,
+                   int dst_x, int dst_y, int w, int h);
+ void dpy_text_cursor(QemuConsole *con, int x, int y);
+diff --git a/trace-events b/trace-events
+index b08627b..968edb6 100644
+--- a/trace-events
++++ b/trace-events
+@@ -965,6 +965,7 @@ dma_map_wait(void *dbs) "dbs=%p"
+ console_gfx_new(void) ""
+ console_txt_new(int w, int h) "%dx%d"
+ console_select(int nr) "%d"
++console_refresh(int interval) "interval %d ms"
+ displaysurface_create(void *display_surface, int w, int h) "surface=%p, %dx%d"
+ displaysurface_create_from(void *display_surface, int w, int h, int bpp, int swap) "surface=%p, %dx%d, bpp %d, bswap %d"
+ displaysurface_free(void *display_surface) "surface=%p"
+diff --git a/ui/console.c b/ui/console.c
+index 79a306b..5bbc891 100644
+--- a/ui/console.c
++++ b/ui/console.c
+@@ -157,6 +157,9 @@ struct QemuConsole {
+ 
+ struct DisplayState {
+     struct QEMUTimer *gui_timer;
++    uint64_t last_update;
++    uint64_t update_interval;
++    bool refreshing;
+     bool have_gfx;
+     bool have_text;
+ 
+@@ -171,22 +174,32 @@ static int nb_consoles = 0;
+ static void text_console_do_init(CharDriverState *chr, DisplayState *ds);
+ static void dpy_gfx_switch_surface(DisplayState *ds,
+                                    DisplaySurface *surface);
++static void dpy_refresh(DisplayState *s);
+ 
+ static void gui_update(void *opaque)
+ {
+-    uint64_t interval = GUI_REFRESH_INTERVAL;
++    uint64_t interval = GUI_REFRESH_INTERVAL_IDLE;
++    uint64_t dcl_interval;
+     DisplayState *ds = opaque;
+     DisplayChangeListener *dcl;
+ 
++    ds->refreshing = true;
+     dpy_refresh(ds);
++    ds->refreshing = false;
+ 
+     QLIST_FOREACH(dcl, &ds->listeners, next) {
+-        if (dcl->gui_timer_interval &&
+-            dcl->gui_timer_interval < interval) {
+-            interval = dcl->gui_timer_interval;
++        dcl_interval = dcl->update_interval ?
++            dcl->update_interval : GUI_REFRESH_INTERVAL_DEFAULT;
++        if (interval > dcl_interval) {
++            interval = dcl_interval;
+         }
+     }
+-    qemu_mod_timer(ds->gui_timer, interval + qemu_get_clock_ms(rt_clock));
++    if (ds->update_interval != interval) {
++        ds->update_interval = interval;
++        trace_console_refresh(interval);
++    }
++    ds->last_update = qemu_get_clock_ms(rt_clock);
++    qemu_mod_timer(ds->gui_timer, ds->last_update + interval);
+ }
+ 
+ static void gui_setup_refresh(DisplayState *ds)
+@@ -1286,6 +1299,17 @@ void register_displaychangelistener(DisplayState *ds,
+     }
+ }
+ 
++void update_displaychangelistener(DisplayChangeListener *dcl,
++                                  uint64_t interval)
++{
++    DisplayState *ds = dcl->ds;
++
++    dcl->update_interval = interval;
++    if (!ds->refreshing && ds->update_interval > interval) {
++        qemu_mod_timer(ds->gui_timer, ds->last_update + interval);
++    }
++}
++
+ void unregister_displaychangelistener(DisplayChangeListener *dcl)
+ {
+     DisplayState *ds = dcl->ds;
+diff --git a/ui/sdl.c b/ui/sdl.c
+index ede31dc..97764a6 100644
+--- a/ui/sdl.c
++++ b/ui/sdl.c
+@@ -751,12 +751,12 @@ static void handle_activation(SDL_Event *ev)
+     if (ev->active.state & SDL_APPACTIVE) {
+         if (ev->active.gain) {
+             /* Back to default interval */
+-            dcl->gui_timer_interval = 0;
+-            dcl->idle = 0;
++            update_displaychangelistener(dcl, GUI_REFRESH_INTERVAL_DEFAULT);
+         } else {
+-            /* Sleeping interval */
+-            dcl->gui_timer_interval = 500;
+-            dcl->idle = 1;
++            /* Sleeping interval.  Not using the long default here as
++             * sdl_refresh does not only update the guest screen, but
++             * also checks for gui events. */
++            update_displaychangelistener(dcl, 500);
+         }
+     }
+ }
+diff --git a/ui/vnc.c b/ui/vnc.c
+index bc787cc..75ad67f 100644
+--- a/ui/vnc.c
++++ b/ui/vnc.c
+@@ -34,9 +34,9 @@
+ #include "qmp-commands.h"
+ #include "qemu/osdep.h"
+ 
+-#define VNC_REFRESH_INTERVAL_BASE 30
++#define VNC_REFRESH_INTERVAL_BASE GUI_REFRESH_INTERVAL_DEFAULT
+ #define VNC_REFRESH_INTERVAL_INC  50
+-#define VNC_REFRESH_INTERVAL_MAX  2000
++#define VNC_REFRESH_INTERVAL_MAX  GUI_REFRESH_INTERVAL_IDLE
+ static const struct timeval VNC_REFRESH_STATS = { 0, 500000 };
+ static const struct timeval VNC_REFRESH_LOSSY = { 2, 0 };
+ 
+@@ -419,14 +419,12 @@ out_error:
+ static int vnc_update_client(VncState *vs, int has_dirty);
+ static int vnc_update_client_sync(VncState *vs, int has_dirty);
+ static void vnc_disconnect_start(VncState *vs);
+-static void vnc_init_timer(VncDisplay *vd);
+-static void vnc_remove_timer(VncDisplay *vd);
+ 
+ static void vnc_colordepth(VncState *vs);
+ static void framebuffer_update_request(VncState *vs, int incremental,
+                                        int x_position, int y_position,
+                                        int w, int h);
+-static void vnc_refresh(void *opaque);
++static void vnc_refresh(DisplayChangeListener *dcl);
+ static int vnc_refresh_server_surface(VncDisplay *vd);
+ 
+ static void vnc_dpy_update(DisplayChangeListener *dcl,
+@@ -1064,11 +1062,6 @@ void vnc_disconnect_finish(VncState *vs)
+         qemu_remove_mouse_mode_change_notifier(&vs->mouse_mode_notifier);
+     }
+ 
+-    if (QTAILQ_EMPTY(&vs->vd->clients)) {
+-        vs->vd->dcl.idle = 1;
+-    }
+-
+-    vnc_remove_timer(vs->vd);
+     if (vs->vd->lock_key_sync)
+         qemu_remove_led_event_handler(vs->led);
+     vnc_unlock_output(vs);
+@@ -2013,9 +2006,7 @@ static int protocol_client_msg(VncState *vs, uint8_t *data, size_t len)
+     VncDisplay *vd = vs->vd;
+ 
+     if (data[0] > 3) {
+-        vd->timer_interval = VNC_REFRESH_INTERVAL_BASE;
+-        if (!qemu_timer_expired(vd->timer, qemu_get_clock_ms(rt_clock) + vd->timer_interval))
+-            qemu_mod_timer(vd->timer, qemu_get_clock_ms(rt_clock) + vd->timer_interval);
++        update_displaychangelistener(&vd->dcl, VNC_REFRESH_INTERVAL_BASE);
+     }
+ 
+     switch (data[0]) {
+@@ -2647,18 +2638,16 @@ static int vnc_refresh_server_surface(VncDisplay *vd)
+     return has_dirty;
+ }
+ 
+-static void vnc_refresh(void *opaque)
++static void vnc_refresh(DisplayChangeListener *dcl)
+ {
+-    VncDisplay *vd = opaque;
++    VncDisplay *vd = container_of(dcl, VncDisplay, dcl);
+     VncState *vs, *vn;
+     int has_dirty, rects = 0;
+ 
+     graphic_hw_update(NULL);
+ 
+     if (vnc_trylock_display(vd)) {
+-        vd->timer_interval = VNC_REFRESH_INTERVAL_BASE;
+-        qemu_mod_timer(vd->timer, qemu_get_clock_ms(rt_clock) +
+-                       vd->timer_interval);
++        update_displaychangelistener(&vd->dcl, VNC_REFRESH_INTERVAL_BASE);
+         return;
+     }
+ 
+@@ -2670,39 +2659,21 @@ static void vnc_refresh(void *opaque)
+         /* vs might be free()ed here */
+     }
+ 
+-    /* vd->timer could be NULL now if the last client disconnected,
+-     * in this case don't update the timer */
+-    if (vd->timer == NULL)
++    if (QTAILQ_EMPTY(&vd->clients)) {
++        update_displaychangelistener(&vd->dcl, VNC_REFRESH_INTERVAL_MAX);
+         return;
++    }
+ 
+     if (has_dirty && rects) {
+-        vd->timer_interval /= 2;
+-        if (vd->timer_interval < VNC_REFRESH_INTERVAL_BASE)
+-            vd->timer_interval = VNC_REFRESH_INTERVAL_BASE;
++        vd->dcl.update_interval /= 2;
++        if (vd->dcl.update_interval < VNC_REFRESH_INTERVAL_BASE) {
++            vd->dcl.update_interval = VNC_REFRESH_INTERVAL_BASE;
++        }
+     } else {
+-        vd->timer_interval += VNC_REFRESH_INTERVAL_INC;
+-        if (vd->timer_interval > VNC_REFRESH_INTERVAL_MAX)
+-            vd->timer_interval = VNC_REFRESH_INTERVAL_MAX;
+-    }
+-    qemu_mod_timer(vd->timer, qemu_get_clock_ms(rt_clock) + vd->timer_interval);
+-}
+-
+-static void vnc_init_timer(VncDisplay *vd)
+-{
+-    vd->timer_interval = VNC_REFRESH_INTERVAL_BASE;
+-    if (vd->timer == NULL && !QTAILQ_EMPTY(&vd->clients)) {
+-        vd->timer = qemu_new_timer_ms(rt_clock, vnc_refresh, vd);
+-        graphic_hw_update(NULL);
+-        vnc_refresh(vd);
+-    }
+-}
+-
+-static void vnc_remove_timer(VncDisplay *vd)
+-{
+-    if (vd->timer != NULL && QTAILQ_EMPTY(&vd->clients)) {
+-        qemu_del_timer(vd->timer);
+-        qemu_free_timer(vd->timer);
+-        vd->timer = NULL;
++        vd->dcl.update_interval += VNC_REFRESH_INTERVAL_INC;
++        if (vd->dcl.update_interval > VNC_REFRESH_INTERVAL_MAX) {
++            vd->dcl.update_interval = VNC_REFRESH_INTERVAL_MAX;
++        }
+     }
+ }
+ 
+@@ -2731,7 +2702,7 @@ static void vnc_connect(VncDisplay *vd, int csock, int skipauth, bool websocket)
+     }
+ 
+     VNC_DEBUG("New client on socket %d\n", csock);
+-    vd->dcl.idle = 0;
++    update_displaychangelistener(&vd->dcl, VNC_REFRESH_INTERVAL_BASE);
+     qemu_set_nonblock(vs->csock);
+ #ifdef CONFIG_VNC_WS
+     if (websocket) {
+@@ -2787,8 +2758,6 @@ void vnc_init_state(VncState *vs)
+     vs->mouse_mode_notifier.notify = check_pointer_type_change;
+     qemu_add_mouse_mode_change_notifier(&vs->mouse_mode_notifier);
+ 
+-    vnc_init_timer(vd);
+-
+     /* vs might be free()ed here */
+ }
+ 
+@@ -2829,6 +2798,7 @@ static void vnc_listen_websocket_read(void *opaque)
+ 
+ static const DisplayChangeListenerOps dcl_ops = {
+     .dpy_name          = "vnc",
++    .dpy_refresh       = vnc_refresh,
+     .dpy_gfx_copy      = vnc_dpy_copy,
+     .dpy_gfx_update    = vnc_dpy_update,
+     .dpy_gfx_switch    = vnc_dpy_switch,
+@@ -2840,7 +2810,6 @@ void vnc_display_init(DisplayState *ds)
+ {
+     VncDisplay *vs = g_malloc0(sizeof(*vs));
+ 
+-    vs->dcl.idle = 1;
+     vnc_display = vs;
+ 
+     vs->lsock = -1;
+diff --git a/ui/vnc.h b/ui/vnc.h
+index 58e002e..ad1dec2 100644
+--- a/ui/vnc.h
++++ b/ui/vnc.h
+@@ -142,8 +142,6 @@ struct VncDisplay
+     QTAILQ_HEAD(, VncState) clients;
+     int num_exclusive;
+     VncSharePolicy share_policy;
+-    QEMUTimer *timer;
+-    int timer_interval;
+     int lsock;
+ #ifdef CONFIG_VNC_WS
+     int lwebsock;
+-- 
+1.7.9.7
+

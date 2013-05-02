@@ -1,0 +1,35 @@
+From patches Mon Sep 17 00:00:00 2001
+From: liguang <lig.fnst@cn.fujitsu.com>
+To: qemu-devel@nongnu.org
+Cc: liguang <lig.fnst@cn.fujitsu.com>
+Date: Thu, 11 Apr 2013 11:41:54 +0800
+Message-id: 1365651722-11241-8-git-send-email-lig.fnst@cn.fujitsu.com
+Subject: [PATCH 08/16] target-microblaze/translate: mininally change
+ gen_intermediate_code_interna
+
+Signed-off-by: liguang <lig.fnst@cn.fujitsu.com>
+---
+ target-microblaze/translate.c |    6 +++---
+ 1 files changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/target-microblaze/translate.c b/target-microblaze/translate.c
+index 06d2346..402667d 100644
+--- a/target-microblaze/translate.c
++++ b/target-microblaze/translate.c
+@@ -1801,9 +1801,9 @@ gen_intermediate_code_internal(CPUMBState *env, TranslationBlock *tb,
+         if (search_pc) {
+             j = tcg_ctx.gen_opc_ptr - tcg_ctx.gen_opc_buf;
+             if (lj < j) {
+-                lj++;
+-                while (lj < j)
+-                    tcg_ctx.gen_opc_instr_start[lj++] = 0;
++                while (++lj < j) {
++                    tcg_ctx.gen_opc_instr_start[lj] = 0;
++                }
+             }
+             tcg_ctx.gen_opc_pc[lj] = dc->pc;
+             tcg_ctx.gen_opc_instr_start[lj] = 1;
+-- 
+1.7.2.5
+
+

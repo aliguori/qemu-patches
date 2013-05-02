@@ -1,0 +1,1 @@
+../virtio-refactoring-cleanup/v3.1365999989/0008-virtio-cleanup-init-and-exit-function.patch

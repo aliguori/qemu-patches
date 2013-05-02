@@ -1,0 +1,50 @@
+From patches Mon Sep 17 00:00:00 2001
+From: riku.voipio@linaro.org
+To: qemu-devel@nongnu.org
+Cc: Andreas Schwab <schwab@suse.de>
+Date: Fri, 19 Apr 2013 16:59:56 +0300
+Message-id: 03903ffcfb5a7c75e52da97d00eb9d0bb0660f28.1366377671.git.riku.voipio@linaro.org
+Subject: [PATCH 3/3] linux-user: fix setgroups/getgroups for non-UID16 archs
+
+From: Andreas Schwab <schwab@suse.de>
+
+Don't assume target_id is a short.
+
+Signed-off-by: Andreas Schwab <schwab@suse.de>
+Signed-off-by: Riku Voipio <riku.voipio@linaro.org>
+---
+ linux-user/syscall.c |    6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/linux-user/syscall.c b/linux-user/syscall.c
+index 5a786f2..c705960 100644
+--- a/linux-user/syscall.c
++++ b/linux-user/syscall.c
+@@ -7743,12 +7743,12 @@ abi_long do_syscall(void *cpu_env, int num, abi_long arg1,
+             if (gidsetsize == 0)
+                 break;
+             if (!is_error(ret)) {
+-                target_grouplist = lock_user(VERIFY_WRITE, arg2, gidsetsize * 2, 0);
++                target_grouplist = lock_user(VERIFY_WRITE, arg2, gidsetsize * sizeof(target_id), 0);
+                 if (!target_grouplist)
+                     goto efault;
+                 for(i = 0;i < ret; i++)
+                     target_grouplist[i] = tswapid(high2lowgid(grouplist[i]));
+-                unlock_user(target_grouplist, arg2, gidsetsize * 2);
++                unlock_user(target_grouplist, arg2, gidsetsize * sizeof(target_id));
+             }
+         }
+         break;
+@@ -7760,7 +7760,7 @@ abi_long do_syscall(void *cpu_env, int num, abi_long arg1,
+             int i;
+             if (gidsetsize) {
+                 grouplist = alloca(gidsetsize * sizeof(gid_t));
+-                target_grouplist = lock_user(VERIFY_READ, arg2, gidsetsize * 2, 1);
++                target_grouplist = lock_user(VERIFY_READ, arg2, gidsetsize * sizeof(target_id), 1);
+                 if (!target_grouplist) {
+                     ret = -TARGET_EFAULT;
+                     goto fail;
+-- 
+1.7.10.4
+
+

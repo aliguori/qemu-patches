@@ -1,0 +1,69 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Richard Henderson <rth@twiddle.net>
+To: qemu-devel@nongnu.org
+Cc: Aurelien Jarno <aurelien@aurel32.net>
+Date: Sun, 31 Mar 2013 15:34:46 -0700
+Message-id: 1364769305-3687-1-git-send-email-rth@twiddle.net
+Subject: [PATCH 00/19] tcg-arm improvements
+
+Changes v4-v5:
+  * Incorprate stack realignment into frame size, instead of pushing r12.
+
+  * Disassemble prologues with -d out_asm.
+
+Changes v3-v4:
+  * Local stack frame fix has been reworked to be independant of the rest
+    of the change set, making it possible to cherry-pick to stable.
+
+  * While doing that, I've dropped the patch that pulled the epilogue
+    into the exit_tb expansion, as the stated reason (one insn in the
+    epilogue) is no longer true -- there's the stack pop as well.  This
+    obviated several of the changes that PMM suggested.
+
+  * I've dropped all of the changes to goto_tb, as Aurelien tried the
+    same thing a while ago, and there were reports of no real speedup,
+    ascribed to Dcache pollution.
+
+Hopefully I've addressed all of the outstanding comments to which there
+is still code that applies.  The patch set is available at
+
+  git://github.com/rth7680/qemu.git tcg-arm
+
+
+
+r~
+
+
+Richard Henderson (19):
+  tcg-arm: Fix local stack frame
+  tcg: Log the contents of the prologue with -d out_asm
+  tcg-arm: Use bic to implement and with constant
+  tcg-arm: Handle negated constant arguments to and/sub
+  tcg-arm: Allow constant first argument to sub
+  tcg-arm: Use tcg_out_dat_rIN for compares
+  tcg-arm: Handle constant arguments to add2/sub2
+  tcg-arm: Improve constant generation
+  tcg-arm: Implement deposit for armv7
+  tcg-arm: Implement division instructions
+  tcg-arm: Use TCG_REG_TMP name for the tcg temporary
+  tcg-arm: Use R12 for the tcg temporary
+  tcg-arm: Cleanup multiply subroutines
+  tcg-arm: Cleanup most primitive load store subroutines
+  tcg-arm: Split out tcg_out_tlb_read
+  tcg-arm: Improve scheduling of tcg_out_tlb_read
+  tcg-arm: Use movi32 + blx for calls on v7
+  tcg-arm: Convert to CONFIG_QEMU_LDST_OPTIMIZATION
+  tcg-arm: Tidy exit_tb
+
+ configure               |    2 +-
+ disas/arm.c             |    4 +
+ include/exec/exec-all.h |   17 +
+ tcg/arm/tcg-target.c    | 1470 +++++++++++++++++++++++++++--------------------
+ tcg/arm/tcg-target.h    |   14 +-
+ tcg/tcg.c               |   10 +
+ 6 files changed, 875 insertions(+), 642 deletions(-)
+
+-- 
+1.8.1.4
+
+

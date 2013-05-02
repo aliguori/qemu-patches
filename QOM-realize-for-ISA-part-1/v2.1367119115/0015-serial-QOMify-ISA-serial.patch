@@ -1,0 +1,78 @@
+From patches Mon Sep 17 00:00:00 2001
+From: =?utf-8?q?Andreas_F=C3=A4rber_=3Cafaerber=40suse=2Ede=3E?=
+To: qemu-devel@nongnu.org
+Cc: =?UTF-8?q?Andreas=20F=C3=A4rber?= <afaerber@suse.de>
+Date: Sat, 27 Apr 2013 22:18:50 +0200
+Message-id: 1367093935-29091-16-git-send-email-afaerber@suse.de
+Subject: [PATCH 15/20] serial: QOM'ify ISA serial
+
+Introduce type constant and cast macro to obsolete DO_UPCAST().
+
+Prepares for ISA realizefn.
+
+Signed-off-by: Andreas Färber <afaerber@suse.de>
+---
+ hw/char/serial-isa.c     | 11 +++++++----
+ include/hw/char/serial.h |  1 +
+ 2 files changed, 8 insertions(+), 4 deletions(-)
+
+diff --git a/hw/char/serial-isa.c b/hw/char/serial-isa.c
+index ed140d0..342b4cc 100644
+--- a/hw/char/serial-isa.c
++++ b/hw/char/serial-isa.c
+@@ -26,8 +26,11 @@
+ #include "hw/char/serial.h"
+ #include "hw/isa/isa.h"
+ 
++#define ISA_SERIAL(obj) OBJECT_CHECK(ISASerialState, (obj), TYPE_ISA_SERIAL)
++
+ typedef struct ISASerialState {
+-    ISADevice dev;
++    ISADevice parent_obj;
++
+     uint32_t index;
+     uint32_t iobase;
+     uint32_t isairq;
+@@ -44,7 +47,7 @@ static const int isa_serial_irq[MAX_SERIAL_PORTS] = {
+ static int serial_isa_initfn(ISADevice *dev)
+ {
+     static int index;
+-    ISASerialState *isa = DO_UPCAST(ISASerialState, dev, dev);
++    ISASerialState *isa = ISA_SERIAL(dev);
+     SerialState *s = &isa->state;
+ 
+     if (isa->index == -1) {
+@@ -100,7 +103,7 @@ static void serial_isa_class_initfn(ObjectClass *klass, void *data)
+ }
+ 
+ static const TypeInfo serial_isa_info = {
+-    .name          = "isa-serial",
++    .name          = TYPE_ISA_SERIAL,
+     .parent        = TYPE_ISA_DEVICE,
+     .instance_size = sizeof(ISASerialState),
+     .class_init    = serial_isa_class_initfn,
+@@ -117,7 +120,7 @@ bool serial_isa_init(ISABus *bus, int index, CharDriverState *chr)
+ {
+     ISADevice *dev;
+ 
+-    dev = isa_try_create(bus, "isa-serial");
++    dev = isa_try_create(bus, TYPE_ISA_SERIAL);
+     if (!dev) {
+         return false;
+     }
+diff --git a/include/hw/char/serial.h b/include/hw/char/serial.h
+index e884499..bca79f1 100644
+--- a/include/hw/char/serial.h
++++ b/include/hw/char/serial.h
+@@ -96,6 +96,7 @@ SerialState *serial_mm_init(MemoryRegion *address_space,
+                             CharDriverState *chr, enum device_endian end);
+ 
+ /* serial-isa.c */
++#define TYPE_ISA_SERIAL "isa-serial"
+ bool serial_isa_init(ISABus *bus, int index, CharDriverState *chr);
+ 
+ #endif
+-- 
+1.8.1.4
+
+

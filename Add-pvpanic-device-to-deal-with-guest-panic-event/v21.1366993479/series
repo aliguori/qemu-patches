@@ -1,0 +1,9 @@
+0000-Add-pvpanic-device-to-deal-with-guest-panic-event.txt
+0001-add-a-new-runstate-RUN_STATE_GUEST_PANICKED.patch
+0002-add-a-new-qevent-QEVENT_GUEST_PANICKED.patch
+0003-introduce-a-new-qom-device-to-deal-with-panicked-event.patch
+0004-fw_cfg-add-required-header-files.patch
+0005-pvpanic-pass-configurable-ioport-to-seabios.patch
+0006-pvpanic-add-document-of-pvpanic.patch
+0007-pvpanic-create-pvpanic-by-default-for-machine-15.patch
+0008-Wire-up-disabled-wait-a-panicked-event-on-s390.patch

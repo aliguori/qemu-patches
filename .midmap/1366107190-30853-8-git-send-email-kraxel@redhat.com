@@ -1,0 +1,1 @@
+../usb-patch-queue/v1.1366132383/0007-use-libusb-for-usb-host.patch

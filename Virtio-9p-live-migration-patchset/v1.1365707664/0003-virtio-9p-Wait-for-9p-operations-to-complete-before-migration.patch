@@ -1,0 +1,161 @@
+From patches Mon Sep 17 00:00:00 2001
+From: =?utf-8?q?Beno=C3=AEt_Canet_=3Cbenoit=40irqsave=2Enet=3E?=
+To: Paolo Bonzini <pbonzini@redhat.com>, qemu-devel@nongnu.org,
+ =?ISO-8859-1?Q?Beno=EEt_Canet?= <benoit@irqsave.net>
+Cc: =?UTF-8?q?Beno=C3=AEt=20Canet?= <benoit@irqsave.net>, qemu-devel@nongnu.org,
+ aneesh.kumar@linux.vnet.ibm.com,
+ =?UTF-8?Q?Beno=C3=AEt_Canet?= <benoit@irqsave.net>, quintela@redhat.com
+Date: Thu, 11 Apr 2013 14:14:27 +0200
+Message-id: 1365682468-12301-4-git-send-email-benoit@irqsave.net
+Subject: [PATCH 3/4] virtio-9p: Wait for 9p operations to complete before
+ migration.
+
+The function used to wait is registered as a pre migration flush hook.
+
+The completion status is put in the virtio ring buffer which
+will be send to the guest on resume by the viring migration code
+
+This patch is a rewrite from the one written by Aneesh Kumar.
+
+Signed-off-by: Benoit Canet <benoit@irqsave.net>
+---
+ hw/9pfs/virtio-9p-device.c |    2 ++
+ hw/9pfs/virtio-9p.c        |   70 ++++++++++++++++++++++++++++++++++++++++++++
+ hw/9pfs/virtio-9p.h        |    2 ++
+ 3 files changed, 74 insertions(+)
+
+diff --git a/hw/9pfs/virtio-9p-device.c b/hw/9pfs/virtio-9p-device.c
+index 7d4aefd..02b8630 100644
+--- a/hw/9pfs/virtio-9p-device.c
++++ b/hw/9pfs/virtio-9p-device.c
+@@ -200,6 +200,8 @@ VirtIODevice *virtio_9p_init(DeviceState *dev, V9fsConf *conf)
+     V9fsPath path;
+     static int virtio_9p_id;
+ 
++    v9fs_init_migration_helper();
++
+     s = (V9fsState *)virtio_common_init("virtio-9p",
+                                     VIRTIO_ID_9P,
+                                     sizeof(struct virtio_9p_config)+
+diff --git a/hw/9pfs/virtio-9p.c b/hw/9pfs/virtio-9p.c
+index 5cc4c92..3bf3ee4 100644
+--- a/hw/9pfs/virtio-9p.c
++++ b/hw/9pfs/virtio-9p.c
+@@ -20,11 +20,20 @@
+ #include "virtio-9p-coth.h"
+ #include "trace.h"
+ #include "migration/migration.h"
++#include "migration/migration-flush-hooks.h"
+ 
+ int open_fd_hw;
+ int total_open_fd;
+ static int open_fd_rc;
+ 
++typedef struct MigrationHelper {
++    int32_t pending_requests;
++    QemuCond complete;
++    QemuMutex mutex;
++} MigrationHelper;
++
++MigrationHelper *migration;
++
+ enum {
+     Oread   = 0x00,
+     Owrite  = 0x01,
+@@ -37,6 +46,62 @@ enum {
+     Oappend = 0x80,
+ };
+ 
++static void v9fs_wait_for_requests_drain(void)
++{
++    if (!migration) {
++        return;
++    }
++
++    qemu_mutex_lock(&migration->mutex);
++    while (migration->pending_requests) {
++        /* At this point ticks and vcpus will be stopped so we can safely
++         * release the BQL so pending 9p callbacks will be executed and the
++         * condition signaled.
++         */
++        qemu_mutex_unlock_iothread();
++        qemu_cond_wait(&migration->complete, &migration->mutex);
++        qemu_mutex_lock_iothread();
++    }
++    qemu_mutex_unlock(&migration->mutex);
++}
++
++void v9fs_init_migration_helper(void)
++{
++    if (migration) {
++        return;
++    }
++
++    migration = g_new0(MigrationHelper, 1);
++    qemu_mutex_init(&migration->mutex);
++    qemu_cond_init(&migration->complete);
++    register_migration_flush_hook(v9fs_wait_for_requests_drain);
++}
++
++static void v9fs_inc_pending_requests(void)
++{
++    if (!migration) {
++        return;
++    }
++
++    qemu_mutex_lock(&migration->mutex);
++    migration->pending_requests++;
++    qemu_mutex_unlock(&migration->mutex);
++}
++
++static void v9fs_dec_pending_requests(void)
++{
++    if (!migration) {
++        return;
++    }
++
++    qemu_mutex_lock(&migration->mutex);
++    migration->pending_requests--;
++    if (!migration->pending_requests) {
++        qemu_cond_signal(&migration->complete);
++    }
++    qemu_mutex_unlock(&migration->mutex);
++}
++
+ static int omode_to_uflags(int8_t mode)
+ {
+     int ret = 0;
+@@ -637,6 +702,8 @@ static void complete_pdu(V9fsState *s, V9fsPDU *pdu, ssize_t len)
+     qemu_co_queue_next(&pdu->complete);
+ 
+     free_pdu(s, pdu);
++
++    v9fs_dec_pending_requests();
+ }
+ 
+ static mode_t v9mode_to_mode(uint32_t mode, V9fsString *extension)
+@@ -3240,6 +3307,9 @@ static void submit_pdu(V9fsState *s, V9fsPDU *pdu)
+     if (is_ro_export(&s->ctx) && !is_read_only_op(pdu)) {
+         handler = v9fs_fs_ro;
+     }
++
++    v9fs_inc_pending_requests();
++
+     co = qemu_coroutine_create(handler);
+     qemu_coroutine_enter(co, pdu);
+ }
+diff --git a/hw/9pfs/virtio-9p.h b/hw/9pfs/virtio-9p.h
+index 52b1c69..4d16d46 100644
+--- a/hw/9pfs/virtio-9p.h
++++ b/hw/9pfs/virtio-9p.h
+@@ -401,4 +401,6 @@ extern int v9fs_name_to_path(V9fsState *s, V9fsPath *dirpath,
+ #define pdu_unmarshal(pdu, offset, fmt, args...)  \
+     v9fs_unmarshal(pdu->elem.out_sg, pdu->elem.out_num, offset, 1, fmt, ##args)
+ 
++void v9fs_init_migration_helper(void);
++
+ #endif
+-- 
+1.7.10.4
+
+

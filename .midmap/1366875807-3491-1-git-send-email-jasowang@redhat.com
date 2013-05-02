@@ -1,0 +1,1 @@
+../virtio-abort-on-zero-config-length/v1.1366922607/0001-virtio-abort-on-zero-config-length.patch

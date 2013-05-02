@@ -1,0 +1,1 @@
+../vmware_vga-do-not-cache-depth-and-bypp/v1.1364599722/0001-vmware_vga-do-not-cache-depth-and-bypp.patch

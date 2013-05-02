@@ -1,0 +1,134 @@
+From patches Mon Sep 17 00:00:00 2001
+From: minyard@acm.org
+To: qemu-devel@nongnu.org
+Cc: Corey Minyard <cminyard@mvista.com>
+Date: Tue, 18 Sep 2012 15:00:33 -0500
+Message-id: 1347998443-20599-7-git-send-email-minyard@acm.org
+Subject: [PATCH 06/16] qemu-char: Close fd at end of file
+
+From: Corey Minyard <cminyard@mvista.com>
+
+The chardev backends that used qemu_chr_open_fd did not get their
+file descriptors closed at end of file or when the chardev was closed.
+This could result in a file descriptor leak.
+
+Signed-off-by: Corey Minyard <cminyard@mvista.com>
+---
+ qemu-char.c |   31 +++++++++++++++++++++++++------
+ 1 files changed, 25 insertions(+), 6 deletions(-)
+
+diff --git a/qemu-char.c b/qemu-char.c
+index a94d9ef..ea0d8b7 100644
+--- a/qemu-char.c
++++ b/qemu-char.c
+@@ -566,6 +566,7 @@ static int stdio_nb_clients;
+ typedef struct {
+     int fd_in, fd_out;
+     int max_size;
++    int close_fds_on_close;
+ } FDCharDriver;
+ 
+ 
+@@ -584,6 +585,20 @@ static int fd_chr_read_poll(void *opaque)
+     return s->max_size;
+ }
+ 
++static void fd_close_fds(FDCharDriver *s)
++{
++    if (!s->close_fds_on_close) {
++        return;
++    }
++
++    if ((s->fd_out != s->fd_in) && (s->fd_out != -1)) {
++        close(s->fd_out);
++    }
++    s->fd_out = -1;
++    close(s->fd_in);
++    s->fd_in = -1;
++}
++
+ static void fd_chr_read(void *opaque)
+ {
+     CharDriverState *chr = opaque;
+@@ -600,6 +615,7 @@ static void fd_chr_read(void *opaque)
+     if (size == 0) {
+         /* FD has been closed. Remove it from the active list.  */
+         qemu_set_fd_handler2(s->fd_in, NULL, NULL, NULL, NULL);
++        fd_close_fds(s);
+         qemu_chr_be_event(chr, CHR_EVENT_CLOSED);
+         return;
+     }
+@@ -629,6 +645,7 @@ static void fd_chr_close(struct CharDriverState *chr)
+         if (display_type == DT_NOGRAPHIC && s->fd_in == 0) {
+         } else {
+             qemu_set_fd_handler2(s->fd_in, NULL, NULL, NULL, NULL);
++            fd_close_fds(s);
+         }
+     }
+ 
+@@ -638,13 +655,15 @@ static void fd_chr_close(struct CharDriverState *chr)
+ 
+ /* open a character device to a unix fd */
+ static CharDriverState *qemu_chr_open_fd(CharDriverState *chr,
+-                                         int fd_in, int fd_out)
++                                         int fd_in, int fd_out,
++                                         int close_fds_on_close)
+ {
+     FDCharDriver *s;
+ 
+     s = g_malloc0(sizeof(FDCharDriver));
+     s->fd_in = fd_in;
+     s->fd_out = fd_out;
++    s->close_fds_on_close = close_fds_on_close;
+     chr->opaque = s;
+     chr->chr_write = fd_chr_write;
+     chr->chr_update_read_handler = fd_chr_update_read_handler;
+@@ -665,7 +684,7 @@ static CharDriverState *qemu_chr_open_file_out(CharDriverState *chr,
+     if (fd_out < 0) {
+         return NULL;
+     }
+-    return qemu_chr_open_fd(chr, -1, fd_out);
++    return qemu_chr_open_fd(chr, -1, fd_out, 1);
+ }
+ 
+ static CharDriverState *qemu_chr_open_pipe(CharDriverState *chr, QemuOpts *opts)
+@@ -693,7 +712,7 @@ static CharDriverState *qemu_chr_open_pipe(CharDriverState *chr, QemuOpts *opts)
+             return NULL;
+         }
+     }
+-    return qemu_chr_open_fd(chr, fd_in, fd_out);
++    return qemu_chr_open_fd(chr, fd_in, fd_out, 1);
+ }
+ 
+ 
+@@ -797,7 +816,7 @@ static CharDriverState *qemu_chr_open_stdio(CharDriverState *chr,
+         atexit(term_exit);
+     }
+ 
+-    qemu_chr_open_fd(chr, 0, 1);
++    qemu_chr_open_fd(chr, 0, 1, 0);
+     chr->chr_close = qemu_chr_close_stdio;
+     chr->chr_set_echo = qemu_chr_set_echo_stdio;
+     qemu_set_fd_handler2(0, stdio_read_poll, stdio_read, NULL, chr);
+@@ -1242,7 +1261,7 @@ static CharDriverState *qemu_chr_open_tty(CharDriverState *chr, QemuOpts *opts)
+         return NULL;
+     }
+     tty_serial_init(fd, 115200, 'N', 8, 1);
+-    qemu_chr_open_fd(chr, fd, fd);
++    qemu_chr_open_fd(chr, fd, fd, 1);
+     chr->chr_ioctl = tty_serial_ioctl;
+     chr->chr_close = qemu_chr_close_tty;
+     return chr;
+@@ -2327,7 +2346,7 @@ static void tcp_chr_read(void *opaque)
+ CharDriverState *qemu_chr_open_eventfd(int eventfd)
+ {
+     CharDriverState *chr = g_malloc0(sizeof(CharDriverState));
+-    return qemu_chr_open_fd(chr, eventfd, eventfd);
++    return qemu_chr_open_fd(chr, eventfd, eventfd, 0);
+ }
+ #endif
+ 
+-- 
+1.7.4.1
+
+

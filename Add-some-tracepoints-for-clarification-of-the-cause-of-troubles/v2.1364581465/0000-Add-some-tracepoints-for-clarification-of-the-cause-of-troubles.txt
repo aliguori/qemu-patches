@@ -1,0 +1,46 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Kazuya Saito <saito.kazuya@jp.fujitsu.com>
+To: Kazuya Saito <saito.kazuya@jp.fujitsu.com>,
+ "qemu-devel@nongnu.org" <qemu-devel@nongnu.org>
+Cc: Paolo Bonzini <pbonzini@redhat.com>, aliguori@us.ibm.com,
+ stefanha@linux.vnet.ibm.com, kvm@vger.kernel.org,
+ "qemu-devel@nongnu.org" <qemu-devel@nongnu.org>
+Date: Fri, 29 Mar 2013 13:24:25 +0900
+Message-id: 51551779.9060403@jp.fujitsu.com
+Subject: [PATCH 0/2] Add some tracepoints for clarification of the cause of
+ troubles
+
+This series adds tracepoints for helping us clarify the cause of
+troubles. Virtualization on Linux is composed of some components such
+as qemu, kvm, libvirt, and so on. So it is very important to clarify
+firstly and swiftly the cause of troubles is on what component of
+them. Although qemu has useful information of this because it stands
+among kvm, libvirt and guest, it doesn't output the information by
+trace or log system.
+These patches add tracepoints which lead to reduce the time of the
+clarification. We'd like to add the tracepoints as the first set
+because, based on our experience, we've found out they must be useful
+for an investigation in the future. Without those tracepoints,
+we had a really hard time investigating a problem since the problem's
+reproducibility was quite low and there was no clue in the dump of
+qemu.
+
+Changes from v1:
+Add arg to kvm_ioctl, kvm_vm_ioctl, kvm_vcpu_ioctl tracepoints.
+Add cpu_index to kvm_vcpu_ioctl, kvm_run_exit tracepoints.
+
+Kazuya Saito (2):
+  kvm-all: add kvm_ioctl, kvm_vm_ioctl, kvm_vcpu_ioctl tracepoints
+  kvm-all: add kvm_run_exit tracepoint
+
+ kvm-all.c    |    5 +++++
+ trace-events |    7 +++++++
+ 2 files changed, 12 insertions(+), 0 deletions(-)
+
+
+--
+To unsubscribe from this list: send the line "unsubscribe kvm" in
+the body of a message to majordomo@vger.kernel.org
+More majordomo info at  http://vger.kernel.org/majordomo-info.html
+
+Reviewed-by: Paolo Bonzini <pbonzini@redhat.com>

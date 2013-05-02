@@ -1,0 +1,68 @@
+From patches Mon Sep 17 00:00:00 2001
+From: "Michael S. Tsirkin" <mst@redhat.com>
+To: Anthony Liguori <anthony@codemonkey.ws>, qemu-devel@nongnu.org
+Cc: mst@redhat.com
+Date: Thu, 18 Apr 2013 11:00:24 +0300
+Message-id: cover.1366272004.git.mst@redhat.com
+Subject: [PATCH 0/4] pci: add pci test device
+
+The following changes since commit e2ec3f976803b360c70d9ae2ba13852fa5d11665:
+
+  qjson: to_json() case QTYPE_QSTRING is buggy, rewrite (2013-04-13 19:40:25 +0000)
+
+are available in the git repository at:
+
+  git://git.kernel.org/pub/scm/virt/kvm/mst/qemu.git tags/for_anthony
+
+for you to fetch changes up to 22773d6066a7f01a95f78c270edf9dbd2e755ac3:
+
+  pci: add pci test device (2013-04-16 01:41:53 +0300)
+
+----------------------------------------------------------------
+pci: add pci test device
+
+This adds a new device that we can use for testing PCI PIO and MMIO, with and
+without ioeventfd in different configurations.  FAST_MMIO will be added if/when
+kvm supports it.  Also included are minor cleanups in kvm APIs that it needs.
+
+Signed-off-by: Michael S. Tsirkin <mst@redhat.com>
+
+----------------------------------------------------------------
+Michael S. Tsirkin (4):
+      kvm: remove unused APIs
+      kvm: support any size for pio eventfd
+      kvm: support non datamatch ioeventfd
+      pci: add pci test device
+
+ default-configs/pci.mak    |   1 +
+ docs/specs/pci-testdev.txt |  26 ++++
+ hw/misc/Makefile.objs      |   1 +
+ hw/misc/pci-testdev.c      | 325 +++++++++++++++++++++++++++++++++++++++++++++
+ include/hw/pci/pci.h       |   1 +
+ include/sysemu/kvm.h       |   4 -
+ kvm-all.c                  | 133 ++++++++++---------
+ kvm-stub.c                 |  10 --
+ 8 files changed, 422 insertions(+), 79 deletions(-)
+ create mode 100644 docs/specs/pci-testdev.txt
+ create mode 100644 hw/misc/pci-testdev.c
+
+Michael S. Tsirkin (4):
+  kvm: remove unused APIs
+  kvm: support any size for pio eventfd
+  kvm: support non datamatch ioeventfd
+  pci: add pci test device
+
+ default-configs/pci.mak    |   1 +
+ docs/specs/pci-testdev.txt |  26 ++++
+ hw/misc/Makefile.objs      |   1 +
+ hw/misc/pci-testdev.c      | 325 +++++++++++++++++++++++++++++++++++++++++++++
+ include/hw/pci/pci.h       |   1 +
+ include/sysemu/kvm.h       |   4 -
+ kvm-all.c                  | 133 ++++++++++---------
+ kvm-stub.c                 |  10 --
+ 8 files changed, 422 insertions(+), 79 deletions(-)
+ create mode 100644 docs/specs/pci-testdev.txt
+ create mode 100644 hw/misc/pci-testdev.c
+
+-- 
+MST

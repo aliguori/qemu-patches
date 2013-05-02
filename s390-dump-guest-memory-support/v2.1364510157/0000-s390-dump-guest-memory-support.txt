@@ -1,0 +1,52 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Jens Freimann <jfrei@linux.vnet.ibm.com>
+To: Alexander Graf <agraf@suse.de>
+Cc: qemu-devel <qemu-devel@nongnu.org>,
+ Christian Borntraeger <borntraeger@de.ibm.com>,
+ Cornelia Huck <cornelia.huck@de.ibm.com>,
+ =?UTF-8?q?Andreas=20F=C3=A4rber?= <afaerber@suse.de>,
+ Ekaterina Tumanova <tumanova@linux.vnet.ibm.com>, Rabin Vincent <rabin@rab.in>,
+ Jens Freimann <jfrei@linux.vnet.ibm.com>
+Date: Thu, 28 Mar 2013 17:35:57 +0100
+Message-id: 1364488560-16265-1-git-send-email-jfrei@linux.vnet.ibm.com
+Subject: [PATCH 0/3] s390 dump guest memory support
+
+Hi Alex,
+
+this is code for dump guest memory support.
+
+About Patch 3/3:
+In order to be able to have CONFIG_HAVE_GET_MEMORY_MAPPING=n
+we moved the memory mapping code which is needed for both =y
+and =n to a new file memory_mapping_common.c. We still have memory_mapping
+support turned on in patch 1 but it is resolved in patch 3.
+
+Ekaterina Tumanova (3):
+  s390: dump-guest-memory implementation
+  s390: Added check for unsupported parameters of dump-guest-memory
+  s390: Split dump-guest-memory memory mapping code, drop
+    CONFIG_HAVE_GET_MEMORY_MAPPING for s390
+
+ Makefile.target                    |   2 +-
+ configure                          |   4 +-
+ dump.c                             |  12 +-
+ include/elf.h                      |   6 +
+ include/qapi/qmp/qerror.h          |   3 +
+ include/sysemu/dump.h              |   6 +
+ include/sysemu/memory_mapping.h    |  15 ++-
+ memory_mapping-stub.c              |  14 +-
+ memory_mapping.c                   |  87 +------------
+ memory_mapping_common.c            | 103 +++++++++++++++
+ target-i386/arch_dump.c            |   6 +
+ target-s390x/Makefile.objs         |   2 +-
+ target-s390x/arch_dump.c           | 254 +++++++++++++++++++++++++++++++++++++
+ target-s390x/arch_memory_mapping.c |  26 ++++
+ 14 files changed, 434 insertions(+), 106 deletions(-)
+ create mode 100644 memory_mapping_common.c
+ create mode 100644 target-s390x/arch_dump.c
+ create mode 100644 target-s390x/arch_memory_mapping.c
+
+-- 
+1.7.12.4
+
+

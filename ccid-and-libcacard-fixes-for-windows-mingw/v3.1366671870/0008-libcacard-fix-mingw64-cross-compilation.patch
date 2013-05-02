@@ -1,0 +1,58 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Alon Levy <alevy@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: mlureau@redhat.com
+Date: Mon, 22 Apr 2013 18:04:38 +0300
+Message-id: 1366643098-2566-9-git-send-email-alevy@redhat.com
+Subject: [PATCH 08/28] libcacard: fix mingw64 cross-compilation
+
+From: Marc-André Lureau <marcandre.lureau@gmail.com>
+
+Compile and link with version.lo
+
+Signed-off-by: Marc-André Lureau <marcandre.lureau@redhat.com>
+---
+ Makefile  | 8 ++++++--
+ rules.mak | 3 ++-
+ 2 files changed, 8 insertions(+), 3 deletions(-)
+
+diff --git a/Makefile b/Makefile
+index 88375dc..b6ad03a 100644
+--- a/Makefile
++++ b/Makefile
+@@ -166,11 +166,15 @@ recurse-all: $(SUBDIR_RULES) $(ROMSUBDIR_RULES)
+ 
+ bt-host.o: QEMU_CFLAGS += $(BLUEZ_CFLAGS)
+ 
+-version.o: $(SRC_PATH)/version.rc config-host.h
++version.o: $(SRC_PATH)/version.rc config-host.h | version.lo
+ 	$(call quiet-command,$(WINDRES) -I. -o $@ $<,"  RC    $(TARGET_DIR)$@")
++version.lo: $(SRC_PATH)/version.rc config-host.h
++	$(call quiet-command,$(LIBTOOL) --mode=compile --tag=RC $(WINDRES) -I. -o $@ $<,"lt RC   $(TARGET_DIR)$@")
+ 
+ version-obj-$(CONFIG_WIN32) += version.o
+-Makefile: $(version-obj-y)
++version-lobj-$(CONFIG_WIN32) += $(if $(LIBTOOL),version.lo)
++Makefile: $(version-obj-y) $(version-lobj-y)
++
+ 
+ ######################################################################
+ # Build libraries
+diff --git a/rules.mak b/rules.mak
+index 36aba2d..292a422 100644
+--- a/rules.mak
++++ b/rules.mak
+@@ -35,7 +35,8 @@ LIBTOOL += $(if $(V),,--quiet)
+ LINK = $(call quiet-command,\
+        $(if $(filter %.lo %.la,$^),$(LIBTOOL) --mode=link --tag=CC \
+        )$(CC) $(QEMU_CFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ \
+-       $(sort $(filter %.o, $1)) $(filter-out %.o, $1) $(version-obj-y) \
++       $(sort $(filter %.o, $1)) $(filter-out %.o, $1) \
++       $(if $(filter %.lo %.la,$^),$(version-lobj-y),$(version-obj-y)) \
+        $(if $(filter %.lo %.la,$^),$(LIBTOOLFLAGS)) \
+        $(LIBS),$(if $(filter %.lo %.la,$^),"lt LINK ", "  LINK  ")"$(TARGET_DIR)$@")
+ endif
+-- 
+1.8.2
+
+

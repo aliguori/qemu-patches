@@ -1,0 +1,1 @@
+../hw-nandc-Fix-nand-erase-operation/v1.1365021188/0001-hw-nandc-Fix-nand-erase-operation.patch

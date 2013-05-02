@@ -1,0 +1,86 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Igor Mammedov <imammedo@redhat.com>
+To: Igor Mammedov <imammedo@redhat.com>,
+ Andreas =?ISO-8859-1?B?RuRyYmVy?= <afaerber@suse.de>, qemu-devel@nongnu.org,
+ Andreas =?iso-8859-1?Q?F=E4rber?= <afaerber@suse.de>
+Cc: peter.maydell@linaro.org, gleb@redhat.com, mst@redhat.com,
+ jan.kiszka@siemens.com, qemu-devel@nongnu.org, lcapitulino@redhat.com,
+ blauwirbel@gmail.com, Igor Mammedov <imammedo@redhat.com>, kraxel@redhat.com,
+ eblake@redhat.com, Anthony Liguori <aliguori@us.ibm.com>, quintela@redhat.com,
+ armbru@redhat.com, yang.z.zhang@intel.com, ehabkost@redhat.com,
+ stefano.stabellini@eu.citrix.com, aderumier@odiso.com,
+ anthony.perard@citrix.com, alex.williamson@redhat.com, rth@twiddle.net,
+ kwolf@redhat.com, claudio.fontana@huawei.com, pbonzini@redhat.com,
+ afaerber@suse.de
+Date: Tue, 23 Apr 2013 10:29:53 +0200
+Message-id: 1366705795-24732-20-git-send-email-imammedo@redhat.com
+Subject: [PATCH 19/21] add hot_add_cpu hook to QEMUMachine and export
+ machine_args
+
+hot_add_cpu hook should be overriden by target that implements
+cpu hot-add via cpu-add QMP command.
+
+Make machine_args available to machine init code, it allows
+to centralize cpu_model starage instead of adding target
+specific globals to keep it.
+
+Signed-off-by: Igor Mammedov <imammedo@redhat.com>
+---
+ include/hw/boards.h |    3 +++
+ vl.c                |    6 +++++-
+ 2 files changed, 8 insertions(+), 1 deletions(-)
+
+diff --git a/include/hw/boards.h b/include/hw/boards.h
+index 425bdc7..de8f92a 100644
+--- a/include/hw/boards.h
++++ b/include/hw/boards.h
+@@ -18,6 +18,8 @@ typedef struct QEMUMachineInitArgs {
+     const char *cpu_model;
+ } QEMUMachineInitArgs;
+ 
++extern QEMUMachineInitArgs *machine_args;
++
+ typedef void QEMUMachineInitFunc(QEMUMachineInitArgs *args);
+ 
+ typedef void QEMUMachineResetFunc(void);
+@@ -43,6 +45,7 @@ typedef struct QEMUMachine {
+     GlobalProperty *compat_props;
+     struct QEMUMachine *next;
+     const char *hw_version;
++    void (*hot_add_cpu)(const int64_t id, Error **errp);
+ } QEMUMachine;
+ 
+ int qemu_register_machine(QEMUMachine *m);
+diff --git a/vl.c b/vl.c
+index 5612c33..6a612e6 100644
+--- a/vl.c
++++ b/vl.c
+@@ -179,6 +179,8 @@ int main(int argc, char **argv)
+ #define MAX_VIRTIO_CONSOLES 1
+ #define MAX_SCLP_CONSOLES 1
+ 
++QEMUMachineInitArgs *machine_args;
++
+ static const char *data_dir[16];
+ static int data_dir_idx;
+ const char *bios_name = NULL;
+@@ -4295,13 +4297,15 @@ int main(int argc, char **argv, char **envp)
+                                  .kernel_cmdline = kernel_cmdline,
+                                  .initrd_filename = initrd_filename,
+                                  .cpu_model = cpu_model };
++    machine_args = &args;
++    current_machine = machine;
++
+     machine->init(&args);
+ 
+     cpu_synchronize_all_post_init();
+ 
+     set_numa_modes();
+ 
+-    current_machine = machine;
+ 
+     /* init USB devices */
+     if (usb_enabled(false)) {
+-- 
+1.7.1
+

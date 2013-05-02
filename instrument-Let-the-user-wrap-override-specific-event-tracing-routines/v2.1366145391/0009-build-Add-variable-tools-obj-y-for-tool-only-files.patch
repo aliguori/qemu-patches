@@ -1,0 +1,66 @@
+From patches Mon Sep 17 00:00:00 2001
+From: =?utf-8?q?Llu=C3=ADs_Vilanova_=3Cvilanova=40ac=2Eupc=2Eedu=3E?=
+To: qemu-devel@nongnu.org
+Cc: 
+Date: Tue, 16 Apr 2013 15:50:42 +0200
+Message-id: 20130416135041.21588.24660.stgit@fimbulvetr.bsc.es
+Subject: [PATCH 09/23] build: Add variable 'tools-obj-y' for tool-only files
+
+Signed-off-by: Lluís Vilanova <vilanova@ac.upc.edu>
+---
+ Makefile           |   11 ++++++-----
+ libcacard/Makefile |    2 +-
+ 2 files changed, 7 insertions(+), 6 deletions(-)
+
+diff --git a/Makefile b/Makefile
+index 028ef83..2d3431a 100644
+--- a/Makefile
++++ b/Makefile
+@@ -171,18 +171,19 @@ Makefile: $(version-obj-y)
+ 
+ libqemustub.a: $(stub-obj-y)
+ libqemuutil.a: $(util-obj-y)
++libqemutools.a: $(tools-obj-y)
+ 
+ ######################################################################
+ 
+ qemu-img.o: qemu-img-cmds.h
+ 
+-qemu-img$(EXESUF): qemu-img.o $(block-obj-y) libqemuutil.a libqemustub.a
+-qemu-nbd$(EXESUF): qemu-nbd.o $(block-obj-y) libqemuutil.a libqemustub.a
+-qemu-io$(EXESUF): qemu-io.o cmd.o $(block-obj-y) libqemuutil.a libqemustub.a
++qemu-img$(EXESUF): qemu-img.o $(block-obj-y) libqemuutil.a libqemustub.a libqemutools.a
++qemu-nbd$(EXESUF): qemu-nbd.o $(block-obj-y) libqemuutil.a libqemustub.a libqemutools.a
++qemu-io$(EXESUF): qemu-io.o cmd.o $(block-obj-y) libqemuutil.a libqemustub.a libqemutools.a
+ 
+ qemu-bridge-helper$(EXESUF): qemu-bridge-helper.o
+ 
+-fsdev/virtfs-proxy-helper$(EXESUF): fsdev/virtfs-proxy-helper.o fsdev/virtio-9p-marshal.o libqemuutil.a libqemustub.a
++fsdev/virtfs-proxy-helper$(EXESUF): fsdev/virtfs-proxy-helper.o fsdev/virtio-9p-marshal.o libqemuutil.a libqemustub.a libqemutools.a
+ fsdev/virtfs-proxy-helper$(EXESUF): LIBS += -lcap
+ 
+ qemu-img-cmds.h: $(SRC_PATH)/qemu-img-cmds.hx
+@@ -218,7 +219,7 @@ $(SRC_PATH)/qapi-schema.json $(SRC_PATH)/scripts/qapi-commands.py $(qapi-py)
+ QGALIB_GEN=$(addprefix qga/qapi-generated/, qga-qapi-types.h qga-qapi-visit.h qga-qmp-commands.h)
+ $(qga-obj-y) qemu-ga.o: $(QGALIB_GEN)
+ 
+-qemu-ga$(EXESUF): $(qga-obj-y) libqemuutil.a libqemustub.a
++qemu-ga$(EXESUF): $(qga-obj-y) libqemuutil.a libqemustub.a libqemutools.a
+ 	$(call LINK, $^)
+ 
+ clean:
+diff --git a/libcacard/Makefile b/libcacard/Makefile
+index 47827a0..c0a5d66 100644
+--- a/libcacard/Makefile
++++ b/libcacard/Makefile
+@@ -16,7 +16,7 @@ $(libcacard-obj-y): | $(libcacard-lobj-y)
+ 
+ all: libcacard.la libcacard.pc
+ 
+-vscclient$(EXESUF): libcacard/vscclient.o libcacard.la
++vscclient$(EXESUF): libcacard/vscclient.o libcacard.la libqemutools.a
+ 	$(call LINK,$^)
+ 
+ #########################################################################
+
+

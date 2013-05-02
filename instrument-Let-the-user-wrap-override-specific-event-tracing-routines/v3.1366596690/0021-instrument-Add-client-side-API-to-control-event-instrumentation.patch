@@ -1,0 +1,149 @@
+From patches Mon Sep 17 00:00:00 2001
+From: =?utf-8?q?Llu=C3=ADs_Vilanova_=3Cvilanova=40ac=2Eupc=2Eedu=3E?=
+To: qemu-devel@nongnu.org
+Cc: 
+Date: Sun, 21 Apr 2013 21:13:28 +0200
+Message-id: 20130421191327.8947.70105.stgit@fimbulvetr.bsc.es
+Subject: [PATCH 21/24] instrument: Add client-side API to control event
+ instrumentation
+
+Signed-off-by: Lluís Vilanova <vilanova@ac.upc.edu>
+---
+ instrument/qemu-instr/control-internal.h |   16 ++++++
+ instrument/qemu-instr/control.h          |   75 ++++++++++++++++++++++++++++++
+ 2 files changed, 91 insertions(+)
+
+diff --git a/instrument/qemu-instr/control-internal.h b/instrument/qemu-instr/control-internal.h
+index 6e419e7..953f2d1 100644
+--- a/instrument/qemu-instr/control-internal.h
++++ b/instrument/qemu-instr/control-internal.h
+@@ -11,6 +11,7 @@
+ #define QI__CONTROL_INTERNAL_H
+ 
+ #include "trace/control.h"
++#include "instrument/control.h"
+ 
+ 
+ QI_IDEF QIEvent* qi_ctrl_event_id(QIEventID id)
+@@ -38,6 +39,16 @@ QI_IDEF QIEventID qi_ctrl_event_count(void)
+     return (QIEventID)trace_event_count();
+ }
+ 
++QI_IDEF QIType qi_ctrl_type(void)
++{
++    return instr_type();
++}
++
++QI_IDEF bool qi_ctrl_event_is_available(QIEvent *ev)
++{
++    return instr_event_available((TraceEvent*)ev);
++}
++
+ 
+ 
+ QI_IDEF QIEventID qi_ctrl_event_get_id(QIEvent *ev)
+@@ -50,4 +61,9 @@ QI_IDEF const char * qi_ctrl_event_get_name(QIEvent *ev)
+     return trace_event_get_name((TraceEvent*)ev);
+ }
+ 
++QI_IDEF bool qi_ctrl_event_set(QIEvent *ev, void *cb)
++{
++    return instr_event_set((TraceEvent*)ev, cb);
++}
++
+ #endif  /* QI__CONTROL_INTERNAL_H */
+diff --git a/instrument/qemu-instr/control.h b/instrument/qemu-instr/control.h
+index 8687b1d..037897b 100644
+--- a/instrument/qemu-instr/control.h
++++ b/instrument/qemu-instr/control.h
+@@ -96,6 +96,27 @@ QI_IDECL bool qi_ctrl_event_is_pattern(const char *str);
+  */
+ QI_IDECL QIEventID qi_ctrl_event_count(void);
+ 
++/**
++ * QIType:
++ * @QI_TYPE_NONE: No instrumentation support.
++ * @QI_TYPE_STATIC: Static instrumentation support.
++ * @QI_TYPE_DYNAMIC: Dynamic instrumentation support.
++ *
++ * Instrumentation type supported by the system.
++ */
++typedef enum {
++    QI_TYPE_NONE,
++    QI_TYPE_STATIC,
++    QI_TYPE_DYNAMIC,
++} QIType;
++
++/**
++ * qi_ctrl_type:
++ *
++ * Returns: Instrumentation type supported by the system.
++ */
++QI_IDECL QIType qi_ctrl_type(void);
++
+ 
+ 
+ /**
+@@ -112,6 +133,60 @@ QI_IDECL QIEventID qi_ctrl_event_get_id(QIEvent *ev);
+  */
+ QI_IDECL const char * qi_ctrl_event_get_name(QIEvent *ev);
+ 
++/**
++ * qi_ctrl_event_is_available:
++ *
++ * Returns: Whether the given event has the 'instrument' property.
++ */
++QI_IDECL bool qi_ctrl_event_is_available(QIEvent *ev);
++
++
++/**
++ * QI_CTRL_INSTR_NOP:
++ *
++ * Set instrumentation callback to no-operation.
++ * (qi_event_${name}_nop).
++ */
++#define QI_CTRL_INSTR_NOP ((void*)NULL)
++
++/**
++ * QI_CTRL_INSTR_NEXT:
++ *
++ * Set instrumentation callback to the "next logical step"
++ * (qi_event_${name}_trace).
++ */
++#define QI_CTRL_INSTR_NEXT ((void*)1)
++
++/**
++ * QI_CTRL_INSTR_AUTO:
++ *
++ * Automatically set callback to proper routine.
++ *
++ * Looks for a symbol name in the instrumentation library matching the event
++ * name (qi_event_${name}).
++ */
++#define QI_CTRL_INSTR_AUTO    ((void*)2)
++
++/**
++ * qi_ctrl_event_set:
++ * @ev: Event descriptor.
++ * @cb: Pointer to instrumentation callback.
++ *
++ * Set the instrumentation callback for the given event.
++ *
++ * @cb can also be set to any of the QI_CTRL_INSTR_* special values.
++ *
++ * #false indicates that the instrumentation library does not export the
++ * appropriate symbol for the instrumentation routine.
++ *
++ * Pre-condition: qi_ctrl_dynamic() == true
++ * Pre-condition: qi_ctrl_event_is_available(ev) == true
++ *
++ * Returns: Whether the callback could be set (if @cb was QI_CTRL_INSTR_AUTO,
++ *          otherwise always #true).
++ */
++QI_IDECL bool qi_ctrl_event_set(QIEvent *ev, void *cb);
++
+ 
+ #if !defined(QI_TYPE_CONFIG_DYNAMIC)
+ #include "instrument/qemu-instr/control-internal.h"
+
+

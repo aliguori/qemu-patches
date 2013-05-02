@@ -1,0 +1,87 @@
+From patches Mon Sep 17 00:00:00 2001
+From: liguang <lig.fnst@cn.fujitsu.com>
+To: qemu-devel@nongnu.org
+Cc: peter.maydell@linaro.org, ehabkost@redhat.com,
+ liguang <lig.fnst@cn.fujitsu.com>, blauwirbel@gmail.com, imammedo@redhat.com,
+ pbonzini@redhat.com, afaerber@suse.de, rth@twiddle.net
+Date: Tue, 23 Apr 2013 16:16:54 +0800
+Message-id: 1366705016-30471-11-git-send-email-lig.fnst@cn.fujitsu.com
+Subject: [PATCH 10/12] target-i386/helper: remove DF macro
+
+Signed-off-by: liguang <lig.fnst@cn.fujitsu.com>
+---
+ cpu-exec.c              |    4 ++--
+ target-i386/cc_helper.c |    2 +-
+ target-i386/cpu.h       |    6 ++----
+ 3 files changed, 5 insertions(+), 7 deletions(-)
+
+diff --git a/cpu-exec.c b/cpu-exec.c
+index 31c089d..ec46380 100644
+--- a/cpu-exec.c
++++ b/cpu-exec.c
+@@ -230,7 +230,7 @@ int cpu_exec(CPUArchState *env)
+ #if defined(TARGET_I386)
+     /* put eflags in CPU temporary format */
+     CC_SRC = env->eflags & (CC_O | CC_S | CC_Z | CC_A | CC_P | CC_C);
+-    DF = 1 - (2 * ((env->eflags >> 10) & 1));
++    env->df = 1 - (2 * ((env->eflags >> 10) & 1));
+     CC_OP = CC_OP_EFLAGS;
+     env->eflags &= ~(DF_MASK | CC_O | CC_S | CC_Z | CC_A | CC_P | CC_C);
+ #elif defined(TARGET_SPARC)
+@@ -681,7 +681,7 @@ int cpu_exec(CPUArchState *env)
+ #if defined(TARGET_I386)
+     /* restore flags in standard format */
+     env->eflags = env->eflags | cpu_cc_compute_all(env, CC_OP)
+-        | (DF & DF_MASK);
++        | (env->df & DF_MASK);
+ #elif defined(TARGET_ARM)
+     /* XXX: Save/restore host fpu exception state?.  */
+ #elif defined(TARGET_UNICORE32)
+diff --git a/target-i386/cc_helper.c b/target-i386/cc_helper.c
+index 9daa1a0..ee04092 100644
+--- a/target-i386/cc_helper.c
++++ b/target-i386/cc_helper.c
+@@ -331,7 +331,7 @@ target_ulong helper_read_eflags(CPUX86State *env)
+     uint32_t eflags;
+ 
+     eflags = cpu_cc_compute_all(env, CC_OP);
+-    eflags |= (DF & DF_MASK);
++    eflags |= (env->df & DF_MASK);
+     eflags |= env->eflags & ~(VM_MASK | RF_MASK);
+     return eflags;
+ }
+diff --git a/target-i386/cpu.h b/target-i386/cpu.h
+index 3b72b2e..021ba3a 100644
+--- a/target-i386/cpu.h
++++ b/target-i386/cpu.h
+@@ -1107,8 +1107,6 @@ static inline int cpu_mmu_index (CPUX86State *env)
+         ? MMU_KSMAP_IDX : MMU_KERNEL_IDX;
+ }
+ 
+-#define DF  (env->df)
+-
+ #define CC_DST  (env->cc_dst)
+ #define CC_SRC  (env->cc_src)
+ #define CC_SRC2 (env->cc_src2)
+@@ -1202,7 +1200,7 @@ uint32_t cpu_cc_compute_all(CPUX86State *env1, int op);
+ 
+ static inline uint32_t cpu_compute_eflags(CPUX86State *env)
+ {
+-    return env->eflags | cpu_cc_compute_all(env, CC_OP) | (DF & DF_MASK);
++    return env->eflags | cpu_cc_compute_all(env, CC_OP) | (env->df & DF_MASK);
+ }
+ 
+ /* NOTE: CC_OP must be modified manually to CC_OP_EFLAGS */
+@@ -1210,7 +1208,7 @@ static inline void cpu_load_eflags(CPUX86State *env, int eflags,
+                                    int update_mask)
+ {
+     CC_SRC = eflags & (CC_O | CC_S | CC_Z | CC_A | CC_P | CC_C);
+-    DF = 1 - (2 * ((eflags >> 10) & 1));
++    env->df = 1 - (2 * ((eflags >> 10) & 1));
+     env->eflags = (env->eflags & ~update_mask) |
+         (eflags & update_mask) | 0x2;
+ }
+-- 
+1.7.2.5
+
+

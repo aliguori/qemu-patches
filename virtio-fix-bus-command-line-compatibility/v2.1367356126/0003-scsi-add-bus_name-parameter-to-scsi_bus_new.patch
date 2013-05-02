@@ -1,0 +1,192 @@
+From patches Mon Sep 17 00:00:00 2001
+From: fred.konrad@greensocs.com
+To: Anthony Liguori <aliguori@us.ibm.com>, qemu-devel@nongnu.org,
+ fred.konrad@greensocs.com
+Cc: Anthony Liguori <aliguori@us.ibm.com>, peter.maydell@linaro.org,
+ mark.burton@greensocs.com, agraf@suse.de, qemu-devel@nongnu.org,
+ amit.shah@redhat.com, cornelia.huck@de.ibm.com, pbonzini@redhat.com,
+ afaerber@suse.de, fred.konrad@greensocs.com
+Date: Tue, 30 Apr 2013 16:08:49 +0200
+Message-id: 1367330931-12994-4-git-send-email-fred.konrad@greensocs.com
+Subject: [PATCH 3/5] scsi: add bus_name parameter to scsi_bus_new.
+
+From: KONRAD Frederic <fred.konrad@greensocs.com>
+
+This adds the possibility to create a scsi-bus with a specified name.
+
+Signed-off-by: KONRAD Frederic <fred.konrad@greensocs.com>
+Acked-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ hw/scsi/esp-pci.c      | 2 +-
+ hw/scsi/esp.c          | 2 +-
+ hw/scsi/lsi53c895a.c   | 2 +-
+ hw/scsi/megasas.c      | 2 +-
+ hw/scsi/scsi-bus.c     | 5 +++--
+ hw/scsi/spapr_vscsi.c  | 2 +-
+ hw/scsi/virtio-scsi.c  | 2 +-
+ hw/scsi/vmw_pvscsi.c   | 2 +-
+ hw/usb/dev-storage.c   | 4 ++--
+ hw/usb/dev-uas.c       | 2 +-
+ include/hw/scsi/scsi.h | 3 ++-
+ 11 files changed, 15 insertions(+), 13 deletions(-)
+
+diff --git a/hw/scsi/esp-pci.c b/hw/scsi/esp-pci.c
+index 3ca5c8c..029789a 100644
+--- a/hw/scsi/esp-pci.c
++++ b/hw/scsi/esp-pci.c
+@@ -354,7 +354,7 @@ static int esp_pci_scsi_init(PCIDevice *dev)
+     pci_register_bar(&pci->dev, 0, PCI_BASE_ADDRESS_SPACE_IO, &pci->io);
+     s->irq = pci->dev.irq[0];
+ 
+-    scsi_bus_new(&s->bus, &dev->qdev, &esp_pci_scsi_info);
++    scsi_bus_new(&s->bus, &dev->qdev, &esp_pci_scsi_info, NULL);
+     if (!dev->qdev.hotplugged) {
+         return scsi_bus_legacy_handle_cmdline(&s->bus);
+     }
+diff --git a/hw/scsi/esp.c b/hw/scsi/esp.c
+index 17adbec..0c81a50 100644
+--- a/hw/scsi/esp.c
++++ b/hw/scsi/esp.c
+@@ -681,7 +681,7 @@ static int sysbus_esp_init(SysBusDevice *dev)
+ 
+     qdev_init_gpio_in(&dev->qdev, sysbus_esp_gpio_demux, 2);
+ 
+-    scsi_bus_new(&s->bus, &dev->qdev, &esp_scsi_info);
++    scsi_bus_new(&s->bus, &dev->qdev, &esp_scsi_info, NULL);
+     return scsi_bus_legacy_handle_cmdline(&s->bus);
+ }
+ 
+diff --git a/hw/scsi/lsi53c895a.c b/hw/scsi/lsi53c895a.c
+index c601b29..22b8e98 100644
+--- a/hw/scsi/lsi53c895a.c
++++ b/hw/scsi/lsi53c895a.c
+@@ -2099,7 +2099,7 @@ static int lsi_scsi_init(PCIDevice *dev)
+     pci_register_bar(&s->dev, 2, PCI_BASE_ADDRESS_SPACE_MEMORY, &s->ram_io);
+     QTAILQ_INIT(&s->queue);
+ 
+-    scsi_bus_new(&s->bus, &dev->qdev, &lsi_scsi_info);
++    scsi_bus_new(&s->bus, &dev->qdev, &lsi_scsi_info, NULL);
+     if (!dev->qdev.hotplugged) {
+         return scsi_bus_legacy_handle_cmdline(&s->bus);
+     }
+diff --git a/hw/scsi/megasas.c b/hw/scsi/megasas.c
+index 14b0552..4934a81 100644
+--- a/hw/scsi/megasas.c
++++ b/hw/scsi/megasas.c
+@@ -2159,7 +2159,7 @@ static int megasas_scsi_init(PCIDevice *dev)
+         s->frames[i].state = s;
+     }
+ 
+-    scsi_bus_new(&s->bus, &dev->qdev, &megasas_scsi_info);
++    scsi_bus_new(&s->bus, &dev->qdev, &megasas_scsi_info, NULL);
+     scsi_bus_legacy_handle_cmdline(&s->bus);
+     return 0;
+ }
+diff --git a/hw/scsi/scsi-bus.c b/hw/scsi/scsi-bus.c
+index 6239ee1..53ea906 100644
+--- a/hw/scsi/scsi-bus.c
++++ b/hw/scsi/scsi-bus.c
+@@ -72,9 +72,10 @@ static void scsi_device_unit_attention_reported(SCSIDevice *s)
+ }
+ 
+ /* Create a scsi bus, and attach devices to it.  */
+-void scsi_bus_new(SCSIBus *bus, DeviceState *host, const SCSIBusInfo *info)
++void scsi_bus_new(SCSIBus *bus, DeviceState *host, const SCSIBusInfo *info,
++                  const char *bus_name)
+ {
+-    qbus_create_inplace(&bus->qbus, TYPE_SCSI_BUS, host, NULL);
++    qbus_create_inplace(&bus->qbus, TYPE_SCSI_BUS, host, bus_name);
+     bus->busnr = next_scsi_bus++;
+     bus->info = info;
+     bus->qbus.allow_hotplug = 1;
+diff --git a/hw/scsi/spapr_vscsi.c b/hw/scsi/spapr_vscsi.c
+index 3d322d5..e8978bf 100644
+--- a/hw/scsi/spapr_vscsi.c
++++ b/hw/scsi/spapr_vscsi.c
+@@ -915,7 +915,7 @@ static int spapr_vscsi_init(VIOsPAPRDevice *dev)
+ 
+     dev->crq.SendFunc = vscsi_do_crq;
+ 
+-    scsi_bus_new(&s->bus, &dev->qdev, &vscsi_scsi_info);
++    scsi_bus_new(&s->bus, &dev->qdev, &vscsi_scsi_info, NULL);
+     if (!dev->qdev.hotplugged) {
+         scsi_bus_legacy_handle_cmdline(&s->bus);
+     }
+diff --git a/hw/scsi/virtio-scsi.c b/hw/scsi/virtio-scsi.c
+index 84b3ac7..f7ce743 100644
+--- a/hw/scsi/virtio-scsi.c
++++ b/hw/scsi/virtio-scsi.c
+@@ -624,7 +624,7 @@ static int virtio_scsi_device_init(VirtIODevice *vdev)
+         return ret;
+     }
+ 
+-    scsi_bus_new(&s->bus, qdev, &virtio_scsi_scsi_info);
++    scsi_bus_new(&s->bus, qdev, &virtio_scsi_scsi_info, NULL);
+     if (!qdev->hotplugged) {
+         scsi_bus_legacy_handle_cmdline(&s->bus);
+     }
+diff --git a/hw/scsi/vmw_pvscsi.c b/hw/scsi/vmw_pvscsi.c
+index 4b4a58f..48d12f4 100644
+--- a/hw/scsi/vmw_pvscsi.c
++++ b/hw/scsi/vmw_pvscsi.c
+@@ -1088,7 +1088,7 @@ pvscsi_init(PCIDevice *pci_dev)
+         return -ENOMEM;
+     }
+ 
+-    scsi_bus_new(&s->bus, &pci_dev->qdev, &pvscsi_scsi_info);
++    scsi_bus_new(&s->bus, &pci_dev->qdev, &pvscsi_scsi_info, NULL);
+     pvscsi_reset_state(s);
+ 
+     return 0;
+diff --git a/hw/usb/dev-storage.c b/hw/usb/dev-storage.c
+index 06f0171..1073901 100644
+--- a/hw/usb/dev-storage.c
++++ b/hw/usb/dev-storage.c
+@@ -623,7 +623,7 @@ static int usb_msd_initfn_storage(USBDevice *dev)
+     }
+ 
+     usb_desc_init(dev);
+-    scsi_bus_new(&s->bus, &s->dev.qdev, &usb_msd_scsi_info_storage);
++    scsi_bus_new(&s->bus, &s->dev.qdev, &usb_msd_scsi_info_storage, NULL);
+     scsi_dev = scsi_bus_legacy_add_drive(&s->bus, bs, 0, !!s->removable,
+                                             s->conf.bootindex, s->serial);
+     if (!scsi_dev) {
+@@ -650,7 +650,7 @@ static int usb_msd_initfn_bot(USBDevice *dev)
+ 
+     usb_desc_create_serial(dev);
+     usb_desc_init(dev);
+-    scsi_bus_new(&s->bus, &s->dev.qdev, &usb_msd_scsi_info_bot);
++    scsi_bus_new(&s->bus, &s->dev.qdev, &usb_msd_scsi_info_bot, NULL);
+     s->bus.qbus.allow_hotplug = 0;
+     usb_msd_handle_reset(dev);
+ 
+diff --git a/hw/usb/dev-uas.c b/hw/usb/dev-uas.c
+index c8c42ee..6efab62 100644
+--- a/hw/usb/dev-uas.c
++++ b/hw/usb/dev-uas.c
+@@ -888,7 +888,7 @@ static int usb_uas_init(USBDevice *dev)
+     QTAILQ_INIT(&uas->requests);
+     uas->status_bh = qemu_bh_new(usb_uas_send_status_bh, uas);
+ 
+-    scsi_bus_new(&uas->bus, &uas->dev.qdev, &usb_uas_scsi_info);
++    scsi_bus_new(&uas->bus, &uas->dev.qdev, &usb_uas_scsi_info, NULL);
+ 
+     return 0;
+ }
+diff --git a/include/hw/scsi/scsi.h b/include/hw/scsi/scsi.h
+index 3bda1c4..9786e00 100644
+--- a/include/hw/scsi/scsi.h
++++ b/include/hw/scsi/scsi.h
+@@ -152,7 +152,8 @@ struct SCSIBus {
+     const SCSIBusInfo *info;
+ };
+ 
+-void scsi_bus_new(SCSIBus *bus, DeviceState *host, const SCSIBusInfo *info);
++void scsi_bus_new(SCSIBus *bus, DeviceState *host, const SCSIBusInfo *info,
++                  const char *bus_name);
+ 
+ static inline SCSIBus *scsi_bus_from_device(SCSIDevice *d)
+ {
+-- 
+1.8.1.4
+

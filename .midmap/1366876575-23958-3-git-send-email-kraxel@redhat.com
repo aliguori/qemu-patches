@@ -1,0 +1,1 @@
+../console-qom-ify-consoles/v2.1366901769/0002-console-add-device-link-to-QemuConsoles.patch

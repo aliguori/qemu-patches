@@ -1,0 +1,78 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: peter.maydell@linaro.org, mst@redhat.com
+Date: Thu, 11 Apr 2013 18:10:30 +0200
+Message-id: 1365696633-30727-10-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 09/12] memory: move core typedefs to qemu/typedefs.h
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ include/exec/memory.h   | 5 -----
+ include/qemu/typedefs.h | 4 ++++
+ target-ppc/kvm_ppc.h    | 2 --
+ 3 files changed, 4 insertions(+), 7 deletions(-)
+
+diff --git a/include/exec/memory.h b/include/exec/memory.h
+index 2322732..9e88320 100644
+--- a/include/exec/memory.h
++++ b/include/exec/memory.h
+@@ -27,7 +27,6 @@
+ #include "qemu/int128.h"
+ 
+ typedef struct MemoryRegionOps MemoryRegionOps;
+-typedef struct MemoryRegion MemoryRegion;
+ typedef struct MemoryRegionPortio MemoryRegionPortio;
+ typedef struct MemoryRegionMmio MemoryRegionMmio;
+ 
+@@ -157,8 +156,6 @@ struct MemoryRegionPortio {
+ 
+ #define PORTIO_END_OF_LIST() { }
+ 
+-typedef struct AddressSpace AddressSpace;
+-
+ /**
+  * AddressSpace: describes a mapping of addresses to #MemoryRegion objects
+  */
+@@ -173,8 +170,6 @@ struct AddressSpace {
+     QTAILQ_ENTRY(AddressSpace) address_spaces_link;
+ };
+ 
+-typedef struct MemoryRegionSection MemoryRegionSection;
+-
+ /**
+  * MemoryRegionSection: describes a fragment of a #MemoryRegion
+  *
+diff --git a/include/qemu/typedefs.h b/include/qemu/typedefs.h
+index fd532a2..93aae81 100644
+--- a/include/qemu/typedefs.h
++++ b/include/qemu/typedefs.h
+@@ -18,6 +18,10 @@ typedef struct DeviceState DeviceState;
+ typedef struct BusState BusState;
+ typedef struct BusClass BusClass;
+ 
++typedef struct AddressSpace AddressSpace;
++typedef struct MemoryRegion MemoryRegion;
++typedef struct MemoryRegionSection MemoryRegionSection;
++
+ typedef struct NICInfo NICInfo;
+ typedef struct HCIInfo HCIInfo;
+ typedef struct AudioState AudioState;
+diff --git a/target-ppc/kvm_ppc.h b/target-ppc/kvm_ppc.h
+index c30b006..6bcc5cc 100644
+--- a/target-ppc/kvm_ppc.h
++++ b/target-ppc/kvm_ppc.h
+@@ -9,8 +9,6 @@
+ #ifndef __KVM_PPC_H__
+ #define __KVM_PPC_H__
+ 
+-#include "exec/memory.h"
+-
+ #define TYPE_HOST_POWERPC_CPU "host-" TYPE_POWERPC_CPU
+ 
+ void kvmppc_init(void);
+-- 
+1.8.1.4
+
+
+

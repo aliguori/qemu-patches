@@ -1,0 +1,67 @@
+From patches Mon Sep 17 00:00:00 2001
+From: liguang <lig.fnst@cn.fujitsu.com>
+To: peter.maydell@linaro.org, qemu-devel@nongnu.org
+Cc: blauwirbel@gmail.com, pbonzini@redhat.com,
+ liguang <lig.fnst@cn.fujitsu.com>, afaerber@suse.de,
+ Anthony Liguori <aliguori@us.ibm.com>
+Date: Fri, 19 Apr 2013 10:52:21 +0800
+Message-id: 1366339945-17151-3-git-send-email-lig.fnst@cn.fujitsu.com
+Subject: [PATCH 2/6] target-i386/smm_helper: replace env->eip with EIP
+
+Signed-off-by: liguang <lig.fnst@cn.fujitsu.com>
+---
+ target-i386/smm_helper.c |   10 +++++-----
+ 1 files changed, 5 insertions(+), 5 deletions(-)
+
+diff --git a/target-i386/smm_helper.c b/target-i386/smm_helper.c
+index eea2fe9..ba79075 100644
+--- a/target-i386/smm_helper.c
++++ b/target-i386/smm_helper.c
+@@ -93,7 +93,7 @@ void do_smm_enter(CPUX86State *env)
+     for (i = 8; i < 16; i++) {
+         stq_phys(sm_state + 0x7ff8 - i * 8, env->regs[i]);
+     }
+-    stq_phys(sm_state + 0x7f78, env->eip);
++    stq_phys(sm_state + 0x7f78, EIP);
+     stl_phys(sm_state + 0x7f70, cpu_compute_eflags(env));
+     stl_phys(sm_state + 0x7f68, env->dr[6]);
+     stl_phys(sm_state + 0x7f60, env->dr[7]);
+@@ -108,7 +108,7 @@ void do_smm_enter(CPUX86State *env)
+     stl_phys(sm_state + 0x7ffc, env->cr[0]);
+     stl_phys(sm_state + 0x7ff8, env->cr[3]);
+     stl_phys(sm_state + 0x7ff4, cpu_compute_eflags(env));
+-    stl_phys(sm_state + 0x7ff0, env->eip);
++    stl_phys(sm_state + 0x7ff0, EIP);
+     stl_phys(sm_state + 0x7fec, EDI);
+     stl_phys(sm_state + 0x7fe8, ESI);
+     stl_phys(sm_state + 0x7fe4, EBP);
+@@ -160,7 +160,7 @@ void do_smm_enter(CPUX86State *env)
+ #endif
+     cpu_load_eflags(env, 0, ~(CC_O | CC_S | CC_Z | CC_A | CC_P | CC_C |
+                               DF_MASK));
+-    env->eip = 0x00008000;
++    EIP = 0x00008000;
+     cpu_x86_load_seg_cache(env, R_CS, (env->smbase >> 4) & 0xffff, env->smbase,
+                            0xffffffff, 0);
+     cpu_x86_load_seg_cache(env, R_DS, 0, 0, 0xffffffff, 0);
+@@ -224,7 +224,7 @@ void helper_rsm(CPUX86State *env)
+     for (i = 8; i < 16; i++) {
+         env->regs[i] = ldq_phys(sm_state + 0x7ff8 - i * 8);
+     }
+-    env->eip = ldq_phys(sm_state + 0x7f78);
++    EIP = ldq_phys(sm_state + 0x7f78);
+     cpu_load_eflags(env, ldl_phys(sm_state + 0x7f70),
+                     ~(CC_O | CC_S | CC_Z | CC_A | CC_P | CC_C | DF_MASK));
+     env->dr[6] = ldl_phys(sm_state + 0x7f68);
+@@ -243,7 +243,7 @@ void helper_rsm(CPUX86State *env)
+     cpu_x86_update_cr3(env, ldl_phys(sm_state + 0x7ff8));
+     cpu_load_eflags(env, ldl_phys(sm_state + 0x7ff4),
+                     ~(CC_O | CC_S | CC_Z | CC_A | CC_P | CC_C | DF_MASK));
+-    env->eip = ldl_phys(sm_state + 0x7ff0);
++    EIP = ldl_phys(sm_state + 0x7ff0);
+     EDI = ldl_phys(sm_state + 0x7fec);
+     ESI = ldl_phys(sm_state + 0x7fe8);
+     EBP = ldl_phys(sm_state + 0x7fe4);
+-- 
+1.7.2.5
+

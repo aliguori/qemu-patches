@@ -1,0 +1,53 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Mark Asselstine <mark.asselstine@windriver.com>
+To: qemu-devel@nongnu.org
+Cc: mark.asselstine@windriver.com, jan.kiszka@web.de
+Date: Thu, 4 Apr 2013 11:43:05 -0400
+Message-id: 1365090185-26920-1-git-send-email-mark.asselstine@windriver.com
+Subject: [PATCH 1/1] apic: fixup fallthrough to PIC
+
+Commit 0e21e12bb311c4c1095d0269dc2ef81196ccb60a [Don't route PIC
+interrupts through the local APIC if the local APIC config says so.]
+missed a check to ensure the local APIC is enabled. Since if the local
+APIC is disabled it doesn't matter what the local APIC config says.
+
+If this check isn't done and the guest has disabled the local APIC the
+guest will receive a general protection fault, similar to what is seen
+here:
+
+https://lists.gnu.org/archive/html/qemu-devel/2012-12/msg02304.html
+
+The GPF is caused by an attempt to service interrupt 0xffffffff. This
+comes about since cpu_get_pic_interrupt() calls apic_accept_pic_intr()
+(with the local APIC disabled apic_get_interrupt() returns -1).
+apic_accept_pic_intr() returns 0 and thus the interrupt number which
+is returned from cpu_get_pic_interrupt(), and which is attempted to be
+serviced, is -1.
+
+Signed-off-by: Mark Asselstine <mark.asselstine@windriver.com>
+---
+
+*v2*  moved the checks to a single line
+
+Resending since I would like to get this into the tree.
+
+ hw/apic.c |    2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/hw/apic.c b/hw/apic.c
+index d2395f0..e5e3435 100644
+--- a/hw/apic.c
++++ b/hw/apic.c
+@@ -590,7 +590,7 @@ int apic_accept_pic_intr(DeviceState *d)
+     APICCommonState *s = DO_UPCAST(APICCommonState, busdev.qdev, d);
+     uint32_t lvt0;
+ 
+-    if (!s)
++    if (!s || !(s->spurious_vec & APIC_SV_ENABLE))
+         return -1;
+ 
+     lvt0 = s->lvt[APIC_LVT_LINT0];
+-- 
+1.7.10.4
+
+

@@ -1,0 +1,140 @@
+From patches Mon Sep 17 00:00:00 2001
+From: fred.konrad@greensocs.com
+To: Anthony Liguori <aliguori@us.ibm.com>, aliguori@us.ibm.com,
+ qemu-devel@nongnu.org, fred.konrad@greensocs.com
+Cc: cornelia.huck@de.ibm.com, peter.maydell@linaro.org,
+ mark.burton@greensocs.com, Luiz Capitulino <lcapitulino@redhat.com>,
+ fred.konrad@greensocs.com
+Date: Sun, 14 Apr 2013 14:07:00 +0200
+Message-id: 1365941220-8114-1-git-send-email-fred.konrad@greensocs.com
+Subject: [PATCH 1/1] virtio-balloon: fix dynamic properties.
+
+From: KONRAD Frederic <fred.konrad@greensocs.com>
+
+To keep compatibility with the old virtio-balloon-x, add the dynamic properties
+to virtio-balloon-pci and virtio-balloon-ccw.
+
+Cc: Luiz Capitulino <lcapitulino@redhat.com>
+Signed-off-by: KONRAD Frederic <fred.konrad@greensocs.com>
+
+Changes v1 -> v2:
+  * Use public API instead of exposing the "private" functions.
+---
+ hw/s390x/virtio-ccw.c  | 34 ++++++++++++++++++++++++++++++++++
+ hw/virtio/virtio-pci.c | 36 ++++++++++++++++++++++++++++++++++++
+ 2 files changed, 70 insertions(+)
+
+diff --git a/hw/s390x/virtio-ccw.c b/hw/s390x/virtio-ccw.c
+index 4dec0cd..3b5a1f9 100644
+--- a/hw/s390x/virtio-ccw.c
++++ b/hw/s390x/virtio-ccw.c
+@@ -621,11 +621,45 @@ static int virtio_ccw_balloon_init(VirtioCcwDevice *ccw_dev)
+     return virtio_ccw_device_init(ccw_dev, VIRTIO_DEVICE(vdev));
+ }
+ 
++static void balloon_ccw_stats_get_all(Object *obj, struct Visitor *v,
++                                      void *opaque, const char *name,
++                                      Error **errp)
++{
++    VirtIOBalloonCcw *dev = opaque;
++    object_property_get(OBJECT(&dev->vdev), v, "guest-stats", errp);
++}
++
++static void balloon_ccw_stats_get_poll_interval(Object *obj, struct Visitor *v,
++                                                void *opaque, const char *name,
++                                                Error **errp)
++{
++    VirtIOBalloonCcw *dev = opaque;
++    object_property_get(OBJECT(&dev->vdev), v, "guest-stats-polling-interval",
++                        errp);
++}
++
++static void balloon_ccw_stats_set_poll_interval(Object *obj, struct Visitor *v,
++                                                void *opaque, const char *name,
++                                                Error **errp)
++{
++    VirtIOBalloonCcw *dev = opaque;
++    object_property_set(OBJECT(&dev->vdev), v, "guest-stats-polling-interval",
++                        errp);
++}
++
+ static void virtio_ccw_balloon_instance_init(Object *obj)
+ {
+     VirtIOBalloonCcw *dev = VIRTIO_BALLOON_CCW(obj);
+     object_initialize(OBJECT(&dev->vdev), TYPE_VIRTIO_BALLOON);
+     object_property_add_child(obj, "virtio-backend", OBJECT(&dev->vdev), NULL);
++
++    object_property_add(obj, "guest-stats", "guest statistics",
++                        balloon_ccw_stats_get_all, NULL, NULL, dev, NULL);
++
++    object_property_add(obj, "guest-stats-polling-interval", "int",
++                        balloon_ccw_stats_get_poll_interval,
++                        balloon_ccw_stats_set_poll_interval,
++                        NULL, dev, NULL);
+ }
+ 
+ static int virtio_ccw_scsi_init(VirtioCcwDevice *ccw_dev)
+diff --git a/hw/virtio/virtio-pci.c b/hw/virtio/virtio-pci.c
+index 2b22588..db0eefd 100644
+--- a/hw/virtio/virtio-pci.c
++++ b/hw/virtio/virtio-pci.c
+@@ -33,6 +33,7 @@
+ #include "virtio-pci.h"
+ #include "qemu/range.h"
+ #include "hw/virtio/virtio-bus.h"
++#include "qapi/visitor.h"
+ 
+ /* from Linux's linux/virtio_pci.h */
+ 
+@@ -1409,6 +1410,32 @@ static const TypeInfo virtio_scsi_pci_info = {
+ 
+ /* virtio-balloon-pci */
+ 
++static void balloon_pci_stats_get_all(Object *obj, struct Visitor *v,
++                                      void *opaque, const char *name,
++                                      Error **errp)
++{
++    VirtIOBalloonPCI *dev = opaque;
++    object_property_get(OBJECT(&dev->vdev), v, "guest-stats", errp);
++}
++
++static void balloon_pci_stats_get_poll_interval(Object *obj, struct Visitor *v,
++                                                void *opaque, const char *name,
++                                                Error **errp)
++{
++    VirtIOBalloonPCI *dev = opaque;
++    object_property_get(OBJECT(&dev->vdev), v, "guest-stats-polling-interval",
++                        errp);
++}
++
++static void balloon_pci_stats_set_poll_interval(Object *obj, struct Visitor *v,
++                                                void *opaque, const char *name,
++                                                Error **errp)
++{
++    VirtIOBalloonPCI *dev = opaque;
++    object_property_set(OBJECT(&dev->vdev), v, "guest-stats-polling-interval",
++                        errp);
++}
++
+ static Property virtio_balloon_pci_properties[] = {
+     DEFINE_VIRTIO_COMMON_FEATURES(VirtIOPCIProxy, host_features),
+     DEFINE_PROP_HEX32("class", VirtIOPCIProxy, class_code, 0),
+@@ -1450,6 +1477,15 @@ static void virtio_balloon_pci_instance_init(Object *obj)
+     VirtIOBalloonPCI *dev = VIRTIO_BALLOON_PCI(obj);
+     object_initialize(OBJECT(&dev->vdev), TYPE_VIRTIO_BALLOON);
+     object_property_add_child(obj, "virtio-backend", OBJECT(&dev->vdev), NULL);
++
++    object_property_add(obj, "guest-stats", "guest statistics",
++                        balloon_pci_stats_get_all, NULL, NULL, dev,
++                        NULL);
++
++    object_property_add(obj, "guest-stats-polling-interval", "int",
++                        balloon_pci_stats_get_poll_interval,
++                        balloon_pci_stats_set_poll_interval,
++                        NULL, dev, NULL);
+ }
+ 
+ static const TypeInfo virtio_balloon_pci_info = {
+-- 
+1.7.11.7
+

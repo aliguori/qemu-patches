@@ -1,0 +1,12 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Anthony Liguori <aliguori@us.ibm.com>
+To: qemu-devel@nongnu.org
+Cc: Kevin Wolf <kwolf@redhat.com>
+Date: Fri, 26 Apr 2013 14:43:04 -0500
+Message-id: 1367005387-330-1-git-send-email-aliguori@us.ibm.com
+Subject: [PATCH 0/3] gtk: add Devices menu
+
+This small series adds a devices menu to the GTK UI allowing
+a user to change or eject a removable block device from the menus.
+
+

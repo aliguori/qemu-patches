@@ -1,0 +1,38 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Jan Kiszka <jan.kiszka@siemens.com>
+To: Anthony Liguori <aliguori@us.ibm.com>, Jan Kiszka <jan.kiszka@web.de>,
+ Jan Kiszka <jan.kiszka@siemens.com>, qemu-devel <qemu-devel@nongnu.org>
+Cc: Anthony Liguori <aliguori@us.ibm.com>, qemu-devel <qemu-devel@nongnu.org>
+Date: Fri, 22 Feb 2013 21:39:57 +0100
+Message-id: cover.1361565596.git.jan.kiszka@siemens.com
+Subject: [PATCH 0/2] i2c: Add AT24Cxx EEPROM model
+
+Rebased over current master, resolved new reports of checkpatch.
+
+See patches for details.
+
+Jan Kiszka (2):
+  i2c: Introduce device address mask
+  Add AT24Cxx I2C EEPROM device model
+
+ hw/Makefile.objs |    2 +-
+ hw/at24.c        |  363 ++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ hw/ds1338.c      |    2 +-
+ hw/i2c.c         |    9 +-
+ hw/i2c.h         |    3 +-
+ hw/lm832x.c      |    2 +-
+ hw/max7310.c     |    2 +-
+ hw/pxa2xx.c      |    3 +-
+ hw/smbus.c       |    2 +-
+ hw/ssd0303.c     |    2 +-
+ hw/tmp105.c      |    2 +-
+ hw/tosa.c        |    2 +-
+ hw/twl92230.c    |    2 +-
+ hw/wm8750.c      |    2 +-
+ hw/z2.c          |    2 +-
+ 15 files changed, 383 insertions(+), 17 deletions(-)
+ create mode 100644 hw/at24.c
+
+-- 
+1.7.3.4
+

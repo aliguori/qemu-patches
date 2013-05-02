@@ -1,0 +1,357 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: 
+Date: Thu,  4 Apr 2013 21:23:00 +0200
+Message-id: 1365103395-11547-21-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 20/35] hw: move char devices to hw/char/,
+ configure via default-configs/
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ default-configs/arm-softmmu.mak    |  1 +
+ default-configs/i386-softmmu.mak   |  1 +
+ default-configs/lm32-softmmu.mak   |  1 +
+ default-configs/s390x-softmmu.mak  |  1 +
+ default-configs/sparc-softmmu.mak  |  1 +
+ default-configs/x86_64-softmmu.mak |  1 +
+ hw/arm/Makefile.objs               |  6 +++---
+ hw/char/Makefile.objs              | 15 +++++++++++++++
+ hw/{ => char}/debugcon.c           |  0
+ hw/{ => char}/etraxfs_ser.c        |  2 --
+ hw/{ => char}/exynos4210_uart.c    |  0
+ hw/{ => char}/grlib_apbuart.c      |  0
+ hw/{ => char}/imx_serial.c         |  0
+ hw/{ => char}/lm32_juart.c         |  0
+ hw/{ => char}/lm32_uart.c          |  0
+ hw/{ => char}/mcf_uart.c           |  0
+ hw/{ => char}/milkymist-uart.c     |  0
+ hw/{ => char}/omap_uart.c          |  0
+ hw/{s390x => char}/sclpconsole.c   |  2 +-
+ hw/{ => char}/sh_serial.c          |  0
+ hw/{ => char}/spapr_vty.c          |  0
+ hw/cris/Makefile.objs              |  1 -
+ hw/i386/Makefile.objs              |  2 +-
+ hw/lm32/Makefile.objs              |  3 ---
+ hw/m68k/Makefile.objs              |  4 ----
+ hw/ppc/Makefile.objs               |  1 -
+ hw/s390x/Makefile.objs             |  2 +-
+ hw/sh4/Makefile.objs               |  2 +-
+ hw/sparc/Makefile.objs             |  2 +-
+ 29 files changed, 29 insertions(+), 19 deletions(-)
+ rename hw/{ => char}/debugcon.c (100%)
+ rename hw/{ => char}/etraxfs_ser.c (98%)
+ rename hw/{ => char}/exynos4210_uart.c (100%)
+ rename hw/{ => char}/grlib_apbuart.c (100%)
+ rename hw/{ => char}/imx_serial.c (100%)
+ rename hw/{ => char}/lm32_juart.c (100%)
+ rename hw/{ => char}/lm32_uart.c (100%)
+ rename hw/{ => char}/mcf_uart.c (100%)
+ rename hw/{ => char}/milkymist-uart.c (100%)
+ rename hw/{ => char}/omap_uart.c (100%)
+ rename hw/{s390x => char}/sclpconsole.c (99%)
+ rename hw/{ => char}/sh_serial.c (100%)
+ rename hw/{ => char}/spapr_vty.c (100%)
+
+diff --git a/default-configs/arm-softmmu.mak b/default-configs/arm-softmmu.mak
+index 8eb04e2..8da5ec8 100644
+--- a/default-configs/arm-softmmu.mak
++++ b/default-configs/arm-softmmu.mak
+@@ -57,6 +57,7 @@ CONFIG_MARVELL_88W8618=y
+ CONFIG_OMAP=y
+ CONFIG_BLIZZARD=y
+ CONFIG_ONENAND=y
++CONFIG_IMX=y
+ CONFIG_ZAURUS=y
+ 
+ CONFIG_VERSATILE_PCI=y
+diff --git a/default-configs/i386-softmmu.mak b/default-configs/i386-softmmu.mak
+index 89aaff5..9d852ff 100644
+--- a/default-configs/i386-softmmu.mak
++++ b/default-configs/i386-softmmu.mak
+@@ -34,3 +34,4 @@ CONFIG_MC146818RTC=y
+ CONFIG_WDT_IB700=y
+ CONFIG_PC_SYSFW=y
+ CONFIG_XEN_I386=$(CONFIG_XEN)
++CONFIG_ISA_DEBUG=y
+diff --git a/default-configs/lm32-softmmu.mak b/default-configs/lm32-softmmu.mak
+index 6b2ee43..ef0f4ba 100644
+--- a/default-configs/lm32-softmmu.mak
++++ b/default-configs/lm32-softmmu.mak
+@@ -1,5 +1,6 @@
+ # Default configuration for lm32-softmmu
+ 
++CONFIG_LM32=y
+ CONFIG_MILKYMIST=y
+ CONFIG_FRAMEBUFFER=y
+ CONFIG_PTIMER=y
+diff --git a/default-configs/s390x-softmmu.mak b/default-configs/s390x-softmmu.mak
+index 3005729..81fbc68 100644
+--- a/default-configs/s390x-softmmu.mak
++++ b/default-configs/s390x-softmmu.mak
+@@ -1 +1,2 @@
+ CONFIG_VIRTIO=y
++CONFIG_SCLPCONSOLE=y
+diff --git a/default-configs/sparc-softmmu.mak b/default-configs/sparc-softmmu.mak
+index 25bcbe3..da5b02d 100644
+--- a/default-configs/sparc-softmmu.mak
++++ b/default-configs/sparc-softmmu.mak
+@@ -11,3 +11,4 @@ CONFIG_PCNET_COMMON=y
+ CONFIG_LANCE=y
+ CONFIG_TCX=y
+ CONFIG_CS4231=y
++CONFIG_GRLIB=y
+diff --git a/default-configs/x86_64-softmmu.mak b/default-configs/x86_64-softmmu.mak
+index c34f8f8..760d51e 100644
+--- a/default-configs/x86_64-softmmu.mak
++++ b/default-configs/x86_64-softmmu.mak
+@@ -34,3 +34,4 @@ CONFIG_MC146818RTC=y
+ CONFIG_WDT_IB700=y
+ CONFIG_PC_SYSFW=y
+ CONFIG_XEN_I386=$(CONFIG_XEN)
++CONFIG_ISA_DEBUG=y
+diff --git a/hw/arm/Makefile.objs b/hw/arm/Makefile.objs
+index 6f764e6..26e107f 100644
+--- a/hw/arm/Makefile.objs
++++ b/hw/arm/Makefile.objs
+@@ -3,7 +3,7 @@ obj-y += arm_gic.o arm_gic_common.o
+ obj-y += a9scu.o
+ obj-y += realview_gic.o arm_sysctl.o arm11mpcore.o a9mpcore.o
+ obj-y += exynos4210_gic.o exynos4210_combiner.o
+-obj-y += exynos4210_uart.o exynos4210_pwm.o
++obj-y += exynos4210_pwm.o
+ obj-y += exynos4210_pmu.o exynos4210_mct.o
+ obj-y += exynos4210_rtc.o
+ obj-y += arm_mptimer.o a15mpcore.o
+@@ -12,14 +12,14 @@ obj-y += pxa2xx_timer.o pxa2xx_dma.o
+ obj-y += pxa2xx_mmci.o pxa2xx_pcmcia.o pxa2xx_keypad.o
+ obj-y += zaurus.o
+ obj-y += omap_dma.o omap_clk.o omap_mmc.o \
+-                omap_gpio.o omap_intc.o omap_uart.o
++                omap_gpio.o omap_intc.o
+ obj-y += soc_dma.o omap_gptimer.o omap_synctimer.o \
+                 omap_gpmc.o omap_sdrc.o omap_tap.o omap_l4.o
+ obj-y += tsc210x.o
+ obj-y += cbus.o tusb6010.o
+ obj-y += mst_fpga.o
+ obj-y += strongarm.o
+-obj-y += imx_serial.o imx_ccm.o imx_timer.o imx_avic.o
++obj-y += imx_ccm.o imx_timer.o imx_avic.o
+ obj-$(CONFIG_KVM) += kvm/arm_gic.o
+ 
+ obj-y := $(addprefix ../,$(obj-y))
+diff --git a/hw/char/Makefile.objs b/hw/char/Makefile.objs
+index ddfd3ec..f8f3dbc 100644
+--- a/hw/char/Makefile.objs
++++ b/hw/char/Makefile.objs
+@@ -9,4 +9,19 @@ common-obj-$(CONFIG_XILINX) += xilinx_uartlite.o
+ common-obj-$(CONFIG_XEN_BACKEND) += xen_console.o
+ common-obj-$(CONFIG_CADENCE) += cadence_uart.o
+ 
++obj-$(CONFIG_EXYNOS4) += exynos4210_uart.o
++obj-$(CONFIG_COLDFIRE) += mcf_uart.o
++obj-$(CONFIG_OMAP) += omap_uart.o
++obj-$(CONFIG_SH4) += sh_serial.o
++obj-$(CONFIG_PSERIES) += spapr_vty.o
++
++common-obj-$(CONFIG_ETRAXFS) += etraxfs_ser.o
++common-obj-$(CONFIG_ISA_DEBUG) += debugcon.o
++common-obj-$(CONFIG_GRLIB) += grlib_apbuart.o
++common-obj-$(CONFIG_IMX) += imx_serial.o
++common-obj-$(CONFIG_LM32) += lm32_juart.o
++common-obj-$(CONFIG_LM32) += lm32_uart.o
++common-obj-$(CONFIG_MILKYMIST) += milkymist-uart.o
++common-obj-$(CONFIG_SCLPCONSOLE) += sclpconsole.o
++
+ obj-$(CONFIG_VIRTIO) += virtio-serial-bus.o
+diff --git a/hw/debugcon.c b/hw/char/debugcon.c
+similarity index 100%
+rename from hw/debugcon.c
+rename to hw/char/debugcon.c
+diff --git a/hw/etraxfs_ser.c b/hw/char/etraxfs_ser.c
+similarity index 98%
+rename from hw/etraxfs_ser.c
+rename to hw/char/etraxfs_ser.c
+index 7e24d34..b7499d7 100644
+--- a/hw/etraxfs_ser.c
++++ b/hw/char/etraxfs_ser.c
+@@ -78,7 +78,6 @@ static uint64_t
+ ser_read(void *opaque, hwaddr addr, unsigned int size)
+ {
+     struct etrax_serial *s = opaque;
+-    D(CPUCRISState *env = s->env);
+     uint32_t r = 0;
+ 
+     addr >>= 2;
+@@ -116,7 +115,6 @@ ser_write(void *opaque, hwaddr addr,
+     struct etrax_serial *s = opaque;
+     uint32_t value = val64;
+     unsigned char ch = val64;
+-    D(CPUCRISState *env = s->env);
+ 
+     D(qemu_log("%s " TARGET_FMT_plx "=%x\n",  __func__, addr, value));
+     addr >>= 2;
+diff --git a/hw/exynos4210_uart.c b/hw/char/exynos4210_uart.c
+similarity index 100%
+rename from hw/exynos4210_uart.c
+rename to hw/char/exynos4210_uart.c
+diff --git a/hw/grlib_apbuart.c b/hw/char/grlib_apbuart.c
+similarity index 100%
+rename from hw/grlib_apbuart.c
+rename to hw/char/grlib_apbuart.c
+diff --git a/hw/imx_serial.c b/hw/char/imx_serial.c
+similarity index 100%
+rename from hw/imx_serial.c
+rename to hw/char/imx_serial.c
+diff --git a/hw/lm32_juart.c b/hw/char/lm32_juart.c
+similarity index 100%
+rename from hw/lm32_juart.c
+rename to hw/char/lm32_juart.c
+diff --git a/hw/lm32_uart.c b/hw/char/lm32_uart.c
+similarity index 100%
+rename from hw/lm32_uart.c
+rename to hw/char/lm32_uart.c
+diff --git a/hw/mcf_uart.c b/hw/char/mcf_uart.c
+similarity index 100%
+rename from hw/mcf_uart.c
+rename to hw/char/mcf_uart.c
+diff --git a/hw/milkymist-uart.c b/hw/char/milkymist-uart.c
+similarity index 100%
+rename from hw/milkymist-uart.c
+rename to hw/char/milkymist-uart.c
+diff --git a/hw/omap_uart.c b/hw/char/omap_uart.c
+similarity index 100%
+rename from hw/omap_uart.c
+rename to hw/char/omap_uart.c
+diff --git a/hw/s390x/sclpconsole.c b/hw/char/sclpconsole.c
+similarity index 99%
+rename from hw/s390x/sclpconsole.c
+rename to hw/char/sclpconsole.c
+index 5c881e5..42ed54c 100644
+--- a/hw/s390x/sclpconsole.c
++++ b/hw/char/sclpconsole.c
+@@ -234,7 +234,7 @@ static int write_event_data(SCLPEvent *event, EventBufferHeader *evt_buf_hdr)
+     return rc;
+ }
+ 
+-static void trigger_ascii_console_data(void *env, int n, int level)
++static void trigger_ascii_console_data(void *opaque, int n, int level)
+ {
+     sclp_service_interrupt(0);
+ }
+diff --git a/hw/sh_serial.c b/hw/char/sh_serial.c
+similarity index 100%
+rename from hw/sh_serial.c
+rename to hw/char/sh_serial.c
+diff --git a/hw/spapr_vty.c b/hw/char/spapr_vty.c
+similarity index 100%
+rename from hw/spapr_vty.c
+rename to hw/char/spapr_vty.c
+diff --git a/hw/cris/Makefile.objs b/hw/cris/Makefile.objs
+index e02365d..c4d5189 100644
+--- a/hw/cris/Makefile.objs
++++ b/hw/cris/Makefile.objs
+@@ -2,7 +2,6 @@
+ obj-y += etraxfs_dma.o
+ obj-y += etraxfs_pic.o
+ obj-y += etraxfs_timer.o
+-obj-y += etraxfs_ser.o
+ 
+ obj-y := $(addprefix ../,$(obj-y))
+ 
+diff --git a/hw/i386/Makefile.objs b/hw/i386/Makefile.objs
+index c85bb3d..5e91d1e 100644
+--- a/hw/i386/Makefile.objs
++++ b/hw/i386/Makefile.objs
+@@ -1,7 +1,7 @@
+ obj-y += apic_common.o apic.o
+ obj-y += sga.o ioapic_common.o ioapic.o piix_pci.o
+ obj-y += vmport.o
+-obj-y += debugcon.o debugexit.o
++obj-y += debugexit.o
+ obj-y += lpc_ich9.o q35.o
+ obj-y += kvm/
+ obj-y += pc-testdev.o
+diff --git a/hw/lm32/Makefile.objs b/hw/lm32/Makefile.objs
+index a894c46..e116156 100644
+--- a/hw/lm32/Makefile.objs
++++ b/hw/lm32/Makefile.objs
+@@ -1,15 +1,12 @@
+ # LM32 peripherals
+ obj-y += lm32_pic.o
+-obj-y += lm32_juart.o
+ obj-y += lm32_timer.o
+-obj-y += lm32_uart.o
+ obj-y += lm32_sys.o
+ obj-y += milkymist-hpdmc.o
+ obj-y += milkymist-memcard.o
+ obj-y += milkymist-pfpu.o
+ obj-y += milkymist-softusb.o
+ obj-y += milkymist-sysctl.o
+-obj-y += milkymist-uart.o
+ 
+ obj-y := $(addprefix ../,$(obj-y))
+ 
+diff --git a/hw/m68k/Makefile.objs b/hw/m68k/Makefile.objs
+index ebbe003..c4352e7 100644
+--- a/hw/m68k/Makefile.objs
++++ b/hw/m68k/Makefile.objs
+@@ -1,7 +1,3 @@
+-obj-y = mcf_uart.o
+-
+-obj-y := $(addprefix ../,$(obj-y))
+-
+ obj-y += an5206.o mcf5208.o
+ obj-y += dummy_m68k.o
+ 
+diff --git a/hw/ppc/Makefile.objs b/hw/ppc/Makefile.objs
+index 2d51ae9..1e24b58 100644
+--- a/hw/ppc/Makefile.objs
++++ b/hw/ppc/Makefile.objs
+@@ -1,5 +1,4 @@
+ # IBM pSeries (sPAPR)
+-obj-$(CONFIG_PSERIES) += spapr_vty.o
+ obj-$(CONFIG_PSERIES) += spapr_pci.o
+ obj-$(CONFIG_PSERIES) += spapr_nvram.o
+ # PowerPC 4xx boards
+diff --git a/hw/s390x/Makefile.objs b/hw/s390x/Makefile.objs
+index 9f2f419..77e1218 100644
+--- a/hw/s390x/Makefile.objs
++++ b/hw/s390x/Makefile.objs
+@@ -2,7 +2,7 @@ obj-y = s390-virtio-bus.o s390-virtio.o
+ obj-y += s390-virtio-hcall.o
+ obj-y += sclp.o
+ obj-y += event-facility.o
+-obj-y += sclpquiesce.o sclpconsole.o
++obj-y += sclpquiesce.o
+ obj-y += ipl.o
+ obj-y += css.o
+ obj-y += s390-virtio-ccw.o
+diff --git a/hw/sh4/Makefile.objs b/hw/sh4/Makefile.objs
+index c9b0416..10c971a 100644
+--- a/hw/sh4/Makefile.objs
++++ b/hw/sh4/Makefile.objs
+@@ -1,4 +1,4 @@
+-obj-y += sh_timer.o sh_serial.o sh_intc.o sh_pci.o
++obj-y += sh_timer.o sh_intc.o sh_pci.o
+ 
+ obj-y := $(addprefix ../,$(obj-y))
+ 
+diff --git a/hw/sparc/Makefile.objs b/hw/sparc/Makefile.objs
+index 2354616..e18bc67 100644
+--- a/hw/sparc/Makefile.objs
++++ b/hw/sparc/Makefile.objs
+@@ -3,7 +3,7 @@ obj-y += slavio_timer.o slavio_misc.o sparc32_dma.o
+ obj-y += eccmemctl.o sbi.o sun4c_intctl.o
+ 
+ # GRLIB
+-obj-y += grlib_gptimer.o grlib_irqmp.o grlib_apbuart.o
++obj-y += grlib_gptimer.o grlib_irqmp.o
+ 
+ obj-y := $(addprefix ../,$(obj-y))
+ 
+-- 
+1.8.1.4
+
+
+

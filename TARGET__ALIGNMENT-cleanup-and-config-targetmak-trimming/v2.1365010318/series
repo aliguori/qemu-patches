@@ -1,0 +1,11 @@
+0000-TARGET__ALIGNMENT-cleanup-and-config-targetmak-trimming.txt
+0001-elfload-fix-size-of-ABI-dependent-fields-in-core-dumps.patch
+0002-elfload-fix-size-of-registers-for-N32.patch
+0003-elfload-use-tswapreg-consistently-in-elf_core_copy_regs.patch
+0004-elfload-use-abi_short-ushort-instead-of-target_short-ushort.patch
+0005-elfload-use-abi_int-uint-instead-of-target_int-uint.patch
+0006-elfload-only-give-abi_long-ulong-the-alignment-specified-by-the-target.patch
+0007-elfload-use-abi_llong-ullong-instead-of-target_llong-ullong.patch
+0008-configure-move-CONFIG_QEMU_LDST_OPTIMIZATION-to-config-hostmak.patch
+0009-configure-move-common-libraries-to-config-hostmak.patch
+0010-configure-CONFIG_NO_XEN-is-duplicated.patch

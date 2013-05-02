@@ -1,0 +1,11 @@
+0000-usb-patch-queue.txt
+0001-usb-redir-Fix-crash-on-migration-with-no-client-connected.patch
+0002-usb-redir-Add-flow-control-support.patch
+0003-xhci-fix-numintrs-sanity-checks.patch
+0004-xhci-remove-leftover-debug-printf.patch
+0005-xhci-remove-unimplemented-printfs.patch
+0006-xhci-zap-unused-name-field.patch
+0007-usb-hub-limit-chain-length.patch
+0008-usb-hub-report-status-changes-only-once.patch
+0009-usb-update-docs-for-bus-name-change.patch
+0010-usb-tablet-Dont-claim-wakeup-capability-for-USB-2-version.patch

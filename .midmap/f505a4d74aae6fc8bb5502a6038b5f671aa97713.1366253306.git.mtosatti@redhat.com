@@ -1,0 +1,1 @@
+../qemu-kvmgit-uq-master-queue/v1.1366260501/0001-vmxcap-Open-MSR-file-in-unbuffered-mode.patch

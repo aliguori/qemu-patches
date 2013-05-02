@@ -1,0 +1,58 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Alexander Graf <agraf@suse.de>
+To: qemu-ppc@nongnu.org
+Cc: Blue Swirl <blauwirbel@gmail.com>,
+ Christian Borntraeger <borntraeger@de.ibm.com>,
+ Aurelien Jarno <aurelien@aurel32.net>, qemu-devel@nongnu.org
+Date: Fri, 26 Apr 2013 20:19:21 +0200
+Message-id: 1367000373-7972-13-git-send-email-agraf@suse.de
+Subject: [PATCH 12/24] s390-ccw.img: build s390-ccw rom on s3900 system by
+ default
+
+From: Christian Borntraeger <borntraeger@de.ibm.com>
+
+Lets build the s390-ccw rom if on s390. Also fix the separate build
+folder case.
+
+Signed-off-by: Christian Borntraeger <borntraeger@de.ibm.com>
+Signed-off-by: Alexander Graf <agraf@suse.de>
+---
+ configure |    7 ++++++-
+ 1 files changed, 6 insertions(+), 1 deletions(-)
+
+diff --git a/configure b/configure
+index 8188a7c..a07abc4 100755
+--- a/configure
++++ b/configure
+@@ -3460,6 +3460,10 @@ if test "$cpu" = "ppc64" -a "$targetos" != "Darwin" ; then
+   roms="$roms spapr-rtas"
+ fi
+ 
++if test "$cpu" = "s390x" ; then
++  roms="$roms s390-ccw"
++fi
++
+ # add pixman flags after all config tests are done
+ QEMU_CFLAGS="$QEMU_CFLAGS $pixman_cflags $fdt_cflags"
+ libs_softmmu="$libs_softmmu $pixman_libs"
+@@ -4511,7 +4515,7 @@ fi
+ 
+ # build tree in object directory in case the source is not in the current directory
+ DIRS="tests tests/tcg tests/tcg/cris tests/tcg/lm32 tests/libqos"
+-DIRS="$DIRS pc-bios/optionrom pc-bios/spapr-rtas"
++DIRS="$DIRS pc-bios/optionrom pc-bios/spapr-rtas pc-bios/s390-ccw"
+ DIRS="$DIRS roms/seabios roms/vgabios"
+ DIRS="$DIRS qapi-generated"
+ FILES="Makefile tests/tcg/Makefile qdict-test-data.txt"
+@@ -4519,6 +4523,7 @@ FILES="$FILES tests/tcg/cris/Makefile tests/tcg/cris/.gdbinit"
+ FILES="$FILES tests/tcg/lm32/Makefile po/Makefile"
+ FILES="$FILES pc-bios/optionrom/Makefile pc-bios/keymaps"
+ FILES="$FILES pc-bios/spapr-rtas/Makefile"
++FILES="$FILES pc-bios/s390-ccw/Makefile"
+ FILES="$FILES roms/seabios/Makefile roms/vgabios/Makefile"
+ FILES="$FILES pc-bios/qemu-icon.bmp"
+ for bios_file in \
+-- 
+1.6.0.2
+
+

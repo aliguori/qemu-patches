@@ -1,0 +1,1 @@
+../SCSI-patches-for-2012-08-27/v1.1343426547/0023-scsi-introduce-hotplug-and-hot_unplug-interfaces-for-SCSI-bus.patch

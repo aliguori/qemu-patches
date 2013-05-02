@@ -1,0 +1,23 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+To: peter.maydell@linaro.org, qemu-devel@nongnu.org
+Cc: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+Date: Wed,  3 Apr 2013 14:52:20 +1000
+Message-id: cover.1364964526.git.peter.crosthwaite@xilinx.com
+Subject: [PATCH 0/1] cadence_uart: U-boot driver
+
+Hi Peter,
+
+This is a corner case bug discovered by U-boot driver for cadence GEM.
+
+Regards,
+Peter
+
+
+Peter Crosthwaite (1):
+  cadence_uart: Flush queued characters on reset
+
+ hw/cadence_uart.c |    1 +
+ 1 files changed, 1 insertions(+), 0 deletions(-)
+
+

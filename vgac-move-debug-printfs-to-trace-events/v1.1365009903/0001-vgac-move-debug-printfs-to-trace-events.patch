@@ -1,0 +1,166 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Alex DAMIAN <alexandru.damian@intel.com>
+To: jan.kiszka@siemens.com, qemu-devel@nongnu.org, blauwirbel@gmail.com,
+ Alex DAMIAN <alexandru.damian@intel.com>, kraxel@redhat.com,
+ pbonzini@redhat.com
+Cc: jan.kiszka@siemens.com, qemu-devel@nongnu.org, blauwirbel@gmail.com,
+ kraxel@redhat.com, pbonzini@redhat.com,
+ Alexandru DAMIAN <alexandru.damian@intel.com>
+Date: Wed,  3 Apr 2013 12:25:03 +0300
+Message-id: 1364981103-17220-1-git-send-email-alexandru.damian@intel.com
+Subject: [PATCH 1/1] vga.c: move debug printfs to trace events
+
+From: Alexandru DAMIAN <alexandru.damian@intel.com>
+
+Move all register read/write log events from DEBUG
+ifdefs to the tracing infrastructure.
+
+Signed-off-by: Alexandru DAMIAN <alexandru.damian@intel.com>
+---
+ hw/vga.c     |   45 +++++++++++----------------------------------
+ trace-events |    4 ++++
+ 2 files changed, 15 insertions(+), 34 deletions(-)
+
+diff --git a/hw/vga.c b/hw/vga.c
+index 59bfb22..f9292ed 100644
+--- a/hw/vga.c
++++ b/hw/vga.c
+@@ -32,11 +32,7 @@
+ #include "hw/xen.h"
+ #include "trace.h"
+ 
+-//#define DEBUG_VGA
+ //#define DEBUG_VGA_MEM
+-//#define DEBUG_VGA_REG
+-
+-//#define DEBUG_BOCHS_VBE
+ 
+ /* 16 state changes per vertical frame @60 Hz */
+ #define VGA_TEXT_CURSOR_PERIOD_MS       (1000 * 2 * 16 / 60)
+@@ -390,9 +386,7 @@ uint32_t vga_ioport_read(void *opaque, uint32_t addr)
+             break;
+         case VGA_SEQ_D:
+             val = s->sr[s->sr_index];
+-#ifdef DEBUG_VGA_REG
+-            printf("vga: read SR%x = 0x%02x\n", s->sr_index, val);
+-#endif
++	    trace_vga_register_read("SR", s->sr_index, val);
+             break;
+         case VGA_PEL_IR:
+             val = s->dac_state;
+@@ -418,9 +412,7 @@ uint32_t vga_ioport_read(void *opaque, uint32_t addr)
+             break;
+         case VGA_GFX_D:
+             val = s->gr[s->gr_index];
+-#ifdef DEBUG_VGA_REG
+-            printf("vga: read GR%x = 0x%02x\n", s->gr_index, val);
+-#endif
++            trace_vga_register_read("GR", s->gr_index, val);
+             break;
+         case VGA_CRT_IM:
+         case VGA_CRT_IC:
+@@ -429,9 +421,7 @@ uint32_t vga_ioport_read(void *opaque, uint32_t addr)
+         case VGA_CRT_DM:
+         case VGA_CRT_DC:
+             val = s->cr[s->cr_index];
+-#ifdef DEBUG_VGA_REG
+-            printf("vga: read CR%x = 0x%02x\n", s->cr_index, val);
+-#endif
++            trace_vga_register_read("CR", s->cr_index, val);
+             break;
+         case VGA_IS1_RM:
+         case VGA_IS1_RC:
+@@ -444,9 +434,7 @@ uint32_t vga_ioport_read(void *opaque, uint32_t addr)
+             break;
+         }
+     }
+-#if defined(DEBUG_VGA)
+-    printf("VGA: read addr=0x%04x data=0x%02x\n", addr, val);
+-#endif
++    trace_vga_register_read("port", addr, val);
+     return val;
+ }
+ 
+@@ -461,9 +449,8 @@ void vga_ioport_write(void *opaque, uint32_t addr, uint32_t val)
+     if (vga_ioport_invalid(s, addr)) {
+         return;
+     }
+-#ifdef DEBUG_VGA
+-    printf("VGA: write addr=0x%04x data=0x%02x\n", addr, val);
+-#endif
++    
++    trace_vga_register_write("port", addr, val);
+ 
+     switch(addr) {
+     case VGA_ATT_W:
+@@ -505,9 +492,7 @@ void vga_ioport_write(void *opaque, uint32_t addr, uint32_t val)
+         s->sr_index = val & 7;
+         break;
+     case VGA_SEQ_D:
+-#ifdef DEBUG_VGA_REG
+-        printf("vga: write SR%x = 0x%02x\n", s->sr_index, val);
+-#endif
++        trace_vga_register_write("SR", s->sr_index, val);
+         s->sr[s->sr_index] = val & sr_mask[s->sr_index];
+         if (s->sr_index == VGA_SEQ_CLOCK_MODE) {
+             s->update_retrace_info(s);
+@@ -536,9 +521,7 @@ void vga_ioport_write(void *opaque, uint32_t addr, uint32_t val)
+         s->gr_index = val & 0x0f;
+         break;
+     case VGA_GFX_D:
+-#ifdef DEBUG_VGA_REG
+-        printf("vga: write GR%x = 0x%02x\n", s->gr_index, val);
+-#endif
++        trace_vga_register_write("GR", s->gr_index, val);
+         s->gr[s->gr_index] = val & gr_mask[s->gr_index];
+         vga_update_memory_access(s);
+         break;
+@@ -548,9 +531,7 @@ void vga_ioport_write(void *opaque, uint32_t addr, uint32_t val)
+         break;
+     case VGA_CRT_DM:
+     case VGA_CRT_DC:
+-#ifdef DEBUG_VGA_REG
+-        printf("vga: write CR%x = 0x%02x\n", s->cr_index, val);
+-#endif
++        trace_vga_register_write("CR", s->cr_index, val);
+         /* handle CR0-7 protection */
+         if ((s->cr[VGA_CRTC_V_SYNC_END] & VGA_CR11_LOCK_CR0_CR7) &&
+             s->cr_index <= VGA_CRTC_OVERFLOW) {
+@@ -620,9 +601,7 @@ uint32_t vbe_ioport_read_data(void *opaque, uint32_t addr)
+     } else {
+         val = 0;
+     }
+-#ifdef DEBUG_BOCHS_VBE
+-    printf("VBE: read index=0x%x val=0x%x\n", s->vbe_index, val);
+-#endif
++    trace_vga_register_read("VBE", s->vbe_index, val);
+     return val;
+ }
+ 
+@@ -637,9 +616,7 @@ void vbe_ioport_write_data(void *opaque, uint32_t addr, uint32_t val)
+     VGACommonState *s = opaque;
+ 
+     if (s->vbe_index <= VBE_DISPI_INDEX_NB) {
+-#ifdef DEBUG_BOCHS_VBE
+-        printf("VBE: write index=0x%x val=0x%x\n", s->vbe_index, val);
+-#endif
++        trace_vga_register_write("VBE", s->vbe_index, val);
+         switch(s->vbe_index) {
+         case VBE_DISPI_INDEX_ID:
+             if (val == VBE_DISPI_ID0 ||
+diff --git a/trace-events b/trace-events
+index 7f34112..8a9e199 100644
+--- a/trace-events
++++ b/trace-events
+@@ -1101,3 +1101,7 @@ virtio_ccw_new_device(int cssid, int ssid, int schid, int devno, const char *dev
+ 
+ # migration.c
+ migrate_set_state(int new_state) "new state %d"
++
++# hw/vga.c
++vga_register_read(const char *name, int index, int value) "VGA: read %s %x = 0x%02x"
++vga_register_write(const char *name, int index, int value) "VGA: write %s %x = 0x%02x"
+-- 
+1.7.10.4
+
+

@@ -1,0 +1,314 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Laszlo Ersek <lersek@redhat.com>
+To: aliguori@us.ibm.com, seabios@seabios.org, qemu-devel@nongnu.org
+Cc: 
+Date: Mon,  8 Apr 2013 15:13:23 +0200
+Message-id: 1365426803-1781-6-git-send-email-lersek@redhat.com
+Subject: [PATCH 5/5] i386/pc: build ACPI MADT (APIC) for fw_cfg clients
+
+The set of per-table fw_cfg files is installed with the new function
+pc_acpi_fw_cfg_init().
+
+This function is called at the end of pc_init1() and pc_q35_init():
+
+  pc_init1() or pc_q35_init()
+    pc_acpi_init()             <---- very early
+    /* bunch of setup code */
+    pc_acpi_fw_cfg_init()      <---- added now
+
+rather than from within pc_acpi_init() for two reasons:
+
+(1) In general, calculation of ACPI tables could logically depend on
+machine data set up by pc_init1() / pc_q35_init() *after* their respective
+calls to pc_acpi_init().
+
+(2) pc_acpi_fw_cfg_init() obviously depends on the FWCfgState object,
+which is not available when pc_acpi_init() is called:
+
+  pc_init1() and pc_q35_init()
+    pc_acpi_init()
+    ...
+    pc_memory_init()
+      bochs_bios_init()
+        fw_cfg_init()          <---- FWCfgState object set up here
+          sysbus_mmio_map()
+        fw_cfg_add_bytes(..., acpi_tables, ...);
+    ...
+    pc_acpi_fw_cfg_init()      <---- added now, depends on FWCfgState
+
+The following movements have been considered and rejected:
+
+(2a) Pushing pc_acpi_init() below pc_memory_init(), and sinking the call
+to the new function pc_acpi_fw_cfg_init() into pc_acpi_init():
+
+  pc_init1() and pc_q35_init()
+    ...
+    pc_memory_init()
+      bochs_bios_init()
+        fw_cfg_init()
+          sysbus_mmio_map()
+        fw_cfg_add_bytes(..., acpi_tables, ...);
+    ...
+    pc_acpi_init()             <---- ordered after rest of setup code
+      pc_acpi_fw_cfg_init()    <---- added now
+
+Unfortunately, "acpi_tables" is modified by pc_acpi_init(), hence this
+move would violate a data dependency in pc_memory_init().
+
+(2b) Alternatively, based on (2), hoisting the fw_cfg_init() call to just
+before pc_acpi_init(), and again sinking the call to the new function
+pc_acpi_fw_cfg_init() into pc_acpi_init():
+
+  pc_init1() and pc_q35_init()
+    fw_cfg_init()              <---- pulled up from bochs_bios_init()
+      sysbus_mmio_map()
+    pc_acpi_init()
+      pc_acpi_fw_cfg_init()    <---- added now
+    ...
+    pc_memory_init()
+      bochs_bios_init()
+        fw_cfg_add_bytes(..., acpi_tables, ...);
+
+Alas, sysbus_mmio_map() in fw_cfg_init() depends on the memory layout
+prepared by pc_memory_init().
+
+Ultimately we have the following dependencies:
+- pc_acpi_fw_cfg_init() depends on fw_cfg_init() [2],
+- fw_cfg_init() depends on pc_memory_init() [2b],
+- pc_memory_init() depends on pc_acpi_init() [2a]
+
+This yields the total ordering visible in the patch.
+
+Signed-off-by: Laszlo Ersek <lersek@redhat.com>
+---
+ hw/pc.h           |    1 +
+ hw/i386/pc.c      |  142 +++++++++++++++++++++++++++++++++++++++++++++++++++++
+ hw/i386/pc_piix.c |    2 +
+ hw/i386/pc_q35.c  |   10 +++-
+ 4 files changed, 152 insertions(+), 3 deletions(-)
+
+diff --git a/hw/pc.h b/hw/pc.h
+index 5e5dd3d..0718d8f 100644
+--- a/hw/pc.h
++++ b/hw/pc.h
+@@ -107,6 +107,7 @@ typedef void (*cpu_set_smm_t)(int smm, void *arg);
+ void cpu_smm_register(cpu_set_smm_t callback, void *arg);
+ 
+ void ioapic_init_gsi(GSIState *gsi_state, const char *parent_name);
++void pc_acpi_fw_cfg_init(FWCfgState *fw_cfg);
+ 
+ /* acpi.c */
+ extern int acpi_enabled;
+diff --git a/hw/i386/pc.c b/hw/i386/pc.c
+index e7c88c4..7dd9c60 100644
+--- a/hw/i386/pc.c
++++ b/hw/i386/pc.c
+@@ -52,6 +52,7 @@
+ #include "sysemu/arch_init.h"
+ #include "qemu/bitmap.h"
+ #include "qemu/config-file.h"
++#include "hw/acpi.h"
+ 
+ /* debug PC/ISA interrupts */
+ //#define DEBUG_IRQ
+@@ -1178,3 +1179,144 @@ void ioapic_init_gsi(GSIState *gsi_state, const char *parent_name)
+         gsi_state->ioapic_irq[i] = qdev_get_gpio_in(dev, i);
+     }
+ }
++
++static void pc_acpi_install(FWCfgState *fw_cfg, AcpiTableStdHdr *std_hdr,
++                            size_t blob_size, const char *sig)
++{
++    char *pathname;
++
++    g_assert(blob_size >= sizeof *std_hdr);
++
++    *std_hdr = acpi_dfl_hdr;
++    strncpy(std_hdr->sig, sig, sizeof std_hdr->sig);
++    strncpy(std_hdr->oem_id, "QEMU  ", sizeof std_hdr->oem_id);
++    strncpy(std_hdr->oem_table_id + 4, sig, sizeof std_hdr->oem_table_id - 4);
++    std_hdr->length = cpu_to_le32(blob_size);
++    std_hdr->checksum = acpi_checksum((uint8_t *)std_hdr, blob_size);
++
++    pathname = g_strdup_printf("etc/acpi/%s", sig);
++    fw_cfg_add_file(fw_cfg, pathname, std_hdr, blob_size);
++    g_free(pathname);
++}
++
++static void pc_acpi_madt(FWCfgState *fw_cfg)
++{
++    typedef struct {
++        uint8_t    type;
++        uint8_t    length;
++    } QEMU_PACKED AcpiSubHdr;
++
++    AcpiTableStdHdr *std_hdr;
++    struct {
++        uint32_t   lapic_addr; /* Local Interrupt Controller Address */
++        uint32_t   flags;      /* Multiple APIC flags */
++    } QEMU_PACKED *madt;
++    struct {
++        AcpiSubHdr hdr;
++        uint8_t    processor_id; /* ACPI Processor ID */
++        uint8_t    apic_id;      /* APIC ID */
++        uint32_t   flags;        /* LOcal APIC flags */
++    } QEMU_PACKED *lapic;
++    struct {
++        AcpiSubHdr hdr;
++        uint8_t    io_apic_id;   /* The I/O APIC's ID */
++        uint8_t    reserved;     /* constant zero */
++        uint32_t   io_apic_addr; /* 32-bit physical address to access */
++        uint32_t   gsi_base;     /* interrupt inputs start here */
++    } QEMU_PACKED *io_apic;
++    struct {
++        AcpiSubHdr hdr;
++        uint8_t    bus;    /* constant zero: ISA */
++        uint8_t    source; /* this bus-relative interrupt source... */
++        uint32_t   gsi;    /* ... will signal this global system interrupt */
++        uint16_t   flags;  /* MPS INTI Flags: Polarity, Trigger Mode */
++    } QEMU_PACKED *int_src_ovr;
++    struct {
++        AcpiSubHdr hdr;
++        uint8_t    processor_id; /* ACPI Processor ID */
++        uint16_t   flags;        /* MPS INTI Flags: Polarity, Trigger Mode */
++        uint8_t    lint;         /* LAPIC interrupt input for NMI */
++    } QEMU_PACKED *lapic_nmi;
++
++    static const uint8_t pci_isa_irq[] = { 5, 9, 10, 11 };
++
++    unsigned num_lapic, num_int_src_ovr, i;
++    size_t blob_size;
++    char unsigned *blob;
++
++    /* see note on FW_CFG_MAX_CPUS in bochs_bios_init() */
++    num_lapic = pc_apic_id_limit(max_cpus);
++    num_int_src_ovr = sizeof pci_isa_irq + kvm_allows_irq0_override();
++
++    blob_size = (sizeof *std_hdr)     * 1               +
++                (sizeof *madt)        * 1               +
++                (sizeof *lapic)       * num_lapic       +
++                (sizeof *io_apic)     * 1               +
++                (sizeof *int_src_ovr) * num_int_src_ovr +
++                (sizeof *lapic_nmi)   * 1;
++    blob      = g_malloc(blob_size);
++
++    std_hdr     = (void *)blob;
++    madt        = (void *)(std_hdr     + 1              );
++    lapic       = (void *)(madt        + 1              );
++    io_apic     = (void *)(lapic       + num_lapic      );
++    int_src_ovr = (void *)(io_apic     + 1              );
++    lapic_nmi   = (void *)(int_src_ovr + num_int_src_ovr);
++
++    madt->lapic_addr = cpu_to_le32(APIC_DEFAULT_ADDRESS);
++    madt->flags      = cpu_to_le32(1); /* PCAT_COMPAT */
++
++    /* create a Local APIC structure for each possible APIC ID */
++    for (i = 0; i < num_lapic; ++i) {
++        lapic[i].hdr.type     = 0; /* Processor Local APIC */
++        lapic[i].hdr.length   = sizeof *lapic;
++        lapic[i].processor_id = i;
++        lapic[i].apic_id      = i;
++        lapic[i].flags        = cpu_to_le32(0); /* disabled */
++    }
++    /* enable the CPUs with a CPU index in the [0..smp_cpus-1] range */
++    for (i = 0; i < smp_cpus; ++i) {
++        lapic[x86_cpu_apic_id_from_index(i)].flags = cpu_to_le32(1);
++    }
++
++    io_apic->hdr.type     = 1; /* I/O APIC */
++    io_apic->hdr.length   = sizeof *io_apic;
++    io_apic->io_apic_id   = 0;
++    io_apic->reserved     = 0;
++    io_apic->io_apic_addr = cpu_to_le32(IO_APIC_DEFAULT_ADDRESS);
++    io_apic->gsi_base     = cpu_to_le32(0);
++
++    for (i = 0; i < sizeof pci_isa_irq; ++i) {
++        int_src_ovr[i].hdr.type   = 2; /* Interrupt Source Override */
++        int_src_ovr[i].hdr.length = sizeof *int_src_ovr;
++        int_src_ovr[i].bus        = 0;
++        int_src_ovr[i].source     = pci_isa_irq[i];
++        int_src_ovr[i].gsi        = cpu_to_le32(pci_isa_irq[i]);
++        int_src_ovr[i].flags      = cpu_to_le16(0xd);
++                                    /* active high, level-triggered */
++    }
++    if (kvm_allows_irq0_override()) {
++        int_src_ovr[i].hdr.type   = 2; /* Interrupt Source Override */
++        int_src_ovr[i].hdr.length = sizeof *int_src_ovr;
++        int_src_ovr[i].bus        = 0;
++        int_src_ovr[i].source     = 0;
++        int_src_ovr[i].gsi        = cpu_to_le32(2);
++        int_src_ovr[i].flags      = cpu_to_le16(0); /* conforms to bus spec */
++    }
++
++    lapic_nmi->hdr.type     = 4; /* Local APIC NMI */
++    lapic_nmi->hdr.length   = sizeof *lapic_nmi;
++    lapic_nmi->processor_id = 0xff; /* all processors */
++    lapic_nmi->flags        = cpu_to_le16(0); /* conforms to bus spec */
++    lapic_nmi->lint         = 1; /* NMI connected to LAPIC input LINT1 */
++
++    pc_acpi_install(fw_cfg, std_hdr, blob_size, "APIC");
++}
++
++void pc_acpi_fw_cfg_init(FWCfgState *fw_cfg)
++{
++    if (fw_cfg == NULL) {
++        return;
++    }
++    pc_acpi_madt(fw_cfg);
++}
+diff --git a/hw/i386/pc_piix.c b/hw/i386/pc_piix.c
+index 7761077..c261d50 100644
+--- a/hw/i386/pc_piix.c
++++ b/hw/i386/pc_piix.c
+@@ -217,6 +217,8 @@ static void pc_init1(MemoryRegion *system_memory,
+     if (pci_enabled) {
+         pc_pci_device_init(pci_bus);
+     }
++
++    pc_acpi_fw_cfg_init(fw_cfg);
+ }
+ 
+ static void pc_init_pci(QEMUMachineInitArgs *args)
+diff --git a/hw/i386/pc_q35.c b/hw/i386/pc_q35.c
+index 4f5f347..c852a90 100644
+--- a/hw/i386/pc_q35.c
++++ b/hw/i386/pc_q35.c
+@@ -85,6 +85,7 @@ static void pc_q35_init(QEMUMachineInitArgs *args)
+     ICH9LPCState *ich9_lpc;
+     PCIDevice *ahci;
+     qemu_irq *cmos_s3;
++    FWCfgState *fw_cfg = NULL;
+ 
+     pc_cpus_init(cpu_model);
+     pc_acpi_init("q35-acpi-dsdt.aml");
+@@ -111,9 +112,10 @@ static void pc_q35_init(QEMUMachineInitArgs *args)
+ 
+     /* allocate ram and load rom/bios */
+     if (!xen_enabled()) {
+-        pc_memory_init(get_system_memory(), kernel_filename, kernel_cmdline,
+-                       initrd_filename, below_4g_mem_size, above_4g_mem_size,
+-                       rom_memory, &ram_memory);
++        fw_cfg = pc_memory_init(get_system_memory(), kernel_filename,
++                                kernel_cmdline, initrd_filename,
++                                below_4g_mem_size, above_4g_mem_size,
++                                rom_memory, &ram_memory);
+     }
+ 
+     /* irq lines */
+@@ -207,6 +209,8 @@ static void pc_q35_init(QEMUMachineInitArgs *args)
+     if (pci_enabled) {
+         pc_pci_device_init(host_bus);
+     }
++
++    pc_acpi_fw_cfg_init(fw_cfg);
+ }
+ 
+ static QEMUMachine pc_q35_machine_v1_5 = {
+-- 
+1.7.1
+
+
+_______________________________________________
+SeaBIOS mailing list
+SeaBIOS@seabios.org
+http://www.seabios.org/mailman/listinfo/seabios

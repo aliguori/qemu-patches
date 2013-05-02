@@ -1,0 +1,57 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Cornelia Huck <cornelia.huck@de.ibm.com>
+To: Alexander Graf <agraf@suse.de>
+Cc: Christian Borntraeger <borntraeger@de.ibm.com>,
+ Cornelia Huck <cornelia.huck@de.ibm.com>, qemu-devel@nongnu.org,
+ Dominik Dingel <dingel@linux.vnet.ibm.com>
+Date: Tue, 23 Apr 2013 14:37:12 +0200
+Message-id: 1366720634-13184-3-git-send-email-cornelia.huck@de.ibm.com
+Subject: [PATCH 2/4] s390-ccw.img: Enhance drain_irqs().
+
+- Use tpi + tsch to get interrupts.
+- Return an error if the irb indicates problems.
+
+Signed-off-by: Cornelia Huck <cornelia.huck@de.ibm.com>
+---
+ pc-bios/s390-ccw/virtio.c | 21 ++++++++++++++++++---
+ 1 file changed, 18 insertions(+), 3 deletions(-)
+
+diff --git a/pc-bios/s390-ccw/virtio.c b/pc-bios/s390-ccw/virtio.c
+index 79e2941..2a132f8 100644
+--- a/pc-bios/s390-ccw/virtio.c
++++ b/pc-bios/s390-ccw/virtio.c
+@@ -38,12 +38,27 @@ static void virtio_notify(struct subchannel_id schid)
+  *             Virtio functions                *
+  ***********************************************/
+ 
+-static void drain_irqs(struct subchannel_id schid)
++static int drain_irqs(struct subchannel_id schid)
+ {
+     struct irb irb = {};
++    struct tpi_info tpi_info = {};
++    int r = 0;
++
+     while (1) {
+-        if (tsch(schid, &irb)) {
+-            return;
++        if (tpi(&tpi_info)) {
++            if (tpi_info.schid.sch_no != schid.sch_no) {
++                /* should not really happen... */
++                continue;
++            }
++            if (tsch(schid, &irb)) {
++                /* Might want to differentiate error codes later on. */
++                if (irb.scsw.cstat) {
++                    r = -EIO;
++                } else if (irb.scsw.dstat != 0xc) {
++                    r = -EIO;
++                }
++                return r;
++            }
+         }
+     }
+ }
+-- 
+1.7.12.4
+
+

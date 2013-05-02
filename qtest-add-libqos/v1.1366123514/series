@@ -1,0 +1,8 @@
+0000-qtest-add-libqos.txt
+0001-qtest-dont-use-system-command-to-avoid-double-fork.patch
+0002-qtest-add-libqos-including-PCI-support.patch
+0003-libqos-add-fw_cfg-support.patch
+0004-libqos-add-malloc-support.patch
+0005-i440fx-test-add-test-to-compare-default-register-values.patch
+0006-i440fx-test-add-test-for-PAM-functionality.patch
+0007-fw_cfg-add-qtest-test-case.patch

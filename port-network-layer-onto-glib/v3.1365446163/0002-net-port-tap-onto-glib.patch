@@ -1,0 +1,148 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Liu Ping Fan <pingfank@linux.vnet.ibm.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <anthony@codemonkey.ws>,
+ Paolo Bonzini <pbonzini@redhat.com>, mdroth <mdroth@linux.vnet.ibm.com>,
+ Stefan Hajnoczi <stefanha@redhat.com>
+Date: Mon,  8 Apr 2013 13:36:05 +0800
+Message-id: 1365399368-26967-3-git-send-email-pingfank@linux.vnet.ibm.com
+Subject: [PATCH 2/5] net: port tap onto glib
+
+Signed-off-by: Liu Ping Fan <pingfank@linux.vnet.ibm.com>
+---
+ net/tap.c |   58 +++++++++++++++++++++++++++++++++++++++++++++++-----------
+ 1 files changed, 47 insertions(+), 11 deletions(-)
+
+diff --git a/net/tap.c b/net/tap.c
+index daab350..e19bb07 100644
+--- a/net/tap.c
++++ b/net/tap.c
+@@ -70,25 +70,48 @@ static int tap_can_send(void *opaque);
+ static void tap_send(void *opaque);
+ static void tap_writable(void *opaque);
+ 
+-static void tap_update_fd_handler(TAPState *s)
++static bool readable(void *opaque)
+ {
+-    qemu_set_fd_handler2(s->fd,
+-                         s->read_poll && s->enabled ? tap_can_send : NULL,
+-                         s->read_poll && s->enabled ? tap_send     : NULL,
+-                         s->write_poll && s->enabled ? tap_writable : NULL,
+-                         s);
++    TAPState *s = opaque;
++
++    if (s->enabled && s->read_poll &&
++        tap_can_send(s)) {
++        return true;
++    }
++    return false;
++}
++
++static bool writable(void *opaque)
++{
++    TAPState *s = opaque;
++
++    if (s->enabled && s->write_poll) {
++        return true;
++    }
++    return false;
++}
++
++static gboolean tap_handler(gpointer data)
++{
++    NetClientSource *nsrc = data;
++
++    if (nsrc->gfd.revents & G_IO_IN) {
++        tap_send(nsrc->opaque);
++    }
++    if (nsrc->gfd.revents & G_IO_OUT) {
++        tap_writable(nsrc->opaque);
++    }
++    return true;
+ }
+ 
+ static void tap_read_poll(TAPState *s, bool enable)
+ {
+     s->read_poll = enable;
+-    tap_update_fd_handler(s);
+ }
+ 
+ static void tap_write_poll(TAPState *s, bool enable)
+ {
+     s->write_poll = enable;
+-    tap_update_fd_handler(s);
+ }
+ 
+ static void tap_writable(void *opaque)
+@@ -298,6 +321,7 @@ static void tap_cleanup(NetClientState *nc)
+ static void tap_poll(NetClientState *nc, bool enable)
+ {
+     TAPState *s = DO_UPCAST(TAPState, nc, nc);
++    /* fixme, when tap backend on another thread, the disable should be sync */
+     tap_read_poll(s, enable);
+     tap_write_poll(s, enable);
+ }
+@@ -309,6 +333,11 @@ int tap_get_fd(NetClientState *nc)
+     return s->fd;
+ }
+ 
++static void tap_bind_ctx(NetClientState *nc, GMainContext *ctx)
++{
++    g_source_attach(&nc->nsrc->source, ctx);
++}
++
+ /* fd support */
+ 
+ static NetClientInfo net_tap_info = {
+@@ -319,6 +348,7 @@ static NetClientInfo net_tap_info = {
+     .receive_iov = tap_receive_iov,
+     .poll = tap_poll,
+     .cleanup = tap_cleanup,
++    .bind_ctx = tap_bind_ctx,
+ };
+ 
+ static TAPState *net_tap_fd_init(NetClientState *peer,
+@@ -596,13 +626,19 @@ static int net_init_tap_one(const NetdevTapOptions *tap, NetClientState *peer,
+                             int vnet_hdr, int fd)
+ {
+     TAPState *s;
++    NetClientSource *nsrc;
+ 
+     s = net_tap_fd_init(peer, model, name, fd, vnet_hdr);
+     if (!s) {
+         close(fd);
+         return -1;
+     }
+-
++    nsrc = net_source_new(s->fd, tap_handler, s);
++    nsrc->gfd.events = G_IO_IN|G_IO_OUT;
++    nsrc->readable = readable;
++    nsrc->writable = writable;
++    s->nc.nsrc = nsrc;
++    s->nc.info->bind_ctx(&s->nc, NULL);
+     if (tap_set_sndbuf(s->fd, tap) < 0) {
+         return -1;
+     }
+@@ -843,8 +879,8 @@ int tap_enable(NetClientState *nc)
+     } else {
+         ret = tap_fd_enable(s->fd);
+         if (ret == 0) {
++            /*fixme, will be sync to ensure handler not be called */
+             s->enabled = true;
+-            tap_update_fd_handler(s);
+         }
+         return ret;
+     }
+@@ -861,8 +897,8 @@ int tap_disable(NetClientState *nc)
+         ret = tap_fd_disable(s->fd);
+         if (ret == 0) {
+             qemu_purge_queued_packets(nc);
++            /*fixme, will be sync to ensure handler not be called */
+             s->enabled = false;
+-            tap_update_fd_handler(s);
+         }
+         return ret;
+     }
+-- 
+1.7.4.4
+

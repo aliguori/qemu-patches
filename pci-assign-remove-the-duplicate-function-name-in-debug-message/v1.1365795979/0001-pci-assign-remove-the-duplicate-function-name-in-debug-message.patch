@@ -1,0 +1,80 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Wanlong Gao <gaowanlong@cn.fujitsu.com>
+To: qemu-devel@nongnu.org, Wanlong Gao <gaowanlong@cn.fujitsu.com>
+Cc: pbonzini@redhat.com, alex.williamson@redhat.com, qemu-devel@nongnu.org,
+ Wanlong Gao <gaowanlong@cn.fujitsu.com>
+Date: Fri, 12 Apr 2013 14:46:19 +0800
+Message-id: 1365749179-6069-1-git-send-email-gaowanlong@cn.fujitsu.com
+Subject: [PATCH 1/1] pci-assign: remove the duplicate function name in debug
+ message
+
+While DEBUG() already includes the function name.
+
+Signed-off-by: Wanlong Gao <gaowanlong@cn.fujitsu.com>
+Acked-by: Alex Williamson <alex.williamson@redhat.com>
+---
+ hw/i386/kvm/pci-assign.c | 12 ++++++------
+ 1 file changed, 6 insertions(+), 6 deletions(-)
+
+diff --git a/hw/i386/kvm/pci-assign.c b/hw/i386/kvm/pci-assign.c
+index c1e08ec..6afb82e 100644
+--- a/hw/i386/kvm/pci-assign.c
++++ b/hw/i386/kvm/pci-assign.c
+@@ -226,7 +226,7 @@ static uint32_t slow_bar_readb(void *opaque, hwaddr addr)
+     uint32_t r;
+ 
+     r = *in;
+-    DEBUG("slow_bar_readl addr=0x" TARGET_FMT_plx " val=0x%08x\n", addr, r);
++    DEBUG("addr=0x" TARGET_FMT_plx " val=0x%08x\n", addr, r);
+ 
+     return r;
+ }
+@@ -238,7 +238,7 @@ static uint32_t slow_bar_readw(void *opaque, hwaddr addr)
+     uint32_t r;
+ 
+     r = *in;
+-    DEBUG("slow_bar_readl addr=0x" TARGET_FMT_plx " val=0x%08x\n", addr, r);
++    DEBUG("addr=0x" TARGET_FMT_plx " val=0x%08x\n", addr, r);
+ 
+     return r;
+ }
+@@ -250,7 +250,7 @@ static uint32_t slow_bar_readl(void *opaque, hwaddr addr)
+     uint32_t r;
+ 
+     r = *in;
+-    DEBUG("slow_bar_readl addr=0x" TARGET_FMT_plx " val=0x%08x\n", addr, r);
++    DEBUG("addr=0x" TARGET_FMT_plx " val=0x%08x\n", addr, r);
+ 
+     return r;
+ }
+@@ -260,7 +260,7 @@ static void slow_bar_writeb(void *opaque, hwaddr addr, uint32_t val)
+     AssignedDevRegion *d = opaque;
+     uint8_t *out = d->u.r_virtbase + addr;
+ 
+-    DEBUG("slow_bar_writeb addr=0x" TARGET_FMT_plx " val=0x%02x\n", addr, val);
++    DEBUG("addr=0x" TARGET_FMT_plx " val=0x%02x\n", addr, val);
+     *out = val;
+ }
+ 
+@@ -269,7 +269,7 @@ static void slow_bar_writew(void *opaque, hwaddr addr, uint32_t val)
+     AssignedDevRegion *d = opaque;
+     uint16_t *out = (uint16_t *)(d->u.r_virtbase + addr);
+ 
+-    DEBUG("slow_bar_writew addr=0x" TARGET_FMT_plx " val=0x%04x\n", addr, val);
++    DEBUG("addr=0x" TARGET_FMT_plx " val=0x%04x\n", addr, val);
+     *out = val;
+ }
+ 
+@@ -278,7 +278,7 @@ static void slow_bar_writel(void *opaque, hwaddr addr, uint32_t val)
+     AssignedDevRegion *d = opaque;
+     uint32_t *out = (uint32_t *)(d->u.r_virtbase + addr);
+ 
+-    DEBUG("slow_bar_writel addr=0x" TARGET_FMT_plx " val=0x%08x\n", addr, val);
++    DEBUG("addr=0x" TARGET_FMT_plx " val=0x%08x\n", addr, val);
+     *out = val;
+ }
+ 
+-- 
+1.8.2.1.339.g52a3e01
+
+

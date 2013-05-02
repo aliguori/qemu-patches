@@ -1,0 +1,8 @@
+0000-Migration-Remove-copying-of-guest-ram-pages.txt
+0001-Add-QemuFileWritevBuffer-QemuFileOps.patch
+0002-Add-socket_writev_buffer-function.patch
+0003-Update-bytes_xfer-in-qemu_put_byte.patch
+0004-Store-the-data-to-send-also-in-iovec.patch
+0005-Use-writev-ops-if-available.patch
+0006-Add-qemu_put_buffer_async.patch
+0007-Use-qemu_put_buffer_async-for-guest-memory-pages.patch

@@ -1,0 +1,116 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Richard Henderson <rth@twiddle.net>
+To: qemu-devel@nongnu.org, Richard Henderson <rth@twiddle.net>
+Cc: Aurelien Jarno <aurelien@aurel32.net>, qemu-devel@nongnu.org
+Date: Sun, 31 Mar 2013 15:34:54 -0700
+Message-id: 1364769305-3687-9-git-send-email-rth@twiddle.net
+Subject: [PATCH 08/19] tcg-arm: Improve constant generation
+
+Try fully rotated arguments to mov and mvn before trying movt
+or full decomposition.  Begin decomposition with mvn when it
+looks like it'll help.  Examples include
+
+-:        mov   r9, #0x00000fa0
+-:        orr   r9, r9, #0x000ee000
+-:        orr   r9, r9, #0x0ff00000
+-:        orr   r9, r9, #0xf0000000
++:        mvn   r9, #0x0000005f
++:        eor   r9, r9, #0x00011000
+
+Signed-off-by: Richard Henderson <rth@twiddle.net>
+Reviewed-by: Aurelien Jarno <aurelien@aurel32.net>
+---
+ tcg/arm/tcg-target.c | 67 ++++++++++++++++++++++++++++++++++------------------
+ 1 file changed, 44 insertions(+), 23 deletions(-)
+
+diff --git a/tcg/arm/tcg-target.c b/tcg/arm/tcg-target.c
+index 9e8c97c..1f38795 100644
+--- a/tcg/arm/tcg-target.c
++++ b/tcg/arm/tcg-target.c
+@@ -427,15 +427,31 @@ static inline void tcg_out_dat_imm(TCGContext *s,
+                     (rn << 16) | (rd << 12) | im);
+ }
+ 
+-static inline void tcg_out_movi32(TCGContext *s,
+-                int cond, int rd, uint32_t arg)
+-{
+-    /* TODO: This is very suboptimal, we can easily have a constant
+-     * pool somewhere after all the instructions.  */
+-    if ((int)arg < 0 && (int)arg >= -0x100) {
+-        tcg_out_dat_imm(s, cond, ARITH_MVN, rd, 0, (~arg) & 0xff);
+-    } else if (use_armv7_instructions) {
+-        /* use movw/movt */
++static void tcg_out_movi32(TCGContext *s, int cond, int rd, uint32_t arg)
++{
++    int rot, opc, rn;
++
++    /* For armv7, make sure not to use movw+movt when mov/mvn would do.
++       Speed things up by only checking when movt would be required.
++       Prior to armv7, have one go at fully rotated immediates before
++       doing the decomposition thing below.  */
++    if (!use_armv7_instructions || (arg & 0xffff0000)) {
++        rot = encode_imm(arg);
++        if (rot >= 0) {
++            tcg_out_dat_imm(s, cond, ARITH_MOV, rd, 0,
++                            rotl(arg, rot) | (rot << 7));
++            return;
++        }
++        rot = encode_imm(~arg);
++        if (rot >= 0) {
++            tcg_out_dat_imm(s, cond, ARITH_MVN, rd, 0,
++                            rotl(~arg, rot) | (rot << 7));
++            return;
++        }
++    }
++
++    /* Use movw + movt.  */
++    if (use_armv7_instructions) {
+         /* movw */
+         tcg_out32(s, (cond << 28) | 0x03000000 | (rd << 12)
+                   | ((arg << 4) & 0x000f0000) | (arg & 0xfff));
+@@ -444,22 +460,27 @@ static inline void tcg_out_movi32(TCGContext *s,
+             tcg_out32(s, (cond << 28) | 0x03400000 | (rd << 12)
+                       | ((arg >> 12) & 0x000f0000) | ((arg >> 16) & 0xfff));
+         }
+-    } else {
+-        int opc = ARITH_MOV;
+-        int rn = 0;
+-
+-        do {
+-            int i, rot;
+-
+-            i = ctz32(arg) & ~1;
+-            rot = ((32 - i) << 7) & 0xf00;
+-            tcg_out_dat_imm(s, cond, opc, rd, rn, ((arg >> i) & 0xff) | rot);
+-            arg &= ~(0xff << i);
++        return;
++    }
+ 
+-            opc = ARITH_ORR;
+-            rn = rd;
+-        } while (arg);
++    /* TODO: This is very suboptimal, we can easily have a constant
++       pool somewhere after all the instructions.  */
++    opc = ARITH_MOV;
++    rn = 0;
++    /* If we have lots of leading 1's, we can shorten the sequence by
++       beginning with mvn and then clearing higher bits with eor.  */
++    if (clz32(~arg) > clz32(arg)) {
++        opc = ARITH_MVN, arg = ~arg;
+     }
++    do {
++        int i = ctz32(arg) & ~1;
++        rot = ((32 - i) << 7) & 0xf00;
++        tcg_out_dat_imm(s, cond, opc, rd, rn, ((arg >> i) & 0xff) | rot);
++        arg &= ~(0xff << i);
++
++        opc = ARITH_EOR;
++        rn = rd;
++    } while (arg);
+ }
+ 
+ static inline void tcg_out_dat_rI(TCGContext *s, int cond, int opc, TCGArg dst,
+-- 
+1.8.1.4
+
+

@@ -1,0 +1,388 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+To: Peter Maydell <peter.maydell@linaro.org>, qemu-devel@nongnu.org,
+ Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+Cc: peter.maydell@linaro.org, mst@redhat.com, qemu-devel@nongnu.org,
+ Peter Crosthwaite <peter.crosthwaite@xilinx.com>, blauwirbel@gmail.com,
+ kraxel@redhat.com, Peter Maydell <peter.maydell@linaro.org>,
+ edgar.iglesias@gmail.com
+Date: Fri,  5 Apr 2013 18:43:41 +1000
+Message-id: b58f3b5c3be5a78765ae759e926a06a71a03adc0.1365151096.git.peter.crosthwaite@xilinx.com
+Subject: [PATCH 2/5] register: Add Register API
+
+This API provides some encapsulation of registers and factors our some
+common functionality to common code. Bits of device state (usually MMIO
+registers), often have all sorts of access restrictions and semantics
+associated with them. This API allow you to define what those
+restrictions are on a bit-by-bit basis.
+
+Helper functions are then used to access the register which observe the
+semantics defined by the RegisterAccessInfo struct.
+
+Some features:
+Bits can be marked as read_only (ro field)
+Bits can be marked as write-1-clear (w1c field)
+Bits can be marked as write only (wo)
+Bits can be marked as sticky (nw0 and nw1)
+Reset values can be defined (reset)
+Bits can throw guest errors when written certain values (ge0, ge1)
+Bits can throw unimp errors when written certain values (ui0, ui1)
+Bits can be marked clear on read (cor)
+Pre and post action callbacks can be added to read and write ops
+Verbose debugging info can be enabled/disabled
+
+Useful for defining device register spaces in a data driven way. Cuts
+down on a lot of the verbosity and repetition in the switch-case blocks
+in the standard foo_mmio_read/write functions.
+
+Signed-off-by: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+---
+changed from v1:
+Rebranded as the "Register API" - I think thats probably what it is.
+Near total rewrite of implementation.
+De-arrayified reset (this is client/Memory APIs job).
+Moved out of bitops into its own file (Blue review)
+Added debug, the register pointer, and prefix to a struct (Blue Review)
+Made 64-bit to play friendlier with memory API (Blue review)
+Made backend storage uint8_t (MST review)
+Added read/write callbacks (Blue review)
+Added ui0, ui1 (Blue review)
+Moved re-purposed width (now byte width defining actual storage size)
+Arrayified ge0, ge1 (ui0, ui1 too) and added .reason
+Added wo field (not an April fools joke - this has genuine meaning here)
+Added we mask to write accessor
+
+ Makefile.target         |    2 +-
+ include/exec/register.h |  134 ++++++++++++++++++++++++++++++++++++++
+ register.c              |  164 +++++++++++++++++++++++++++++++++++++++++++++++
+ 3 files changed, 299 insertions(+), 1 deletions(-)
+ create mode 100644 include/exec/register.h
+ create mode 100644 register.c
+
+diff --git a/Makefile.target b/Makefile.target
+index 2bd6d14..9c35931 100644
+--- a/Makefile.target
++++ b/Makefile.target
+@@ -114,7 +114,7 @@ obj-y += hw/
+ obj-$(CONFIG_FDT) += device_tree.o
+ obj-$(CONFIG_KVM) += kvm-all.o
+ obj-$(CONFIG_NO_KVM) += kvm-stub.o
+-obj-y += memory.o savevm.o cputlb.o
++obj-y += memory.o register.o savevm.o cputlb.o
+ obj-$(CONFIG_HAVE_GET_MEMORY_MAPPING) += memory_mapping.o
+ obj-$(CONFIG_HAVE_CORE_DUMP) += dump.o
+ obj-$(CONFIG_NO_GET_MEMORY_MAPPING) += memory_mapping-stub.o
+diff --git a/include/exec/register.h b/include/exec/register.h
+new file mode 100644
+index 0000000..0b05439
+--- /dev/null
++++ b/include/exec/register.h
+@@ -0,0 +1,134 @@
++/*
++ * Register Definition API
++ *
++ * Copyright (c) 2013 Xilinx Inc.
++ * Copyright (c) 2013 Peter Crosthwaite <peter.crosthwaite@xilinx.com>
++ *
++ * This work is licensed under the terms of the GNU GPL, version 2.  See
++ * the COPYING file in the top-level directory.
++ */
++
++#ifndef REGISTER_H
++#define REGISTER_H
++
++#include <stdint.h>
++#include <stdbool.h>
++
++typedef struct RegisterInfo RegisterInfo;
++typedef struct RegisterAccessInfo RegisterAccessInfo;
++
++/**
++ * A register access error message
++ * @mask: Bits in the register the error applies to
++ * @reason: Reason why this access is an error
++ */
++
++typedef struct RegisterAccessError {
++    uint64_t mask;
++    const char *reason;
++} RegisterAccessError;
++
++/**
++ * Access description for a register that is part of guest accessible device
++ * state.
++ *
++ * @name: String name of the register
++ * @ro: whether or not the bit is read-only
++ * @wo: Bits that are write only (read as reset value)
++ * @w1c: bits with the common write 1 to clear semantic.
++ * @nw0: bits that can't be written with a 0 by the guest (sticky 1)
++ * @nw1: bits that can't be written with a 1 by the guest (sticky 0)
++ * @reset: reset value.
++ * @cor: Bits that are clear on read
++ *
++ * @ge1: Bits that when written 1 indicate a guest error
++ * @ge0: Bits that when written 0 indicate a guest error
++ * @ui1: Bits that when written 1 indicate use of an unimplemented feature
++ * @ui0: Bits that when written 0 indicate use of an unimplemented feature
++ *
++ * @pre_write: Pre write callback. Passed the value that's to be written,
++ * immediately before the actual write. The returned value is what is written,
++ * giving the handler a chance to modify the written value.
++ * @post_write: Post write callback. Passed the written value. Most write side
++ * effects should be implemented here.
++ *
++ * @pre_read: Pre read callback.
++ * @post_read: Post read callback. Passes the value that is about to be returned
++ * for a read. The return value from this function is what is ultimately read,
++ * allowing this function to modify the value before return to the client.
++ */
++
++struct RegisterAccessInfo {
++    const char *name;
++    uint64_t ro;
++    uint64_t wo;
++    uint64_t w1c;
++    uint64_t nw0;
++    uint64_t nw1;
++    uint64_t reset;
++    uint64_t cor;
++
++    const RegisterAccessError *ge0;
++    const RegisterAccessError *ge1;
++    const RegisterAccessError *ui0;
++    const RegisterAccessError *ui1;
++
++    uint64_t (*pre_write)(RegisterInfo *reg, uint64_t val);
++    void (*post_write)(RegisterInfo *reg, uint64_t val);
++
++    void (*pre_read)(RegisterInfo *reg);
++    uint64_t (*post_read)(RegisterInfo *reg, uint64_t val);
++};
++
++/**
++ * A register that is part of guest accessible state
++ * @data: pointer to the register data
++ * @data_size: Size of the register in bytes
++ * @data_big_endian: Define endianess of data register
++ *
++ * @access: Access desciption of this register
++ *
++ * @debug: Whether or not verbose debug is enabled
++ * @prefix: String prefix for log and debug messages
++ *
++ * @opaque: Opaque data for the register
++ */
++
++struct RegisterInfo {
++    uint8_t *data;
++    int data_size;
++    bool data_big_endian;
++
++    const RegisterAccessInfo *access;
++
++    bool debug;
++    const char *prefix;
++
++    void *opaque;
++};
++
++/**
++ * write a value to a register, subject to its restrictions
++ * @reg: register to write to
++ * @val: value to write
++ * @we: write enable mask
++ */
++
++void register_write(RegisterInfo *reg, uint64_t val, uint64_t we);
++
++/**
++ * read a value from a register, subject to its restrictions
++ * @reg: register to read from
++ * returns: value read
++ */
++
++uint64_t register_read(RegisterInfo *reg);
++
++/**
++ * reset a register
++ * @reg: register to reset
++ */
++
++void register_reset(RegisterInfo *reg);
++
++#endif
+diff --git a/register.c b/register.c
+new file mode 100644
+index 0000000..439f2f2
+--- /dev/null
++++ b/register.c
+@@ -0,0 +1,164 @@
++/*
++ * Register Definition API
++ *
++ * Copyright (c) 2013 Xilinx Inc.
++ * Copyright (c) 2013 Peter Crosthwaite <peter.crosthwaite@xilinx.com>
++ *
++ * This work is licensed under the terms of the GNU GPL, version 2.  See
++ * the COPYING file in the top-level directory.
++ */
++
++#include "exec/register.h"
++#include "qemu/log.h"
++
++static inline void register_write_log(RegisterInfo *reg, int dir, uint64_t val,
++                                      int mask, const char *msg,
++                                      const char *reason)
++{
++    qemu_log_mask(mask, "%s:%s bits %#" PRIx64 " %s write of %d%s%s\n",
++                  reg->prefix, reg->access->name, val, msg, dir,
++                  reason ? ": " : "", reason ? reason : "");
++}
++
++static inline void register_write_val(RegisterInfo *reg, uint64_t val)
++{
++    int i;
++
++    for (i = 0; i < reg->data_size; ++i) {
++        reg->data[i] = val >> (reg->data_big_endian ?
++                    8 * (reg->data_size - 1 - i) : 8 * i);
++    }
++}
++
++static inline uint64_t register_read_val(RegisterInfo *reg)
++{
++    uint64_t ret = 0;
++    int i;
++
++    for (i = 0; i < reg->data_size; ++i) {
++        ret |= (uint64_t)reg->data[i] << (reg->data_big_endian ?
++                    8 * (reg->data_size - 1 - i) : 8 * i);
++    }
++    return ret;
++}
++
++void register_write(RegisterInfo *reg, uint64_t val, uint64_t we)
++{
++    uint64_t old_val, new_val, test;
++    const RegisterAccessInfo *ac;
++    const RegisterAccessError *rae;
++
++    assert(reg);
++
++    ac = reg->access;
++    if (!ac || !ac->name) {
++        qemu_log_mask(LOG_GUEST_ERROR, "%s: write to undefined device state "
++                      "(written value: %#" PRIx64 ")\n", reg->prefix, val);
++        return;
++    }
++
++    uint32_t no_w0_mask = ac->ro | ac->w1c | ac->nw0 | ~we;
++    uint32_t no_w1_mask = ac->ro | ac->w1c | ac->nw1 | ~we;
++
++    if (reg->debug) {
++        fprintf(stderr, "%s:%s: write of value %#" PRIx64 "\n", reg->prefix,
++                ac->name, val);
++    }
++
++    if (qemu_loglevel_mask(LOG_GUEST_ERROR)) {
++        for (rae = ac->ge1; rae && rae->mask; rae++) {
++            test = val & rae->mask;
++            if (test) {
++                register_write_log(reg, 1, test, LOG_GUEST_ERROR,
++                                   "invalid", rae->reason);
++            }
++        }
++        for (rae = ac->ge0; rae && rae->mask; rae++) {
++            test = val & rae->mask;
++            if (test) {
++                register_write_log(reg, 0, test, LOG_GUEST_ERROR,
++                                   "invalid", rae->reason);
++            }
++        }
++    }
++
++    if (qemu_loglevel_mask(LOG_UNIMP)) {
++        for (rae = ac->ui1; rae && rae->mask; rae++) {
++            test = val & rae->mask;
++            if (test) {
++                register_write_log(reg, 1, test, LOG_GUEST_ERROR,
++                                   "unimplmented", rae->reason);
++            }
++        }
++        for (rae = ac->ui0; rae && rae->mask; rae++) {
++            test = val & rae->mask;
++            if (test) {
++                register_write_log(reg, 0, test, LOG_GUEST_ERROR,
++                                   "unimplemented", rae->reason);
++            }
++        }
++    }
++
++    assert(reg->data);
++    old_val = register_read_val(reg);
++
++    new_val = val & ~(no_w1_mask & val);
++    new_val |= no_w1_mask & old_val & val;
++    new_val |= no_w0_mask & old_val & ~val;
++    new_val &= ~(val & ac->w1c);
++
++    if (ac->pre_write) {
++        new_val = ac->pre_write(reg, new_val);
++    }
++    register_write_val(reg, new_val);
++    if (ac->post_write) {
++        ac->post_write(reg, new_val);
++    }
++}
++
++uint64_t register_read(RegisterInfo *reg)
++{
++    uint64_t ret;
++    const RegisterAccessInfo *ac;
++
++    assert(reg);
++
++    ac = reg->access;
++    if (!ac || !ac->name) {
++        qemu_log_mask(LOG_GUEST_ERROR, "%s: read from undefined device state\n",
++                      reg->prefix);
++        return 0;
++    }
++
++    assert(reg->data);
++    if (ac->pre_read) {
++        ac->pre_read(reg);
++    }
++    ret = register_read_val(reg);
++
++    register_write_val(reg, ret & ~ac->cor);
++
++    ret &= ~ac->wo;
++    ret |= ac->wo & ac->reset;
++
++    if (ac->post_read) {
++        ret = ac->post_read(reg, ret);
++    }
++    if (reg->debug) {
++        fprintf(stderr, "%s:%s: read of value %#" PRIx64 "\n", reg->prefix,
++                ac->name, ret);
++    }
++
++    return ret;
++}
++
++void register_reset(RegisterInfo *reg)
++{
++    assert(reg);
++
++    if (!reg->data || !reg->access) {
++        return;
++    }
++
++    register_write_val(reg, reg->access->reset);
++}
+-- 
+1.7.0.4
+
+

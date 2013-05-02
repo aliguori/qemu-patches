@@ -1,0 +1,39 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Stefan Hajnoczi <stefanha@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, Paolo Bonzini <pbonzini@redhat.com>,
+ Stefan Hajnoczi <stefanha@redhat.com>, pingfank@linux.vnet.ibm.com,
+ Kevin Wolf <kwolf@redhat.com>
+Date: Wed, 17 Apr 2013 15:07:38 +0200
+Message-id: 1366204073-8468-3-git-send-email-stefanha@redhat.com
+Subject: [PATCH 02/17] dataplane/virtio-blk: check exit conditions before
+ aio_poll()
+
+Check exit conditions before entering blocking aio_poll().  This is
+mainly for consistency since it's unlikely that we are stopping in the
+first event loop iteration.
+
+Signed-off-by: Stefan Hajnoczi <stefanha@redhat.com>
+---
+ hw/block/dataplane/virtio-blk.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/hw/block/dataplane/virtio-blk.c b/hw/block/dataplane/virtio-blk.c
+index 5baef23..982896c 100644
+--- a/hw/block/dataplane/virtio-blk.c
++++ b/hw/block/dataplane/virtio-blk.c
+@@ -378,9 +378,9 @@ static void *data_plane_thread(void *opaque)
+ {
+     VirtIOBlockDataPlane *s = opaque;
+ 
+-    do {
++    while (!s->stopping || s->num_reqs > 0) {
+         aio_poll(s->ctx, true);
+-    } while (!s->stopping || s->num_reqs > 0);
++    }
+     return NULL;
+ }
+ 
+-- 
+1.8.1.4
+

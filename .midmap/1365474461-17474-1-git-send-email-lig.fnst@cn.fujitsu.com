@@ -1,0 +1,1 @@
+../hw-i386-pc-prompt-not-multboot-or-morden-kernel-image/v3.1365521261/0001-hw-i386-pc-prompt-not-multboot-or-morden-kernel-image.patch

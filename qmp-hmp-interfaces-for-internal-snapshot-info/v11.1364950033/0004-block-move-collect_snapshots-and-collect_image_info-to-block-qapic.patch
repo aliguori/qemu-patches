@@ -1,0 +1,318 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Wenchao Xia <xiawenc@linux.vnet.ibm.com>
+To: qemu-devel@nongnu.org
+Cc: kwolf@redhat.com, Wenchao Xia <xiawenc@linux.vnet.ibm.com>,
+ stefanha@gmail.com, armbru@redhat.com, lcapitulino@redhat.com,
+ pbonzini@redhat.com
+Date: Tue,  2 Apr 2013 19:47:17 +0800
+Message-id: 1364903250-10429-5-git-send-email-xiawenc@linux.vnet.ibm.com
+Subject: [PATCH 04/17] block: move collect_snapshots() and
+ collect_image_info() to block/qapi.c
+
+  This patch adds block/qapi.c and moves the functions there. To avoid
+conflict and tip better, macro in header file is BLOCK_QAPI_H instead
+of QAPI_H. The moving is for making review easier, those functions
+will be modified and renamed later.
+
+Signed-off-by: Wenchao Xia <xiawenc@linux.vnet.ibm.com>
+Reviewed-by: Eric Blake <eblake@redhat.com>
+Reviewed-by: Kevin Wolf <kwolf@redhat.com>
+---
+ block/Makefile.objs  |    2 +-
+ block/qapi.c         |  107 ++++++++++++++++++++++++++++++++++++++++++++++++++
+ include/block/qapi.h |   35 ++++++++++++++++
+ qemu-img.c           |   86 +--------------------------------------
+ 4 files changed, 146 insertions(+), 84 deletions(-)
+ create mode 100644 block/qapi.c
+ create mode 100644 include/block/qapi.h
+
+diff --git a/block/Makefile.objs b/block/Makefile.objs
+index 60a4cd2..fc27bed 100644
+--- a/block/Makefile.objs
++++ b/block/Makefile.objs
+@@ -3,7 +3,7 @@ block-obj-y += qcow2.o qcow2-refcount.o qcow2-cluster.o qcow2-snapshot.o qcow2-c
+ block-obj-y += qed.o qed-gencb.o qed-l2-cache.o qed-table.o qed-cluster.o
+ block-obj-y += qed-check.o
+ block-obj-y += parallels.o blkdebug.o blkverify.o
+-block-obj-y += snapshot.o
++block-obj-y += snapshot.o qapi.o
+ block-obj-$(CONFIG_WIN32) += raw-win32.o win32-aio.o
+ block-obj-$(CONFIG_POSIX) += raw-posix.o
+ block-obj-$(CONFIG_LINUX_AIO) += linux-aio.o
+diff --git a/block/qapi.c b/block/qapi.c
+new file mode 100644
+index 0000000..e2b1b6b
+--- /dev/null
++++ b/block/qapi.c
+@@ -0,0 +1,107 @@
++/*
++ * Block layer qmp related functions
++ *
++ * Copyright (c) 2003-2008 Fabrice Bellard
++ *
++ * Permission is hereby granted, free of charge, to any person obtaining a copy
++ * of this software and associated documentation files (the "Software"), to deal
++ * in the Software without restriction, including without limitation the rights
++ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
++ * copies of the Software, and to permit persons to whom the Software is
++ * furnished to do so, subject to the following conditions:
++ *
++ * The above copyright notice and this permission notice shall be included in
++ * all copies or substantial portions of the Software.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
++ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
++ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
++ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
++ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
++ * THE SOFTWARE.
++ */
++
++#include "block/qapi.h"
++#include "block/block_int.h"
++
++void bdrv_collect_snapshots(BlockDriverState *bs , ImageInfo *info)
++{
++    int i, sn_count;
++    QEMUSnapshotInfo *sn_tab = NULL;
++    SnapshotInfoList *info_list, *cur_item = NULL;
++    sn_count = bdrv_snapshot_list(bs, &sn_tab);
++
++    for (i = 0; i < sn_count; i++) {
++        info->has_snapshots = true;
++        info_list = g_new0(SnapshotInfoList, 1);
++
++        info_list->value                = g_new0(SnapshotInfo, 1);
++        info_list->value->id            = g_strdup(sn_tab[i].id_str);
++        info_list->value->name          = g_strdup(sn_tab[i].name);
++        info_list->value->vm_state_size = sn_tab[i].vm_state_size;
++        info_list->value->date_sec      = sn_tab[i].date_sec;
++        info_list->value->date_nsec     = sn_tab[i].date_nsec;
++        info_list->value->vm_clock_sec  = sn_tab[i].vm_clock_nsec / 1000000000;
++        info_list->value->vm_clock_nsec = sn_tab[i].vm_clock_nsec % 1000000000;
++
++        /* XXX: waiting for the qapi to support qemu-queue.h types */
++        if (!cur_item) {
++            info->snapshots = cur_item = info_list;
++        } else {
++            cur_item->next = info_list;
++            cur_item = info_list;
++        }
++
++    }
++
++    g_free(sn_tab);
++}
++
++void bdrv_collect_image_info(BlockDriverState *bs,
++                             ImageInfo *info,
++                             const char *filename)
++{
++    uint64_t total_sectors;
++    char backing_filename[1024];
++    char backing_filename2[1024];
++    BlockDriverInfo bdi;
++
++    bdrv_get_geometry(bs, &total_sectors);
++
++    info->filename        = g_strdup(filename);
++    info->format          = g_strdup(bdrv_get_format_name(bs));
++    info->virtual_size    = total_sectors * 512;
++    info->actual_size     = bdrv_get_allocated_file_size(bs);
++    info->has_actual_size = info->actual_size >= 0;
++    if (bdrv_is_encrypted(bs)) {
++        info->encrypted = true;
++        info->has_encrypted = true;
++    }
++    if (bdrv_get_info(bs, &bdi) >= 0) {
++        if (bdi.cluster_size != 0) {
++            info->cluster_size = bdi.cluster_size;
++            info->has_cluster_size = true;
++        }
++        info->dirty_flag = bdi.is_dirty;
++        info->has_dirty_flag = true;
++    }
++    bdrv_get_backing_filename(bs, backing_filename, sizeof(backing_filename));
++    if (backing_filename[0] != '\0') {
++        info->backing_filename = g_strdup(backing_filename);
++        info->has_backing_filename = true;
++        bdrv_get_full_backing_filename(bs, backing_filename2,
++                                       sizeof(backing_filename2));
++
++        if (strcmp(backing_filename, backing_filename2) != 0) {
++            info->full_backing_filename =
++                        g_strdup(backing_filename2);
++            info->has_full_backing_filename = true;
++        }
++
++        if (bs->backing_format[0]) {
++            info->backing_filename_format = g_strdup(bs->backing_format);
++            info->has_backing_filename_format = true;
++        }
++    }
++}
+diff --git a/include/block/qapi.h b/include/block/qapi.h
+new file mode 100644
+index 0000000..4586578
+--- /dev/null
++++ b/include/block/qapi.h
+@@ -0,0 +1,35 @@
++/*
++ * Block layer qmp related functions
++ *
++ * Copyright (c) 2003-2008 Fabrice Bellard
++ *
++ * Permission is hereby granted, free of charge, to any person obtaining a copy
++ * of this software and associated documentation files (the "Software"), to deal
++ * in the Software without restriction, including without limitation the rights
++ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
++ * copies of the Software, and to permit persons to whom the Software is
++ * furnished to do so, subject to the following conditions:
++ *
++ * The above copyright notice and this permission notice shall be included in
++ * all copies or substantial portions of the Software.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
++ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
++ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
++ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
++ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
++ * THE SOFTWARE.
++ */
++
++#ifndef BLOCK_QAPI_H
++#define BLOCK_QAPI_H
++
++#include "qapi-types.h"
++#include "block/block.h"
++
++void bdrv_collect_snapshots(BlockDriverState *bs , ImageInfo *info);
++void bdrv_collect_image_info(BlockDriverState *bs,
++                             ImageInfo *info,
++                             const char *filename);
++#endif
+diff --git a/qemu-img.c b/qemu-img.c
+index 937ec01..a020ccc 100644
+--- a/qemu-img.c
++++ b/qemu-img.c
+@@ -30,6 +30,7 @@
+ #include "qemu/osdep.h"
+ #include "sysemu/sysemu.h"
+ #include "block/block_int.h"
++#include "block/qapi.h"
+ #include <getopt.h>
+ #include <stdio.h>
+ #include <stdarg.h>
+@@ -1588,39 +1589,6 @@ static void dump_json_image_info_list(ImageInfoList *list)
+     QDECREF(str);
+ }
+ 
+-static void collect_snapshots(BlockDriverState *bs , ImageInfo *info)
+-{
+-    int i, sn_count;
+-    QEMUSnapshotInfo *sn_tab = NULL;
+-    SnapshotInfoList *info_list, *cur_item = NULL;
+-    sn_count = bdrv_snapshot_list(bs, &sn_tab);
+-
+-    for (i = 0; i < sn_count; i++) {
+-        info->has_snapshots = true;
+-        info_list = g_new0(SnapshotInfoList, 1);
+-
+-        info_list->value                = g_new0(SnapshotInfo, 1);
+-        info_list->value->id            = g_strdup(sn_tab[i].id_str);
+-        info_list->value->name          = g_strdup(sn_tab[i].name);
+-        info_list->value->vm_state_size = sn_tab[i].vm_state_size;
+-        info_list->value->date_sec      = sn_tab[i].date_sec;
+-        info_list->value->date_nsec     = sn_tab[i].date_nsec;
+-        info_list->value->vm_clock_sec  = sn_tab[i].vm_clock_nsec / 1000000000;
+-        info_list->value->vm_clock_nsec = sn_tab[i].vm_clock_nsec % 1000000000;
+-
+-        /* XXX: waiting for the qapi to support qemu-queue.h types */
+-        if (!cur_item) {
+-            info->snapshots = cur_item = info_list;
+-        } else {
+-            cur_item->next = info_list;
+-            cur_item = info_list;
+-        }
+-
+-    }
+-
+-    g_free(sn_tab);
+-}
+-
+ static void dump_json_image_info(ImageInfo *info)
+ {
+     Error *errp = NULL;
+@@ -1638,54 +1606,6 @@ static void dump_json_image_info(ImageInfo *info)
+     QDECREF(str);
+ }
+ 
+-static void collect_image_info(BlockDriverState *bs,
+-                   ImageInfo *info,
+-                   const char *filename)
+-{
+-    uint64_t total_sectors;
+-    char backing_filename[1024];
+-    char backing_filename2[1024];
+-    BlockDriverInfo bdi;
+-
+-    bdrv_get_geometry(bs, &total_sectors);
+-
+-    info->filename        = g_strdup(filename);
+-    info->format          = g_strdup(bdrv_get_format_name(bs));
+-    info->virtual_size    = total_sectors * 512;
+-    info->actual_size     = bdrv_get_allocated_file_size(bs);
+-    info->has_actual_size = info->actual_size >= 0;
+-    if (bdrv_is_encrypted(bs)) {
+-        info->encrypted = true;
+-        info->has_encrypted = true;
+-    }
+-    if (bdrv_get_info(bs, &bdi) >= 0) {
+-        if (bdi.cluster_size != 0) {
+-            info->cluster_size = bdi.cluster_size;
+-            info->has_cluster_size = true;
+-        }
+-        info->dirty_flag = bdi.is_dirty;
+-        info->has_dirty_flag = true;
+-    }
+-    bdrv_get_backing_filename(bs, backing_filename, sizeof(backing_filename));
+-    if (backing_filename[0] != '\0') {
+-        info->backing_filename = g_strdup(backing_filename);
+-        info->has_backing_filename = true;
+-        bdrv_get_full_backing_filename(bs, backing_filename2,
+-                                       sizeof(backing_filename2));
+-
+-        if (strcmp(backing_filename, backing_filename2) != 0) {
+-            info->full_backing_filename =
+-                        g_strdup(backing_filename2);
+-            info->has_full_backing_filename = true;
+-        }
+-
+-        if (bs->backing_format[0]) {
+-            info->backing_filename_format = g_strdup(bs->backing_format);
+-            info->has_backing_filename_format = true;
+-        }
+-    }
+-}
+-
+ static void dump_human_image_info(ImageInfo *info)
+ {
+     char size_buf[128], dsize_buf[128];
+@@ -1814,8 +1734,8 @@ static ImageInfoList *collect_image_info_list(const char *filename,
+         }
+ 
+         info = g_new0(ImageInfo, 1);
+-        collect_image_info(bs, info, filename);
+-        collect_snapshots(bs, info);
++        bdrv_collect_image_info(bs, info, filename);
++        bdrv_collect_snapshots(bs, info);
+ 
+         elem = g_new0(ImageInfoList, 1);
+         elem->value = info;
+-- 
+1.7.1
+
+
+

@@ -1,0 +1,1 @@
+../Extend-support-of-SMBUSmodule-pm_smbusc-HST_STS-register/v1.1367205981/0001-Extend-support-of-SMBUSmodule-pm_smbusc-HST_STS-register.patch

@@ -1,0 +1,81 @@
+From patches Mon Sep 17 00:00:00 2001
+From: "Peter Maydell" <peter.maydell@linaro.org>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>,
+ =?UTF-8?q?Andreas=20F=C3=A4rber?= <afaerber@web.de>, patches@linaro.org
+Date: Mon, 22 Apr 2013 21:29:46 +0100
+Message-id: 1366662589-18315-2-git-send-email-peter.maydell@linaro.org
+Subject: [PATCH 1/4] ui/cocoa.m: Fix leaks of NSScreen and NSConcreteMapTable
+
+On MacOSX 10.8 QEMU provokes system log messages:
+11/03/2013 17:03:29.998 qemu-system-arm[42586]: objc[42586]: Object
+0x7ffbf9c2f3b0 of class NSScreen autoreleased with no pool in place - just
+leaking - break on objc_autoreleaseNoPool() to debug
+
+11/03/2013 17:03:29.999 qemu-system-arm[42586]: objc[42586]: Object
+0x7ffbf9c3a010 of class NSConcreteMapTable autoreleased with no pool in
+place - just leaking - break on objc_autoreleaseNoPool() to debug
+
+This is because we call back into Cocoa from threads other than
+the UI thread (specifically from the CPU thread). Since we created
+these threads via the POSIX API rather than NSThread, they don't have
+automatically created autorelease pools. Guard all the functions where
+QEMU can call back into the Cocoa UI code with autorelease pools
+so that we don't leak any Cocoa objects.
+
+Signed-off-by: Peter Maydell <peter.maydell@linaro.org>
+---
+ ui/cocoa.m | 11 ++++++++++-
+ 1 file changed, 10 insertions(+), 1 deletion(-)
+
+diff --git a/ui/cocoa.m b/ui/cocoa.m
+index d51462a..833c6ed 100644
+--- a/ui/cocoa.m
++++ b/ui/cocoa.m
+@@ -960,6 +960,8 @@ int main (int argc, const char * argv[]) {
+ static void cocoa_update(DisplayChangeListener *dcl,
+                          int x, int y, int w, int h)
+ {
++    NSAutoreleasePool * pool = [[NSAutoreleasePool alloc] init];
++
+     COCOA_DEBUG("qemu_cocoa: cocoa_update\n");
+ 
+     NSRect rect;
+@@ -973,18 +975,24 @@ static void cocoa_update(DisplayChangeListener *dcl,
+             h * [cocoaView cdy]);
+     }
+     [cocoaView setNeedsDisplayInRect:rect];
++
++    [pool release];
+ }
+ 
+ static void cocoa_switch(DisplayChangeListener *dcl,
+                          DisplaySurface *surface)
+ {
+-    COCOA_DEBUG("qemu_cocoa: cocoa_resize\n");
++    NSAutoreleasePool * pool = [[NSAutoreleasePool alloc] init];
+ 
++    COCOA_DEBUG("qemu_cocoa: cocoa_switch\n");
+     [cocoaView switchSurface:surface];
++    [pool release];
+ }
+ 
+ static void cocoa_refresh(DisplayChangeListener *dcl)
+ {
++    NSAutoreleasePool * pool = [[NSAutoreleasePool alloc] init];
++
+     COCOA_DEBUG("qemu_cocoa: cocoa_refresh\n");
+ 
+     if (kbd_mouse_is_absolute()) {
+@@ -1007,6 +1015,7 @@ static void cocoa_refresh(DisplayChangeListener *dcl)
+         }
+     } while(event != nil);
+     graphic_hw_update(NULL);
++    [pool release];
+ }
+ 
+ static void cocoa_cleanup(void)
+-- 
+1.7.11.4
+
+

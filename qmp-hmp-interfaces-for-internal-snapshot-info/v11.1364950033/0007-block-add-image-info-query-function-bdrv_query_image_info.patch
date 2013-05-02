@@ -1,0 +1,134 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Wenchao Xia <xiawenc@linux.vnet.ibm.com>
+To: Markus Armbruster <armbru@redhat.com>,
+ Wenchao Xia <xiawenc@linux.vnet.ibm.com>, qemu-devel@nongnu.org
+Cc: kwolf@redhat.com, Wenchao Xia <xiawenc@linux.vnet.ibm.com>,
+ qemu-devel@nongnu.org, stefanha@gmail.com, armbru@redhat.com,
+ lcapitulino@redhat.com, pbonzini@redhat.com
+Date: Tue,  2 Apr 2013 19:47:20 +0800
+Message-id: 1364903250-10429-8-git-send-email-xiawenc@linux.vnet.ibm.com
+Subject: [PATCH 07/17] block: add image info query function
+ bdrv_query_image_info()
+
+  This patch adds function bdrv_query_image_info(), which will
+retrieve image info in qmp object format. The implementation is
+based on the code moved from qemu-img.c, but uses block layer
+function to get snapshot info.
+
+Signed-off-by: Wenchao Xia <xiawenc@linux.vnet.ibm.com>
+---
+ block/qapi.c         |   41 ++++++++++++++++++++++++++++++++++-------
+ include/block/qapi.h |    6 +++---
+ qemu-img.c           |    8 ++------
+ 3 files changed, 39 insertions(+), 16 deletions(-)
+
+diff --git a/block/qapi.c b/block/qapi.c
+index 19d4d93..176a479 100644
+--- a/block/qapi.c
++++ b/block/qapi.c
+@@ -122,18 +122,22 @@ int bdrv_query_snapshot_info_list(BlockDriverState *bs,
+     return 0;
+ }
+ 
+-void bdrv_collect_image_info(BlockDriverState *bs,
+-                             ImageInfo *info,
+-                             const char *filename)
++/* return 0 on success, and @p_info will be set only on success. */
++int bdrv_query_image_info(BlockDriverState *bs,
++                          ImageInfo **p_info,
++                          Error **errp)
+ {
+     uint64_t total_sectors;
+-    char backing_filename[1024];
++    const char *backing_filename;
+     char backing_filename2[1024];
+     BlockDriverInfo bdi;
++    int ret;
++    Error *err = NULL;
++    ImageInfo *info = g_new0(ImageInfo, 1);
+ 
+     bdrv_get_geometry(bs, &total_sectors);
+ 
+-    info->filename        = g_strdup(filename);
++    info->filename        = g_strdup(bs->filename);
+     info->format          = g_strdup(bdrv_get_format_name(bs));
+     info->virtual_size    = total_sectors * 512;
+     info->actual_size     = bdrv_get_allocated_file_size(bs);
+@@ -150,8 +154,8 @@ void bdrv_collect_image_info(BlockDriverState *bs,
+         info->dirty_flag = bdi.is_dirty;
+         info->has_dirty_flag = true;
+     }
+-    bdrv_get_backing_filename(bs, backing_filename, sizeof(backing_filename));
+-    if (backing_filename[0] != '\0') {
++    backing_filename = bs->backing_file;
++    if (backing_filename && backing_filename[0] != '\0') {
+         info->backing_filename = g_strdup(backing_filename);
+         info->has_backing_filename = true;
+         bdrv_get_full_backing_filename(bs, backing_filename2,
+@@ -168,4 +172,27 @@ void bdrv_collect_image_info(BlockDriverState *bs,
+             info->has_backing_filename_format = true;
+         }
+     }
++
++    ret = bdrv_query_snapshot_info_list(bs, &info->snapshots, false, &err);
++    switch (ret) {
++    case 0:
++        if (info->snapshots) {
++            info->has_snapshots = true;
++        }
++        break;
++    /* recoverable error */
++    case -ENOMEDIUM:
++        error_free(err);
++        break;
++    case -ENOTSUP:
++        error_free(err);
++        break;
++    default:
++        error_propagate(errp, err);
++        qapi_free_ImageInfo(info);
++        return ret;
++    }
++
++    *p_info = info;
++    return 0;
+ }
+diff --git a/include/block/qapi.h b/include/block/qapi.h
+index fe66053..2c62fdf 100644
+--- a/include/block/qapi.h
++++ b/include/block/qapi.h
+@@ -32,7 +32,7 @@ int bdrv_query_snapshot_info_list(BlockDriverState *bs,
+                                   SnapshotInfoList **p_list,
+                                   bool vm_snapshot,
+                                   Error **errp);
+-void bdrv_collect_image_info(BlockDriverState *bs,
+-                             ImageInfo *info,
+-                             const char *filename);
++int bdrv_query_image_info(BlockDriverState *bs,
++                          ImageInfo **p_info,
++                          Error **errp);
+ #endif
+diff --git a/qemu-img.c b/qemu-img.c
+index 261c277..1dd0a60 100644
+--- a/qemu-img.c
++++ b/qemu-img.c
+@@ -1733,12 +1733,8 @@ static ImageInfoList *collect_image_info_list(const char *filename,
+             goto err;
+         }
+ 
+-        info = g_new0(ImageInfo, 1);
+-        bdrv_collect_image_info(bs, info, filename);
+-        if (!bdrv_query_snapshot_info_list(bs, &info->snapshots,
+-                                           false, NULL) &&
+-            info->snapshots) {
+-            info->has_snapshots = true;
++        if (bdrv_query_image_info(bs, &info, NULL)) {
++            goto err;
+         }
+ 
+         elem = g_new0(ImageInfoList, 1);
+-- 
+1.7.1
+
+
+

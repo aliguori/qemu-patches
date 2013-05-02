@@ -1,0 +1,1 @@
+../block-make-qmp_transaction-extendable/v4.1367508401/0002-block-move-input-parsing-code-in-qmp_transaction.patch

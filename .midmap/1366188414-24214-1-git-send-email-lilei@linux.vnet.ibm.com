@@ -1,0 +1,1 @@
+../chardev-remove-the-headers-of-Memory-chardev-driver/v1.1366235214/0001-chardev-remove-the-headers-of-Memory-chardev-driver.patch

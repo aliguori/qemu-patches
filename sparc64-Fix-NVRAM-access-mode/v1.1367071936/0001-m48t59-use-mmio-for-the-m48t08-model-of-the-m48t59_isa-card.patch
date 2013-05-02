@@ -1,0 +1,89 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Artyom Tarasenko <atar4qemu@gmail.com>
+To: qemu-devel@nongnu.org, =?ISO-8859-1?Q?Andreas_F=E4rber?= <afaerber@suse.de>,
+ Artyom Tarasenko <atar4qemu@gmail.com>
+Cc: blauwirbel@gmail.com, Blue Swirl <blauwirbel@gmail.com>,
+ qemu-devel <qemu-devel@nongnu.org>, Artyom Tarasenko <atar4qemu@gmail.com>,
+ qemu-devel@nongnu.org
+Date: Sat, 27 Apr 2013 09:12:17 +0200
+Message-id: e2498b66b4aeec3b9850d89d3bc87af1d7d37e4b.1367046225.git.atar4qemu@gmail.com
+Subject: [PATCH 1/2] m48t59: use mmio for the m48t08 model of the m48t59_isa
+ card
+
+PrEP and SPARC machines use slightly different variations of
+a Mostek NVRAM chip. Since the SPARC variant is much closer
+to a m48t08 type, the model can be used to differentiate between
+the PIO and MMIO accesses.
+
+Signed-off-by: Artyom Tarasenko <atar4qemu@gmail.com>
+---
+ hw/timer/m48t59.c |   38 +++++++++++++++++++++++++++++++++++---
+ 1 files changed, 35 insertions(+), 3 deletions(-)
+
+diff --git a/hw/timer/m48t59.c b/hw/timer/m48t59.c
+index 5019e06..00ad417 100644
+--- a/hw/timer/m48t59.c
++++ b/hw/timer/m48t59.c
+@@ -632,6 +632,33 @@ static const MemoryRegionOps m48t59_io_ops = {
+     .endianness = DEVICE_LITTLE_ENDIAN,
+ };
+ 
++static uint64_t nvram_read(void *opaque, hwaddr addr, unsigned size)
++{
++    M48t59State *NVRAM = opaque;
++    uint32_t retval;
++
++    retval = m48t59_read(NVRAM, addr);
++    return retval;
++}
++
++static void nvram_write(void *opaque, hwaddr addr, uint64_t value,
++                         unsigned size)
++{
++    M48t59State *NVRAM = opaque;
++
++    m48t59_write(NVRAM, addr, value & 0xff);
++}
++
++static const MemoryRegionOps m48t59_mmio_ops = {
++    .read = nvram_read,
++    .write = nvram_write,
++    .impl = {
++        .min_access_size = 1,
++        .max_access_size = 1,
++    },
++    .endianness = DEVICE_LITTLE_ENDIAN,
++};
++
+ /* Initialisation routine */
+ M48t59State *m48t59_init(qemu_irq IRQ, hwaddr mem_base,
+                          uint32_t io_base, uint16_t size, int model)
+@@ -676,7 +703,11 @@ M48t59State *m48t59_init_isa(ISABus *bus, uint32_t io_base, uint16_t size,
+     d = DO_UPCAST(M48t59ISAState, busdev, dev);
+     s = &d->state;
+ 
+-    memory_region_init_io(&d->io, &m48t59_io_ops, s, "m48t59", 4);
++    if (model == 59) {
++        memory_region_init_io(&d->io, &m48t59_io_ops, s, "m48t59", 4);
++    } else {
++        memory_region_init_io(&d->io, &m48t59_mmio_ops, s, "m48t59", size);
++    }
+     if (io_base != 0) {
+         isa_register_ioport(dev, &d->io, io_base);
+     }
+@@ -700,8 +731,9 @@ static int m48t59_init_isa1(ISADevice *dev)
+ {
+     M48t59ISAState *d = DO_UPCAST(M48t59ISAState, busdev, dev);
+     M48t59State *s = &d->state;
+-
+-    isa_init_irq(dev, &s->IRQ, 8);
++    if (s->model == 59) {
++        isa_init_irq(dev, &s->IRQ, 8);
++    }
+     m48t59_init_common(s);
+ 
+     return 0;
+-- 
+1.7.1
+
+

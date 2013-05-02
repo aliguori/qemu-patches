@@ -1,0 +1,167 @@
+From patches Mon Sep 17 00:00:00 2001
+From: liguang <lig.fnst@cn.fujitsu.com>
+To: Paolo Bonzini <pbonzini@redhat.com>,
+ =?UTF-8?B?IumZs+mfi+S7uyAoV2VpLVJlbiBDaGVuKSI=?=
+ <chenwj@iis.sinica.edu.tw>, qemu-devel@nongnu.org,
+ liguang <lig.fnst@cn.fujitsu.com>, li guang <lig.fnst@cn.fujitsu.com>,
+ "=?Big5?Q?=B3=AF=AD=B3=A5=F4?= \(Wei-Ren Chen\)" <chenwj@iis.sinica.edu.tw>,
+ Peter Maydell <peter.maydell@linaro.org>
+Cc: peter.maydell@linaro.org,
+ =?utf-8?B?IumZs+mfi+S7uw==?= <chenwj@iis.sinica.edu.tw>, proljc@gmail.com,
+ e.voevodin@samsung.com, Paolo Bonzini <pbonzini@redhat.com>,
+ =?UTF-8?B?IumZs+mfi+S7uw==?= <chenwj@iis.sinica.edu.tw>, qemu-devel@nongnu.org,
+ liguang <lig.fnst@cn.fujitsu.com>, blauwirbel@gmail.com,
+ =?utf-8?B?IumZs+mfi+S7uyAoV2VpLVJlbiBDaGVuKSI=?= <chenwj@iis.sinica.edu.tw>,
+ =?Big5?Q?=22=B3=AF=AD=B3=A5=F4?= <chenwj@iis.sinica.edu.tw>,
+ paul@codesourcery.com, Peter Maydell <peter.maydell@linaro.org>,
+ pbonzini@redhat.com,
+ =?utf-8?B?6Zmz6Z+L5Lu7IChXZWktUmVuIENoZW4p?= <chenwj@iis.sinica.edu.tw>,
+ "=?Big5?Q?=22=B3=AF=AD=B3=A5=F4?= \(Wei-Ren Chen\)\""
+ <chenwj@iis.sinica.edu.tw>, afaerber@suse.de, aurelien@aurel32.net,
+ rth@twiddle.net
+Date: Tue, 9 Apr 2013 11:45:39 +0800
+Message-id: 1365479139-18737-1-git-send-email-lig.fnst@cn.fujitsu.com
+Subject: [PATCH 1/1] translate: optimize gen_intermediate_code_internal
+
+Signed-off-by: liguang <lig.fnst@cn.fujitsu.com>
+---
+ target-arm/translate.c  |   17 ++++++++---------
+ target-i386/translate.c |   17 ++++++++---------
+ target-mips/translate.c |   16 ++++++++--------
+ 3 files changed, 24 insertions(+), 26 deletions(-)
+
+diff --git a/target-arm/translate.c b/target-arm/translate.c
+index 35a21be..c0c080d 100644
+--- a/target-arm/translate.c
++++ b/target-arm/translate.c
+@@ -9806,11 +9806,10 @@ static inline void gen_intermediate_code_internal(CPUARMState *env,
+     cpu_M0 = tcg_temp_new_i64();
+     next_page_start = (pc_start & TARGET_PAGE_MASK) + TARGET_PAGE_SIZE;
+     lj = -1;
+-    num_insns = 0;
+     max_insns = tb->cflags & CF_COUNT_MASK;
+-    if (max_insns == 0)
++    if (max_insns == 0) {
+         max_insns = CF_COUNT_MASK;
+-
++    }
+     gen_tb_start();
+ 
+     tcg_clear_temp_count();
+@@ -9889,9 +9888,9 @@ static inline void gen_intermediate_code_internal(CPUARMState *env,
+         if (search_pc) {
+             j = tcg_ctx.gen_opc_ptr - tcg_ctx.gen_opc_buf;
+             if (lj < j) {
+-                lj++;
+-                while (lj < j)
+-                    tcg_ctx.gen_opc_instr_start[lj++] = 0;
++                while (++lj < j) {
++                    tcg_ctx.gen_opc_instr_start[lj] = 0;
++                }
+             }
+             tcg_ctx.gen_opc_pc[lj] = dc->pc;
+             gen_opc_condexec_bits[lj] = (dc->condexec_cond << 4) | (dc->condexec_mask >> 1);
+@@ -10028,9 +10027,9 @@ done_generating:
+ #endif
+     if (search_pc) {
+         j = tcg_ctx.gen_opc_ptr - tcg_ctx.gen_opc_buf;
+-        lj++;
+-        while (lj <= j)
+-            tcg_ctx.gen_opc_instr_start[lj++] = 0;
++        while (++lj <= j) {
++            tcg_ctx.gen_opc_instr_start[lj] = 0;
++        }
+     } else {
+         tb->size = dc->pc - pc_start;
+         tb->icount = num_insns;
+diff --git a/target-i386/translate.c b/target-i386/translate.c
+index 7596a90..9c5e1a3 100644
+--- a/target-i386/translate.c
++++ b/target-i386/translate.c
+@@ -8319,11 +8319,10 @@ static inline void gen_intermediate_code_internal(CPUX86State *env,
+     dc->is_jmp = DISAS_NEXT;
+     pc_ptr = pc_start;
+     lj = -1;
+-    num_insns = 0;
+     max_insns = tb->cflags & CF_COUNT_MASK;
+-    if (max_insns == 0)
++    if (max_insns == 0) {
+         max_insns = CF_COUNT_MASK;
+-
++    }
+     gen_tb_start();
+     for(;;) {
+         if (unlikely(!QTAILQ_EMPTY(&env->breakpoints))) {
+@@ -8338,9 +8337,9 @@ static inline void gen_intermediate_code_internal(CPUX86State *env,
+         if (search_pc) {
+             j = tcg_ctx.gen_opc_ptr - tcg_ctx.gen_opc_buf;
+             if (lj < j) {
+-                lj++;
+-                while (lj < j)
+-                    tcg_ctx.gen_opc_instr_start[lj++] = 0;
++                while (++lj < j) {
++                    tcg_ctx.gen_opc_instr_start[lj] = 0;
++                }
+             }
+             tcg_ctx.gen_opc_pc[lj] = pc_ptr;
+             gen_opc_cc_op[lj] = dc->cc_op;
+@@ -8387,9 +8386,9 @@ static inline void gen_intermediate_code_internal(CPUX86State *env,
+     /* we don't forget to fill the last values */
+     if (search_pc) {
+         j = tcg_ctx.gen_opc_ptr - tcg_ctx.gen_opc_buf;
+-        lj++;
+-        while (lj <= j)
+-            tcg_ctx.gen_opc_instr_start[lj++] = 0;
++        while (++lj <= j) {
++            tcg_ctx.gen_opc_instr_start[lj] = 0;
++        }
+     }
+ 
+ #ifdef DEBUG_DISAS
+diff --git a/target-mips/translate.c b/target-mips/translate.c
+index b7f8203..d1e5d84 100644
+--- a/target-mips/translate.c
++++ b/target-mips/translate.c
+@@ -15571,10 +15571,10 @@ gen_intermediate_code_internal (CPUMIPSState *env, TranslationBlock *tb,
+ #else
+         ctx.mem_idx = ctx.hflags & MIPS_HFLAG_KSU;
+ #endif
+-    num_insns = 0;
+     max_insns = tb->cflags & CF_COUNT_MASK;
+-    if (max_insns == 0)
++    if (max_insns == 0) {
+         max_insns = CF_COUNT_MASK;
++    }
+     LOG_DISAS("\ntb %p idx %d hflags %04x\n", tb, ctx.mem_idx, ctx.hflags);
+     gen_tb_start();
+     while (ctx.bstate == BS_NONE) {
+@@ -15595,9 +15595,9 @@ gen_intermediate_code_internal (CPUMIPSState *env, TranslationBlock *tb,
+         if (search_pc) {
+             j = tcg_ctx.gen_opc_ptr - tcg_ctx.gen_opc_buf;
+             if (lj < j) {
+-                lj++;
+-                while (lj < j)
+-                    tcg_ctx.gen_opc_instr_start[lj++] = 0;
++                while (++lj < j) {
++                    tcg_ctx.gen_opc_instr_start[lj] = 0;
++                }
+             }
+             tcg_ctx.gen_opc_pc[lj] = ctx.pc;
+             gen_opc_hflags[lj] = ctx.hflags & MIPS_HFLAG_BMASK;
+@@ -15678,9 +15678,9 @@ done_generating:
+     *tcg_ctx.gen_opc_ptr = INDEX_op_end;
+     if (search_pc) {
+         j = tcg_ctx.gen_opc_ptr - tcg_ctx.gen_opc_buf;
+-        lj++;
+-        while (lj <= j)
+-            tcg_ctx.gen_opc_instr_start[lj++] = 0;
++        while (++lj <= j) {
++            tcg_ctx.gen_opc_instr_start[lj] = 0;
++        }
+     } else {
+         tb->size = ctx.pc - pc_start;
+         tb->icount = num_insns;
+-- 
+1.7.2.5
+
+

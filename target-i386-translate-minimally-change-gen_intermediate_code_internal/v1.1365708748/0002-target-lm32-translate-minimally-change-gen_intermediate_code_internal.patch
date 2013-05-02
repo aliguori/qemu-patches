@@ -1,0 +1,46 @@
+From patches Mon Sep 17 00:00:00 2001
+From: liguang <lig.fnst@cn.fujitsu.com>
+To: qemu-devel@nongnu.org
+Cc: liguang <lig.fnst@cn.fujitsu.com>
+Date: Thu, 11 Apr 2013 14:32:29 +0800
+Message-id: 1365661963-15396-2-git-send-email-lig.fnst@cn.fujitsu.com
+Subject: [PATCH 02/16] target-lm32/translate: minimally change
+ gen_intermediate_code_internal
+
+Signed-off-by: liguang <lig.fnst@cn.fujitsu.com>
+---
+ target-lm32/translate.c |   10 ++++------
+ 1 files changed, 4 insertions(+), 6 deletions(-)
+
+diff --git a/target-lm32/translate.c b/target-lm32/translate.c
+index af9ce8c..9f37f3d 100644
+--- a/target-lm32/translate.c
++++ b/target-lm32/translate.c
+@@ -1052,9 +1052,8 @@ static void gen_intermediate_code_internal(CPULM32State *env,
+         if (search_pc) {
+             j = tcg_ctx.gen_opc_ptr - tcg_ctx.gen_opc_buf;
+             if (lj < j) {
+-                lj++;
+-                while (lj < j) {
+-                    tcg_ctx.gen_opc_instr_start[lj++] = 0;
++                while (++lj < j) {
++                    tcg_ctx.gen_opc_instr_start[lj] = 0;
+                 }
+             }
+             tcg_ctx.gen_opc_pc[lj] = dc->pc;
+@@ -1111,9 +1110,8 @@ static void gen_intermediate_code_internal(CPULM32State *env,
+     *tcg_ctx.gen_opc_ptr = INDEX_op_end;
+     if (search_pc) {
+         j = tcg_ctx.gen_opc_ptr - tcg_ctx.gen_opc_buf;
+-        lj++;
+-        while (lj <= j) {
+-            tcg_ctx.gen_opc_instr_start[lj++] = 0;
++        while (++lj <= j) {
++            tcg_ctx.gen_opc_instr_start[lj] = 0;
+         }
+     } else {
+         tb->size = dc->pc - pc_start;
+-- 
+1.7.2.5
+
+

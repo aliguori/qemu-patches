@@ -1,0 +1,59 @@
+From patches Mon Sep 17 00:00:00 2001
+From: liguang <lig.fnst@cn.fujitsu.com>
+To: qemu-devel@nongnu.org, liguang <lig.fnst@cn.fujitsu.com>
+Cc: qemu-devel@nongnu.org, liguang <lig.fnst@cn.fujitsu.com>
+Date: Fri, 12 Apr 2013 12:12:21 +0800
+Message-id: 1365739943-30194-1-git-send-email-lig.fnst@cn.fujitsu.com
+Subject: [PATCH 1/3] debugcon: fix always print "addr=0x0, val=0x0" bug
+
+when use DEBUG_DEBUGCON, screen spits:
+debugcon: write addr=0x0000 val=0x00
+Rdebugcon: write addr=0x0000 val=0x00
+udebugcon: write addr=0x0000 val=0x00
+ndebugcon: write addr=0x0000 val=0x00
+ndebugcon: write addr=0x0000 val=0x00
+idebugcon: write addr=0x0000 val=0x00
+ndebugcon: write addr=0x0000 val=0x00
+gdebugcon: write addr=0x0000 val=0x00
+ debugcon: write addr=0x0000 val=0x00
+odebugcon: write addr=0x0000 val=0x00
+pdebugcon: write addr=0x0000 val=0x00
+tdebugcon: write addr=0x0000 val=0x00
+idebugcon: write addr=0x0000 val=0x00
+odebugcon: write addr=0x0000 val=0x00
+ndebugcon: write addr=0x0000 val=0x00
+ debugcon: write addr=0x0000 val=0x00
+rdebugcon: write addr=0x0000 val=0x00
+odebugcon: write addr=0x0000 val=0x00
+mdebugcon: write addr=0x0000 val=0x00
+ debugcon: write addr=0x0000 val=0x00
+adebugcon: write addr=0x0000 val=0x00
+tdebugcon: write addr=0x0000 val=0x00
+ debugcon: write addr=0x0000 val=0x00
+
+Oh, that's wrong, val is not always be 0.
+this bug caused by lack of length modifier
+for specifier 'x'.
+
+Signed-off-by: liguang <lig.fnst@cn.fujitsu.com>
+---
+ hw/char/debugcon.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+diff --git a/hw/char/debugcon.c b/hw/char/debugcon.c
+index 0588eeb..e41ec8a 100644
+--- a/hw/char/debugcon.c
++++ b/hw/char/debugcon.c
+@@ -55,7 +55,7 @@ static void debugcon_ioport_write(void *opaque, hwaddr addr, uint64_t val,
+     unsigned char ch = val;
+ 
+ #ifdef DEBUG_DEBUGCON
+-    printf("debugcon: write addr=0x%04x val=0x%02x\n", addr, val);
++    printf("debugcon: write addr=0x%04llx val=0x%02x\n", addr, val);
+ #endif
+ 
+     qemu_chr_fe_write(s->chr, &ch, 1);
+-- 
+1.7.2.5
+
+

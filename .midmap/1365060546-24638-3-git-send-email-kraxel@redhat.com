@@ -1,0 +1,1 @@
+../console-console-overhaul-continued/v3.1365085722/0002-hw-vmware_vgac-fix-screen-resize-bug-introduced-after-console-revamp.patch

@@ -1,0 +1,6 @@
+0000-vmdk-zeroed-grain-GTE-support.txt
+0001-vmdk-named-return-code.patch
+0002-vmdk-add-support-for-zeroedgrain-GTE.patch
+0003-vmdk-Add-option-to-create-zeroed-grain-image.patch
+0004-vmdk-change-magic-number-to-macro.patch
+0005-vmdk-add-bdrv_co_write_zeroes.patch

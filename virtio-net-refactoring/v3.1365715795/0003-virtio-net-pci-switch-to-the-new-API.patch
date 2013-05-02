@@ -1,0 +1,218 @@
+From patches Mon Sep 17 00:00:00 2001
+From: fred.konrad@greensocs.com
+To: Anthony Liguori <aliguori@us.ibm.com>, qemu-devel@nongnu.org
+Cc: cornelia.huck@de.ibm.com, peter.maydell@linaro.org,
+ mark.burton@greensocs.com, fred.konrad@greensocs.com
+Date: Thu, 11 Apr 2013 16:29:58 +0200
+Message-id: 1365690602-22729-4-git-send-email-fred.konrad@greensocs.com
+Subject: [PATCH 3/7] virtio-net-pci: switch to the new API.
+
+From: KONRAD Frederic <fred.konrad@greensocs.com>
+
+Here the virtio-net-pci is modified for the new API. The device
+virtio-net-pci extends virtio-pci. It creates and connects a
+virtio-net-device during the init. The properties are not changed.
+
+Signed-off-by: KONRAD Frederic <fred.konrad@greensocs.com>
+---
+ hw/virtio/virtio-pci.c | 114 ++++++++++++++++++++++++-------------------------
+ hw/virtio/virtio-pci.h |  15 ++++++-
+ 2 files changed, 69 insertions(+), 60 deletions(-)
+
+diff --git a/hw/virtio/virtio-pci.c b/hw/virtio/virtio-pci.c
+index cb4c064..6ac90f4 100644
+--- a/hw/virtio/virtio-pci.c
++++ b/hw/virtio/virtio-pci.c
+@@ -942,31 +942,6 @@ static void virtio_exit_pci(PCIDevice *pci_dev)
+     msix_uninit_exclusive_bar(pci_dev);
+ }
+ 
+-static int virtio_net_init_pci(PCIDevice *pci_dev)
+-{
+-    VirtIOPCIProxy *proxy = DO_UPCAST(VirtIOPCIProxy, pci_dev, pci_dev);
+-    VirtIODevice *vdev;
+-
+-    vdev = virtio_net_init(&pci_dev->qdev, &proxy->nic, &proxy->net,
+-                           proxy->host_features);
+-
+-    vdev->nvectors = proxy->nvectors;
+-    virtio_init_pci(proxy, vdev);
+-
+-    /* make the actual value visible */
+-    proxy->nvectors = vdev->nvectors;
+-    return 0;
+-}
+-
+-static void virtio_net_exit_pci(PCIDevice *pci_dev)
+-{
+-    VirtIOPCIProxy *proxy = DO_UPCAST(VirtIOPCIProxy, pci_dev, pci_dev);
+-
+-    virtio_pci_stop_ioeventfd(proxy);
+-    virtio_net_exit(proxy->vdev);
+-    virtio_exit_pci(pci_dev);
+-}
+-
+ static int virtio_rng_init_pci(PCIDevice *pci_dev)
+ {
+     VirtIOPCIProxy *proxy = DO_UPCAST(VirtIOPCIProxy, pci_dev, pci_dev);
+@@ -1002,38 +977,6 @@ static void virtio_rng_exit_pci(PCIDevice *pci_dev)
+     virtio_exit_pci(pci_dev);
+ }
+ 
+-static Property virtio_net_properties[] = {
+-    DEFINE_PROP_BIT("ioeventfd", VirtIOPCIProxy, flags, VIRTIO_PCI_FLAG_USE_IOEVENTFD_BIT, false),
+-    DEFINE_PROP_UINT32("vectors", VirtIOPCIProxy, nvectors, 3),
+-    DEFINE_VIRTIO_NET_FEATURES(VirtIOPCIProxy, host_features),
+-    DEFINE_NIC_PROPERTIES(VirtIOPCIProxy, nic),
+-    DEFINE_VIRTIO_NET_PROPERTIES(VirtIOPCIProxy, net),
+-    DEFINE_PROP_END_OF_LIST(),
+-};
+-
+-static void virtio_net_class_init(ObjectClass *klass, void *data)
+-{
+-    DeviceClass *dc = DEVICE_CLASS(klass);
+-    PCIDeviceClass *k = PCI_DEVICE_CLASS(klass);
+-
+-    k->init = virtio_net_init_pci;
+-    k->exit = virtio_net_exit_pci;
+-    k->romfile = "efi-virtio.rom";
+-    k->vendor_id = PCI_VENDOR_ID_REDHAT_QUMRANET;
+-    k->device_id = PCI_DEVICE_ID_VIRTIO_NET;
+-    k->revision = VIRTIO_PCI_ABI_VERSION;
+-    k->class_id = PCI_CLASS_NETWORK_ETHERNET;
+-    dc->reset = virtio_pci_reset;
+-    dc->props = virtio_net_properties;
+-}
+-
+-static const TypeInfo virtio_net_info = {
+-    .name          = "virtio-net-pci",
+-    .parent        = TYPE_PCI_DEVICE,
+-    .instance_size = sizeof(VirtIOPCIProxy),
+-    .class_init    = virtio_net_class_init,
+-};
+-
+ static void virtio_rng_initfn(Object *obj)
+ {
+     PCIDevice *pci_dev = PCI_DEVICE(obj);
+@@ -1464,6 +1407,61 @@ static const TypeInfo virtio_serial_pci_info = {
+     .class_init    = virtio_serial_pci_class_init,
+ };
+ 
++/* virtio-net-pci */
++
++static Property virtio_net_properties[] = {
++    DEFINE_PROP_BIT("ioeventfd", VirtIOPCIProxy, flags,
++                    VIRTIO_PCI_FLAG_USE_IOEVENTFD_BIT, false),
++    DEFINE_PROP_UINT32("vectors", VirtIOPCIProxy, nvectors, 3),
++    DEFINE_VIRTIO_NET_FEATURES(VirtIOPCIProxy, host_features),
++    DEFINE_NIC_PROPERTIES(VirtIONetPCI, vdev.nic_conf),
++    DEFINE_VIRTIO_NET_PROPERTIES(VirtIONetPCI, vdev.net_conf),
++    DEFINE_PROP_END_OF_LIST(),
++};
++
++static int virtio_net_pci_init(VirtIOPCIProxy *vpci_dev)
++{
++    VirtIONetPCI *dev = VIRTIO_NET_PCI(vpci_dev);
++    DeviceState *vdev = DEVICE(&dev->vdev);
++
++    virtio_net_set_config_size(&dev->vdev, vpci_dev->host_features);
++    qdev_set_parent_bus(vdev, BUS(&vpci_dev->bus));
++    if (qdev_init(vdev) < 0) {
++        return -1;
++    }
++    return 0;
++}
++
++static void virtio_net_pci_class_init(ObjectClass *klass, void *data)
++{
++    DeviceClass *dc = DEVICE_CLASS(klass);
++    PCIDeviceClass *k = PCI_DEVICE_CLASS(klass);
++    VirtioPCIClass *vpciklass = VIRTIO_PCI_CLASS(klass);
++
++    k->romfile = "efi-virtio.rom";
++    k->vendor_id = PCI_VENDOR_ID_REDHAT_QUMRANET;
++    k->device_id = PCI_DEVICE_ID_VIRTIO_NET;
++    k->revision = VIRTIO_PCI_ABI_VERSION;
++    k->class_id = PCI_CLASS_NETWORK_ETHERNET;
++    dc->props = virtio_net_properties;
++    vpciklass->init = virtio_net_pci_init;
++}
++
++static void virtio_net_pci_instance_init(Object *obj)
++{
++    VirtIONetPCI *dev = VIRTIO_NET_PCI(obj);
++    object_initialize(OBJECT(&dev->vdev), TYPE_VIRTIO_NET);
++    object_property_add_child(obj, "virtio-backend", OBJECT(&dev->vdev), NULL);
++}
++
++static const TypeInfo virtio_net_pci_info = {
++    .name          = TYPE_VIRTIO_NET_PCI,
++    .parent        = TYPE_VIRTIO_PCI,
++    .instance_size = sizeof(VirtIONetPCI),
++    .instance_init = virtio_net_pci_instance_init,
++    .class_init    = virtio_net_pci_class_init,
++};
++
+ /* virtio-pci-bus */
+ 
+ void virtio_pci_bus_new(VirtioBusState *bus, VirtIOPCIProxy *dev)
+@@ -1502,7 +1500,6 @@ static const TypeInfo virtio_pci_bus_info = {
+ 
+ static void virtio_pci_register_types(void)
+ {
+-    type_register_static(&virtio_net_info);
+     type_register_static(&virtio_rng_info);
+     type_register_static(&virtio_pci_bus_info);
+     type_register_static(&virtio_pci_info);
+@@ -1513,6 +1510,7 @@ static void virtio_pci_register_types(void)
+     type_register_static(&virtio_scsi_pci_info);
+     type_register_static(&virtio_balloon_pci_info);
+     type_register_static(&virtio_serial_pci_info);
++    type_register_static(&virtio_net_pci_info);
+ }
+ 
+ type_init(virtio_pci_register_types)
+diff --git a/hw/virtio/virtio-pci.h b/hw/virtio/virtio-pci.h
+index 85a795f..6f7116e 100644
+--- a/hw/virtio/virtio-pci.h
++++ b/hw/virtio/virtio-pci.h
+@@ -33,6 +33,7 @@ typedef struct VirtIOBlkPCI VirtIOBlkPCI;
+ typedef struct VirtIOSCSIPCI VirtIOSCSIPCI;
+ typedef struct VirtIOBalloonPCI VirtIOBalloonPCI;
+ typedef struct VirtIOSerialPCI VirtIOSerialPCI;
++typedef struct VirtIONetPCI VirtIONetPCI;
+ 
+ /* virtio-pci-bus */
+ 
+@@ -81,9 +82,7 @@ struct VirtIOPCIProxy {
+     uint32_t flags;
+     uint32_t class_code;
+     uint32_t nvectors;
+-    NICConf nic;
+     uint32_t host_features;
+-    virtio_net_conf net;
+     VirtIORNGConf rng;
+     bool ioeventfd_disabled;
+     bool ioeventfd_started;
+@@ -159,6 +158,18 @@ typedef struct V9fsPCIState {
+ 
+ #endif /* CONFIG_VIRTFS */
+ 
++/*
++ * virtio-net-pci: This extends VirtioPCIProxy.
++ */
++#define TYPE_VIRTIO_NET_PCI "virtio-net-pci"
++#define VIRTIO_NET_PCI(obj) \
++        OBJECT_CHECK(VirtIONetPCI, (obj), TYPE_VIRTIO_NET_PCI)
++
++struct VirtIONetPCI {
++    VirtIOPCIProxy parent_obj;
++    VirtIONet vdev;
++};
++
+ void virtio_init_pci(VirtIOPCIProxy *proxy, VirtIODevice *vdev);
+ void virtio_pci_bus_new(VirtioBusState *bus, VirtIOPCIProxy *dev);
+ 
+-- 
+1.8.1.4
+

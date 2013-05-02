@@ -1,0 +1,43 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Tomoki Sekiyama <tsekiyam@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: mdroth@linux.vnet.ibm.com, pbonzini@redhat.com, vrozenfe@redhat.com,
+ Tomoki Sekiyama <tomoki.sekiyama@hds.com>, lcapitulino@redhat.com
+Date: Fri, 12 Apr 2013 16:02:15 -0400
+Message-id: 20130412200215.20814.548.stgit@corona
+Subject: [PATCH 11/11] QMP/qmp.py: set locale for exceptions to display
+ non-ascii messages correctly
+
+qemu-ga in Windows might return error message with multibyte characters
+when the guest OS language is set to other than English. To display such
+messages correctly, this decodes the message based on locale settings.
+
+Signed-off-by: Tomoki Sekiyama <tomoki.sekiyama@hds.com>
+---
+ QMP/qmp.py |    4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/QMP/qmp.py b/QMP/qmp.py
+index c551df1..ee21819 100644
+--- a/QMP/qmp.py
++++ b/QMP/qmp.py
+@@ -11,6 +11,7 @@
+ import json
+ import errno
+ import socket
++import locale
+ 
+ class QMPError(Exception):
+     pass
+@@ -133,7 +134,8 @@ class QEMUMonitorProtocol:
+     def command(self, cmd, **kwds):
+         ret = self.cmd(cmd, kwds)
+         if ret.has_key('error'):
+-            raise Exception(ret['error']['desc'])
++            enc = locale.getpreferredencoding()
++            raise Exception(ret['error']['desc'].encode(enc))
+         return ret['return']
+ 
+     def pull_event(self, wait=False):
+
+

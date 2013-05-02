@@ -1,0 +1,71 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Andreas Schwab <schwab@suse.de>
+To: Andreas Schwab <schwab@suse.de>, qemu-devel@nongnu.org
+Cc: qemu-devel@nongnu.org
+Date: Mon, 11 Mar 2013 18:19:44 +0100
+Message-id: mvmy5dtq2fj.fsf@hawking.suse.de
+Subject: [PATCH 1/1] linux-user: identify running binary in /proc/$$/exe
+
+Some applications like to test /proc/$$/exe (where $$ is the own pid) to
+find out who they are.  Handle it like /proc/self/exe.
+
+Also, do the same handling in readlinkat.
+
+Signed-off-by: Andreas Schwab <schwab@suse.de>
+---
+ linux-user/syscall.c | 22 ++++++++++++++++++----
+ 1 file changed, 18 insertions(+), 4 deletions(-)
+
+diff --git a/linux-user/syscall.c b/linux-user/syscall.c
+index 19630ea..3e5a6ae 100644
+--- a/linux-user/syscall.c
++++ b/linux-user/syscall.c
+@@ -6413,7 +6413,10 @@ abi_long do_syscall(void *cpu_env, int num, abi_long arg1,
+             if (!p || !p2)
+                 ret = -TARGET_EFAULT;
+             else {
+-                if (strncmp((const char *)p, "/proc/self/exe", 14) == 0) {
++                char myself[PATH_MAX];
++                snprintf(myself, sizeof(myself), "/proc/%d/exe", getpid());
++                if (strncmp((const char *)p, "/proc/self/exe", 14) == 0 ||
++                    strcmp((const char *)p, myself) == 0) {
+                     char real[PATH_MAX];
+                     temp = realpath(exec_path,real);
+                     ret = (temp==NULL) ? get_errno(-1) : strlen(real) ;
+@@ -6429,13 +6432,24 @@ abi_long do_syscall(void *cpu_env, int num, abi_long arg1,
+ #if defined(TARGET_NR_readlinkat) && defined(__NR_readlinkat)
+     case TARGET_NR_readlinkat:
+         {
+-            void *p2;
++            void *p2, *temp;
+             p  = lock_user_string(arg2);
+             p2 = lock_user(VERIFY_WRITE, arg3, arg4, 0);
+             if (!p || !p2)
+         	ret = -TARGET_EFAULT;
+-            else
+-                ret = get_errno(sys_readlinkat(arg1, path(p), p2, arg4));
++            else {
++                char myself[PATH_MAX];
++                snprintf(myself, sizeof(myself), "/proc/%d/exe", getpid());
++                if (strncmp((const char *)p, "/proc/self/exe", 14) == 0 ||
++                    strcmp((const char *)p, myself) == 0) {
++                    char real[PATH_MAX];
++                    temp = realpath(exec_path,real);
++                    ret = (temp==NULL) ? get_errno(-1) : strlen(real) ;
++                    snprintf((char *)p2, arg3, "%s", real);
++                }
++                else
++                    ret = get_errno(sys_readlinkat(arg1, path(p), p2, arg4));
++            }
+             unlock_user(p2, arg3, ret);
+             unlock_user(p, arg2, 0);
+         }
+-- 
+1.8.1.5
+
+
+-- 
+Andreas Schwab, SUSE Labs, schwab@suse.de
+GPG Key fingerprint = 0196 BAD8 1CE9 1970 F4BE  1748 E4D4 88E3 0EEA B9D7
+"And now for something completely different."
+

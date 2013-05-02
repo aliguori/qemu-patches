@@ -1,0 +1,35 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: 
+Date: Fri, 27 Jul 2012 17:02:29 +0200
+Message-id: 1343401379-19495-3-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 02/32] megasas: fix misuse of scsi_req_abort
+
+scsi_req_abort is for terminating a command with a non-zero status.
+The ABORT task management function is invoked by scsi_req_cancel.
+In fact, ABORTED_COMMAND is a sense key, not a SAM status code.
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ hw/megasas.c |    2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/hw/megasas.c b/hw/megasas.c
+index c389ddf..9a0eab1 100644
+--- a/hw/megasas.c
++++ b/hw/megasas.c
+@@ -544,7 +544,7 @@ static void megasas_reset_frames(MegasasState *s)
+ static void megasas_abort_command(MegasasCmd *cmd)
+ {
+     if (cmd->req) {
+-        scsi_req_abort(cmd->req, ABORTED_COMMAND);
++        scsi_req_cancel(cmd->req);
+         cmd->req = NULL;
+     }
+ }
+-- 
+1.7.10.4
+
+
+

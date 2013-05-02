@@ -1,0 +1,40 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Jason Wang <jasowang@redhat.com>
+To: aliguori@us.ibm.com, shajnocz@redhat.com, qemu-devel@nongnu.org,
+ mst@redhat.com
+Cc: krkumar2@in.ibm.com, kvm@vger.kernel.org, mprivozn@redhat.com,
+ rusty@rustcorp.com.au, Jason Wang <jasowang@redhat.com>,
+ gaowanlong@cn.fujitsu.com, jwhan@filewood.snu.ac.kr, shiyer@redhat.com
+Date: Fri, 25 Jan 2013 18:35:43 +0800
+Message-id: 1359110143-42984-21-git-send-email-jasowang@redhat.com
+Subject: [PATCH 20/20] virtio-net: compat multiqueue support
+
+Disable multiqueue support for pre 1.4.
+
+Signed-off-by: Jason Wang <jasowang@redhat.com>
+---
+ hw/pc_piix.c |    4 ++++
+ 1 files changed, 4 insertions(+), 0 deletions(-)
+
+diff --git a/hw/pc_piix.c b/hw/pc_piix.c
+index 0a6923d..7bc3563 100644
+--- a/hw/pc_piix.c
++++ b/hw/pc_piix.c
+@@ -297,6 +297,10 @@ static QEMUMachine pc_i440fx_machine_v1_4 = {
+             .driver   = "usb-tablet",\
+             .property = "usb_version",\
+             .value    = stringify(1),\
++        },{ \
++            .driver   = "virtio-net-pci", \
++            .property = "mq", \
++            .value    = "off", \
+         }
+ 
+ static QEMUMachine pc_machine_v1_3 = {
+-- 
+1.7.1
+
+--
+To unsubscribe from this list: send the line "unsubscribe kvm" in
+the body of a message to majordomo@vger.kernel.org
+More majordomo info at  http://vger.kernel.org/majordomo-info.html

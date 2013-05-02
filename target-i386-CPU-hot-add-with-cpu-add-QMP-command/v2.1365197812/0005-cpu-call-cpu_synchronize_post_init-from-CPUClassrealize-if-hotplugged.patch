@@ -1,0 +1,187 @@
+From patches Mon Sep 17 00:00:00 2001
+From: "Igor Mammedov" <imammedo@redhat.com>
+To: Eduardo Habkost <ehabkost@redhat.com>, Igor Mammedov <imammedo@redhat.com>,
+ qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>,
+ Eduardo Habkost <ehabkost@redhat.com>, aliguori@us.ibm.com,
+ ehabkost@redhat.com, claudio.fontana@huawei.com, qemu-devel@nongnu.org,
+ aderumier@odiso.com, lcapitulino@redhat.com, jfrei@linux.vnet.ibm.com,
+ yang.z.zhang@intel.com, pbonzini@redhat.com, eblake@redhat.com,
+ afaerber@suse.de, lig.fnst@cn.fujitsu.com, rth@twiddle.net
+Date: Fri,  5 Apr 2013 16:36:57 +0200
+Message-id: 1365172636-28628-6-git-send-email-imammedo@redhat.com
+Subject: [PATCH 05/22] cpu: call cpu_synchronize_post_init() from
+ CPUClass.realize() if hotplugged
+
+... to synchronize CPU state to KVM
+
+* in addition link kvm-stub.o to *-user target and fix related compiling issues.
+
+Signed-off-by: Igor Mammedov <imammedo@redhat.com>
+---
+ Makefile.target      |  6 ++++++
+ include/sysemu/kvm.h | 22 ++++++++++++----------
+ kvm-all.c            |  1 +
+ kvm-stub.c           |  5 +++++
+ qom/cpu.c            |  4 ++++
+ vl.c                 |  1 -
+ 6 files changed, 28 insertions(+), 11 deletions(-)
+
+diff --git a/Makefile.target b/Makefile.target
+index 2bd6d14..0c2c24a 100644
+--- a/Makefile.target
++++ b/Makefile.target
+@@ -76,6 +76,12 @@ obj-y += disas.o
+ obj-$(CONFIG_GDBSTUB_XML) += gdbstub-xml.o
+ 
+ #########################################################
++# user emulator target
++ifdef CONFIG_USER_ONLY
++obj-y += kvm-stub.o
++endif #CONFIG_USER_ONLY
++
++#########################################################
+ # Linux user emulator target
+ 
+ ifdef CONFIG_LINUX_USER
+diff --git a/include/sysemu/kvm.h b/include/sysemu/kvm.h
+index 495e6f8..8534e44 100644
+--- a/include/sysemu/kvm.h
++++ b/include/sysemu/kvm.h
+@@ -144,10 +144,10 @@ int kvm_cpu_exec(CPUArchState *env);
+ #if !defined(CONFIG_USER_ONLY)
+ void *kvm_vmalloc(ram_addr_t size);
+ void *kvm_arch_vmalloc(ram_addr_t size);
+-void kvm_setup_guest_memory(void *start, size_t size);
++#endif
+ 
++void kvm_setup_guest_memory(void *start, size_t size);
+ void kvm_flush_coalesced_mmio_buffer(void);
+-#endif
+ 
+ int kvm_insert_breakpoint(CPUArchState *current_env, target_ulong addr,
+                           target_ulong len, int type);
+@@ -250,8 +250,6 @@ int kvm_check_extension(KVMState *s, unsigned int extension);
+ uint32_t kvm_arch_get_supported_cpuid(KVMState *env, uint32_t function,
+                                       uint32_t index, int reg);
+ void kvm_cpu_synchronize_state(CPUArchState *env);
+-void kvm_cpu_synchronize_post_reset(CPUState *cpu);
+-void kvm_cpu_synchronize_post_init(CPUState *cpu);
+ 
+ /* generic hooks - to be moved/refactored once there are more users */
+ 
+@@ -262,6 +260,16 @@ static inline void cpu_synchronize_state(CPUArchState *env)
+     }
+ }
+ 
++#if !defined(CONFIG_USER_ONLY)
++int kvm_physical_memory_addr_from_host(KVMState *s, void *ram_addr,
++                                       hwaddr *phys_addr);
++#endif
++
++#endif
++
++void kvm_cpu_synchronize_post_reset(CPUState *cpu);
++void kvm_cpu_synchronize_post_init(CPUState *cpu);
++
+ static inline void cpu_synchronize_post_reset(CPUState *cpu)
+ {
+     if (kvm_enabled()) {
+@@ -277,12 +285,6 @@ static inline void cpu_synchronize_post_init(CPUState *cpu)
+ }
+ 
+ 
+-#if !defined(CONFIG_USER_ONLY)
+-int kvm_physical_memory_addr_from_host(KVMState *s, void *ram_addr,
+-                                       hwaddr *phys_addr);
+-#endif
+-
+-#endif
+ int kvm_set_ioeventfd_mmio(int fd, uint32_t adr, uint32_t val, bool assign,
+                            uint32_t size);
+ 
+diff --git a/kvm-all.c b/kvm-all.c
+index fc4e17c..1d17128 100644
+--- a/kvm-all.c
++++ b/kvm-all.c
+@@ -109,6 +109,7 @@ bool kvm_async_interrupts_allowed;
+ bool kvm_irqfds_allowed;
+ bool kvm_msi_via_irqfd_allowed;
+ bool kvm_gsi_routing_allowed;
++bool kvm_allowed;
+ 
+ static const KVMCapabilityInfo kvm_required_capabilites[] = {
+     KVM_CAP_INFO(USER_MEMORY),
+diff --git a/kvm-stub.c b/kvm-stub.c
+index 82875dd..f3e9438 100644
+--- a/kvm-stub.c
++++ b/kvm-stub.c
+@@ -12,7 +12,9 @@
+ 
+ #include "qemu-common.h"
+ #include "hw/hw.h"
++#ifndef CONFIG_USER_ONLY
+ #include "hw/pci/msi.h"
++#endif
+ #include "cpu.h"
+ #include "exec/gdbstub.h"
+ #include "sysemu/kvm.h"
+@@ -23,6 +25,7 @@ bool kvm_async_interrupts_allowed;
+ bool kvm_irqfds_allowed;
+ bool kvm_msi_via_irqfd_allowed;
+ bool kvm_gsi_routing_allowed;
++bool kvm_allowed;
+ 
+ int kvm_init_vcpu(CPUState *cpu)
+ {
+@@ -122,6 +125,7 @@ int kvm_on_sigbus(int code, void *addr)
+     return 1;
+ }
+ 
++#ifndef CONFIG_USER_ONLY
+ int kvm_irqchip_add_msi_route(KVMState *s, MSIMessage msg)
+ {
+     return -ENOSYS;
+@@ -145,3 +149,4 @@ int kvm_irqchip_remove_irqfd_notifier(KVMState *s, EventNotifier *n, int virq)
+ {
+     return -ENOSYS;
+ }
++#endif
+diff --git a/qom/cpu.c b/qom/cpu.c
+index e242dcb..0c76712 100644
+--- a/qom/cpu.c
++++ b/qom/cpu.c
+@@ -20,6 +20,7 @@
+ 
+ #include "qom/cpu.h"
+ #include "qemu-common.h"
++#include "sysemu/kvm.h"
+ 
+ void cpu_reset_interrupt(CPUState *cpu, int mask)
+ {
+@@ -57,6 +58,9 @@ static ObjectClass *cpu_common_class_by_name(const char *cpu_model)
+ 
+ static void cpu_common_realizefn(DeviceState *dev, Error **errp)
+ {
++    if (dev->hotplugged) {
++        cpu_synchronize_post_init(CPU(dev));
++    }
+ }
+ 
+ static void cpu_class_init(ObjectClass *klass, void *data)
+diff --git a/vl.c b/vl.c
+index a8bba04..97f0349 100644
+--- a/vl.c
++++ b/vl.c
+@@ -267,7 +267,6 @@ static NotifierList machine_init_done_notifiers =
+     NOTIFIER_LIST_INITIALIZER(machine_init_done_notifiers);
+ 
+ static bool tcg_allowed = true;
+-bool kvm_allowed;
+ bool xen_allowed;
+ uint32_t xen_domid;
+ enum xen_mode xen_mode = XEN_EMULATE;
+-- 
+1.8.1.4
+
+

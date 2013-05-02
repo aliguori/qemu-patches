@@ -1,0 +1,51 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Andreas Schwab <schwab@suse.de>
+To: qemu-devel@nongnu.org
+Cc: 
+Date: Tue, 09 Apr 2013 17:41:33 +0200
+Message-id: mvmvc7v1zki.fsf@hawking.suse.de
+Subject: [PATCH 1/1] linux-user: fix setgroups/getgroups for non-UID16 archs
+
+Don't assume target_id is a short.
+
+Signed-off-by: Andreas Schwab <schwab@suse.de>
+---
+ linux-user/syscall.c | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/linux-user/syscall.c b/linux-user/syscall.c
+index d3c26de..3f13d0b 100644
+--- a/linux-user/syscall.c
++++ b/linux-user/syscall.c
+@@ -7800,12 +7800,12 @@ abi_long do_syscall(void *cpu_env, int num, abi_long arg1,
+             if (gidsetsize == 0)
+                 break;
+             if (!is_error(ret)) {
+-                target_grouplist = lock_user(VERIFY_WRITE, arg2, gidsetsize * 2, 0);
++                target_grouplist = lock_user(VERIFY_WRITE, arg2, gidsetsize * sizeof(target_id), 0);
+                 if (!target_grouplist)
+                     goto efault;
+                 for(i = 0;i < ret; i++)
+                     target_grouplist[i] = tswapid(high2lowgid(grouplist[i]));
+-                unlock_user(target_grouplist, arg2, gidsetsize * 2);
++                unlock_user(target_grouplist, arg2, gidsetsize * sizeof(target_id));
+             }
+         }
+         break;
+@@ -7817,7 +7817,7 @@ abi_long do_syscall(void *cpu_env, int num, abi_long arg1,
+             int i;
+             if (gidsetsize) {
+                 grouplist = alloca(gidsetsize * sizeof(gid_t));
+-                target_grouplist = lock_user(VERIFY_READ, arg2, gidsetsize * 2, 1);
++                target_grouplist = lock_user(VERIFY_READ, arg2, gidsetsize * sizeof(target_id), 1);
+                 if (!target_grouplist) {
+                     ret = -TARGET_EFAULT;
+                     goto fail;
+-- 
+1.8.2.1
+
+-- 
+Andreas Schwab, SUSE Labs, schwab@suse.de
+GPG Key fingerprint = 0196 BAD8 1CE9 1970 F4BE  1748 E4D4 88E3 0EEA B9D7
+"And now for something completely different."
+

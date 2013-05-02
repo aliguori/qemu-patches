@@ -1,0 +1,1 @@
+../usb-redir-chardev-flowcontrol-patches-v4/v1.1365179418/0002-virtio-console-Remove-any-pending-watches-on-close.patch

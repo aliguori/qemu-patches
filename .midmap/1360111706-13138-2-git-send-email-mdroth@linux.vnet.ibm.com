@@ -1,0 +1,1 @@
+../fix-migration-failure-from-13-due-to-SeaBIOS-size-change/v1.1360111704/0001-savevm-add-support-for-RAMBlock-resize-handlers.patch

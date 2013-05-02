@@ -1,0 +1,1 @@
+../spice-patch-queue/v1.1366131385/0008-spice-qemu-char-Remove-intermediate-buffer.patch

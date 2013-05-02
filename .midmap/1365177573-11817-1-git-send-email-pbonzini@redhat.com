@@ -1,0 +1,1 @@
+../qemu-char-eliminate-busy-waiting-on-can_read-returning-zero/v2.1365202773/0001-qemu-char-eliminate-busy-waiting-on-can_read-returning-zero.patch

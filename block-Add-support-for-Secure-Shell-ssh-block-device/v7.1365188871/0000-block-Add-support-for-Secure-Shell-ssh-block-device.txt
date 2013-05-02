@@ -1,0 +1,23 @@
+From patches Mon Sep 17 00:00:00 2001
+From: "Richard W.M. Jones" <rjones@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: 
+Date: Fri,  5 Apr 2013 14:07:51 +0100
+Message-id: 1365167273-28050-1-git-send-email-rjones@redhat.com
+Subject: [PATCH 0/2] block: Add support for Secure Shell (ssh) block device.
+
+Since v6:
+
+- This fixes a rather serious race condition in the previous versions,
+  which only manifested itself when using 'snapshot=on'.
+
+- Store the attributes (like filesize) in the state.
+
+- Macros for LOCK/UNLOCK to make debugging simpler.
+
+- Added an ssh driver to libguestfs and tested with that:
+  https://www.redhat.com/archives/libguestfs/2013-April/msg00022.html
+
+Rich.
+
+

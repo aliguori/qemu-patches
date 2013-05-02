@@ -1,0 +1,1 @@
+../seabios-move-acpi-table-formatting-out-of-bios/v1.1366909340/0002-acpi-load-and-link-tables-from--etc-acpi-.patch

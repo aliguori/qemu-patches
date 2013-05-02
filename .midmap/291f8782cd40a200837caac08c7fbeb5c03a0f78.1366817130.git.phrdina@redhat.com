@@ -1,0 +1,1 @@
+../covert-savevm-loadvm-and-delvm-into-qapi/v2.1366842718/0007-savevm-update-error-reporting-for-qemu_loadvm_state.patch

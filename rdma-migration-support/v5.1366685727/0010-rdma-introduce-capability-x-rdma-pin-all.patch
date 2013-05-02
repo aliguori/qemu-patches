@@ -1,0 +1,96 @@
+From patches Mon Sep 17 00:00:00 2001
+From: mrhines@linux.vnet.ibm.com
+To: quintela@redhat.com
+Cc: Anthony Liguori <aliguori@us.ibm.com>, qemu-devel@nongnu.org,
+ Michael R Hines <mrhines@us.ibm.com>, Bulent Abali <abali@us.ibm.com>,
+ owasserm@redhat.com, pbonzini@redhat.com, Gokul B Kandiraju <gokul@us.ibm.com>,
+ eblake@redhat.com
+Date: Mon, 22 Apr 2013 21:55:37 -0400
+Message-id: 1366682139-22122-11-git-send-email-mrhines@linux.vnet.ibm.com
+Subject: [PATCH 10/12] rdma: introduce capability x-rdma-pin-all
+
+From: "Michael R. Hines" <mrhines@us.ibm.com>
+
+This capability allows you to disable dynamic chunk registration
+for better throughput on high-performance links.
+
+For example, using an 8GB RAM virtual machine with all 8GB of memory in
+active use and the VM itself is completely idle using a 40 gbps infiniband link:
+
+1. x-rdma-pin-all disabled total time: approximately 7.5 seconds @ 9.5 Gbps
+2. x-rdma-pin-all enabled total time: approximately 4 seconds @ 26 Gbps
+
+These numbers would of course scale up to whatever size virtual machine
+you have to migrate using RDMA.
+
+Enabling this feature does *not* have any measurable affect on
+migration *downtime*. This is because, without this feature, all of the
+memory will have already been registered already in advance during
+the bulk round and does not need to be re-registered during the successive
+iteration rounds.
+
+Signed-off-by: Michael R. Hines <mrhines@us.ibm.com>
+Reviewed-by: Eric Blake <eblake@redhat.com>
+---
+ include/migration/migration.h |    2 ++
+ migration.c                   |    9 +++++++++
+ qapi-schema.json              |    7 ++++++-
+ 3 files changed, 17 insertions(+), 1 deletion(-)
+
+diff --git a/include/migration/migration.h b/include/migration/migration.h
+index d173bd9..3b4d5e9 100644
+--- a/include/migration/migration.h
++++ b/include/migration/migration.h
+@@ -122,6 +122,8 @@ void migrate_add_blocker(Error *reason);
+  */
+ void migrate_del_blocker(Error *reason);
+ 
++bool migrate_rdma_pin_all(void);
++
+ int xbzrle_encode_buffer(uint8_t *old_buf, uint8_t *new_buf, int slen,
+                          uint8_t *dst, int dlen);
+ int xbzrle_decode_buffer(uint8_t *src, int slen, uint8_t *dst, int dlen);
+diff --git a/migration.c b/migration.c
+index 48b5174..b13fa66 100644
+--- a/migration.c
++++ b/migration.c
+@@ -476,6 +476,15 @@ void qmp_migrate_set_downtime(double value, Error **errp)
+     max_downtime = (uint64_t)value;
+ }
+ 
++bool migrate_rdma_pin_all(void)
++{
++    MigrationState *s;
++
++    s = migrate_get_current();
++
++    return s->enabled_capabilities[MIGRATION_CAPABILITY_X_RDMA_PIN_ALL];
++}
++
+ int migrate_use_xbzrle(void)
+ {
+     MigrationState *s;
+diff --git a/qapi-schema.json b/qapi-schema.json
+index cc846c3..b73e30a 100644
+--- a/qapi-schema.json
++++ b/qapi-schema.json
+@@ -602,10 +602,15 @@
+ #          This feature allows us to minimize migration traffic for certain work
+ #          loads, by sending compressed difference of the pages
+ #
++# @x-rdma-pin-all: Controls whether or not the entire VM memory footprint is
++#          mlock()'d on demand or all at once. Refer to docs/rdma.txt for usage.
++#          Disabled by default. Experimental: may (or may not) be renamed after
++#          further testing is complete. (since 1.5)
++#
+ # Since: 1.2
+ ##
+ { 'enum': 'MigrationCapability',
+-  'data': ['xbzrle'] }
++  'data': ['xbzrle', 'x-rdma-pin-all'] }
+ 
+ ##
+ # @MigrationCapabilityStatus
+-- 
+1.7.10.4
+

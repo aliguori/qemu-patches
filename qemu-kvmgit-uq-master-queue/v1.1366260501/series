@@ -1,0 +1,6 @@
+0000-qemu-kvmgit-uq-master-queue.txt
+0001-vmxcap-Open-MSR-file-in-unbuffered-mode.patch
+0002-vmxcap-Augment-reported-information.patch
+0003-vmxcap-Report-APIC-register-emulation-and-RDTSCP-control.patch
+0004-target-i386-kvm-save-restore-steal-time-MSR.patch
+0005-vmxcap-Update-according-to-SDM-of-January-2013.patch

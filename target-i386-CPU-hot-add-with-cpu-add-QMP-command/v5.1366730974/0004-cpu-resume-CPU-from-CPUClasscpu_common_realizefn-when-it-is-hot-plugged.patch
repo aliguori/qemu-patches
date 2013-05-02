@@ -1,0 +1,42 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Igor Mammedov <imammedo@redhat.com>
+To: Igor Mammedov <imammedo@redhat.com>, qemu-devel@nongnu.org
+Cc: peter.maydell@linaro.org, gleb@redhat.com, mst@redhat.com,
+ jan.kiszka@siemens.com, qemu-devel@nongnu.org, lcapitulino@redhat.com,
+ blauwirbel@gmail.com, kraxel@redhat.com, eblake@redhat.com,
+ Anthony Liguori <aliguori@us.ibm.com>, quintela@redhat.com, armbru@redhat.com,
+ yang.z.zhang@intel.com, ehabkost@redhat.com, stefano.stabellini@eu.citrix.com,
+ aderumier@odiso.com, anthony.perard@citrix.com, alex.williamson@redhat.com,
+ rth@twiddle.net, kwolf@redhat.com, claudio.fontana@huawei.com,
+ pbonzini@redhat.com, afaerber@suse.de
+Date: Tue, 23 Apr 2013 10:29:38 +0200
+Message-id: 1366705795-24732-5-git-send-email-imammedo@redhat.com
+Subject: [PATCH 04/21] cpu: resume CPU from CPUClass.cpu_common_realizefn()
+ when it is hot-plugged
+
+Signed-off-by: Igor Mammedov <imammedo@redhat.com>
+---
+v2:
+  s/resume_vcpu/cpu_resume/
+v2:
+ * remove unnecessary now sysemu/cpus.h header
+ * move out introducing resume_vcpu() into a separate patch
+---
+ qom/cpu.c |    1 +
+ 1 files changed, 1 insertions(+), 0 deletions(-)
+
+diff --git a/qom/cpu.c b/qom/cpu.c
+index 0c76712..abb20d0 100644
+--- a/qom/cpu.c
++++ b/qom/cpu.c
+@@ -60,6 +60,7 @@ static void cpu_common_realizefn(DeviceState *dev, Error **errp)
+ {
+     if (dev->hotplugged) {
+         cpu_synchronize_post_init(CPU(dev));
++        cpu_resume(CPU(dev));
+     }
+ }
+ 
+-- 
+1.7.1
+

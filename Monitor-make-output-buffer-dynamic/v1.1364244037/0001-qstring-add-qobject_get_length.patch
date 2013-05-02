@@ -1,0 +1,52 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Luiz Capitulino <lcapitulino@redhat.com>
+To: Luiz Capitulino <lcapitulino@redhat.com>, Hu Tao <hutao@cn.fujitsu.com>,
+ qemu-devel@nongnu.org
+Cc: qemu-devel@nongnu.org, kraxel@redhat.com, fred.konrad@greensocs.com
+Date: Mon, 25 Mar 2013 15:40:38 -0400
+Message-id: 1364240439-23450-2-git-send-email-lcapitulino@redhat.com
+Subject: [PATCH 1/2] qstring: add qobject_get_length()
+
+Long overdue.
+
+Signed-off-by: Luiz Capitulino <lcapitulino@redhat.com>
+---
+ include/qapi/qmp/qstring.h | 1 +
+ qobject/qstring.c          | 8 ++++++++
+ 2 files changed, 9 insertions(+)
+
+diff --git a/include/qapi/qmp/qstring.h b/include/qapi/qmp/qstring.h
+index 0e690f4..1bc3666 100644
+--- a/include/qapi/qmp/qstring.h
++++ b/include/qapi/qmp/qstring.h
+@@ -26,6 +26,7 @@ typedef struct QString {
+ QString *qstring_new(void);
+ QString *qstring_from_str(const char *str);
+ QString *qstring_from_substr(const char *str, int start, int end);
++size_t qstring_get_length(const QString *qstring);
+ const char *qstring_get_str(const QString *qstring);
+ void qstring_append_int(QString *qstring, int64_t value);
+ void qstring_append(QString *qstring, const char *str);
+diff --git a/qobject/qstring.c b/qobject/qstring.c
+index 5f7376c..607b7a1 100644
+--- a/qobject/qstring.c
++++ b/qobject/qstring.c
+@@ -32,6 +32,14 @@ QString *qstring_new(void)
+ }
+ 
+ /**
++ * qstring_get_length(): Get the length of a QString
++ */
++size_t qstring_get_length(const QString *qstring)
++{
++    return qstring->length;
++}
++
++/**
+  * qstring_from_substr(): Create a new QString from a C string substring
+  *
+  * Return string reference
+-- 
+1.8.1.4
+
+

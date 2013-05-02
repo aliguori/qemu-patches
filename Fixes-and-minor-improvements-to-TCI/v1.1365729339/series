@@ -1,0 +1,5 @@
+0001-tci-Use-32-bit-signed-offsets-to-loads-stores.patch
+0002-tci-Use-a-local-variable-for-env.patch
+0003-tci-Avoid-code-before-declarations.patch
+0004-tci-Delete-unused-tb_ret_addr.patch
+0005-tci-Make-tcg-temporaries-local-to-tcg_qemu_tb_exec.patch

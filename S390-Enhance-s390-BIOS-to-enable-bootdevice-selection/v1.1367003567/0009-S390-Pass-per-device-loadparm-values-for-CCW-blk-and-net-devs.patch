@@ -1,0 +1,56 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Dominik Dingel <dingel@linux.vnet.ibm.com>
+To: Dominik Dingel <dingel@linux.vnet.ibm.com>, Alexander Graf <agraf@suse.de>,
+ qemu-devel@nongnu.org
+Cc: Christian Borntraeger <borntraeger@de.ibm.com>,
+ Alexander Graf <agraf@suse.de>, qemu-devel@nongnu.org,
+ Christian Paro <cparo@us.ibm.com>, Dominik Dingel <dingel@linux.vnet.ibm.com>
+Date: Fri, 26 Apr 2013 14:12:56 +0200
+Message-id: 1366978377-16823-10-git-send-email-dingel@linux.vnet.ibm.com
+Subject: [PATCH 09/10] S390: Pass per-device loadparm values for CCW blk and
+ net devs.
+
+From: Christian Paro <cparo@us.ibm.com>
+
+Provide a loadparm property which can be used to pass IPL load
+parameters on a per-device basis for VirtioCcwDevice instances
+representing block and network devices.
+
+Signed-off-by: Christian Paro <cparo@us.ibm.com>
+
+diff --git a/hw/s390x/virtio-ccw.c b/hw/s390x/virtio-ccw.c
+index 56539d3..23d042f 100644
+--- a/hw/s390x/virtio-ccw.c
++++ b/hw/s390x/virtio-ccw.c
+@@ -791,6 +791,7 @@ static const VirtIOBindings virtio_ccw_bindings = {
+ 
+ static Property virtio_ccw_net_properties[] = {
+     DEFINE_PROP_STRING("devno", VirtioCcwDevice, bus_id),
++    DEFINE_PROP_UINT32("loadparm", VirtioCcwDevice, loadparm, 0),
+     DEFINE_VIRTIO_NET_FEATURES(VirtioCcwDevice, host_features[0]),
+     DEFINE_VIRTIO_NET_PROPERTIES(VirtIONetCcw, vdev.net_conf),
+     DEFINE_NIC_PROPERTIES(VirtIONetCcw, vdev.nic_conf),
+@@ -818,6 +819,7 @@ static const TypeInfo virtio_ccw_net = {
+ 
+ static Property virtio_ccw_blk_properties[] = {
+     DEFINE_PROP_STRING("devno", VirtioCcwDevice, bus_id),
++    DEFINE_PROP_UINT32("loadparm", VirtioCcwDevice, loadparm, 0),
+     DEFINE_VIRTIO_BLK_FEATURES(VirtioCcwDevice, host_features[0]),
+     DEFINE_VIRTIO_BLK_PROPERTIES(VirtIOBlkCcw, blk),
+     DEFINE_PROP_END_OF_LIST(),
+diff --git a/hw/s390x/virtio-ccw.h b/hw/s390x/virtio-ccw.h
+index 84055e7..a3f706a 100644
+--- a/hw/s390x/virtio-ccw.h
++++ b/hw/s390x/virtio-ccw.h
+@@ -76,6 +76,7 @@ struct VirtioCcwDevice {
+     SubchDev *sch;
+     VirtIODevice *vdev;
+     char *bus_id;
++    uint32_t loadparm;
+     uint32_t host_features[VIRTIO_CCW_FEATURE_SIZE];
+     VirtIORNGConf rng;
+     VirtioBusState bus;
+-- 
+1.7.9.5
+
+

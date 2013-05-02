@@ -1,0 +1,135 @@
+From patches Mon Sep 17 00:00:00 2001
+From: =?utf-8?q?Andreas_F=C3=A4rber_=3Cafaerber=40suse=2Ede=3E?=
+To: Andreas =?utf-8?Q?F=C3=A4rber?= <afaerber@suse.de>, qemu-devel@nongnu.org
+Cc: qemu-devel@nongnu.org, Igor Mammedov <imammedo@redhat.com>,
+ =?UTF-8?q?Andreas=20F=C3=A4rber?= <afaerber@suse.de>,
+ Gleb Natapov <gleb@redhat.com>, Marcelo Tosatti <mtosatti@redhat.com>,
+ "open list:Overall" <kvm@vger.kernel.org>
+Date: Tue, 16 Apr 2013 02:46:47 +0200
+Message-id: 1366073209-27119-11-git-send-email-afaerber@suse.de
+Subject: [PATCH 10/12] cpu: Pass CPUState to *cpu_synchronize_post*()
+
+From: Igor Mammedov <imammedo@redhat.com>
+
+... so it could be called without requiring CPUArchState.
+
+Signed-off-by: Igor Mammedov <imammedo@redhat.com>
+Reviewed-by: Eduardo Habkost <ehabkost@redhat.com>
+Acked-by: Gleb Natapov <gleb@redhat.com>
+Signed-off-by: Andreas Färber <afaerber@suse.de>
+---
+ cpus.c               |  4 ++--
+ include/sysemu/kvm.h | 12 ++++++------
+ kvm-all.c            |  8 ++------
+ kvm-stub.c           |  4 ++--
+ 4 files changed, 12 insertions(+), 16 deletions(-)
+
+diff --git a/cpus.c b/cpus.c
+index 97e9ab4..c15ff6c 100644
+--- a/cpus.c
++++ b/cpus.c
+@@ -419,7 +419,7 @@ void cpu_synchronize_all_post_reset(void)
+     CPUArchState *cpu;
+ 
+     for (cpu = first_cpu; cpu; cpu = cpu->next_cpu) {
+-        cpu_synchronize_post_reset(cpu);
++        cpu_synchronize_post_reset(ENV_GET_CPU(cpu));
+     }
+ }
+ 
+@@ -428,7 +428,7 @@ void cpu_synchronize_all_post_init(void)
+     CPUArchState *cpu;
+ 
+     for (cpu = first_cpu; cpu; cpu = cpu->next_cpu) {
+-        cpu_synchronize_post_init(cpu);
++        cpu_synchronize_post_init(ENV_GET_CPU(cpu));
+     }
+ }
+ 
+diff --git a/include/sysemu/kvm.h b/include/sysemu/kvm.h
+index f2d97b5..495e6f8 100644
+--- a/include/sysemu/kvm.h
++++ b/include/sysemu/kvm.h
+@@ -250,8 +250,8 @@ int kvm_check_extension(KVMState *s, unsigned int extension);
+ uint32_t kvm_arch_get_supported_cpuid(KVMState *env, uint32_t function,
+                                       uint32_t index, int reg);
+ void kvm_cpu_synchronize_state(CPUArchState *env);
+-void kvm_cpu_synchronize_post_reset(CPUArchState *env);
+-void kvm_cpu_synchronize_post_init(CPUArchState *env);
++void kvm_cpu_synchronize_post_reset(CPUState *cpu);
++void kvm_cpu_synchronize_post_init(CPUState *cpu);
+ 
+ /* generic hooks - to be moved/refactored once there are more users */
+ 
+@@ -262,17 +262,17 @@ static inline void cpu_synchronize_state(CPUArchState *env)
+     }
+ }
+ 
+-static inline void cpu_synchronize_post_reset(CPUArchState *env)
++static inline void cpu_synchronize_post_reset(CPUState *cpu)
+ {
+     if (kvm_enabled()) {
+-        kvm_cpu_synchronize_post_reset(env);
++        kvm_cpu_synchronize_post_reset(cpu);
+     }
+ }
+ 
+-static inline void cpu_synchronize_post_init(CPUArchState *env)
++static inline void cpu_synchronize_post_init(CPUState *cpu)
+ {
+     if (kvm_enabled()) {
+-        kvm_cpu_synchronize_post_init(env);
++        kvm_cpu_synchronize_post_init(cpu);
+     }
+ }
+ 
+diff --git a/kvm-all.c b/kvm-all.c
+index 9b433d3..fc4e17c 100644
+--- a/kvm-all.c
++++ b/kvm-all.c
+@@ -1510,18 +1510,14 @@ void kvm_cpu_synchronize_state(CPUArchState *env)
+     }
+ }
+ 
+-void kvm_cpu_synchronize_post_reset(CPUArchState *env)
++void kvm_cpu_synchronize_post_reset(CPUState *cpu)
+ {
+-    CPUState *cpu = ENV_GET_CPU(env);
+-
+     kvm_arch_put_registers(cpu, KVM_PUT_RESET_STATE);
+     cpu->kvm_vcpu_dirty = false;
+ }
+ 
+-void kvm_cpu_synchronize_post_init(CPUArchState *env)
++void kvm_cpu_synchronize_post_init(CPUState *cpu)
+ {
+-    CPUState *cpu = ENV_GET_CPU(env);
+-
+     kvm_arch_put_registers(cpu, KVM_PUT_FULL_STATE);
+     cpu->kvm_vcpu_dirty = false;
+ }
+diff --git a/kvm-stub.c b/kvm-stub.c
+index f6137d3..723a813 100644
+--- a/kvm-stub.c
++++ b/kvm-stub.c
+@@ -41,11 +41,11 @@ void kvm_cpu_synchronize_state(CPUArchState *env)
+ {
+ }
+ 
+-void kvm_cpu_synchronize_post_reset(CPUArchState *env)
++void kvm_cpu_synchronize_post_reset(CPUState *cpu)
+ {
+ }
+ 
+-void kvm_cpu_synchronize_post_init(CPUArchState *env)
++void kvm_cpu_synchronize_post_init(CPUState *cpu)
+ {
+ }
+ 
+-- 
+1.8.1.4
+
+--
+To unsubscribe from this list: send the line "unsubscribe kvm" in
+the body of a message to majordomo@vger.kernel.org
+More majordomo info at  http://vger.kernel.org/majordomo-info.html

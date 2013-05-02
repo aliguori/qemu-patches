@@ -1,0 +1,51 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Gerd Hoffmann <kraxel@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Gerd Hoffmann <kraxel@redhat.com>
+Date: Tue, 16 Apr 2013 11:56:25 +0200
+Message-id: 1366106194-28826-1-git-send-email-kraxel@redhat.com
+Subject: [PATCH 0/9] spice patch queue
+
+  Hi,
+
+This is the spice patch queue, carrying flow control fixes,
+for spice chardevs and (with Amit's ack) virtio-serial.  Also
+some new resolutions for qxl.
+
+please pull,
+  Gerd
+
+The following changes since commit 24a6e7f4d91e9ed5f8117ecb083431a23f8609a0:
+
+  virtio-balloon: fix dynamic properties. (2013-04-15 17:06:58 -0500)
+
+are available in the git repository at:
+
+  git://anongit.freedesktop.org/spice/qemu spice.v69
+
+for you to fetch changes up to 75c439bc65c07d76f5e74c734ed5432bc6114a3b:
+
+  spice-qemu-char: vmc_write: Don't write more bytes then we're asked too (2013-04-16 11:52:09 +0200)
+
+----------------------------------------------------------------
+Alon Levy (2):
+      spice: (32 bit only) fix surface cmd tracking destruction
+      spice-qemu-char: Remove intermediate buffer
+
+Gerd Hoffmann (2):
+      qxl: add 4k + 8k resolutions
+      qxl: add 2000x2000 and 2048x2048 video modes
+
+Hans de Goede (5):
+      virtio-console: Also throttle when less was written then requested
+      virtio-console: Remove any pending watches on close
+      spice-qemu-char: Remove #ifdef-ed code for old spice-server compat
+      spice-qemu-char: Add watch support
+      spice-qemu-char: vmc_write: Don't write more bytes then we're asked too
+
+ hw/char/virtio-console.c          |   32 +++++++++--
+ hw/display/qxl.c                  |    8 ++-
+ include/hw/virtio/virtio-serial.h |    2 +-
+ spice-qemu-char.c                 |  109 +++++++++++++++++++++++--------------
+ 4 files changed, 104 insertions(+), 47 deletions(-)
+

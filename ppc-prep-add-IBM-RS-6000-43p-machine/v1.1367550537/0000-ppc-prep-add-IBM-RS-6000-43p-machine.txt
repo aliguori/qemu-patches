@@ -1,0 +1,85 @@
+From patches Mon Sep 17 00:00:00 2001
+From: =?utf-8?q?Herv=C3=A9_Poussineau_=3Chpoussin=40reactos=2Eorg=3E?=
+To: qemu-devel@nongnu.org
+Cc: qemu-ppc@nongnu.org, =?UTF-8?q?Andreas=20F=C3=A4rber?= <afaerber@suse.de>,
+ =?UTF-8?q?Herv=C3=A9=20Poussineau?= <hpoussin@reactos.org>
+Date: Thu,  2 May 2013 22:08:57 +0200
+Message-id: 1367525344-7755-1-git-send-email-hpoussin@reactos.org
+Subject: [PATCH 0/7] ppc/prep: add IBM RS/6000 43p machine
+
+Hi,
+
+This patchset adds an emulation of the IBM RS/6000 43p, also known as 7248.
+I've fixed comments of Blue Swirl in this series, so I'm sending it as PATCH instead of RFC.
+
+Andreas did some preliminary patches for OpenBIOS to support PReP machines, available at
+git://repo.or.cz/openbios/afaerber.git branch prep.
+43p emulation has been tested with this firmware, and also with the official firmware,
+named P93H1904.IMG.
+
+Command line may look like
+qemu-system-ppc -M 43p -readconfig ibm_43p.cfg
+
+Changes RFC v2 -> PATCH v1:
+- rebased on master
+- add a Nvram interface on m48t59
+- kept ISA io_base in patch 3
+- renamed QOM parent objects as parent_obj
+
+Changes RFC v1 -> RFC v2:
+- rebased on master
+- works with OpenBIOS
+- rework on m48t59 patches
+- remove rs6000 debug port emulation (not strictly required)
+- checkpatch.pl doesn't complain anymore
+
+Known bugs/missing parts:
+- incomplete MPC105 (PCI host bridge) emulation (memory controller)
+- no video card (should be a S3)
+- QEMU can't change endianness at runtime
+
+OpenBIOS status:
+- detects CPU and memory, then freezes with a "Dictionary space overflow"
+
+Official firmware status:
+- can boot from a IDE hard disk containing a PReP boot partition
+- can't boot from IDE cdroms (overlapping commands not supported by QEMU IDE emulation)
+- can't boot from floppies (READ commands are issued, but it seems completion is ignored)
+- can't boot from network (detects the netcard, but doesn't use it)
+- needs a hack to m48t59 device to work
+
+Regards,
+
+Hervé
+
+Hervé Poussineau (7):
+  pci: add MPC105 PCI host bridge emulation
+  qom: handle registration of new types when initializing the first
+    ones
+  m48t59: move ISA ports/memory regions registration to QOM constructor
+  m48t59: register a QOM type for each nvram type we support
+  m48t59: add a Nvram interface
+  prep: add IBM RS/6000 7248 (43p) machine emulation
+  prep: QOM'ify System I/O
+
+ default-configs/ppc-softmmu.mak |    1 +
+ docs/ibm_43p.cfg                |   43 ++++
+ hw/pci-host/Makefile.objs       |    1 +
+ hw/pci-host/mpc105.c            |  488 +++++++++++++++++++++++++++++++++++++++
+ hw/ppc/Makefile.objs            |    1 +
+ hw/ppc/prep.c                   |  213 +++++++++++++++++
+ hw/ppc/prep_systemio.c          |  298 ++++++++++++++++++++++++
+ hw/timer/m48t59.c               |  304 ++++++++++++++++++------
+ include/hw/pci/pci_ids.h        |    1 +
+ include/hw/timer/m48t59.h       |   24 ++
+ qom/object.c                    |   45 +++-
+ trace-events                    |   11 +
+ 12 files changed, 1349 insertions(+), 81 deletions(-)
+ create mode 100644 docs/ibm_43p.cfg
+ create mode 100644 hw/pci-host/mpc105.c
+ create mode 100644 hw/ppc/prep_systemio.c
+
+-- 
+1.7.10.4
+
+

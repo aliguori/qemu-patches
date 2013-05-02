@@ -1,0 +1,1 @@
+../Fix-the-fail-of-compilation/v1.1365546223/0001-Fix-the-fail-of-compilation.patch

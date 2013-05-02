@@ -1,0 +1,16 @@
+0000-block-Overriding-the-backing-file-with--drive.txt
+0001-block-Fail-gracefully-when-using-a-format-driver-on-protocol-level.patch
+0002-block-Add-driver-specific-options-for-backing-files.patch
+0003-block-Enable-filename-option.patch
+0004-raw-posix-Use-bdrv_open-options-instead-of-filename.patch
+0005-raw-win32-Use-bdrv_open-options-instead-of-filename.patch
+0006-blkdebug-Use-bdrv_open-options-instead-of-filename.patch
+0007-blkverify-Use-bdrv_open-options-instead-of-filename.patch
+0008-curl-Use-bdrv_open-options-instead-of-filename.patch
+0009-gluster-Use-bdrv_open-options-instead-of-filename.patch
+0010-iscsi-Use-bdrv_open-options-instead-of-filename.patch
+0011-rbd-Use-bdrv_open-options-instead-of-filename.patch
+0012-sheepdog-Use-bdrv_open-options-instead-of-filename.patch
+0013-vvfat-Use-bdrv_open-options-instead-of-filename.patch
+0014-block-Remove-filename-parameter-from-bdrv_file_open.patch
+0015-block-Allow-overriding-backingfilefilename.patch

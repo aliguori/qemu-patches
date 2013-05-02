@@ -1,0 +1,41 @@
+From patches Mon Sep 17 00:00:00 2001
+From: MORITA Kazutaka <morita.kazutaka@lab.ntt.co.jp>
+To: kwolf@redhat.com, stefanha@redhat.com
+Cc: namei.unix@gmail.com, sheepdog@lists.wpkg.org, qemu-devel@nongnu.org
+Date: Fri, 26 Apr 2013 01:19:52 +0900
+Message-id: 1366906794-24878-3-git-send-email-morita.kazutaka@lab.ntt.co.jp
+Subject: [PATCH 2/4] sheepdog: add SD_RES_READONLY result code
+
+Sheepdog returns SD_RES_READONLY when qemu sends write requests to the
+snapshot vdi.  This adds the result code and makes sd_strerror() print
+its error reason.
+
+Signed-off-by: MORITA Kazutaka <morita.kazutaka@lab.ntt.co.jp>
+---
+ block/sheepdog.c |    2 ++
+ 1 files changed, 2 insertions(+), 0 deletions(-)
+
+diff --git a/block/sheepdog.c b/block/sheepdog.c
+index 4326664..f4e7204 100644
+--- a/block/sheepdog.c
++++ b/block/sheepdog.c
+@@ -68,6 +68,7 @@
+ #define SD_RES_WAIT_FOR_JOIN    0x17 /* Waiting for other nodes joining */
+ #define SD_RES_JOIN_FAILED   0x18 /* Target node had failed to join sheepdog */
+ #define SD_RES_HALT          0x19 /* Sheepdog is stopped serving IO request */
++#define SD_RES_READONLY      0x1A /* Object is read-only */
+ 
+ /*
+  * Object ID rules
+@@ -349,6 +350,7 @@ static const char * sd_strerror(int err)
+         {SD_RES_WAIT_FOR_JOIN, "Sheepdog is waiting for other nodes joining"},
+         {SD_RES_JOIN_FAILED, "Target node had failed to join sheepdog"},
+         {SD_RES_HALT, "Sheepdog is stopped serving IO request"},
++        {SD_RES_READONLY, "Object is read-only"},
+     };
+ 
+     for (i = 0; i < ARRAY_SIZE(errors); ++i) {
+-- 
+1.7.2.5
+
+

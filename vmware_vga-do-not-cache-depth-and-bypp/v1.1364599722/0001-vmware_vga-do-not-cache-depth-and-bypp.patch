@@ -1,0 +1,121 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Alex DAMIAN <alexandru.damian@intel.com>
+To: "Damian, Alexandru" <alexandru.damian@intel.com>, qemu-devel@nongnu.org,
+ balaton@eik.bme.hu, blauwirbel@gmail.com,
+ Alex DAMIAN <alexandru.damian@intel.com>, kraxel@redhat.com,
+ pbonzini@redhat.com
+Cc: blauwirbel@gmail.com, pbonzini@redhat.com,
+ Alexandru DAMIAN <alexandru.damian@intel.com>, qemu-devel@nongnu.org,
+ Jan Kiszka <jan.kiszka@web.de>
+Date: Fri, 29 Mar 2013 18:28:42 +0200
+Message-id: 1364574522-4093-1-git-send-email-alexandru.damian@intel.com
+Subject: [PATCH 1/1] vmware_vga: do not cache depth and bypp
+
+From: Alexandru DAMIAN <alexandru.damian@intel.com>
+
+Do not cache depth and bypp information in the device state.
+
+This resolves a bug where Xorg video-vmare driver refuses
+to start up because the depth value read is the one cached from the
+device start (default 32 from ui/console.c) and it is not consistent
+with the graphical console depth, which may be different from
+the default depth.
+
+Signed-off-by: Alexandru DAMIAN <alexandru.damian@intel.com>
+---
+ hw/vmware_vga.c |   20 +++++---------------
+ 1 file changed, 5 insertions(+), 15 deletions(-)
+
+diff --git a/hw/vmware_vga.c b/hw/vmware_vga.c
+index 5b9ce8f..75ef404 100644
+--- a/hw/vmware_vga.c
++++ b/hw/vmware_vga.c
+@@ -39,8 +39,6 @@ struct vmsvga_state_s {
+     VGACommonState vga;
+ 
+     int invalidated;
+-    int depth;
+-    int bypp;
+     int enable;
+     int config;
+     struct {
+@@ -742,10 +740,10 @@ static uint32_t vmsvga_value_read(void *opaque, uint32_t address)
+         return SVGA_MAX_HEIGHT;
+ 
+     case SVGA_REG_DEPTH:
+-        return s->depth;
++        return surface_bits_per_pixel(surface);
+ 
+     case SVGA_REG_BITS_PER_PIXEL:
+-        return (s->depth + 7) & ~7;
++        return (surface_bits_per_pixel(surface) + 7) & ~7;
+ 
+     case SVGA_REG_PSEUDOCOLOR:
+         return 0x0;
+@@ -760,7 +758,7 @@ static uint32_t vmsvga_value_read(void *opaque, uint32_t address)
+         return surface->pf.bmask;
+ 
+     case SVGA_REG_BYTES_PER_LINE:
+-        return s->bypp * s->new_width;
++        return surface_bytes_per_pixel(surface) * s->new_width;
+ 
+     case SVGA_REG_FB_START: {
+         struct pci_vmsvga_state_s *pci_vmsvga
+@@ -825,7 +823,7 @@ static uint32_t vmsvga_value_read(void *opaque, uint32_t address)
+         return s->cursor.on;
+ 
+     case SVGA_REG_HOST_BITS_PER_PIXEL:
+-        return (s->depth + 7) & ~7;
++        return (surface_bits_per_pixel(surface) + 7) & ~7;
+ 
+     case SVGA_REG_SCRATCH_SIZE:
+         return s->scratch_size;
+@@ -888,7 +886,7 @@ static void vmsvga_value_write(void *opaque, uint32_t address, uint32_t value)
+         break;
+ 
+     case SVGA_REG_BITS_PER_PIXEL:
+-        if (value != s->depth) {
++        if (value != surface_bits_per_pixel(qemu_console_surface(s->vga.con))) {
+             printf("%s: Bad bits per pixel: %i bits\n", __func__, value);
+             s->config = 0;
+         }
+@@ -1113,7 +1111,6 @@ static const VMStateDescription vmstate_vmware_vga_internal = {
+     .minimum_version_id_old = 0,
+     .post_load = vmsvga_post_load,
+     .fields      = (VMStateField[]) {
+-        VMSTATE_INT32_EQUAL(depth, struct vmsvga_state_s),
+         VMSTATE_INT32(enable, struct vmsvga_state_s),
+         VMSTATE_INT32(config, struct vmsvga_state_s),
+         VMSTATE_INT32(cursor.id, struct vmsvga_state_s),
+@@ -1149,8 +1146,6 @@ static const VMStateDescription vmstate_vmware_vga = {
+ static void vmsvga_init(struct vmsvga_state_s *s,
+                         MemoryRegion *address_space, MemoryRegion *io)
+ {
+-    DisplaySurface *surface;
+-
+     s->scratch_size = SVGA_SCRATCH_SIZE;
+     s->scratch = g_malloc(s->scratch_size * 4);
+ 
+@@ -1158,7 +1153,6 @@ static void vmsvga_init(struct vmsvga_state_s *s,
+                                       vmsvga_invalidate_display,
+                                       vmsvga_screen_dump,
+                                       vmsvga_text_update, s);
+-    surface = qemu_console_surface(s->vga.con);
+ 
+     s->fifo_size = SVGA_FIFO_SIZE;
+     memory_region_init_ram(&s->fifo_ram, "vmsvga.fifo", s->fifo_size);
+@@ -1168,10 +1162,6 @@ static void vmsvga_init(struct vmsvga_state_s *s,
+     vga_common_init(&s->vga);
+     vga_init(&s->vga, address_space, io, true);
+     vmstate_register(NULL, 0, &vmstate_vga_common, &s->vga);
+-    /* Save some values here in case they are changed later.
+-     * This is suspicious and needs more though why it is needed. */
+-    s->depth = surface_bits_per_pixel(surface);
+-    s->bypp = surface_bytes_per_pixel(surface);
+ }
+ 
+ static uint64_t vmsvga_io_read(void *opaque, hwaddr addr, unsigned size)
+-- 
+1.7.10.4
+
+

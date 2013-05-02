@@ -1,0 +1,43 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Peter Maydell <peter.maydell@linaro.org>
+To: qemu-devel@nongnu.org
+Cc: patches@linaro.org
+Date: Tue, 23 Apr 2013 16:58:37 +0100
+Message-id: 1366732717-19657-1-git-send-email-peter.maydell@linaro.org
+Subject: [PATCH 1/1] target-arm: Fix incorrect check of kvm_vcpu_ioctl return
+ value
+
+kvm_vcpu_ioctl() returns -ETHING on error, not ETHING -- correct
+an incorrect check in kvm_arch_init_vcpu(). This would not have
+had any significant ill-effects -- we would just have propagated
+the less useful ENOENT up to the caller rather than the more
+accurate EINVAL in the unlikely case that the kernel didn't
+have VFP-D32 support.
+
+Signed-off-by: Peter Maydell <peter.maydell@linaro.org>
+---
+Pretty trivial bugfix, noticed while I was doing something to
+the code in this area...
+
+ target-arm/kvm.c |    4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/target-arm/kvm.c b/target-arm/kvm.c
+index d8acace..b7bdc03 100644
+--- a/target-arm/kvm.c
++++ b/target-arm/kvm.c
+@@ -62,8 +62,8 @@ int kvm_arch_init_vcpu(CPUState *cs)
+     r.id = KVM_REG_ARM | KVM_REG_SIZE_U64 | KVM_REG_ARM_VFP | 31;
+     r.addr = (uintptr_t)(&v);
+     ret = kvm_vcpu_ioctl(cs, KVM_GET_ONE_REG, &r);
+-    if (ret == ENOENT) {
+-        return EINVAL;
++    if (ret == -ENOENT) {
++        return -EINVAL;
+     }
+     return ret;
+ }
+-- 
+1.7.9.5
+
+

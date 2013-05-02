@@ -1,0 +1,117 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Igor Mammedov <imammedo@redhat.com>
+To: Eduardo Habkost <ehabkost@redhat.com>, Igor Mammedov <imammedo@redhat.com>,
+ qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, ehabkost@redhat.com,
+ claudio.fontana@huawei.com, qemu-devel@nongnu.org, aderumier@odiso.com,
+ lcapitulino@redhat.com, jfrei@linux.vnet.ibm.com, yang.z.zhang@intel.com,
+ pbonzini@redhat.com, eblake@redhat.com, afaerber@suse.de,
+ lig.fnst@cn.fujitsu.com, rth@twiddle.net
+Date: Thu, 11 Apr 2013 16:51:44 +0200
+Message-id: 1365691918-30594-6-git-send-email-imammedo@redhat.com
+Subject: [PATCH 05/19] cpu: resume CPU from CPUClass.cpu_common_realizefn()
+ when it is hot-plugged
+
+Signed-off-by: Igor Mammedov <imammedo@redhat.com>
+Reviewed-by: Eduardo Habkost <ehabkost@redhat.com>
+---
+ cpus.c                | 11 ++++++++---
+ include/sysemu/cpus.h |  3 +++
+ qom/cpu.c             |  2 ++
+ stubs/Makefile.objs   |  1 +
+ stubs/resume_vcpu.c   |  6 ++++++
+ 5 files changed, 20 insertions(+), 3 deletions(-)
+ create mode 100644 stubs/resume_vcpu.c
+
+diff --git a/cpus.c b/cpus.c
+index 9b9a32f..f12624d 100644
+--- a/cpus.c
++++ b/cpus.c
+@@ -973,6 +973,13 @@ void pause_all_vcpus(void)
+     }
+ }
+ 
++void resume_vcpu(CPUState *cpu)
++{
++    cpu->stop = false;
++    cpu->stopped = false;
++    qemu_cpu_kick(cpu);
++}
++
+ void resume_all_vcpus(void)
+ {
+     CPUArchState *penv = first_cpu;
+@@ -980,9 +987,7 @@ void resume_all_vcpus(void)
+     qemu_clock_enable(vm_clock, true);
+     while (penv) {
+         CPUState *pcpu = ENV_GET_CPU(penv);
+-        pcpu->stop = false;
+-        pcpu->stopped = false;
+-        qemu_cpu_kick(pcpu);
++        resume_vcpu(pcpu);
+         penv = penv->next_cpu;
+     }
+ }
+diff --git a/include/sysemu/cpus.h b/include/sysemu/cpus.h
+index 6502488..9437df5 100644
+--- a/include/sysemu/cpus.h
++++ b/include/sysemu/cpus.h
+@@ -1,11 +1,14 @@
+ #ifndef QEMU_CPUS_H
+ #define QEMU_CPUS_H
+ 
++#include "qom/cpu.h"
++
+ /* cpus.c */
+ void qemu_init_cpu_loop(void);
+ void resume_all_vcpus(void);
+ void pause_all_vcpus(void);
+ void cpu_stop_current(void);
++void resume_vcpu(CPUState *cpu);
+ 
+ void cpu_synchronize_all_states(void);
+ void cpu_synchronize_all_post_reset(void);
+diff --git a/qom/cpu.c b/qom/cpu.c
+index 0c76712..2869cfe 100644
+--- a/qom/cpu.c
++++ b/qom/cpu.c
+@@ -21,6 +21,7 @@
+ #include "qom/cpu.h"
+ #include "qemu-common.h"
+ #include "sysemu/kvm.h"
++#include "sysemu/cpus.h"
+ 
+ void cpu_reset_interrupt(CPUState *cpu, int mask)
+ {
+@@ -60,6 +61,7 @@ static void cpu_common_realizefn(DeviceState *dev, Error **errp)
+ {
+     if (dev->hotplugged) {
+         cpu_synchronize_post_init(CPU(dev));
++        resume_vcpu(CPU(dev));
+     }
+ }
+ 
+diff --git a/stubs/Makefile.objs b/stubs/Makefile.objs
+index 9c55b34..28fb4f8 100644
+--- a/stubs/Makefile.objs
++++ b/stubs/Makefile.objs
+@@ -23,3 +23,4 @@ stub-obj-y += sysbus.o
+ stub-obj-y += vm-stop.o
+ stub-obj-y += vmstate.o
+ stub-obj-$(CONFIG_WIN32) += fd-register.o
++stub-obj-y += resume_vcpu.o
+diff --git a/stubs/resume_vcpu.c b/stubs/resume_vcpu.c
+new file mode 100644
+index 0000000..383b71a
+--- /dev/null
++++ b/stubs/resume_vcpu.c
+@@ -0,0 +1,6 @@
++#include "qemu-common.h"
++#include "sysemu/cpus.h"
++
++void resume_vcpu(CPUState *cpu)
++{
++}
+-- 
+1.8.2
+

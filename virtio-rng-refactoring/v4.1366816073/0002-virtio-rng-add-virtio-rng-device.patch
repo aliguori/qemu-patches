@@ -1,0 +1,230 @@
+From patches Mon Sep 17 00:00:00 2001
+From: fred.konrad@greensocs.com
+To: Anthony Liguori <aliguori@us.ibm.com>, qemu-devel@nongnu.org
+Cc: peter.maydell@linaro.org, Alexander Graf <agraf@suse.de>,
+ mark.burton@greensocs.com, Richard Henderson <rth@twiddle.net>,
+ cornelia.huck@de.ibm.com, fred.konrad@greensocs.com
+Date: Wed, 24 Apr 2013 10:07:55 +0200
+Message-id: 1366790881-3026-3-git-send-email-fred.konrad@greensocs.com
+Subject: [PATCH 2/8] virtio-rng: add virtio-rng device.
+
+From: KONRAD Frederic <fred.konrad@greensocs.com>
+
+Create virtio-rng-device which extends virtio-device, so it can be connected on
+virtio-bus.
+
+Signed-off-by: KONRAD Frederic <fred.konrad@greensocs.com>
+---
+ hw/s390x/virtio-ccw.c          |   3 +-
+ hw/virtio/virtio-pci.c         |   8 +--
+ hw/virtio/virtio-rng.c         | 108 ++++++++++++++++++++++++++++++++++++++---
+ include/hw/virtio/virtio-rng.h |  14 ++++++
+ 4 files changed, 117 insertions(+), 16 deletions(-)
+
+diff --git a/hw/s390x/virtio-ccw.c b/hw/s390x/virtio-ccw.c
+index 56539d3..7fdc8c3 100644
+--- a/hw/s390x/virtio-ccw.c
++++ b/hw/s390x/virtio-ccw.c
+@@ -958,8 +958,7 @@ static void virtio_ccw_rng_initfn(Object *obj)
+ static Property virtio_ccw_rng_properties[] = {
+     DEFINE_PROP_STRING("devno", VirtioCcwDevice, bus_id),
+     DEFINE_VIRTIO_COMMON_FEATURES(VirtioCcwDevice, host_features[0]),
+-    DEFINE_PROP_UINT64("max-bytes", VirtioCcwDevice, rng.max_bytes, INT64_MAX),
+-    DEFINE_PROP_UINT32("period", VirtioCcwDevice, rng.period_ms, 1 << 16),
++    DEFINE_VIRTIO_RNG_PROPERTIES(VirtioCcwDevice, rng),
+     DEFINE_PROP_END_OF_LIST(),
+ };
+ 
+diff --git a/hw/virtio/virtio-pci.c b/hw/virtio/virtio-pci.c
+index a1f15a8..4860db1 100644
+--- a/hw/virtio/virtio-pci.c
++++ b/hw/virtio/virtio-pci.c
+@@ -989,13 +989,7 @@ static void virtio_rng_initfn(Object *obj)
+ 
+ static Property virtio_rng_properties[] = {
+     DEFINE_VIRTIO_COMMON_FEATURES(VirtIOPCIProxy, host_features),
+-    /* Set a default rate limit of 2^47 bytes per minute or roughly 2TB/s.  If
+-       you have an entropy source capable of generating more entropy than this
+-       and you can pass it through via virtio-rng, then hats off to you.  Until
+-       then, this is unlimited for all practical purposes.
+-    */
+-    DEFINE_PROP_UINT64("max-bytes", VirtIOPCIProxy, rng.max_bytes, INT64_MAX),
+-    DEFINE_PROP_UINT32("period", VirtIOPCIProxy, rng.period_ms, 1 << 16),
++    DEFINE_VIRTIO_RNG_PROPERTIES(VirtIOPCIProxy, rng),
+     DEFINE_PROP_END_OF_LIST(),
+ };
+ 
+diff --git a/hw/virtio/virtio-rng.c b/hw/virtio/virtio-rng.c
+index 05b4d57..b70975b 100644
+--- a/hw/virtio/virtio-rng.c
++++ b/hw/virtio/virtio-rng.c
+@@ -130,17 +130,27 @@ static void check_rate_limit(void *opaque)
+                    qemu_get_clock_ms(vm_clock) + s->conf.period_ms);
+ }
+ 
+-
+-VirtIODevice *virtio_rng_init(DeviceState *dev, VirtIORNGConf *conf)
++static VirtIODevice *virtio_rng_common_init(DeviceState *dev,
++                                            VirtIORNGConf *conf,
++                                            VirtIORNG **pvrng)
+ {
+-    VirtIORNG *vrng;
++    VirtIORNG *vrng = *pvrng;
+     VirtIODevice *vdev;
+     Error *local_err = NULL;
+ 
+-    vdev = virtio_common_init("virtio-rng", VIRTIO_ID_RNG, 0,
+-                              sizeof(VirtIORNG));
+-
+-    vrng = DO_UPCAST(VirtIORNG, vdev, vdev);
++    /*
++     * We have two cases here: the old virtio-rng-x device, and the
++     * refactored virtio-rng.
++     * This will disappear later in the serie.
++     */
++    if (vrng == NULL) {
++        vdev = virtio_common_init("virtio-rng", VIRTIO_ID_RNG, 0,
++                                  sizeof(VirtIORNG));
++        vrng = DO_UPCAST(VirtIORNG, vdev, vdev);
++    } else {
++        vdev = VIRTIO_DEVICE(vrng);
++        virtio_init(vdev, "virtio-rng", VIRTIO_ID_RNG, 0);
++    }
+ 
+     vrng->rng = conf->rng;
+     if (vrng->rng == NULL) {
+@@ -156,6 +166,7 @@ VirtIODevice *virtio_rng_init(DeviceState *dev, VirtIORNGConf *conf)
+     }
+ 
+     vrng->vq = virtio_add_queue(vdev, 8, handle_input);
++
+     vrng->vdev.get_features = get_features;
+ 
+     vrng->qdev = dev;
+@@ -176,6 +187,15 @@ VirtIODevice *virtio_rng_init(DeviceState *dev, VirtIORNGConf *conf)
+     return vdev;
+ }
+ 
++/*
++ * This two functions will be removed later in the serie.
++ */
++VirtIODevice *virtio_rng_init(DeviceState *dev, VirtIORNGConf *conf)
++{
++    VirtIORNG *vdev = NULL;
++    return virtio_rng_common_init(dev, conf, &vdev);
++}
++
+ void virtio_rng_exit(VirtIODevice *vdev)
+ {
+     VirtIORNG *vrng = DO_UPCAST(VirtIORNG, vdev, vdev);
+@@ -185,3 +205,77 @@ void virtio_rng_exit(VirtIODevice *vdev)
+     unregister_savevm(vrng->qdev, "virtio-rng", vrng);
+     virtio_cleanup(vdev);
+ }
++
++static int virtio_rng_device_init(VirtIODevice *vdev)
++{
++    DeviceState *qdev = DEVICE(vdev);
++    VirtIORNG *vrng = VIRTIO_RNG(vdev);
++
++    if (vrng->conf.rng == NULL) {
++        vrng->conf.default_backend = RNG_RANDOM(object_new(TYPE_RNG_RANDOM));
++
++        object_property_add_child(OBJECT(qdev),
++                                  "default-backend",
++                                  OBJECT(vrng->conf.default_backend),
++                                  NULL);
++
++        object_property_set_link(OBJECT(qdev),
++                                 OBJECT(vrng->conf.default_backend),
++                                 "rng", NULL);
++    }
++
++    if (virtio_rng_common_init(qdev, &(vrng->conf), &vrng) == NULL) {
++        return -1;
++    }
++    return 0;
++}
++
++static int virtio_rng_device_exit(DeviceState *qdev)
++{
++    VirtIORNG *vrng = VIRTIO_RNG(qdev);
++    VirtIODevice *vdev = VIRTIO_DEVICE(qdev);
++
++    qemu_del_timer(vrng->rate_limit_timer);
++    qemu_free_timer(vrng->rate_limit_timer);
++    unregister_savevm(qdev, "virtio-rng", vrng);
++    virtio_common_cleanup(vdev);
++    return 0;
++}
++
++static Property virtio_rng_properties[] = {
++    DEFINE_VIRTIO_RNG_PROPERTIES(VirtIORNG, conf),
++    DEFINE_PROP_END_OF_LIST(),
++};
++
++static void virtio_rng_class_init(ObjectClass *klass, void *data)
++{
++    DeviceClass *dc = DEVICE_CLASS(klass);
++    VirtioDeviceClass *vdc = VIRTIO_DEVICE_CLASS(klass);
++    dc->exit = virtio_rng_device_exit;
++    dc->props = virtio_rng_properties;
++    vdc->init = virtio_rng_device_init;
++    vdc->get_features = get_features;
++}
++
++static void virtio_rng_initfn(Object *obj)
++{
++    VirtIORNG *vrng = VIRTIO_RNG(obj);
++
++    object_property_add_link(obj, "rng", TYPE_RNG_BACKEND,
++                             (Object **)&vrng->conf.rng, NULL);
++}
++
++static const TypeInfo virtio_rng_info = {
++    .name = TYPE_VIRTIO_RNG,
++    .parent = TYPE_VIRTIO_DEVICE,
++    .instance_size = sizeof(VirtIORNG),
++    .instance_init = virtio_rng_initfn,
++    .class_init = virtio_rng_class_init,
++};
++
++static void virtio_register_types(void)
++{
++    type_register_static(&virtio_rng_info);
++}
++
++type_init(virtio_register_types)
+diff --git a/include/hw/virtio/virtio-rng.h b/include/hw/virtio/virtio-rng.h
+index c578c00..973d809 100644
+--- a/include/hw/virtio/virtio-rng.h
++++ b/include/hw/virtio/virtio-rng.h
+@@ -15,6 +15,10 @@
+ #include "sysemu/rng.h"
+ #include "sysemu/rng-random.h"
+ 
++#define TYPE_VIRTIO_RNG "virtio-rng-device"
++#define VIRTIO_RNG(obj) \
++        OBJECT_CHECK(VirtIORNG, (obj), TYPE_VIRTIO_RNG)
++
+ /* The Virtio ID for the virtio rng device */
+ #define VIRTIO_ID_RNG    4
+ 
+@@ -44,4 +48,14 @@ typedef struct VirtIORNG {
+     int64_t quota_remaining;
+ } VirtIORNG;
+ 
++/* Set a default rate limit of 2^47 bytes per minute or roughly 2TB/s.  If
++   you have an entropy source capable of generating more entropy than this
++   and you can pass it through via virtio-rng, then hats off to you.  Until
++   then, this is unlimited for all practical purposes.
++*/
++#define DEFINE_VIRTIO_RNG_PROPERTIES(_state, _conf_field)                    \
++        DEFINE_PROP_UINT64("max-bytes", _state, _conf_field.max_bytes,       \
++                           INT64_MAX),                                       \
++        DEFINE_PROP_UINT32("period", _state, _conf_field.period_ms, 1 << 16)
++
+ #endif
+-- 
+1.7.11.7
+

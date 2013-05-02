@@ -1,0 +1,1 @@
+../PPC-PReP-Use-ElF-kernel-on-PReP/v1.1365032410/0002-PPC-PReP-Use-kernel-entry-to-set-nip-at-reset.patch

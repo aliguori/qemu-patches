@@ -1,0 +1,35 @@
+From patches Mon Sep 17 00:00:00 2001
+From: mrhines@linux.vnet.ibm.com
+To: qemu-devel@nongnu.org, mrhines@linux.vnet.ibm.com
+Cc: Anthony Liguori <aliguori@us.ibm.com>, mst@redhat.com,
+ qemu-devel@nongnu.org, Michael R Hines <mrhines@us.ibm.com>,
+ Bulent Abali <abali@us.ibm.com>, owasserm@redhat.com, pbonzini@redhat.com,
+ Gokul B Kandiraju <gokul@us.ibm.com>
+Date: Mon, 8 Apr 2013 23:04:31 -0400
+Message-id: 1365476681-31593-3-git-send-email-mrhines@linux.vnet.ibm.com
+Subject: [PATCH 02/12] check for CONFIG_RDMA
+
+From: "Michael R. Hines" <mrhines@us.ibm.com>
+
+Make both rdma.c and migration-rdma.c conditionally built.
+
+Signed-off-by: Michael R. Hines <mrhines@us.ibm.com>
+---
+ Makefile.objs |    1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/Makefile.objs b/Makefile.objs
+index e568c01..32f39d3 100644
+--- a/Makefile.objs
++++ b/Makefile.objs
+@@ -49,6 +49,7 @@ common-obj-$(CONFIG_POSIX) += os-posix.o
+ common-obj-$(CONFIG_LINUX) += fsdev/
+ 
+ common-obj-y += migration.o migration-tcp.o
++common-obj-$(CONFIG_RDMA) += migration-rdma.o rdma.o
+ common-obj-y += qemu-char.o #aio.o
+ common-obj-y += block-migration.o
+ common-obj-y += page_cache.o xbzrle.o
+-- 
+1.7.10.4
+

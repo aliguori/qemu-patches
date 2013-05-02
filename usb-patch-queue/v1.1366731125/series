@@ -1,0 +1,5 @@
+0000-usb-patch-queue.txt
+0001-xhci-remove-XHCIRing-base-unused.patch
+0002-ehci_free_packet-Discard-finished-packets-when-the-queue-is-halted.patch
+0003-usb-better-speed-mismatch-error-reporting.patch
+0004-usb-host-raise-libusbx-minimum-version-to-1013.patch

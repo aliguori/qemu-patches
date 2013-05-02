@@ -1,0 +1,32 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Gerd Hoffmann <kraxel@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Gerd Hoffmann <kraxel@redhat.com>
+Date: Tue, 16 Apr 2013 11:56:26 +0200
+Message-id: 1366106194-28826-2-git-send-email-kraxel@redhat.com
+Subject: [PATCH 1/9] qxl: add 4k + 8k resolutions
+
+Signed-off-by: Gerd Hoffmann <kraxel@redhat.com>
+---
+ hw/display/qxl.c |    4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/hw/display/qxl.c b/hw/display/qxl.c
+index 930b7cf..9d8ab58 100644
+--- a/hw/display/qxl.c
++++ b/hw/display/qxl.c
+@@ -116,6 +116,10 @@ static QXLMode qxl_modes[] = {
+     QXL_MODE_EX(2560, 2048),
+     QXL_MODE_EX(2800, 2100),
+     QXL_MODE_EX(3200, 2400),
++    QXL_MODE_EX(3840, 2160), /* 4k mainstream */
++    QXL_MODE_EX(4096, 2160), /* 4k            */
++    QXL_MODE_EX(7680, 4320), /* 8k mainstream */
++    QXL_MODE_EX(8192, 4320), /* 8k            */
+ };
+ 
+ static void qxl_send_events(PCIQXLDevice *d, uint32_t events);
+-- 
+1.7.9.7
+
+

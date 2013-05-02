@@ -1,0 +1,1 @@
+../console-console-overhaul-continued/v4.1366130354/0001-exynos4210_fimdc-fix-display-resize-bug-introduced-after-console-revamp.patch

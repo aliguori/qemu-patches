@@ -1,0 +1,1 @@
+../target-i386-CPU-hot-add-with-cpu-add-QMP-command/v2.1365197812/0011-cpu-introduce-get_firmware_id-method-and-override-it-for-target-i386.patch

@@ -1,0 +1,1 @@
+../Add-pvpanic-device-to-deal-with-guest-panic-event/v21.1366993479/0004-fw_cfg-add-required-header-files.patch

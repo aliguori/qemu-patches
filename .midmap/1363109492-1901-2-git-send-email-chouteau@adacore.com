@@ -1,0 +1,1 @@
+../Add-GDB-qAttached-support/v3.1363131089/0001-Add-GDB-qAttached-support.patch

@@ -1,0 +1,36 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: Blue Swirl <blauwirbel@gmail.com>, Paolo Bonzini <pbonzini@redhat.com>,
+ qemu-devel@nongnu.org
+Cc: sw@weilnetz.de, qemu-devel@nongnu.org
+Date: Wed, 24 Apr 2013 22:59:51 +0200
+Message-id: 1366837194-28601-1-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 0/3] fix win32 compilation
+
+Here is a fix for the Win32 compilation problem that Blue reported,
+and another nit I found while testing.
+
+Paolo Bonzini (3):
+  add missing inclusions of config-host.h
+  win32: add readv/writev emulation
+  win32: generate console executable again
+
+ Makefile.target             |  2 +-
+ include/qemu-common.h       | 22 ++--------------------
+ include/qemu/osdep.h        | 16 ++++++++++++++++
+ qga/channel-posix.c         |  1 +
+ tests/libi2c-omap.c         |  1 +
+ tests/libqtest.c            |  1 +
+ tests/tcg/test-i386-fprem.c |  1 +
+ tests/test-mul64.c          |  1 +
+ ui/sdl_zoom.c               |  1 +
+ ui/vnc.c                    |  1 +
+ util/hbitmap.c              |  1 +
+ util/iov.c                  |  2 +-
+ util/osdep.c                | 42 ++++++++++++++++++++++++++++++++++++++++++
+ 13 files changed, 70 insertions(+), 22 deletions(-)
+
+-- 
+1.8.2
+
+

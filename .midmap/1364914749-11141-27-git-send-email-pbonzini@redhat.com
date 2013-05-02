@@ -1,0 +1,1 @@
+../hw--reorganization-part-2/v2.1364939914/0026-hw-move-interrupt-controllers-to-hw-intc--configure-with-default-configs-.patch

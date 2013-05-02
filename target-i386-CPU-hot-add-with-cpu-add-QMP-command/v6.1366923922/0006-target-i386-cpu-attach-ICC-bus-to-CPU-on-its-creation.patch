@@ -1,0 +1,67 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Igor Mammedov <imammedo@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, peter.maydell@linaro.org,
+ ehabkost@redhat.com, mst@redhat.com, stefano.stabellini@eu.citrix.com,
+ quintela@redhat.com, anthony.perard@citrix.com, pbonzini@redhat.com,
+ eblake@redhat.com, afaerber@suse.de
+Date: Thu, 25 Apr 2013 16:05:28 +0200
+Message-id: 1366898737-6201-7-git-send-email-imammedo@redhat.com
+Subject: [PATCH 06/15] target-i386: cpu: attach ICC bus to CPU on its creation
+
+X86CPU should have parent bus so it would be possible to unplug
+it later. Set bus_type to TYPE_ICC_BUS for X86CPU type to make
+device_add attach hotplugged CPU to ICC bus.
+
+Signed-off-by: Igor Mammedov <imammedo@redhat.com>
+---
+v2:
+  * make sure that missing or ambiguous icc-bus will cause error
+    on softmmu target.
+---
+ target-i386/cpu.c |   15 +++++++++++++++
+ 1 files changed, 15 insertions(+), 0 deletions(-)
+
+diff --git a/target-i386/cpu.c b/target-i386/cpu.c
+index b0eb6ca..25eb158 100644
+--- a/target-i386/cpu.c
++++ b/target-i386/cpu.c
+@@ -41,6 +41,7 @@
+ #endif
+ 
+ #include "sysemu/sysemu.h"
++#include "hw/cpu/icc_bus.h"
+ #ifndef CONFIG_USER_ONLY
+ #include "hw/xen/xen.h"
+ #include "hw/sysbus.h"
+@@ -1619,6 +1620,19 @@ X86CPU *cpu_x86_create(const char *cpu_model, Error **errp)
+     features = model_pieces[1];
+ 
+     cpu = X86_CPU(object_new(TYPE_X86_CPU));
++#ifndef CONFIG_USER_ONLY
++    do {
++        bool ambiguous = false;
++        Object *icc_bus = object_resolve_path_type("icc-bus", TYPE_ICC_BUS,
++                                                   &ambiguous);
++        if ((icc_bus == NULL) || ambiguous) {
++            error_setg(&error, "Invalid icc-bus value");
++            goto out;
++        }
++        qdev_set_parent_bus(DEVICE(cpu), BUS(icc_bus));
++        object_unref(OBJECT(cpu));
++   } while (0);
++#endif
+     env = &cpu->env;
+     env->cpu_model_str = cpu_model;
+ 
+@@ -2330,6 +2344,7 @@ static void x86_cpu_common_class_init(ObjectClass *oc, void *data)
+ 
+     xcc->parent_realize = dc->realize;
+     dc->realize = x86_cpu_realizefn;
++    dc->bus_type = TYPE_ICC_BUS;
+ 
+     xcc->parent_reset = cc->reset;
+     cc->reset = x86_cpu_reset;
+-- 
+1.7.1
+

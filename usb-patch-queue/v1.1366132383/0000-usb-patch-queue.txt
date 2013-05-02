@@ -1,0 +1,50 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Gerd Hoffmann <kraxel@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Gerd Hoffmann <kraxel@redhat.com>
+Date: Tue, 16 Apr 2013 12:13:03 +0200
+Message-id: 1366107190-30853-1-git-send-email-kraxel@redhat.com
+Subject: [PATCH 0/7] usb patch queue
+
+  Hi,
+
+Here comes the usb patch queue.  Big new feature is the libusb-based
+usb-host driver.  There also is a usb-serial fix and a small collection
+of xhci bugfixes.
+
+please pull,
+  Gerd
+
+The following changes since commit 24a6e7f4d91e9ed5f8117ecb083431a23f8609a0:
+
+  virtio-balloon: fix dynamic properties. (2013-04-15 17:06:58 -0500)
+
+are available in the git repository at:
+
+  git://git.kraxel.org/qemu usb.80
+
+for you to fetch changes up to 2b2325ff6491224a42e1fec99b1c39fbc521c95c:
+
+  use libusb for usb-host (2013-04-16 12:04:09 +0200)
+
+----------------------------------------------------------------
+Gerd Hoffmann (6):
+      xhci: remove leftover debug printf
+      xhci: add xhci_cap_write
+      xhci: fix portsc writes
+      xhci: use slotid as device address
+      xhci: fix address device
+      use libusb for usb-host
+
+Hans de Goede (1):
+      usb-serial: Remove double call to qemu_chr_add_handlers( NULL )
+
+ configure            |   36 ++
+ hw/usb/dev-serial.c  |    9 -
+ hw/usb/hcd-xhci.c    |   79 +--
+ hw/usb/host-libusb.c | 1449 ++++++++++++++++++++++++++++++++++++++++++++++++++
+ hw/usb/host-linux.c  |   14 +-
+ trace-events         |    5 +
+ 6 files changed, 1551 insertions(+), 41 deletions(-)
+ create mode 100644 hw/usb/host-libusb.c
+

@@ -1,0 +1,40 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Jan Kiszka <jan.kiszka@siemens.com>
+To: Anthony Liguori <aliguori@us.ibm.com>, Paolo Bonzini <pbonzini@redhat.com>,
+ Jan Kiszka <jan.kiszka@siemens.com>, qemu-devel <qemu-devel@nongnu.org>,
+ =?ISO-8859-1?Q?Andreas_F=E4rber?= <afaerber@suse.de>
+Cc: Marcelo Tosatti <mtosatti@redhat.com>, Paolo Bonzini <pbonzini@redhat.com>,
+ Avi Kivity <avi@redhat.com>, qemu-devel <qemu-devel@nongnu.org>,
+ Anthony Liguori <aliguori@us.ibm.com>
+Date: Mon, 20 Aug 2012 20:11:36 +0200
+Message-id: 50327DD8.8070205@siemens.com
+Subject: [PATCH 1/1] Drop redundant resume_all_vcpus from main
+
+VCPUs are either resumed directly via vm_start, after the incoming
+migration is done, or when a continue command is issued. We don't need
+the explicit resume before entering main_loop.
+
+Signed-off-by: Jan Kiszka <jan.kiszka@siemens.com>
+---
+
+I was adding nesting support to pause/resume_all_vcpus, and that
+stumbled over the imbalance below.
+
+ vl.c |    1 -
+ 1 files changed, 0 insertions(+), 1 deletions(-)
+
+diff --git a/vl.c b/vl.c
+index ebee867..231d3ab 100644
+--- a/vl.c
++++ b/vl.c
+@@ -3757,7 +3757,6 @@ int main(int argc, char **argv, char **envp)
+ 
+     os_setup_post();
+ 
+-    resume_all_vcpus();
+     main_loop();
+     bdrv_close_all();
+     pause_all_vcpus();
+-- 
+1.7.3.4
+

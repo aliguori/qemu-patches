@@ -1,0 +1,17 @@
+From patches Mon Sep 17 00:00:00 2001
+From: "Jason J. Herne" <jjherne@us.ibm.com>
+To: Anthony Liguori <aliguori@us.ibm.com>, jan.kiszka@siemens.com,
+ mtosatti@redhat.com, agraf@suse.de, qemu-devel@nongnu.org,
+ borntraeger@de.ibm.com, Jason Herne <jjherne@us.ibm.com>, R65777@freescale.com
+Cc: Anthony Liguori <aliguori@us.ibm.com>, jan.kiszka@siemens.com,
+ mtosatti@redhat.com, agraf@suse.de, qemu-devel@nongnu.org,
+ borntraeger@de.ibm.com, R65777@freescale.com
+Date: Mon, 11 Mar 2013 13:58:54 -0400
+Message-id: 1363024736-2650-1-git-send-email-jjherne@us.ibm.com
+Subject: [PATCH 0/2] Regsync: Allow selective runtime register synchronization
+
+Selective KVm Register synchronization work for S390. This is re-work of the
+patch set submitted here:
+https://lists.nongnu.org/archive/html/qemu-devel/2013-01/msg01631.html
+
+The selective runtime register sync code has been made S390 specific.

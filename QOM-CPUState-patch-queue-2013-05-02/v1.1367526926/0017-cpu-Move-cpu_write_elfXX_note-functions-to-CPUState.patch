@@ -1,0 +1,425 @@
+From patches Mon Sep 17 00:00:00 2001
+From: =?utf-8?q?Andreas_F=C3=A4rber_=3Cafaerber=40suse=2Ede=3E?=
+To: qemu-devel@nongnu.org
+Cc: =?UTF-8?q?Andreas=20F=C3=A4rber?= <afaerber@suse.de>,
+ Jens Freimann <jfrei@linux.vnet.ibm.com>
+Date: Thu,  2 May 2013 15:35:43 +0200
+Message-id: 1367501755-32272-18-git-send-email-afaerber@suse.de
+Subject: [PATCH 17/29] cpu: Move cpu_write_elfXX_note() functions to CPUState
+
+From: Jens Freimann <jfrei@linux.vnet.ibm.com>
+
+Convert cpu_write_elfXX_note() functions to CPUClass methods and pass
+CPUState as argument. Update target-i386 accordingly.
+
+Signed-off-by: Jens Freimann <jfrei@linux.vnet.ibm.com>
+[AF: Retain stubs as CPUClass' default method implementation; style changes]
+Signed-off-by: Andreas Färber <afaerber@suse.de>
+---
+ dump-stub.c             | 28 ----------------------
+ dump.c                  |  8 +++----
+ include/qom/cpu.h       | 49 ++++++++++++++++++++++++++++++++++++++
+ include/sysemu/dump.h   |  9 -------
+ qom/cpu.c               | 63 +++++++++++++++++++++++++++++++++++++++++++++++++
+ target-i386/arch_dump.c | 38 ++++++++++++++++-------------
+ target-i386/cpu-qom.h   |  9 +++++++
+ target-i386/cpu.c       |  6 +++++
+ 8 files changed, 153 insertions(+), 57 deletions(-)
+
+diff --git a/dump-stub.c b/dump-stub.c
+index a9d0b3c..b3f42cb 100644
+--- a/dump-stub.c
++++ b/dump-stub.c
+@@ -24,34 +24,6 @@ void qmp_dump_guest_memory(bool paging, const char *file, bool has_begin,
+     error_set(errp, QERR_UNSUPPORTED);
+ }
+ 
+-int cpu_write_elf64_note(write_core_dump_function f,
+-                                       CPUArchState *env, int cpuid,
+-                                       void *opaque)
+-{
+-    return -1;
+-}
+-
+-int cpu_write_elf32_note(write_core_dump_function f,
+-                                       CPUArchState *env, int cpuid,
+-                                       void *opaque)
+-{
+-    return -1;
+-}
+-
+-int cpu_write_elf64_qemunote(write_core_dump_function f,
+-                                           CPUArchState *env,
+-                                           void *opaque)
+-{
+-    return -1;
+-}
+-
+-int cpu_write_elf32_qemunote(write_core_dump_function f,
+-                                           CPUArchState *env,
+-                                           void *opaque)
+-{
+-    return -1;
+-}
+-
+ int cpu_get_dump_info(ArchDumpInfo *info)
+ {
+     return -1;
+diff --git a/dump.c b/dump.c
+index b34f143..c0d3da5 100644
+--- a/dump.c
++++ b/dump.c
+@@ -282,7 +282,7 @@ static int write_elf64_notes(DumpState *s)
+     for (env = first_cpu; env != NULL; env = env->next_cpu) {
+         cpu = ENV_GET_CPU(env);
+         id = cpu_index(cpu);
+-        ret = cpu_write_elf64_note(fd_write_vmcore, env, id, s);
++        ret = cpu_write_elf64_note(fd_write_vmcore, cpu, id, s);
+         if (ret < 0) {
+             dump_error(s, "dump: failed to write elf notes.\n");
+             return -1;
+@@ -290,7 +290,7 @@ static int write_elf64_notes(DumpState *s)
+     }
+ 
+     for (env = first_cpu; env != NULL; env = env->next_cpu) {
+-        ret = cpu_write_elf64_qemunote(fd_write_vmcore, env, s);
++        ret = cpu_write_elf64_qemunote(fd_write_vmcore, cpu, s);
+         if (ret < 0) {
+             dump_error(s, "dump: failed to write CPU status.\n");
+             return -1;
+@@ -334,7 +334,7 @@ static int write_elf32_notes(DumpState *s)
+     for (env = first_cpu; env != NULL; env = env->next_cpu) {
+         cpu = ENV_GET_CPU(env);
+         id = cpu_index(cpu);
+-        ret = cpu_write_elf32_note(fd_write_vmcore, env, id, s);
++        ret = cpu_write_elf32_note(fd_write_vmcore, cpu, id, s);
+         if (ret < 0) {
+             dump_error(s, "dump: failed to write elf notes.\n");
+             return -1;
+@@ -342,7 +342,7 @@ static int write_elf32_notes(DumpState *s)
+     }
+ 
+     for (env = first_cpu; env != NULL; env = env->next_cpu) {
+-        ret = cpu_write_elf32_qemunote(fd_write_vmcore, env, s);
++        ret = cpu_write_elf32_qemunote(fd_write_vmcore, cpu, s);
+         if (ret < 0) {
+             dump_error(s, "dump: failed to write CPU status.\n");
+             return -1;
+diff --git a/include/qom/cpu.h b/include/qom/cpu.h
+index e54579b..7cd9442 100644
+--- a/include/qom/cpu.h
++++ b/include/qom/cpu.h
+@@ -24,6 +24,8 @@
+ #include "hw/qdev-core.h"
+ #include "qemu/thread.h"
+ 
++typedef int (*WriteCoreDumpFunction)(void *buf, size_t size, void *opaque);
++
+ /**
+  * SECTION:cpu
+  * @section_id: QEMU-cpu
+@@ -62,6 +64,14 @@ typedef struct CPUClass {
+     int64_t (*get_arch_id)(CPUState *cpu);
+ 
+     const struct VMStateDescription *vmsd;
++    int (*write_elf64_note)(WriteCoreDumpFunction f, CPUState *cpu,
++                            int cpuid, void *opaque);
++    int (*write_elf64_qemunote)(WriteCoreDumpFunction f, CPUState *cpu,
++                                void *opaque);
++    int (*write_elf32_note)(WriteCoreDumpFunction f, CPUState *cpu,
++                            int cpuid, void *opaque);
++    int (*write_elf32_qemunote)(WriteCoreDumpFunction f, CPUState *cpu,
++                                void *opaque);
+ } CPUClass;
+ 
+ struct KVMState;
+@@ -127,6 +137,45 @@ struct CPUState {
+     uint32_t halted; /* used by alpha, cris, ppc TCG */
+ };
+ 
++/**
++ * cpu_write_elf64_note:
++ * @f: pointer to a function that writes memory to a file
++ * @cpu: The CPU whose memory is to be dumped
++ * @cpuid: ID number of the CPU
++ * @opaque: pointer to the CPUState struct
++ */
++int cpu_write_elf64_note(WriteCoreDumpFunction f, CPUState *cpu,
++                         int cpuid, void *opaque);
++
++/**
++ * cpu_write_elf64_qemunote:
++ * @f: pointer to a function that writes memory to a file
++ * @cpu: The CPU whose memory is to be dumped
++ * @cpuid: ID number of the CPU
++ * @opaque: pointer to the CPUState struct
++ */
++int cpu_write_elf64_qemunote(WriteCoreDumpFunction f, CPUState *cpu,
++                             void *opaque);
++
++/**
++ * cpu_write_elf32_note:
++ * @f: pointer to a function that writes memory to a file
++ * @cpu: The CPU whose memory is to be dumped
++ * @cpuid: ID number of the CPU
++ * @opaque: pointer to the CPUState struct
++ */
++int cpu_write_elf32_note(WriteCoreDumpFunction f, CPUState *cpu,
++                         int cpuid, void *opaque);
++
++/**
++ * cpu_write_elf32_qemunote:
++ * @f: pointer to a function that writes memory to a file
++ * @cpu: The CPU whose memory is to be dumped
++ * @cpuid: ID number of the CPU
++ * @opaque: pointer to the CPUState struct
++ */
++int cpu_write_elf32_qemunote(WriteCoreDumpFunction f, CPUState *cpu,
++                             void *opaque);
+ 
+ /**
+  * cpu_reset:
+diff --git a/include/sysemu/dump.h b/include/sysemu/dump.h
+index e25b7cf..b8c770f 100644
+--- a/include/sysemu/dump.h
++++ b/include/sysemu/dump.h
+@@ -20,15 +20,6 @@ typedef struct ArchDumpInfo {
+     int d_class;    /* ELFCLASS32 or ELFCLASS64 */
+ } ArchDumpInfo;
+ 
+-typedef int (*write_core_dump_function)(void *buf, size_t size, void *opaque);
+-int cpu_write_elf64_note(write_core_dump_function f, CPUArchState *env,
+-                                                  int cpuid, void *opaque);
+-int cpu_write_elf32_note(write_core_dump_function f, CPUArchState *env,
+-                                                  int cpuid, void *opaque);
+-int cpu_write_elf64_qemunote(write_core_dump_function f, CPUArchState *env,
+-                                                          void *opaque);
+-int cpu_write_elf32_qemunote(write_core_dump_function f, CPUArchState *env,
+-                                                          void *opaque);
+ int cpu_get_dump_info(ArchDumpInfo *info);
+ ssize_t cpu_get_note_size(int class, int machine, int nr_cpus);
+ 
+diff --git a/qom/cpu.c b/qom/cpu.c
+index 3dc8208..04aefbb 100644
+--- a/qom/cpu.c
++++ b/qom/cpu.c
+@@ -64,6 +64,65 @@ void cpu_reset_interrupt(CPUState *cpu, int mask)
+     cpu->interrupt_request &= ~mask;
+ }
+ 
++int cpu_write_elf32_qemunote(WriteCoreDumpFunction f, CPUState *cpu,
++                             void *opaque)
++{
++    CPUClass *cc = CPU_GET_CLASS(cpu);
++
++    return (*cc->write_elf32_qemunote)(f, cpu, opaque);
++}
++
++static int cpu_common_write_elf32_qemunote(WriteCoreDumpFunction f,
++                                           CPUState *cpu, void *opaque)
++{
++    return -1;
++}
++
++int cpu_write_elf32_note(WriteCoreDumpFunction f, CPUState *cpu,
++                         int cpuid, void *opaque)
++{
++    CPUClass *cc = CPU_GET_CLASS(cpu);
++
++    return (*cc->write_elf32_note)(f, cpu, cpuid, opaque);
++}
++
++static int cpu_common_write_elf32_note(WriteCoreDumpFunction f,
++                                       CPUState *cpu, int cpuid,
++                                       void *opaque)
++{
++    return -1;
++}
++
++int cpu_write_elf64_qemunote(WriteCoreDumpFunction f, CPUState *cpu,
++                             void *opaque)
++{
++    CPUClass *cc = CPU_GET_CLASS(cpu);
++
++    return (*cc->write_elf64_qemunote)(f, cpu, opaque);
++}
++
++static int cpu_common_write_elf64_qemunote(WriteCoreDumpFunction f,
++                                           CPUState *cpu, void *opaque)
++{
++    return -1;
++}
++
++int cpu_write_elf64_note(WriteCoreDumpFunction f, CPUState *cpu,
++                         int cpuid, void *opaque)
++{
++    CPUClass *cc = CPU_GET_CLASS(cpu);
++
++    return (*cc->write_elf64_note)(f, cpu, cpuid, opaque);
++}
++
++static int cpu_common_write_elf64_note(WriteCoreDumpFunction f,
++                                       CPUState *cpu, int cpuid,
++                                       void *opaque)
++{
++    return -1;
++}
++
++
+ void cpu_reset(CPUState *cpu)
+ {
+     CPUClass *klass = CPU_GET_CLASS(cpu);
+@@ -117,6 +176,10 @@ static void cpu_class_init(ObjectClass *klass, void *data)
+     k->class_by_name = cpu_common_class_by_name;
+     k->reset = cpu_common_reset;
+     k->get_arch_id = cpu_common_get_arch_id;
++    k->write_elf32_qemunote = cpu_common_write_elf32_qemunote;
++    k->write_elf32_note = cpu_common_write_elf32_note;
++    k->write_elf64_qemunote = cpu_common_write_elf64_qemunote;
++    k->write_elf64_note = cpu_common_write_elf64_note;
+     dc->realize = cpu_common_realizefn;
+     dc->no_user = 1;
+ }
+diff --git a/target-i386/arch_dump.c b/target-i386/arch_dump.c
+index 2cd2f7f..83898cd 100644
+--- a/target-i386/arch_dump.c
++++ b/target-i386/arch_dump.c
+@@ -34,7 +34,7 @@ typedef struct {
+     char pad3[8];
+ } x86_64_elf_prstatus;
+ 
+-static int x86_64_write_elf64_note(write_core_dump_function f,
++static int x86_64_write_elf64_note(WriteCoreDumpFunction f,
+                                    CPUArchState *env, int id,
+                                    void *opaque)
+ {
+@@ -144,7 +144,7 @@ static void x86_fill_elf_prstatus(x86_elf_prstatus *prstatus, CPUArchState *env,
+     prstatus->pid = id;
+ }
+ 
+-static int x86_write_elf64_note(write_core_dump_function f, CPUArchState *env,
++static int x86_write_elf64_note(WriteCoreDumpFunction f, CPUArchState *env,
+                                 int id, void *opaque)
+ {
+     x86_elf_prstatus prstatus;
+@@ -179,18 +179,19 @@ static int x86_write_elf64_note(write_core_dump_function f, CPUArchState *env,
+     return 0;
+ }
+ 
+-int cpu_write_elf64_note(write_core_dump_function f, CPUArchState *env,
+-                         int cpuid, void *opaque)
++int x86_cpu_write_elf64_note(WriteCoreDumpFunction f, CPUState *cs,
++                             int cpuid, void *opaque)
+ {
++    X86CPU *cpu = X86_CPU(cs);
+     int ret;
+ #ifdef TARGET_X86_64
+     bool lma = !!(first_cpu->hflags & HF_LMA_MASK);
+ 
+     if (lma) {
+-        ret = x86_64_write_elf64_note(f, env, cpuid, opaque);
++        ret = x86_64_write_elf64_note(f, &cpu->env, cpuid, opaque);
+     } else {
+ #endif
+-        ret = x86_write_elf64_note(f, env, cpuid, opaque);
++        ret = x86_write_elf64_note(f, &cpu->env, cpuid, opaque);
+ #ifdef TARGET_X86_64
+     }
+ #endif
+@@ -198,9 +199,10 @@ int cpu_write_elf64_note(write_core_dump_function f, CPUArchState *env,
+     return ret;
+ }
+ 
+-int cpu_write_elf32_note(write_core_dump_function f, CPUArchState *env,
+-                         int cpuid, void *opaque)
++int x86_cpu_write_elf32_note(WriteCoreDumpFunction f, CPUState *cs,
++                             int cpuid, void *opaque)
+ {
++    X86CPU *cpu = X86_CPU(cs);
+     x86_elf_prstatus prstatus;
+     Elf32_Nhdr *note;
+     char *buf;
+@@ -208,7 +210,7 @@ int cpu_write_elf32_note(write_core_dump_function f, CPUArchState *env,
+     const char *name = "CORE";
+     int ret;
+ 
+-    x86_fill_elf_prstatus(&prstatus, env, cpuid);
++    x86_fill_elf_prstatus(&prstatus, &cpu->env, cpuid);
+     descsz = sizeof(x86_elf_prstatus);
+     note_size = ((sizeof(Elf32_Nhdr) + 3) / 4 + (name_size + 3) / 4 +
+                 (descsz + 3) / 4) * 4;
+@@ -317,7 +319,7 @@ static void qemu_get_cpustate(QEMUCPUState *s, CPUArchState *env)
+     s->cr[4] = env->cr[4];
+ }
+ 
+-static inline int cpu_write_qemu_note(write_core_dump_function f,
++static inline int cpu_write_qemu_note(WriteCoreDumpFunction f,
+                                       CPUArchState *env,
+                                       void *opaque,
+                                       int type)
+@@ -370,16 +372,20 @@ static inline int cpu_write_qemu_note(write_core_dump_function f,
+     return 0;
+ }
+ 
+-int cpu_write_elf64_qemunote(write_core_dump_function f, CPUArchState *env,
+-                             void *opaque)
++int x86_cpu_write_elf64_qemunote(WriteCoreDumpFunction f, CPUState *cs,
++                                 void *opaque)
+ {
+-    return cpu_write_qemu_note(f, env, opaque, 1);
++    X86CPU *cpu = X86_CPU(cs);
++
++    return cpu_write_qemu_note(f, &cpu->env, opaque, 1);
+ }
+ 
+-int cpu_write_elf32_qemunote(write_core_dump_function f, CPUArchState *env,
+-                             void *opaque)
++int x86_cpu_write_elf32_qemunote(WriteCoreDumpFunction f, CPUState *cs,
++                                 void *opaque)
+ {
+-    return cpu_write_qemu_note(f, env, opaque, 0);
++    X86CPU *cpu = X86_CPU(cs);
++
++    return cpu_write_qemu_note(f, &cpu->env, opaque, 0);
+ }
+ 
+ int cpu_get_dump_info(ArchDumpInfo *info)
+diff --git a/target-i386/cpu-qom.h b/target-i386/cpu-qom.h
+index 08f9eb6..f890f1c 100644
+--- a/target-i386/cpu-qom.h
++++ b/target-i386/cpu-qom.h
+@@ -86,4 +86,13 @@ extern const struct VMStateDescription vmstate_x86_cpu;
+  */
+ void x86_cpu_do_interrupt(CPUState *cpu);
+ 
++int x86_cpu_write_elf64_note(WriteCoreDumpFunction f, CPUState *cpu,
++                             int cpuid, void *opaque);
++int x86_cpu_write_elf32_note(WriteCoreDumpFunction f, CPUState *cpu,
++                             int cpuid, void *opaque);
++int x86_cpu_write_elf64_qemunote(WriteCoreDumpFunction f, CPUState *cpu,
++                                 void *opaque);
++int x86_cpu_write_elf32_qemunote(WriteCoreDumpFunction f, CPUState *cpu,
++                                 void *opaque);
++
+ #endif
+diff --git a/target-i386/cpu.c b/target-i386/cpu.c
+index 0d9493d..40d51be 100644
+--- a/target-i386/cpu.c
++++ b/target-i386/cpu.c
+@@ -2351,6 +2351,12 @@ static void x86_cpu_common_class_init(ObjectClass *oc, void *data)
+     cc->reset = x86_cpu_reset;
+ 
+     cc->do_interrupt = x86_cpu_do_interrupt;
++#ifndef CONFIG_USER_ONLY
++    cc->write_elf64_note = x86_cpu_write_elf64_note;
++    cc->write_elf64_qemunote = x86_cpu_write_elf64_qemunote;
++    cc->write_elf32_note = x86_cpu_write_elf32_note;
++    cc->write_elf32_qemunote = x86_cpu_write_elf32_qemunote;
++#endif
+     cpu_class_set_vmsd(cc, &vmstate_x86_cpu);
+ 
+     cc->get_arch_id = x86_cpu_get_arch_id;
+-- 
+1.8.1.4
+
+

@@ -1,0 +1,247 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Peter Maydell <peter.maydell@linaro.org>
+To: qemu-devel@nongnu.org
+Cc: Arnd Bergmann <arnd@arndb.de>, patches@linaro.org,
+ Aurelien Jarno <aurelien@aurel32.net>, "Michael S. Tsirkin" <mst@redhat.com>,
+ Paul Brook <paul@codesourcery.com>,
+ =?UTF-8?q?Andreas=20F=C3=A4rber?= <afaerber@suse.de>,
+ Will Deacon <will.deacon@arm.com>
+Date: Thu,  4 Apr 2013 13:58:30 +0100
+Message-id: 1365080313-20875-9-git-send-email-peter.maydell@linaro.org
+Subject: [PATCH 08/11] versatile_pci: Implement the PCI controller's control
+ registers
+
+The versatile_pci PCI controller has a set of control registers which
+handle the mapping between PCI and system address spaces. Implement
+these registers (though for now they have no effect since we don't
+implement mapping PCI space into system memory at all).
+
+The most natural order for our sysbus regions has the control
+registers at the start, so move all the others down one.
+
+Signed-off-by: Peter Maydell <peter.maydell@linaro.org>
+Acked-by: Paul Brook <paul@codesourcery.com>
+---
+ hw/arm/realview.c    |    7 +--
+ hw/arm/versatilepb.c |    7 +--
+ hw/versatile_pci.c   |  127 ++++++++++++++++++++++++++++++++++++++++++++++++--
+ 3 files changed, 130 insertions(+), 11 deletions(-)
+
+diff --git a/hw/arm/realview.c b/hw/arm/realview.c
+index 5fb490c..ba61d18 100644
+--- a/hw/arm/realview.c
++++ b/hw/arm/realview.c
+@@ -217,9 +217,10 @@ static void realview_init(QEMUMachineInitArgs *args,
+         dev = qdev_create(NULL, "realview_pci");
+         busdev = SYS_BUS_DEVICE(dev);
+         qdev_init_nofail(dev);
+-        sysbus_mmio_map(busdev, 0, 0x61000000); /* PCI self-config */
+-        sysbus_mmio_map(busdev, 1, 0x62000000); /* PCI config */
+-        sysbus_mmio_map(busdev, 2, 0x63000000); /* PCI I/O */
++        sysbus_mmio_map(busdev, 0, 0x10019000); /* PCI controller registers */
++        sysbus_mmio_map(busdev, 1, 0x61000000); /* PCI self-config */
++        sysbus_mmio_map(busdev, 2, 0x62000000); /* PCI config */
++        sysbus_mmio_map(busdev, 3, 0x63000000); /* PCI I/O */
+         sysbus_connect_irq(busdev, 0, pic[48]);
+         sysbus_connect_irq(busdev, 1, pic[49]);
+         sysbus_connect_irq(busdev, 2, pic[50]);
+diff --git a/hw/arm/versatilepb.c b/hw/arm/versatilepb.c
+index 0d08d15..9c9bfde 100644
+--- a/hw/arm/versatilepb.c
++++ b/hw/arm/versatilepb.c
+@@ -224,9 +224,10 @@ static void versatile_init(QEMUMachineInitArgs *args, int board_id)
+     dev = qdev_create(NULL, "versatile_pci");
+     busdev = SYS_BUS_DEVICE(dev);
+     qdev_init_nofail(dev);
+-    sysbus_mmio_map(busdev, 0, 0x41000000); /* PCI self-config */
+-    sysbus_mmio_map(busdev, 1, 0x42000000); /* PCI config */
+-    sysbus_mmio_map(busdev, 2, 0x43000000); /* PCI I/O */
++    sysbus_mmio_map(busdev, 0, 0x10001000); /* PCI controller regs */
++    sysbus_mmio_map(busdev, 1, 0x41000000); /* PCI self-config */
++    sysbus_mmio_map(busdev, 2, 0x42000000); /* PCI config */
++    sysbus_mmio_map(busdev, 3, 0x43000000); /* PCI I/O */
+     sysbus_connect_irq(busdev, 0, sic[27]);
+     sysbus_connect_irq(busdev, 1, sic[28]);
+     sysbus_connect_irq(busdev, 2, sic[29]);
+diff --git a/hw/versatile_pci.c b/hw/versatile_pci.c
+index 859fbee..6c0ae01 100644
+--- a/hw/versatile_pci.c
++++ b/hw/versatile_pci.c
+@@ -39,6 +39,7 @@ typedef struct {
+     PCIHostState parent_obj;
+ 
+     qemu_irq irq[4];
++    MemoryRegion controlregs;
+     MemoryRegion mem_config;
+     MemoryRegion mem_config2;
+     MemoryRegion pci_io_space;
+@@ -50,9 +51,27 @@ typedef struct {
+     int realview;
+ 
+     /* Variable state: */
++    uint32_t imap[3];
++    uint32_t smap[3];
++    uint32_t selfid;
++    uint32_t flags;
+     uint8_t irq_mapping;
+ } PCIVPBState;
+ 
++static const VMStateDescription pci_vpb_vmstate = {
++    .name = "versatile-pci",
++    .version_id = 1,
++    .minimum_version_id = 1,
++    .fields = (VMStateField[]) {
++        VMSTATE_UINT32_ARRAY(imap, PCIVPBState, 3),
++        VMSTATE_UINT32_ARRAY(smap, PCIVPBState, 3),
++        VMSTATE_UINT32(selfid, PCIVPBState),
++        VMSTATE_UINT32(flags, PCIVPBState),
++        VMSTATE_UINT8(irq_mapping, PCIVPBState),
++        VMSTATE_END_OF_LIST()
++    }
++};
++
+ #define TYPE_VERSATILE_PCI "versatile_pci"
+ #define PCI_VPB(obj) \
+     OBJECT_CHECK(PCIVPBState, (obj), TYPE_VERSATILE_PCI)
+@@ -61,6 +80,93 @@ typedef struct {
+ #define PCI_VPB_HOST(obj) \
+     OBJECT_CHECK(PCIDevice, (obj), TYPE_VERSATILE_PCIHOST)
+ 
++typedef enum {
++    PCI_IMAP0 = 0x0,
++    PCI_IMAP1 = 0x4,
++    PCI_IMAP2 = 0x8,
++    PCI_SELFID = 0xc,
++    PCI_FLAGS = 0x10,
++    PCI_SMAP0 = 0x14,
++    PCI_SMAP1 = 0x18,
++    PCI_SMAP2 = 0x1c,
++} PCIVPBControlRegs;
++
++static void pci_vpb_reg_write(void *opaque, hwaddr addr,
++                              uint64_t val, unsigned size)
++{
++    PCIVPBState *s = opaque;
++
++    switch (addr) {
++    case PCI_IMAP0:
++    case PCI_IMAP1:
++    case PCI_IMAP2:
++    {
++        int win = (addr - PCI_IMAP0) >> 2;
++        s->imap[win] = val;
++        break;
++    }
++    case PCI_SELFID:
++        s->selfid = val;
++        break;
++    case PCI_FLAGS:
++        s->flags = val;
++        break;
++    case PCI_SMAP0:
++    case PCI_SMAP1:
++    case PCI_SMAP2:
++    {
++        int win = (addr - PCI_SMAP0) >> 2;
++        s->smap[win] = val;
++        break;
++    }
++    default:
++        qemu_log_mask(LOG_GUEST_ERROR,
++                      "pci_vpb_reg_write: Bad offset %x\n", (int)addr);
++        break;
++    }
++}
++
++static uint64_t pci_vpb_reg_read(void *opaque, hwaddr addr,
++                                 unsigned size)
++{
++    PCIVPBState *s = opaque;
++
++    switch (addr) {
++    case PCI_IMAP0:
++    case PCI_IMAP1:
++    case PCI_IMAP2:
++    {
++        int win = (addr - PCI_IMAP0) >> 2;
++        return s->imap[win];
++    }
++    case PCI_SELFID:
++        return s->selfid;
++    case PCI_FLAGS:
++        return s->flags;
++    case PCI_SMAP0:
++    case PCI_SMAP1:
++    case PCI_SMAP2:
++    {
++        int win = (addr - PCI_SMAP0) >> 2;
++        return s->smap[win];
++    }
++    default:
++        qemu_log_mask(LOG_GUEST_ERROR,
++                      "pci_vpb_reg_read: Bad offset %x\n", (int)addr);
++        return 0;
++    }
++}
++
++static const MemoryRegionOps pci_vpb_reg_ops = {
++    .read = pci_vpb_reg_read,
++    .write = pci_vpb_reg_write,
++    .endianness = DEVICE_NATIVE_ENDIAN,
++    .valid = {
++        .min_access_size = 4,
++        .max_access_size = 4,
++    },
++};
++
+ static inline uint32_t vpb_pci_config_addr(hwaddr addr)
+ {
+     return addr & 0xffffff;
+@@ -155,6 +261,14 @@ static void pci_vpb_reset(DeviceState *d)
+ {
+     PCIVPBState *s = PCI_VPB(d);
+ 
++    s->imap[0] = 0;
++    s->imap[1] = 0;
++    s->imap[2] = 0;
++    s->smap[0] = 0;
++    s->smap[1] = 0;
++    s->smap[2] = 0;
++    s->selfid = 0;
++    s->flags = 0;
+     s->irq_mapping = IRQ_MAPPING_ASSUME_OK;
+ }
+ 
+@@ -195,13 +309,15 @@ static void pci_vpb_realize(DeviceState *dev, Error **errp)
+ 
+     pci_bus_irqs(&s->pci_bus, pci_vpb_set_irq, mapfn, s->irq, 4);
+ 
+-    /* ??? Register memory space.  */
+-
+     /* Our memory regions are:
+-     * 0 : PCI self config window
+-     * 1 : PCI config window
+-     * 2 : PCI IO window
++     * 0 : our control registers
++     * 1 : PCI self config window
++     * 2 : PCI config window
++     * 3 : PCI IO window
+      */
++    memory_region_init_io(&s->controlregs, &pci_vpb_reg_ops, s, "pci-vpb-regs",
++                          0x1000);
++    sysbus_init_mmio(sbd, &s->controlregs);
+     memory_region_init_io(&s->mem_config, &pci_vpb_config_ops, s,
+                           "pci-vpb-selfconfig", 0x1000000);
+     sysbus_init_mmio(sbd, &s->mem_config);
+@@ -252,6 +368,7 @@ static void pci_vpb_class_init(ObjectClass *klass, void *data)
+ 
+     dc->realize = pci_vpb_realize;
+     dc->reset = pci_vpb_reset;
++    dc->vmsd = &pci_vpb_vmstate;
+ }
+ 
+ static const TypeInfo pci_vpb_info = {
+-- 
+1.7.9.5
+
+

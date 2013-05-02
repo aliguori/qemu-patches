@@ -1,0 +1,6 @@
+0000-fix-win32-compilation.txt
+0001-win32-add-generic-RC-rules-to-rulesmak.patch
+0002-win32-move-Makefile-dependencies-on-version-obj-y-to-rulesmak.patch
+0003-win32-generate-console-executable-again.patch
+0004-add-missing-inclusions-of-config-hosth.patch
+0005-win32-add-readv-writev-emulation.patch

@@ -1,0 +1,50 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: Paolo Bonzini <pbonzini@redhat.com>, qemu-devel@nongnu.org
+Cc: Anthony Liguori <anthony@codemonkey.ws>, av1474@comtv.ru,
+ qemu-devel@nongnu.org
+Date: Thu, 18 Apr 2013 18:44:02 +0200
+Message-id: 1366303444-24620-7-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 6/8] qom: do not return root for empty path
+
+An empty path will return the sole object of that type in the
+QOM tree.  This is different from "/", which returns the root.
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ qom/object.c | 12 ++----------
+ 1 file changed, 2 insertions(+), 10 deletions(-)
+
+diff --git a/qom/object.c b/qom/object.c
+index 093502e..dd53d24 100644
+--- a/qom/object.c
++++ b/qom/object.c
+@@ -1113,21 +1113,13 @@ static Object *object_resolve_partial_path(Object *parent,
+ Object *object_resolve_path_type(const char *path, const char *typename,
+                                  bool *ambiguous)
+ {
+-    bool partial_path = true;
+     Object *obj;
+     gchar **parts;
+ 
+     parts = g_strsplit(path, "/", 0);
+-    if (parts == NULL || parts[0] == NULL) {
+-        g_strfreev(parts);
+-        return object_get_root();
+-    }
+-
+-    if (strcmp(parts[0], "") == 0) {
+-        partial_path = false;
+-    }
++    assert(parts);
+ 
+-    if (partial_path) {
++    if (parts[0] == NULL || strcmp(parts[0], "") != 0) {
+         if (ambiguous) {
+             *ambiguous = false;
+         }
+-- 
+1.8.1.4
+
+
+

@@ -1,0 +1,1 @@
+../additional-cleanup-and-consolidation/v1.1365571773/0007-introduce-qemu_ram_foreach_block.patch

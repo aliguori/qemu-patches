@@ -1,0 +1,1 @@
+../block-Vectored-bdrv_writev_vmstate/v1.1365215272/0004-qemu-iotests-A-few-more-bdrv_pread-pwrite-tests.patch

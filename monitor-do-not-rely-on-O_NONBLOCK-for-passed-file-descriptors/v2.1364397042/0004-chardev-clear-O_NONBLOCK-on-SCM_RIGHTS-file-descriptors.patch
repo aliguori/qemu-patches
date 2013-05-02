@@ -1,0 +1,47 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Stefan Hajnoczi <stefanha@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, david.pravec@nethost.cz,
+ Eric Blake <eblake@redhat.com>, mprivozn@redhat.com, coreyb@linux.vnet.ibm.com,
+ Juan Quintela <quintela@redhat.com>, Luiz Capitulino <lcapitulino@redhat.com>,
+ Stefan Hajnoczi <stefanha@redhat.com>
+Date: Wed, 27 Mar 2013 10:10:46 +0100
+Message-id: 1364375446-24180-5-git-send-email-stefanha@redhat.com
+Subject: [PATCH 4/4] chardev: clear O_NONBLOCK on SCM_RIGHTS file descriptors
+
+When we receive a file descriptor over a UNIX domain socket the
+O_NONBLOCK flag is preserved.  Clear the O_NONBLOCK flag and rely on
+QEMU file descriptor users like migration, SPICE, VNC, block layer, and
+others to set non-blocking only when necessary.
+
+This change ensures we don't accidentally expose O_NONBLOCK in the QMP
+API.  QMP clients should not need to get the non-blocking state
+"correct".
+
+A recent real-world example was when libvirt passed a non-blocking TCP
+socket for migration where we expected a blocking socket.  The source
+QEMU produced a corrupted migration stream since its code did not cope
+with non-blocking sockets.
+
+Signed-off-by: Stefan Hajnoczi <stefanha@redhat.com>
+---
+ qemu-char.c | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/qemu-char.c b/qemu-char.c
+index 500a582..091f2dc 100644
+--- a/qemu-char.c
++++ b/qemu-char.c
+@@ -2434,6 +2434,9 @@ static void unix_process_msgfd(CharDriverState *chr, struct msghdr *msg)
+         if (fd < 0)
+             continue;
+ 
++        /* O_NONBLOCK is preserved across SCM_RIGHTS so reset it */
++        qemu_set_block(fd);
++
+ #ifndef MSG_CMSG_CLOEXEC
+         qemu_set_cloexec(fd);
+ #endif
+-- 
+1.8.1.4
+

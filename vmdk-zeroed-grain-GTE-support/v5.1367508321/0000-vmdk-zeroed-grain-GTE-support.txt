@@ -1,0 +1,53 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Fam Zheng <famz@redhat.com>
+To: Fam Zheng <famz@redhat.com>, qemu-devel@nongnu.org
+Cc: kwolf@redhat.com, Fam Zheng <famz@redhat.com>, qemu-devel@nongnu.org,
+ stefanha@redhat.com
+Date: Thu,  2 May 2013 10:25:21 +0800
+Message-id: 1367461527-9789-1-git-send-email-famz@redhat.com
+Subject: [PATCH 0/6] vmdk: zeroed-grain GTE support
+
+Added support for zeroed-grain GTE to VMDK according to VMDK Spec 5.0[1].
+
+[1] Virtual Disk Format 5.0 - VMware,
+    http://www.vmware.com/support/developer/vddk/vmdk_50_technote.pdf?src=vmdk
+
+Changes since v4:
+ - 6/6: Correct endianess: *m_data->l2_cache_entry = offset;
+
+
+Changes since v3:
+ - 5/6: Remove tmp
+ - 6/6: Update L2 Cache
+        Remove redundant assignment to m_data
+        Simplify l2_offset assignment to m_data
+        Fix m_data.offset endian.
+
+Changes since v2:
+ - all: Added 5/6 (vmdk: store fields of VmdkMetaData in cpu endian)
+ - 6/6: Avoid side-effect of vmdk_L2update.
+        Change function comment to gtkdoc stype.
+        Fix VMDK4_FLAG_ZG.
+
+Changes since v1:
+ - all: fix From: field
+ - 1/5: squash one line of ret code macro change from 2/5
+ - 2/5: change VMDK4_FLAG_ZG to VMDK4_FLAG_ZERO_GRAIN
+ - 3/5: move BLOCK_OPT_ZEROED_GRAIN defination from block_int.h to vmdk.c
+ - 5/5: fix metadata update issue, unit test with cases 033 034
+
+Fam Zheng (6):
+  vmdk: named return code.
+  vmdk: add support for “zeroed‐grain” GTE
+  vmdk: Add option to create zeroed-grain image
+  vmdk: change magic number to macro
+  vmdk: store fields of VmdkMetaData in cpu endian
+  vmdk: add bdrv_co_write_zeroes
+
+ block/vmdk.c | 208 +++++++++++++++++++++++++++++++++++++++++------------------
+ 1 file changed, 145 insertions(+), 63 deletions(-)
+
+-- 
+1.8.1.4
+
+

@@ -1,0 +1,3 @@
+0000-Add-TPM-driver-and-ACPI-support-to-SeaBIOS.txt
+0001-Add-an-implementation-of-a-TPM-TIS-driver.patch
+0002-Provide-ACPI-SSDT-table-for-TPM-device.patch

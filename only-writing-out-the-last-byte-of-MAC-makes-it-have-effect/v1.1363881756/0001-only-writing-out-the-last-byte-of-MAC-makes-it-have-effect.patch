@@ -1,0 +1,51 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Amos Kong <akong@redhat.com>
+To: Amos Kong <akong@redhat.com>, virtualization@lists.linux-foundation.org
+Cc: virtualization@lists.linux-foundation.org, stefanha@redhat.com,
+ qemu-devel@nongnu.org, Amos Kong <akong@redhat.com>, mst@redhat.com
+Date: Thu, 21 Mar 2013 11:02:36 +0800
+Message-id: 1363834956-9409-1-git-send-email-akong@redhat.com
+Subject: [PATCH 1/1] only writing out the last byte of MAC makes it have effect
+
+The lengcy guests don't have mac programming command, we don't know when
+it's safe to use MAC. We can change QEMU to make MAC change effect when
+the last byte of MAC is written to config space.
+
+Signed-off-by: Amos Kong <akong@redhat.com>
+---
+ virtio-spec.lyx | 11 ++++++++++-
+ 1 file changed, 10 insertions(+), 1 deletion(-)
+
+diff --git a/virtio-spec.lyx b/virtio-spec.lyx
+index dbc4ef0..bb289fb 100644
+--- a/virtio-spec.lyx
++++ b/virtio-spec.lyx
+@@ -5430,7 +5430,7 @@ T_CTRL_MAC_TABLE_SET.
+ 
+ \begin_layout Standard
+ 
+-\change_inserted -1930653948 1358506710
++\change_inserted -1930653948 1363832689
+ The config space 
+ \begin_inset Quotes eld
+ \end_inset
+@@ -5464,6 +5464,15 @@ mac
+  Therefore, VIRTIO_NET_CTRL_MAC_ADDR_SET is preferred, especially while
+  the NIC is up.
+  The command-specific-data is a 6-byte MAC address.
++\end_layout
++
++\begin_layout Standard
++
++\change_inserted -1930653948 1363833477
++The legacy guests don't support the new command, they still change MAC address
++ in original way, that's not atomic.
++ For more robust, QEMU only makes the MAC change effect when the last byte
++ of MAC address is written to config space.
+ \change_unchanged
+ 
+ \end_layout
+-- 
+1.8.1.4
+
+

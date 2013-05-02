@@ -1,0 +1,99 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Alexander Graf <agraf@suse.de>
+To: Blue Swirl <blauwirbel@gmail.com>, Alexander Graf <agraf@suse.de>,
+ Aurelien Jarno <aurelien@aurel32.net>, qemu-ppc@nongnu.org
+Cc: Blue Swirl <blauwirbel@gmail.com>, Aurelien Jarno <aurelien@aurel32.net>,
+ "qemu-devel@nongnu.org" <qemu-devel@nongnu.org>, qemu-devel@nongnu.org,
+ "qemu-ppc@nongnu.org" <qemu-ppc@nongnu.org>, qemu-ppc@nongnu.org
+Date: Fri, 26 Apr 2013 20:21:19 +0200
+Message-id: 1367000509-8833-1-git-send-email-agraf@suse.de
+Subject: [PATCH 00/30] ppc patch queue 2013-04-26
+
+Hi Blue / Aurelien,
+
+This is my current patch queue for ppc.  Please pull.
+
+Alex
+
+
+The following changes since commit bf9b255f484fd61cbaa91faeff254140a0ecd18c:
+  Anthony Liguori (1):
+        gtk: refactor menu creation
+
+are available in the git repository at:
+
+  git://github.com/agraf/qemu.git ppc-for-upstream
+
+Alexander Graf (4):
+      linux-headers: Update to kvm/queue
+      PPC: mac newworld: fix cpu NIP reset value
+      PPC: Fix compile with profiling enabled
+      PPC: Fix dcbz for linux-user on 970
+
+Aurelien Jarno (12):
+      target-ppc: Enable ISEL on POWER7
+      target-ppc: fix nego and subf*o instructions
+      target-ppc: optimize fabs, fnabs, fneg
+      disas: Disassemble all ppc insns for the guest
+      target-ppc: add instruction flags for Book I 2.05
+      target-ppc: emulate cmpb instruction
+      target-ppc: emulate prtyw and prtyd instructions
+      target-ppc: emulate fcpsgn instruction
+      target-ppc: emulate lfiwax instruction
+      target-ppc: emulate load doubleword pair instructions
+      target-ppc: emulate store doubleword pair instructions
+      target-ppc: add support for extended mtfsf/mtfsfi forms
+
+Bharat Bhushan (1):
+      Enable kvm emulated watchdog
+
+David Gibson (7):
+      pseries: Fix incorrect calculation of RMA size in certain configurations
+      pseries: Fixes and enhancements to L1 cache properties
+      target-ppc: Add more stubs for POWER7 PMU registers
+      pseries: Fix some small errors in XICS logic
+      target-ppc: Synchronize VPA state with KVM
+      pseries: Convert VIO code to QOM style type safe(ish) casts
+      pseries: Generate device paths for VIO devices
+
+Fabien Chouteau (3):
+      PPC: Remove env->hreset_excp_prefix
+      PPC: fix hreset_vector for 60x, 7x0, 7x5, G2, MPC8xx, MPC5xx, 7400 and 7450
+      PPC: Add breakpoint registers for 603 and e300
+
+Richard Henderson (1):
+      target-ppc: Fix narrow-mode add/sub carry output
+
+Stuart Yoder (1):
+      PPC: e500: advertise 4.2 MPIC only if KVM supports EPR
+
+Tristan Gingold (1):
+      powerpc: correctly handle fpu exceptions.
+
+ disas.c                         |    1 +
+ hw/char/spapr_vty.c             |   18 ++-
+ hw/net/spapr_llan.c             |   24 ++--
+ hw/nvram/spapr_nvram.c          |   10 +-
+ hw/ppc/e500plat.c               |    7 +
+ hw/ppc/mac_newworld.c           |    2 +
+ hw/ppc/ppc_booke.c              |   45 ++++++-
+ hw/ppc/spapr.c                  |   27 +++-
+ hw/ppc/spapr_vio.c              |   41 ++++--
+ hw/ppc/xics.c                   |    2 +
+ hw/scsi/spapr_vscsi.c           |   15 ++-
+ linux-headers/asm-powerpc/kvm.h |    5 +
+ linux-headers/linux/kvm.h       |    3 +
+ target-ppc/cpu-qom.h            |    1 +
+ target-ppc/cpu.h                |    6 +-
+ target-ppc/fpu_helper.c         |   71 +++-------
+ target-ppc/helper.h             |    4 +-
+ target-ppc/int_helper.c         |   15 ++
+ target-ppc/kvm.c                |  237 +++++++++++++++++++++++++++++++-
+ target-ppc/kvm_ppc.h            |   30 ++++
+ target-ppc/machine.c            |    2 -
+ target-ppc/mem_helper.c         |    2 +-
+ target-ppc/translate.c          |  293 ++++++++++++++++++++++++++++++++++-----
+ target-ppc/translate_init.c     |  117 ++++++++++------
+ translate-all.c                 |    1 +
+ 25 files changed, 791 insertions(+), 188 deletions(-)
+

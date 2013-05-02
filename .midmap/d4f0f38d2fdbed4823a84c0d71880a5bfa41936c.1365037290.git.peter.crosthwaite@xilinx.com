@@ -1,0 +1,1 @@
+../Remove-un-needed-use-of-ssi_create_slave_no_init/v1.1365091394/0001-petalogix_ml605_mmu-Cleanup-ssi_create_slave.patch

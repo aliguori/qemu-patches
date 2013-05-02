@@ -1,0 +1,30 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Richard Henderson <rth@twiddle.net>
+To: qemu-devel@nongnu.org
+Cc: av1474@comtv.ru, aurelien@aurel32.net
+Date: Mon, 15 Apr 2013 20:40:40 +0200
+Message-id: 1366051272-12979-2-git-send-email-rth@twiddle.net
+Subject: [PATCH 01/33] disas: Disassemble all ppc insns for the host
+
+Reviewed-by: Aurelien Jarno <aurelien@aurel32.net>
+Signed-off-by: Richard Henderson <rth@twiddle.net>
+---
+ disas.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/disas.c b/disas.c
+index 74d3ba0..67103e0 100644
+--- a/disas.c
++++ b/disas.c
+@@ -325,6 +325,7 @@ void disas(FILE *out, void *code, unsigned long size)
+     s.info.mach = bfd_mach_x86_64;
+     print_insn = print_insn_i386;
+ #elif defined(_ARCH_PPC)
++    s.info.disassembler_options = (char *)"any";
+     print_insn = print_insn_ppc;
+ #elif defined(__alpha__)
+     print_insn = print_insn_alpha;
+-- 
+1.8.1.4
+
+

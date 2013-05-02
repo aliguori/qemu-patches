@@ -1,0 +1,44 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Marcelo Tosatti <mtosatti@redhat.com>
+To: Anthony Liguori <aliguori@us.ibm.com>
+Cc: Jan Kiszka <jan.kiszka@siemens.com>, Gleb Natapov <gleb@redhat.com>,
+ qemu-devel@nongnu.org, kvm@vger.kernel.org
+Date: Wed, 17 Apr 2013 23:48:22 -0300
+Message-id: f505a4d74aae6fc8bb5502a6038b5f671aa97713.1366253306.git.mtosatti@redhat.com
+Subject: [PATCH 1/5] vmxcap: Open MSR file in unbuffered mode
+
+From: Jan Kiszka <jan.kiszka@siemens.com>
+
+Python may otherwise decide to to read larger chunks, applying the seek
+only on the software buffer. This will return results from the wrong
+MSRs.
+
+Signed-off-by: Jan Kiszka <jan.kiszka@siemens.com>
+Signed-off-by: Gleb Natapov <gleb@redhat.com>
+---
+ scripts/kvm/vmxcap | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/scripts/kvm/vmxcap b/scripts/kvm/vmxcap
+index 0b23f77..6363e73 100755
+--- a/scripts/kvm/vmxcap
++++ b/scripts/kvm/vmxcap
+@@ -27,9 +27,9 @@ MSR_IA32_VMX_VMFUNC = 0x491
+ class msr(object):
+     def __init__(self):
+         try:
+-            self.f = file('/dev/cpu/0/msr')
++            self.f = open('/dev/cpu/0/msr', 'r', 0)
+         except:
+-            self.f = file('/dev/msr0')
++            self.f = open('/dev/msr0', 'r', 0)
+     def read(self, index, default = None):
+         import struct
+         self.f.seek(index)
+-- 
+1.8.1.4
+
+--
+To unsubscribe from this list: send the line "unsubscribe kvm" in
+the body of a message to majordomo@vger.kernel.org
+More majordomo info at  http://vger.kernel.org/majordomo-info.html

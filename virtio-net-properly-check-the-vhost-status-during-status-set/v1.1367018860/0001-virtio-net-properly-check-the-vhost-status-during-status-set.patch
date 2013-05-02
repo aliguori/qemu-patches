@@ -1,0 +1,48 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Jason Wang <jasowang@redhat.com>
+To: Anthony Liguori <aliguori@us.ibm.com>, Jason Wang <jasowang@redhat.com>,
+ qemu-devel@nongnu.org, "Michael S. Tsirkin" <mst@redhat.com>, mst@redhat.com
+Cc: Anthony Liguori <aliguori@us.ibm.com>, qemu-devel@nongnu.org,
+ Jason Wang <jasowang@redhat.com>
+Date: Fri, 26 Apr 2013 18:27:40 +0800
+Message-id: 1366972060-21606-1-git-send-email-jasowang@redhat.com
+Subject: [PATCH 1/1] virtio-net: properly check the vhost status during status
+ set
+
+Commit 32993698 (vhost: disable on tap link down) tries to disable the vhost
+also when the peer's link is down. But the check was not done properly, the
+vhost were only started when:
+
+1) peer's link is not down
+2) virtio-net has already been started.
+
+Since == have a higher precedence than &&, place a brace to make sure both the
+conditions were met then does the check. This fixes the crash when doing a savem
+after set the link off which let qemu crash and complains:
+
+virtio_net_save: Assertion `!n->vhost_started' failed.
+
+Cc: Michael S. Tsirkin <mst@redhat.com>
+Signed-off-by: Jason Wang <jasowang@redhat.com>
+---
+ hw/net/virtio-net.c |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/hw/net/virtio-net.c b/hw/net/virtio-net.c
+index 4d2cdd2..6222039 100644
+--- a/hw/net/virtio-net.c
++++ b/hw/net/virtio-net.c
+@@ -114,8 +114,8 @@ static void virtio_net_vhost_status(VirtIONet *n, uint8_t status)
+         return;
+     }
+ 
+-    if (!!n->vhost_started == virtio_net_started(n, status) &&
+-                              !nc->peer->link_down) {
++    if (!!n->vhost_started ==
++        (virtio_net_started(n, status) && !nc->peer->link_down)) {
+         return;
+     }
+     if (!n->vhost_started) {
+-- 
+1.7.1
+

@@ -1,0 +1,373 @@
+From patches Mon Sep 17 00:00:00 2001
+From: =?utf-8?q?Herv=C3=A9_Poussineau_=3Chpoussin=40reactos=2Eorg=3E?=
+To: qemu-devel@nongnu.org
+Cc: Julio Guerra <guerr@julio.in>, qemu-ppc@nongnu.org,
+ =?UTF-8?q?Andreas=20F=C3=A4rber?= <afaerber@suse.de>,
+ =?UTF-8?q?Herv=C3=A9=20Poussineau?= <hpoussin@reactos.org>
+Date: Thu,  2 May 2013 22:09:04 +0200
+Message-id: 1367525344-7755-8-git-send-email-hpoussin@reactos.org
+Subject: [PATCH 7/7] prep: QOM'ify System I/O
+
+Most of the functionality is extracted from hw/ppc/prep.c.
+Also add support for board identification/equipment registers.
+
+Document it for the IBM 43p emulation.
+
+Cc: Julio Guerra <guerr@julio.in>
+Signed-off-by: Hervé Poussineau <hpoussin@reactos.org>
+---
+ docs/ibm_43p.cfg       |    5 +
+ hw/ppc/Makefile.objs   |    1 +
+ hw/ppc/prep_systemio.c |  298 ++++++++++++++++++++++++++++++++++++++++++++++++
+ trace-events           |    4 +
+ 4 files changed, 308 insertions(+)
+ create mode 100644 hw/ppc/prep_systemio.c
+
+diff --git a/docs/ibm_43p.cfg b/docs/ibm_43p.cfg
+index 70bbfdb..653d50b 100644
+--- a/docs/ibm_43p.cfg
++++ b/docs/ibm_43p.cfg
+@@ -36,3 +36,8 @@
+   iobase = "0x170"
+   iobase2 = "0x376"
+   irq = "15"
++
++[device]
++  driver = "prep-systemio"
++  ibm-planar-id = "0xc0"
++  equipment = "0xff"
+diff --git a/hw/ppc/Makefile.objs b/hw/ppc/Makefile.objs
+index be00d1d..cd1eb1b 100644
+--- a/hw/ppc/Makefile.objs
++++ b/hw/ppc/Makefile.objs
+@@ -9,6 +9,7 @@ obj-y += ppc405_boards.o ppc4xx_devs.o ppc405_uc.o ppc440_bamboo.o
+ obj-y += ppc4xx_pci.o
+ # PReP
+ obj-y += prep.o
++obj-y += prep_systemio.o
+ # OldWorld PowerMac
+ obj-y += mac_oldworld.o
+ # NewWorld PowerMac
+diff --git a/hw/ppc/prep_systemio.c b/hw/ppc/prep_systemio.c
+new file mode 100644
+index 0000000..1ea511c
+--- /dev/null
++++ b/hw/ppc/prep_systemio.c
+@@ -0,0 +1,298 @@
++/*
++ * QEMU PReP System I/O emulation
++ *
++ * Copyright (c) 2003-2007 Jocelyn Mayer
++ * Copyright (c) 2010-2012 Herve Poussineau
++ * Copyright (c) 2010-2011 Andreas Faerber
++ *
++ * Permission is hereby granted, free of charge, to any person obtaining a copy
++ * of this software and associated documentation files (the "Software"), to deal
++ * in the Software without restriction, including without limitation the rights
++ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
++ * copies of the Software, and to permit persons to whom the Software is
++ * furnished to do so, subject to the following conditions:
++ *
++ * The above copyright notice and this permission notice shall be included in
++ * all copies or substantial portions of the Software.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
++ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
++ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
++ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
++ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
++ * THE SOFTWARE.
++ */
++
++#include "hw/isa/isa.h"
++#include "exec/address-spaces.h"
++#include "qemu/error-report.h" /* for error_report() */
++#include "sysemu/sysemu.h" /* for vm_stop() */
++#include "trace.h"
++
++#define TYPE_PREP_SYSTEMIO "prep-systemio"
++#define PREP_SYSTEMIO(obj) \
++    OBJECT_CHECK(PrepSystemIoState, (obj), TYPE_PREP_SYSTEMIO)
++
++/* Bit as defined in PowerPC Reference Plaform v1.1, sect. 6.1.5, p. 132 */
++#define BIT(n) (1 << (7 - (n)))
++
++typedef struct PrepSystemIoState {
++    ISADevice parent_obj;
++    MemoryRegion ppc_parity_mem;
++
++    qemu_irq non_contiguous_io_map_irq;
++    uint8_t sreset; /* 0x0092 */
++    uint8_t equipment; /* 0x080c */
++    uint8_t system_control; /* 0x081c */
++    uint8_t iomap_type; /* 0x0850 */
++    uint8_t ibm_planar_id; /* 0x0852 */
++    qemu_irq softreset_irq;
++} PrepSystemIoState;
++
++/* PORT 0092 -- Special Port 92 (Read/Write) */
++
++enum {
++    PORT0092_SOFTRESET  = BIT(7),
++    PORT0092_LE_MODE    = BIT(6),
++};
++
++static void prep_port0092_write(void *opaque, uint32_t addr, uint32_t val)
++{
++    PrepSystemIoState *s = opaque;
++
++    trace_prep_systemio_write(addr, val);
++
++    if ((val & PORT0092_SOFTRESET) != 0) {
++        qemu_irq_raise(s->softreset_irq);
++        s->sreset = 1;
++    } else {
++        qemu_irq_lower(s->softreset_irq);
++        s->sreset = 0;
++    }
++
++    if ((val & PORT0092_LE_MODE) != 0) {
++        /* XXX Not supported yet */
++        error_report("little-endian mode not supported");
++        vm_stop(RUN_STATE_PAUSED);
++    } else {
++        /* Nothing to do */
++    }
++}
++
++static uint32_t prep_port0092_read(void *opaque, uint32_t addr)
++{
++    PrepSystemIoState *s = opaque;
++    /* XXX LE mode unsupported */
++    trace_prep_systemio_read(addr, 0);
++    return s->sreset;
++}
++
++/* PORT 0808 -- Hardfile Light Register (Write Only) */
++
++enum {
++    PORT0808_HARDFILE_LIGHT_ON  = BIT(7),
++};
++
++static void prep_port0808_write(void *opaque, uint32_t addr, uint32_t val)
++{
++    trace_prep_systemio_write(addr, val);
++}
++
++/* PORT 0810 -- Password Protect 1 Register (Write Only) */
++
++/* reset by port 0x4D in the SIO */
++static void prep_port0810_write(void *opaque, uint32_t addr, uint32_t val)
++{
++    trace_prep_systemio_write(addr, val);
++}
++
++/* PORT 0812 -- Password Protect 2 Register (Write Only) */
++
++/* reset by port 0x4D in the SIO */
++static void prep_port0812_write(void *opaque, uint32_t addr, uint32_t val)
++{
++    trace_prep_systemio_write(addr, val);
++}
++
++/* PORT 0814 -- L2 Invalidate Register (Write Only) */
++
++static void prep_port0814_write(void *opaque, uint32_t addr, uint32_t val)
++{
++    trace_prep_systemio_write(addr, val);
++}
++
++/* PORT 0818 -- Reserved for Keylock (Read Only) */
++
++enum {
++    PORT0818_KEYLOCK_SIGNAL_HIGH    = BIT(7),
++};
++
++static uint32_t prep_port0818_read(void *opaque, uint32_t addr)
++{
++    uint32_t val = 0;
++    trace_prep_systemio_read(addr, val);
++    return val;
++}
++
++/* PORT 080C -- Equipment */
++
++enum {
++    PORT080C_SCSIFUSE               = BIT(1),
++    PORT080C_L2_COPYBACK            = BIT(4),
++    PORT080C_L2_256                 = BIT(5),
++    PORT080C_UPGRADE_CPU            = BIT(6),
++    PORT080C_L2                     = BIT(7),
++};
++
++static uint32_t prep_port080c_read(void *opaque, uint32_t addr)
++{
++    PrepSystemIoState *s = opaque;
++    trace_prep_systemio_read(addr, s->equipment);
++    return s->equipment;
++}
++
++/* PORT 081C -- System Control Register (Read/Write) */
++
++enum {
++    PORT081C_FLOPPY_MOTOR_INHIBIT   = BIT(3),
++    PORT081C_MASK_TEA               = BIT(2),
++    PORT081C_L2_UPDATE_INHIBIT      = BIT(1),
++    PORT081C_L2_CACHEMISS_INHIBIT   = BIT(0),
++};
++
++static void prep_port081c_write(void *opaque, uint32_t addr, uint32_t val)
++{
++    PrepSystemIoState *s = opaque;
++    trace_prep_systemio_write(addr, val);
++    s->system_control = val;
++}
++
++static uint32_t prep_port081c_read(void *opaque, uint32_t addr)
++{
++    PrepSystemIoState *s = opaque;
++    trace_prep_systemio_read(addr, s->system_control);
++    return s->system_control;
++}
++
++/* System Board Identification */
++
++static uint32_t prep_port0852_read(void *opaque, uint32_t addr)
++{
++    PrepSystemIoState *s = opaque;
++    trace_prep_systemio_read(addr, s->ibm_planar_id);
++    return s->ibm_planar_id;
++}
++
++/* PORT 0850 -- I/O Map Type Register (Read/Write) */
++
++enum {
++    PORT0850_IOMAP_NONCONTIGUOUS    = BIT(7),
++};
++
++static uint32_t prep_port0850_read(void *opaque, uint32_t addr)
++{
++    PrepSystemIoState *s = opaque;
++    trace_prep_systemio_read(addr, s->iomap_type);
++    return s->iomap_type;
++}
++
++static void prep_port0850_write(void *opaque, uint32_t addr, uint32_t val)
++{
++    PrepSystemIoState *s = opaque;
++
++    trace_prep_systemio_write(addr, val);
++    qemu_set_irq(s->non_contiguous_io_map_irq,
++                 val & PORT0850_IOMAP_NONCONTIGUOUS ? 1 : 0);
++    s->iomap_type = val;
++}
++
++static const MemoryRegionPortio ppc_io800_port_list[] = {
++    { 0x092, 1, 1, .read = prep_port0092_read,
++                   .write = prep_port0092_write, },
++    { 0x808, 1, 1, .write = prep_port0808_write, },
++    { 0x80c, 1, 1, .read = prep_port080c_read, },
++    { 0x810, 1, 1, .write = prep_port0810_write, },
++    { 0x812, 1, 1, .write = prep_port0812_write, },
++    { 0x814, 1, 1, .write = prep_port0814_write, },
++    { 0x818, 1, 1, .read = prep_port0818_read, },
++    { 0x81c, 1, 1, .read = prep_port081c_read,
++                   .write = prep_port081c_write, },
++    { 0x850, 1, 1, .read = prep_port0850_read,
++                   .write = prep_port0850_write, },
++    { 0x852, 1, 1, .read = prep_port0852_read, },
++    PORTIO_END_OF_LIST()
++};
++
++static uint64_t ppc_parity_error_readl(void *opaque, hwaddr addr,
++                                       unsigned int size)
++{
++    uint32_t val = 0;
++    trace_prep_systemio_read((unsigned int)addr, val);
++    return val;
++}
++
++static const MemoryRegionOps ppc_parity_error_ops = {
++    .read = ppc_parity_error_readl,
++    .valid = {
++        .min_access_size = 4,
++        .max_access_size = 4,
++    },
++};
++
++static int prep_systemio_init(ISADevice *dev)
++{
++    PrepSystemIoState *s = PREP_SYSTEMIO(dev);
++    qdev_init_gpio_out(&dev->qdev, &s->non_contiguous_io_map_irq, 1);
++    s->iomap_type = 0; /* contiguous mode XXX 0x1? */
++    s->softreset_irq = first_cpu->irq_inputs[PPC6xx_INPUT_HRESET];
++
++    isa_register_portio_list(dev, 0x0, ppc_io800_port_list, s, "systemio800");
++
++    memory_region_init_io(&s->ppc_parity_mem, &ppc_parity_error_ops, s,
++                          "ppc-parity", 0x4);
++    memory_region_add_subregion(get_system_memory(), 0xbfffeff0,
++                                &s->ppc_parity_mem);
++    return 0;
++}
++
++static const VMStateDescription vmstate_prep_systemio = {
++    .name = "prep_systemio",
++    .version_id = 1,
++    .minimum_version_id = 1,
++    .fields = (VMStateField[]) {
++        VMSTATE_UINT8(system_control, PrepSystemIoState),
++        VMSTATE_UINT8(iomap_type, PrepSystemIoState),
++        VMSTATE_END_OF_LIST()
++    },
++};
++
++static Property prep_systemio_properties[] = {
++    DEFINE_PROP_UINT8("ibm-planar-id", PrepSystemIoState, ibm_planar_id, 0),
++    DEFINE_PROP_UINT8("equipment", PrepSystemIoState, equipment, 0),
++    DEFINE_PROP_END_OF_LIST()
++};
++
++static void prep_systemio_class_initfn(ObjectClass *klass, void *data)
++{
++    DeviceClass *dc = DEVICE_CLASS(klass);
++    ISADeviceClass *ic = ISA_DEVICE_CLASS(klass);
++    ic->init = prep_systemio_init;
++    dc->vmsd = &vmstate_prep_systemio;
++    dc->props = prep_systemio_properties;
++    dc->no_user = 1;
++}
++
++static TypeInfo prep_systemio800_info = {
++    .name          = TYPE_PREP_SYSTEMIO,
++    .parent        = TYPE_ISA_DEVICE,
++    .instance_size = sizeof(PrepSystemIoState),
++    .class_init    = prep_systemio_class_initfn,
++};
++
++static void prep_systemio_register_types(void)
++{
++    type_register_static(&prep_systemio800_info);
++}
++
++type_init(prep_systemio_register_types)
+diff --git a/trace-events b/trace-events
+index 1970b5c..be35eed 100644
+--- a/trace-events
++++ b/trace-events
+@@ -773,6 +773,10 @@ mpc105_simm_enable(int id, uint32_t start, uint32_t end) "SIMM #%d 0x%08x-0x%08x
+ mpc105_simm_disable(int id) "SIMM #%d disabled"
+ mpc105_simm_size(int id, uint32_t size) "SIMM #%d is %u MB"
+ 
++# hw/ppc/prep_systemio.c
++prep_systemio_read(uint32_t addr, uint32_t val) "read addr=%x val=%x"
++prep_systemio_write(uint32_t addr, uint32_t val) "write addr=%x val=%x"
++
+ # hw/scsi/vmw_pvscsi.c
+ pvscsi_ring_init_data(uint32_t txr_len_log2, uint32_t rxr_len_log2) "TX/RX rings logarithms set to %d/%d"
+ pvscsi_ring_init_msg(uint32_t len_log2) "MSG ring logarithm set to %d"
+-- 
+1.7.10.4
+
+

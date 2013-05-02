@@ -1,0 +1,199 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Dong Xu Wang <wdongxu@linux.vnet.ibm.com>
+To: Eric Blake <eblake@redhat.com>, Stefan Hajnoczi <stefanha@gmail.com>,
+ qemu-devel@nongnu.org, Dong Xu Wang <wdongxu@linux.vnet.ibm.com>
+Cc: kwolf@redhat.com, kwol@redhat.com, wdongxu@cn.ibm.com,
+ Dong Xu Wang <wdongxu@linux.vnet.ibm.com>, qemu-devel@nongnu.org,
+ stefanha@redhat.com
+Date: Wed, 10 Apr 2013 16:11:48 +0800
+Message-id: 1365581513-3475-2-git-send-email-wdongxu@linux.vnet.ibm.com
+Subject: [PATCH 1/6] docs: document for add-cow file format
+
+Document for add-cow format, the usage and spec of add-cow are
+introduced.
+
+Signed-off-by: Dong Xu Wang <wdongxu@linux.vnet.ibm.com>
+---
+V17->V18:
+1) remove version field.
+2) header size is maximum value and cluster size value.
+3) fix type.
+ docs/specs/add-cow.txt | 165 +++++++++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 165 insertions(+)
+ create mode 100644 docs/specs/add-cow.txt
+
+diff --git a/docs/specs/add-cow.txt b/docs/specs/add-cow.txt
+new file mode 100644
+index 0000000..151028b
+--- /dev/null
++++ b/docs/specs/add-cow.txt
+@@ -0,0 +1,165 @@
++== General ==
++
++The raw file format does not support backing files or copy on write
++feature. The add-cow image format makes it possible to use backing
++files with a image by keeping a separate .add-cow metadata file.
++Once all clusters have been written into the image it is safe to
++discard the .add-cow and backing files, then we can use the image
++directly.
++
++An example usage of add-cow would look like:
++(ubuntu.img is a disk image which has an installed OS.)
++    1)  Create a image, such as raw format, with the same size of
++        ubuntu.img:
++            qemu-img create -f raw test.raw 8G
++    2)  Create an add-cow image which will store dirty bitmap
++            qemu-img create -f add-cow test.add-cow \
++                -o backing_file=ubuntu.img,image_file=test.raw
++    3)  Run qemu with add-cow image
++            qemu -drive if=virtio,file=test.add-cow
++
++test.raw may be larger than ubuntu.img, in that case, the size of
++test.add-cow will be calculated from the size of test.raw.
++
++image_fmt can be omitted, in that case image_fmt is assumed to be
++"raw". backing_fmt can also be omitted, add-cow should do a probe
++operation and determine what the backing file's format is.
++
++=Specification=
++
++The file format looks like this:
++
++ +---------------+-------------------------------+
++ |     Header    |           COW bitmap          |
++ +---------------+-------------------------------+
++
++All numbers in add-cow are stored in Little Endian byte order.
++
++== Header ==
++
++The Header is included in the first bytes:
++(HEADER_SIZE is defined in 40-43 bytes.)
++    Byte    0  -  3:    magic
++                        add-cow magic string ("ACOW").
++
++            4  -  7:    backing file name offset
++                        Offset in the add-cow file at which the backing
++                        file name is stored (NB: The string is not
++                        lNUL-terminated).
++                        If backing file name does NOT exist, this field
++                        will be 0. Must be between 76 and [HEADER_SIZE
++                        - 2](a file name must be at least 1 byte).
++
++            8  - 11:    backing file name size
++                        Length of the backing file name in bytes. It
++                        will be 0 if the backing file name offset is
++                        0. If backing file name offset is non-zero,
++                        then it must be non-zero. Must be less than
++                        [HEADER_SIZE - 76] to fit in the reserved
++                        part of the header. Backing file name offset
++                        + size must be no more than HEADER_SIZE.
++
++            12 - 15:    image file name offset
++                        Offset in the add-cow file at which the image
++                        file name is stored (NB: The string is not
++                        NUL-terminated). It must be between 76 and
++                        [HEADER_SIZE - 2]. Image file name size + offset
++                        must be no more than HEADER_SIZE.
++
++            16 - 19:    image file name size
++                        Length of the image file name in bytes.
++                        Must be less than [HEADER_SIZE - 76] to fit in
++                        the reserved part of the header.
++
++            20 - 23:    cluster bits
++                        Number of bits that are used for addressing an
++                        offset within a cluster (1 << cluster_bits is
++                        the cluster size). Must not be less than 9
++                        (i.e. 512 byte clusters).
++
++                        Note: qemu as of today has an implementation
++                        limit of 2 MB as the maximum cluster size and
++                        won't be able to open images with larger cluster
++                        sizes.
++
++            24 - 31:    features
++                        Bitmask of features. If a feature bit is set
++                        but not recognized, the add-cow file should be
++                        dropped. They are not used in now.
++
++                        Bits 0-63:  Reserved (set to 0)
++
++            32 - 39:    compatible features
++                        Bitmask of compatible features. An implementation
++                        can safely ignore any unknown bits that are set.
++                        Bit 0:      All allocated bit.  If this bit is
++                                    set then backing file and COW bitmap
++                                    will not be used, and can read from
++                                    or write to image file directly.
++
++                        Bits 1-63:  Reserved (set to 0)
++
++            40 - 43:    HEADER_SIZE
++                        The header field is variable-sized. This field
++                        indicates how many bytes will be used to store
++                        add-cow header. By default, it is maximum value
++                        of 4096 and cluster size value.
++
++            44 - 59:    backing file format
++                        Format of backing file. It will be filled with
++                        0 if backing file name offset is 0. If backing
++                        file name offset is non-empty, it must be
++                        non-empty. It is coded in free-form ASCII, and
++                        is not NUL-terminated. Zero padded on the right.
++
++            60 - 75:    image file format
++                        Format of image file. It must be non-empty. It
++                        is coded in free-form ASCII, and is not
++                        NUL-terminated. Zero padded on the right.
++
++            76 - [HEADER_SIZE - 1]:
++                        It is used to make sure COW bitmap field starts
++                        at the HEADER_SIZE byte, backing file name and
++                        image file name will be stored here. The bytes
++                        that are not pointing to backing file and image
++                        file names must be set to 0.
++
++== COW bitmap ==
++
++The "COW bitmap" field starts at offset HEADER_SIZE, stores a bitmap
++related to backing file and image file.  It is tracking whether the
++cluster in image file is allocated or not.
++
++Each bit in the bitmap tracks one cluster's status. For example, if
++cluster bit is 16, then each bit tracks one cluster, (1 << 16) = 65536
++bytes. The image file size is rounded up to cluster size (where any
++bytes in the last cluster that do not fit in the image are ignored),
++then if the number of clusters is not a multiple of 8, then remaining
++bits in the bitmap will be set to 0.
++
++The size of bitmap is calculated according to virtual size of image
++file, and the size of bitmap should be multiple of add-cow file's
++cluster size, the bits not used will be set to 0. Within each byte,
++the least significant bit covers the first cluster. Bit orders in one
++byte look like:
++ +----+----+----+----+----+----+----+----+
++ | b7 | b6 | b5 | b4 | b3 | b2 | b1 | b0 |
++ +----+----+----+----+----+----+----+----+
++
++If the bit is 0, it indicates the cluster has not been allocated in
++image file, data should be loaded from backing file while reading; if
++the bit is 1, it indicates the related cluster has been dirty, should
++be loaded from image file while reading. Writing to a cluster causes
++the corresponding bit to be set to 1. If there is no backing file, or
++if the image file is larger than the backing file and the offset is
++beyond the end of the backing file, then the data should be read as
++all zero bytes instead.
++
++If image file is not an even multiple of cluster bytes, bits that
++correspond to bytes beyond the image file size in add-cow must be written
++as 0 and must be ignored when reading.
++
++Image file name and backing file name must NOT be the same, we prevent
++this while creating add-cow files via qemu-img. If image file name and
++backing file name are the same, the add-cow image must be treated as
++invalid.
+-- 
+1.7.11.7
+
+

@@ -1,0 +1,61 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Richard Henderson <rth@twiddle.net>
+To: qemu-devel@nongnu.org, Richard Henderson <rth@twiddle.net>
+Cc: Anthony Liguori <aliguori@us.ibm.com>, qemu-devel@nongnu.org,
+ aurelien@aurel32.net
+Date: Fri, 5 Apr 2013 13:47:28 -0500
+Message-id: 1365187661-17023-1-git-send-email-rth@twiddle.net
+Subject: [PATCH 00/13] tcg-s390 updates
+
+Here's the latest set of tcg-s390 updates.  The only real change
+from v1 is the addition of the last patch.  This is able to run
+the i386-softmmu nbench test, and boot both arm and sparc32 kernels.
+
+I tried to look at addressing Aurelien's comment in response to patch 3,
+that 32-bit s390 defer to the tci interpreter.  As far as I can see from
+reading through the configure file, that already happens.  In that the
+line that sets up tcg already looks for "s390x" and not "s390".
+Unfortunately, the RH hw to which I have access doesn't have any 32-bit
+packages installed at all, so configure bails out very early when trying
+to configure --cpu=s390.  So I'm going to have to ignore this for now.
+
+Please pull.
+
+
+r~
+
+
+The following changes since commit d05ef160453e98546a4197496dc8a3cb2defac53:
+
+  Allow clock_gettime() monotonic clock to be utilized on more OS's (2013-04-04 20:22:45 -0500)
+
+are available in the git repository at:
+
+  git://github.com/rth7680/qemu.git tcg-s390
+
+for you to fetch changes up to b879f3084650410709051202e0e834b903b0858c:
+
+  tcg-s390: Fix merge error in tgen_brcond (2013-04-05 13:35:42 -0500)
+
+----------------------------------------------------------------
+Richard Henderson (13):
+      tcg-s390: Fix movi
+      tcg-s390: Properly allocate a stack frame.
+      tcg-s390: Remove useless preprocessor conditions
+      tcg-s390: Implement add2/sub2 opcodes
+      tcg-s390: Implement mulu2_i64 opcode
+      tcg-s390: Implement movcond opcodes
+      tcg-s390: Implement deposit opcodes
+      tcg-s390: Remove constraint letters for and
+      tcg-s390: Use risbgz for andi
+      tcg-s390: Cleanup argument shuffling fixme in softmmu code
+      tcg-s390: Use load-address for addition
+      tcg-s390: Use all 20 bits of the offset in tcg_out_mem
+      tcg-s390: Fix merge error in tgen_brcond
+
+ tcg/s390/tcg-target.c | 543 ++++++++++++++++++++++++++++----------------------
+ tcg/s390/tcg-target.h |  26 +--
+ 2 files changed, 315 insertions(+), 254 deletions(-)
+-- 
+1.8.1.4
+

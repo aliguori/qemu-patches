@@ -1,0 +1,282 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Stefan Hajnoczi <stefanha@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Paolo Bonzini <pbonzini@redhat.com>, Ian Main <imain@redhat.com>,
+ Fam Zheng <famz@redhat.com>, Kevin Wolf <kwolf@redhat.com>,
+ Stefan Hajnoczi <stefanha@redhat.com>, dietmar@proxmox.com
+Date: Tue, 23 Apr 2013 18:25:08 +0200
+Message-id: 1366734308-11724-4-git-send-email-stefanha@redhat.com
+Subject: [PATCH 3/3] qemu-iotests: add 054 block-backup test case
+
+Testing block-backup is similar to image streaming and drive mirroring.
+This test case is based on 041.
+
+Signed-off-by: Stefan Hajnoczi <stefanha@redhat.com>
+---
+ tests/qemu-iotests/054     | 230 +++++++++++++++++++++++++++++++++++++++++++++
+ tests/qemu-iotests/054.out |   5 +
+ tests/qemu-iotests/group   |   1 +
+ 3 files changed, 236 insertions(+)
+ create mode 100755 tests/qemu-iotests/054
+ create mode 100644 tests/qemu-iotests/054.out
+
+diff --git a/tests/qemu-iotests/054 b/tests/qemu-iotests/054
+new file mode 100755
+index 0000000..506bf05
+--- /dev/null
++++ b/tests/qemu-iotests/054
+@@ -0,0 +1,230 @@
++#!/usr/bin/env python
++#
++# Tests for block-backup
++#
++# Copyright (C) 2013 Red Hat, Inc.
++#
++# Based on 041.
++#
++# This program is free software; you can redistribute it and/or modify
++# it under the terms of the GNU General Public License as published by
++# the Free Software Foundation; either version 2 of the License, or
++# (at your option) any later version.
++#
++# This program is distributed in the hope that it will be useful,
++# but WITHOUT ANY WARRANTY; without even the implied warranty of
++# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++# GNU General Public License for more details.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program.  If not, see <http://www.gnu.org/licenses/>.
++#
++
++import time
++import os
++import iotests
++from iotests import qemu_img, qemu_io
++
++test_img = os.path.join(iotests.test_dir, 'test.img')
++target_img = os.path.join(iotests.test_dir, 'target.img')
++
++class BlockBackupTestCase(iotests.QMPTestCase):
++    '''Abstract base class for block-backup test cases'''
++
++    def assert_no_active_backups(self):
++        result = self.vm.qmp('query-block-jobs')
++        self.assert_qmp(result, 'return', [])
++
++    def cancel_and_wait(self, drive='drive0'):
++        '''Cancel a block job and wait for it to finish'''
++        result = self.vm.qmp('block-job-cancel', device=drive)
++        self.assert_qmp(result, 'return', {})
++
++        cancelled = False
++        while not cancelled:
++            for event in self.vm.get_qmp_events(wait=True):
++                if event['event'] == 'BLOCK_JOB_COMPLETED' or \
++                   event['event'] == 'BLOCK_JOB_CANCELLED':
++                    self.assert_qmp(event, 'data/type', 'backup')
++                    self.assert_qmp(event, 'data/device', drive)
++                    cancelled = True
++
++        self.assert_no_active_backups()
++
++    def complete_and_wait(self):
++        completed = False
++        while not completed:
++            for event in self.vm.get_qmp_events(wait=True):
++                if event['event'] == 'BLOCK_JOB_COMPLETED':
++                    self.assert_qmp(event, 'data/type', 'backup')
++                    self.assert_qmp(event, 'data/device', 'drive0')
++                    self.assert_qmp(event, 'data/offset', self.image_len)
++                    self.assert_qmp(event, 'data/len', self.image_len)
++                    completed = True
++        self.assert_no_active_backups()
++
++    def compare_images(self, img1, img2):
++        try:
++            qemu_img('convert', '-f', iotests.imgfmt, '-O', 'raw', img1, img1 + '.raw')
++            qemu_img('convert', '-f', iotests.imgfmt, '-O', 'raw', img2, img2 + '.raw')
++            file1 = open(img1 + '.raw', 'r')
++            file2 = open(img2 + '.raw', 'r')
++            return file1.read() == file2.read()
++        finally:
++            if file1 is not None:
++                file1.close()
++            if file2 is not None:
++                file2.close()
++            try:
++                os.remove(img1 + '.raw')
++            except OSError:
++                pass
++            try:
++                os.remove(img2 + '.raw')
++            except OSError:
++                pass
++
++class TestSingleDrive(BlockBackupTestCase):
++    image_len = 120 * 1024 * 1024 # MB
++
++    def setUp(self):
++        qemu_img('create', '-f', iotests.imgfmt, test_img, str(TestSingleDrive.image_len))
++        self.vm = iotests.VM().add_drive(test_img)
++        self.vm.launch()
++
++    def tearDown(self):
++        self.vm.shutdown()
++        os.remove(test_img)
++        try:
++            os.remove(target_img)
++        except OSError:
++            pass
++
++    def test_complete(self):
++        self.assert_no_active_backups()
++
++        result = self.vm.qmp('block-backup', device='drive0',
++                             target=target_img)
++        self.assert_qmp(result, 'return', {})
++
++        self.complete_and_wait()
++        self.vm.shutdown()
++        self.assertTrue(self.compare_images(test_img, target_img),
++                        'target image does not match source after backup')
++
++    def test_cancel(self):
++        self.assert_no_active_backups()
++
++        result = self.vm.qmp('block-backup', device='drive0',
++                             target=target_img)
++        self.assert_qmp(result, 'return', {})
++
++        self.cancel_and_wait()
++
++    def test_pause(self):
++        self.assert_no_active_backups()
++
++        result = self.vm.qmp('block-backup', device='drive0',
++                             target=target_img)
++        self.assert_qmp(result, 'return', {})
++
++        result = self.vm.qmp('block-job-pause', device='drive0')
++        self.assert_qmp(result, 'return', {})
++
++        time.sleep(1)
++        result = self.vm.qmp('query-block-jobs')
++        offset = self.dictpath(result, 'return[0]/offset')
++
++        time.sleep(1)
++        result = self.vm.qmp('query-block-jobs')
++        self.assert_qmp(result, 'return[0]/offset', offset)
++
++        result = self.vm.qmp('block-job-resume', device='drive0')
++        self.assert_qmp(result, 'return', {})
++
++        self.complete_and_wait()
++        self.vm.shutdown()
++        self.assertTrue(self.compare_images(test_img, target_img),
++                        'target image does not match source after backup')
++
++    def test_medium_not_found(self):
++        result = self.vm.qmp('block-backup', device='ide1-cd0',
++                             target=target_img)
++        self.assert_qmp(result, 'error/class', 'GenericError')
++
++    def test_image_not_found(self):
++        result = self.vm.qmp('block-backup', device='drive0',
++                             mode='existing', target=target_img)
++        self.assert_qmp(result, 'error/class', 'GenericError')
++
++    def test_device_not_found(self):
++        result = self.vm.qmp('block-backup', device='nonexistent',
++                             target=target_img)
++        self.assert_qmp(result, 'error/class', 'DeviceNotFound')
++
++class TestSetSpeed(BlockBackupTestCase):
++    image_len = 80 * 1024 * 1024 # MB
++
++    def setUp(self):
++        qemu_img('create', '-f', iotests.imgfmt, test_img, str(TestSetSpeed.image_len))
++        self.vm = iotests.VM().add_drive(test_img)
++        self.vm.launch()
++
++    def tearDown(self):
++        self.vm.shutdown()
++        os.remove(test_img)
++        os.remove(target_img)
++
++    def test_set_speed(self):
++        self.assert_no_active_backups()
++
++        result = self.vm.qmp('block-backup', device='drive0',
++                             target=target_img)
++        self.assert_qmp(result, 'return', {})
++
++        # Default speed is 0
++        result = self.vm.qmp('query-block-jobs')
++        self.assert_qmp(result, 'return[0]/device', 'drive0')
++        self.assert_qmp(result, 'return[0]/speed', 0)
++
++        result = self.vm.qmp('block-job-set-speed', device='drive0', speed=8 * 1024 * 1024)
++        self.assert_qmp(result, 'return', {})
++
++        # Ensure the speed we set was accepted
++        result = self.vm.qmp('query-block-jobs')
++        self.assert_qmp(result, 'return[0]/device', 'drive0')
++        self.assert_qmp(result, 'return[0]/speed', 8 * 1024 * 1024)
++
++        self.cancel_and_wait()
++
++        # Check setting speed in block-backup works
++        result = self.vm.qmp('block-backup', device='drive0',
++                             target=target_img, speed=4*1024*1024)
++        self.assert_qmp(result, 'return', {})
++
++        result = self.vm.qmp('query-block-jobs')
++        self.assert_qmp(result, 'return[0]/device', 'drive0')
++        self.assert_qmp(result, 'return[0]/speed', 4 * 1024 * 1024)
++
++        self.cancel_and_wait()
++
++    def test_set_speed_invalid(self):
++        self.assert_no_active_backups()
++
++        result = self.vm.qmp('block-backup', device='drive0',
++                             target=target_img, speed=-1)
++        self.assert_qmp(result, 'error/class', 'GenericError')
++
++        self.assert_no_active_backups()
++
++        result = self.vm.qmp('block-backup', device='drive0',
++                             target=target_img)
++        self.assert_qmp(result, 'return', {})
++
++        result = self.vm.qmp('block-job-set-speed', device='drive0', speed=-1)
++        self.assert_qmp(result, 'error/class', 'GenericError')
++
++        self.cancel_and_wait()
++
++if __name__ == '__main__':
++    iotests.main(supported_fmts=['raw', 'qcow2'])
+diff --git a/tests/qemu-iotests/054.out b/tests/qemu-iotests/054.out
+new file mode 100644
+index 0000000..594c16f
+--- /dev/null
++++ b/tests/qemu-iotests/054.out
+@@ -0,0 +1,5 @@
++........
++----------------------------------------------------------------------
++Ran 8 tests
++
++OK
+diff --git a/tests/qemu-iotests/group b/tests/qemu-iotests/group
+index 68eabda..f487a8f 100644
+--- a/tests/qemu-iotests/group
++++ b/tests/qemu-iotests/group
+@@ -60,3 +60,4 @@
+ 051 rw auto
+ 052 rw auto backing
+ 053 rw auto
++054 rw auto
+-- 
+1.8.1.4
+
+

@@ -1,0 +1,106 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Igor Mammedov <imammedo@redhat.com>
+To: Igor Mammedov <imammedo@redhat.com>, qemu-devel@nongnu.org
+Cc: peter.maydell@linaro.org, gleb@redhat.com, mst@redhat.com,
+ jan.kiszka@siemens.com, qemu-devel@nongnu.org, lcapitulino@redhat.com,
+ blauwirbel@gmail.com, kraxel@redhat.com, eblake@redhat.com,
+ Anthony Liguori <aliguori@us.ibm.com>, quintela@redhat.com, armbru@redhat.com,
+ yang.z.zhang@intel.com, ehabkost@redhat.com, stefano.stabellini@eu.citrix.com,
+ aderumier@odiso.com, anthony.perard@citrix.com, alex.williamson@redhat.com,
+ rth@twiddle.net, kwolf@redhat.com, claudio.fontana@huawei.com,
+ pbonzini@redhat.com, afaerber@suse.de
+Date: Tue, 23 Apr 2013 10:29:40 +0200
+Message-id: 1366705795-24732-7-git-send-email-imammedo@redhat.com
+Subject: [PATCH 06/21] target-i386: pc: update rtc_cmos on CPU hot-plug
+
+it provides updated currently available CPUs count to BIOS on reboot
+
+Signed-off-by: Igor Mammedov <imammedo@redhat.com>
+---
+v2:
+  * reorder fields in rtc_cpu_hotplug_arg, make cpu_added_notifier first.
+  * rebase on top of "mc146818rtc: QOM'ify" and use QOM style cast
+---
+ hw/i386/pc.c                   |   20 ++++++++++++++++++++
+ hw/timer/mc146818rtc.c         |    7 +++++++
+ include/hw/timer/mc146818rtc.h |    1 +
+ 3 files changed, 28 insertions(+), 0 deletions(-)
+
+diff --git a/hw/i386/pc.c b/hw/i386/pc.c
+index 0d6e72b..bbc3bea 100644
+--- a/hw/i386/pc.c
++++ b/hw/i386/pc.c
+@@ -338,6 +338,21 @@ static void pc_cmos_init_late(void *opaque)
+     qemu_unregister_reset(pc_cmos_init_late, opaque);
+ }
+ 
++typedef struct rtc_cpu_hotplug_arg {
++    Notifier cpu_added_notifier;
++    ISADevice *rtc_state;
++} rtc_cpu_hotplug_arg;
++
++static void rtc_notify_cpu_added(Notifier *notifier, void *data)
++{
++    rtc_cpu_hotplug_arg *arg = container_of(notifier, rtc_cpu_hotplug_arg,
++                                           cpu_added_notifier);
++    ISADevice *s = arg->rtc_state;
++
++    /* increment the number of CPUs */
++    rtc_set_memory(s, 0x5f, rtc_get_memory(s, 0x5f) + 1);
++}
++
+ void pc_cmos_init(ram_addr_t ram_size, ram_addr_t above_4g_mem_size,
+                   const char *boot_device,
+                   ISADevice *floppy, BusState *idebus0, BusState *idebus1,
+@@ -346,6 +361,7 @@ void pc_cmos_init(ram_addr_t ram_size, ram_addr_t above_4g_mem_size,
+     int val, nb, i;
+     FDriveType fd_type[2] = { FDRIVE_DRV_NONE, FDRIVE_DRV_NONE };
+     static pc_cmos_init_late_arg arg;
++    static rtc_cpu_hotplug_arg cpu_hotplug_cb;
+ 
+     /* various important CMOS locations needed by PC/Bochs bios */
+ 
+@@ -384,6 +400,10 @@ void pc_cmos_init(ram_addr_t ram_size, ram_addr_t above_4g_mem_size,
+ 
+     /* set the number of CPU */
+     rtc_set_memory(s, 0x5f, smp_cpus - 1);
++    /* init CPU hotplug notifier */
++    cpu_hotplug_cb.rtc_state = s;
++    cpu_hotplug_cb.cpu_added_notifier.notify = rtc_notify_cpu_added;
++    qemu_register_cpu_added_notifier(&cpu_hotplug_cb.cpu_added_notifier);
+ 
+     /* set boot devices, and disable floppy signature check if requested */
+     if (set_boot_dev(s, boot_device, fd_bootchk)) {
+diff --git a/hw/timer/mc146818rtc.c b/hw/timer/mc146818rtc.c
+index afbd0db..481604d 100644
+--- a/hw/timer/mc146818rtc.c
++++ b/hw/timer/mc146818rtc.c
+@@ -680,6 +680,13 @@ void rtc_set_memory(ISADevice *dev, int addr, int val)
+         s->cmos_data[addr] = val;
+ }
+ 
++int rtc_get_memory(ISADevice *dev, int addr)
++{
++    RTCState *s = MC146818_RTC(dev);
++    assert(addr >= 0 && addr <= 127);
++    return s->cmos_data[addr];
++}
++
+ static void rtc_set_date_from_host(ISADevice *dev)
+ {
+     RTCState *s = MC146818_RTC(dev);
+diff --git a/include/hw/timer/mc146818rtc.h b/include/hw/timer/mc146818rtc.h
+index 425bd17..753dda6 100644
+--- a/include/hw/timer/mc146818rtc.h
++++ b/include/hw/timer/mc146818rtc.h
+@@ -8,6 +8,7 @@
+ 
+ ISADevice *rtc_init(ISABus *bus, int base_year, qemu_irq intercept_irq);
+ void rtc_set_memory(ISADevice *dev, int addr, int val);
++int rtc_get_memory(ISADevice *dev, int addr);
+ void rtc_set_date(ISADevice *dev, const struct tm *tm);
+ 
+ #endif /* !MC146818RTC_H */
+-- 
+1.7.1
+

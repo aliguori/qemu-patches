@@ -1,0 +1,45 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Alexander Graf <agraf@suse.de>
+To: qemu-ppc@nongnu.org
+Cc: Blue Swirl <blauwirbel@gmail.com>, Aurelien Jarno <aurelien@aurel32.net>,
+ qemu-devel@nongnu.org
+Date: Fri, 26 Apr 2013 20:21:23 +0200
+Message-id: 1367000509-8833-5-git-send-email-agraf@suse.de
+Subject: [PATCH 04/30] target-ppc: fix nego and subf*o instructions
+
+From: Aurelien Jarno <aurelien@aurel32.net>
+
+The overflow computation of nego and subf*o instructions has been broken
+in commit ffe30937. Contrary to other targets, the instruction is subtract
+from an not subtract on PowerPC.
+
+This patch fixes the issue by using the correct argument in the xor
+computation. Thanks to Peter Maydell for the hint.
+
+With this change the PPC emulation passes the Gwenole Beauchesne
+testsuite again.
+
+Signed-off-by: Aurelien Jarno <aurelien@aurel32.net>
+Reviewed-by: Richard Henderson <rth@twiddle.net>
+Signed-off-by: Alexander Graf <agraf@suse.de>
+---
+ target-ppc/translate.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+diff --git a/target-ppc/translate.c b/target-ppc/translate.c
+index 5e741d1..294ab58 100644
+--- a/target-ppc/translate.c
++++ b/target-ppc/translate.c
+@@ -746,7 +746,7 @@ static inline void gen_op_arith_compute_ov(DisasContext *ctx, TCGv arg0,
+ {
+     TCGv t0 = tcg_temp_new();
+ 
+-    tcg_gen_xor_tl(cpu_ov, arg0, arg1);
++    tcg_gen_xor_tl(cpu_ov, arg0, arg2);
+     tcg_gen_xor_tl(t0, arg1, arg2);
+     if (sub) {
+         tcg_gen_and_tl(cpu_ov, cpu_ov, t0);
+-- 
+1.6.0.2
+
+

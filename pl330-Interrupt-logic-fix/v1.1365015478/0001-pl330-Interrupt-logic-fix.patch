@@ -1,0 +1,25 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+To: peter.maydell@linaro.org, qemu-devel@nongnu.org
+Cc: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+Date: Wed,  3 Apr 2013 13:57:58 +1000
+Message-id: cover.1364961415.git.peter.crosthwaite@xilinx.com
+Subject: [PATCH 1/1] pl330: Interrupt logic fix
+
+Hi Peter
+
+I recently did a bringup of the common Linux kernel pl330 driver as
+instantiated in Zynq. Just the one QEMU bug discovered in the process,
+with the interrupt logic.
+
+Regards,
+Peter
+
+
+Peter Crosthwaite (1):
+  pl330: Dont inhibit ES bits on INTEN
+
+ hw/pl330.c |    3 +--
+ 1 files changed, 1 insertions(+), 2 deletions(-)
+
+

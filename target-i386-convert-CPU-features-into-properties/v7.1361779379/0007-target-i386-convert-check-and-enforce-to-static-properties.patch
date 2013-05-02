@@ -1,0 +1,86 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Igor Mammedov <imammedo@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: ehabkost@redhat.com, afaerber@suse.de
+Date: Mon, 25 Feb 2013 02:03:06 +0100
+Message-id: 1361754189-29809-8-git-send-email-imammedo@redhat.com
+Subject: [PATCH 07/10] target-i386: convert 'check' and 'enforce' to static
+ properties
+
+* additionally convert check_cpuid & enforce_cpuid to bool and make them
+  members of CPUX86State
+* make 'enforce' feature independent from 'check'
+
+Signed-off-by: Igor Mammedov <imammedo@redhat.com>
+---
+v2:
+  - make check_cpuid & enforce_cpuid members of CPUX86State and use
+    DEFINE_PROP_BOOL instead of custom property setters
+---
+ target-i386/cpu.c |   13 ++++++-------
+ target-i386/cpu.h |    2 ++
+ 2 files changed, 8 insertions(+), 7 deletions(-)
+
+diff --git a/target-i386/cpu.c b/target-i386/cpu.c
+index 8f7132a..6826224 100644
+--- a/target-i386/cpu.c
++++ b/target-i386/cpu.c
+@@ -216,9 +216,6 @@ typedef struct model_features_t {
+     FeatureWord feat_word;
+ } model_features_t;
+ 
+-int check_cpuid = 0;
+-int enforce_cpuid = 0;
+-
+ static uint32_t kvm_default_features = (1 << KVM_FEATURE_CLOCKSOURCE) |
+         (1 << KVM_FEATURE_NOP_IO_DELAY) |
+         (1 << KVM_FEATURE_CLOCKSOURCE2) |
+@@ -1351,6 +1348,8 @@ static Property cpu_x86_properties[] = {
+     DEFINE_PROP_HV_SPINLOCKS("hv-spinlocks", HYPERV_SPINLOCK_NEVER_RETRY),
+     DEFINE_PROP_BOOL("hv-relaxed", X86CPU, env.hyperv_relaxed_timing, false),
+     DEFINE_PROP_BOOL("hv-vapic", X86CPU, env.hyperv_vapic, false),
++    DEFINE_PROP_BOOL("check", X86CPU, env.check_cpuid, false),
++    DEFINE_PROP_BOOL("enforce", X86CPU, env.enforce_cpuid, false),
+     DEFINE_PROP_END_OF_LIST(),
+ };
+ 
+@@ -1487,9 +1486,9 @@ static void cpu_x86_parse_featurestr(X86CPU *cpu, char *features, Error **errp)
+                 goto out;
+             }
+         } else if (!strcmp(featurestr, "check")) {
+-            check_cpuid = 1;
++            object_property_parse(OBJECT(cpu), "on", featurestr, errp);
+         } else if (!strcmp(featurestr, "enforce")) {
+-            check_cpuid = enforce_cpuid = 1;
++            object_property_parse(OBJECT(cpu), "on", featurestr, errp);
+         } else if (!strcmp(featurestr, "hv_relaxed")) {
+             object_property_parse(OBJECT(cpu), "on", "hv-relaxed", errp);
+         } else if (!strcmp(featurestr, "hv_vapic")) {
+@@ -2236,8 +2235,8 @@ static void x86_cpu_realizefn(DeviceState *dev, Error **errp)
+ #ifdef CONFIG_KVM
+         filter_features_for_kvm(cpu);
+ #endif
+-        if (check_cpuid && kvm_check_features_against_host(cpu)
+-            && enforce_cpuid) {
++        if ((env->check_cpuid || env->enforce_cpuid)
++            && kvm_check_features_against_host(cpu) && env->enforce_cpuid) {
+             error_setg(errp, "Host's CPU doesn't support requested features");
+             return;
+         }
+diff --git a/target-i386/cpu.h b/target-i386/cpu.h
+index e3723c2..cdec0da 100644
+--- a/target-i386/cpu.h
++++ b/target-i386/cpu.h
+@@ -847,6 +847,8 @@ typedef struct CPUX86State {
+     bool hyperv_vapic;
+     bool hyperv_relaxed_timing;
+     int hyperv_spinlock_attempts;
++    bool check_cpuid;
++    bool enforce_cpuid;
+ 
+     /* MTRRs */
+     uint64_t mtrr_fixed[11];
+-- 
+1.7.1
+
+

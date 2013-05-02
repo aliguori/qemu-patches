@@ -1,0 +1,199 @@
+From patches Mon Sep 17 00:00:00 2001
+From: fred.konrad@greensocs.com
+To: Anthony Liguori <aliguori@us.ibm.com>, qemu-devel@nongnu.org
+Cc: peter.maydell@linaro.org, Paolo Bonzini <pbonzini@redhat.com>,
+ mark.burton@greensocs.com, Kevin Wolf <kwolf@redhat.com>,
+ Amit Shah <amit.shah@redhat.com>, cornelia.huck@de.ibm.com,
+ Stefan Hajnoczi <stefanha@redhat.com>, fred.konrad@greensocs.com
+Date: Sun, 14 Apr 2013 23:26:37 +0200
+Message-id: 1365974797-13217-9-git-send-email-fred.konrad@greensocs.com
+Subject: [PATCH 8/8] virtio: cleanup: init and exit function.
+
+From: KONRAD Frederic <fred.konrad@greensocs.com>
+
+This clean the init and the exit functions and rename virtio_common_cleanup
+in virtio_cleanup.
+
+Signed-off-by: KONRAD Frederic <fred.konrad@greensocs.com>
+---
+ hw/block/virtio-blk.c       |  4 ++--
+ hw/char/virtio-serial-bus.c |  2 +-
+ hw/net/virtio-net.c         |  2 +-
+ hw/scsi/virtio-scsi.c       |  2 +-
+ hw/virtio/virtio-balloon.c  |  4 ++--
+ hw/virtio/virtio-rng.c      |  2 +-
+ hw/virtio/virtio.c          | 17 +----------------
+ include/hw/virtio/virtio.h  |  6 +-----
+ 8 files changed, 10 insertions(+), 29 deletions(-)
+
+diff --git a/hw/block/virtio-blk.c b/hw/block/virtio-blk.c
+index e25a03e..15ff2a8 100644
+--- a/hw/block/virtio-blk.c
++++ b/hw/block/virtio-blk.c
+@@ -661,7 +661,7 @@ static int virtio_blk_device_init(VirtIODevice *vdev)
+     s->vq = virtio_add_queue(vdev, 128, virtio_blk_handle_output);
+ #ifdef CONFIG_VIRTIO_BLK_DATA_PLANE
+     if (!virtio_blk_data_plane_create(vdev, blk, &s->dataplane)) {
+-        virtio_common_cleanup(vdev);
++        virtio_cleanup(vdev);
+         return -1;
+     }
+ #endif
+@@ -689,7 +689,7 @@ static int virtio_blk_device_exit(DeviceState *dev)
+     qemu_del_vm_change_state_handler(s->change);
+     unregister_savevm(dev, "virtio-blk", s);
+     blockdev_mark_auto_del(s->bs);
+-    virtio_common_cleanup(vdev);
++    virtio_cleanup(vdev);
+     return 0;
+ }
+ 
+diff --git a/hw/char/virtio-serial-bus.c b/hw/char/virtio-serial-bus.c
+index 6a5b8b6..3787ad2 100644
+--- a/hw/char/virtio-serial-bus.c
++++ b/hw/char/virtio-serial-bus.c
+@@ -1001,7 +1001,7 @@ static int virtio_serial_device_exit(DeviceState *dev)
+         qemu_free_timer(vser->post_load->timer);
+         g_free(vser->post_load);
+     }
+-    virtio_common_cleanup(vdev);
++    virtio_cleanup(vdev);
+     return 0;
+ }
+ 
+diff --git a/hw/net/virtio-net.c b/hw/net/virtio-net.c
+index 0a0d516..2aea5a1 100644
+--- a/hw/net/virtio-net.c
++++ b/hw/net/virtio-net.c
+@@ -1374,7 +1374,7 @@ static int virtio_net_device_exit(DeviceState *qdev)
+ 
+     g_free(n->vqs);
+     qemu_del_nic(n->nic);
+-    virtio_common_cleanup(vdev);
++    virtio_cleanup(vdev);
+ 
+     return 0;
+ }
+diff --git a/hw/scsi/virtio-scsi.c b/hw/scsi/virtio-scsi.c
+index de8cbbe..225b837 100644
+--- a/hw/scsi/virtio-scsi.c
++++ b/hw/scsi/virtio-scsi.c
+@@ -731,7 +731,7 @@ static int virtio_scsi_device_exit(DeviceState *qdev)
+ 
+     unregister_savevm(qdev, "virtio-scsi", s);
+     g_free(s->cmd_vqs);
+-    virtio_common_cleanup(vdev);
++    virtio_cleanup(vdev);
+     return 0;
+ }
+ 
+diff --git a/hw/virtio/virtio-balloon.c b/hw/virtio/virtio-balloon.c
+index eaaa1ed..4cf0023 100644
+--- a/hw/virtio/virtio-balloon.c
++++ b/hw/virtio/virtio-balloon.c
+@@ -348,7 +348,7 @@ static int virtio_balloon_device_init(VirtIODevice *vdev)
+                                    virtio_balloon_stat, s);
+ 
+     if (ret < 0) {
+-        virtio_common_cleanup(VIRTIO_DEVICE(s));
++        virtio_cleanup(VIRTIO_DEVICE(s));
+         return -1;
+     }
+ 
+@@ -377,7 +377,7 @@ static int virtio_balloon_device_exit(DeviceState *qdev)
+     balloon_stats_destroy_timer(s);
+     qemu_remove_balloon_handler(s);
+     unregister_savevm(qdev, "virtio-balloon", s);
+-    virtio_common_cleanup(vdev);
++    virtio_cleanup(vdev);
+     return 0;
+ }
+ 
+diff --git a/hw/virtio/virtio-rng.c b/hw/virtio/virtio-rng.c
+index da10935..21c87e5 100644
+--- a/hw/virtio/virtio-rng.c
++++ b/hw/virtio/virtio-rng.c
+@@ -192,7 +192,7 @@ static int virtio_rng_device_exit(DeviceState *qdev)
+     qemu_del_timer(vrng->rate_limit_timer);
+     qemu_free_timer(vrng->rate_limit_timer);
+     unregister_savevm(qdev, "virtio-rng", vrng);
+-    virtio_common_cleanup(vdev);
++    virtio_cleanup(vdev);
+     return 0;
+ }
+ 
+diff --git a/hw/virtio/virtio.c b/hw/virtio/virtio.c
+index c5270c9..00d0afe 100644
+--- a/hw/virtio/virtio.c
++++ b/hw/virtio/virtio.c
+@@ -914,19 +914,13 @@ int virtio_load(VirtIODevice *vdev, QEMUFile *f)
+     return 0;
+ }
+ 
+-void virtio_common_cleanup(VirtIODevice *vdev)
++void virtio_cleanup(VirtIODevice *vdev)
+ {
+     qemu_del_vm_change_state_handler(vdev->vmstate);
+     g_free(vdev->config);
+     g_free(vdev->vq);
+ }
+ 
+-void virtio_cleanup(VirtIODevice *vdev)
+-{
+-    virtio_common_cleanup(vdev);
+-    g_free(vdev);
+-}
+-
+ static void virtio_vmstate_change(void *opaque, int running, RunState state)
+ {
+     VirtIODevice *vdev = opaque;
+@@ -977,15 +971,6 @@ void virtio_init(VirtIODevice *vdev, const char *name,
+                                                      vdev);
+ }
+ 
+-VirtIODevice *virtio_common_init(const char *name, uint16_t device_id,
+-                                 size_t config_size, size_t struct_size)
+-{
+-    VirtIODevice *vdev;
+-    vdev = g_malloc0(struct_size);
+-    virtio_init(vdev, name, device_id, config_size);
+-    return vdev;
+-}
+-
+ hwaddr virtio_queue_get_desc_addr(VirtIODevice *vdev, int n)
+ {
+     return vdev->vq[n].vring.desc;
+diff --git a/include/hw/virtio/virtio.h b/include/hw/virtio/virtio.h
+index 3b99a46..1686193 100644
+--- a/include/hw/virtio/virtio.h
++++ b/include/hw/virtio/virtio.h
+@@ -147,7 +147,7 @@ typedef struct VirtioDeviceClass {
+ 
+ void virtio_init(VirtIODevice *vdev, const char *name,
+                          uint16_t device_id, size_t config_size);
+-void virtio_common_cleanup(VirtIODevice *vdev);
++void virtio_cleanup(VirtIODevice *vdev);
+ 
+ VirtQueue *virtio_add_queue(VirtIODevice *vdev, int queue_size,
+                             void (*handle_output)(VirtIODevice *,
+@@ -176,8 +176,6 @@ void virtio_save(VirtIODevice *vdev, QEMUFile *f);
+ 
+ int virtio_load(VirtIODevice *vdev, QEMUFile *f);
+ 
+-void virtio_cleanup(VirtIODevice *vdev);
+-
+ void virtio_notify_config(VirtIODevice *vdev);
+ 
+ void virtio_queue_set_notification(VirtQueue *vq, int enable);
+@@ -188,8 +186,6 @@ int virtio_queue_empty(VirtQueue *vq);
+ 
+ /* Host binding interface.  */
+ 
+-VirtIODevice *virtio_common_init(const char *name, uint16_t device_id,
+-                                 size_t config_size, size_t struct_size);
+ uint32_t virtio_config_readb(VirtIODevice *vdev, uint32_t addr);
+ uint32_t virtio_config_readw(VirtIODevice *vdev, uint32_t addr);
+ uint32_t virtio_config_readl(VirtIODevice *vdev, uint32_t addr);
+-- 
+1.7.11.7
+

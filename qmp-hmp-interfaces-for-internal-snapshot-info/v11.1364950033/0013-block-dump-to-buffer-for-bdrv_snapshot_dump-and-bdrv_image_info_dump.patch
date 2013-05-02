@@ -1,0 +1,255 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Wenchao Xia <xiawenc@linux.vnet.ibm.com>
+To: Markus Armbruster <armbru@redhat.com>, Stefan Hajnoczi <stefanha@gmail.com>,
+ Wenchao Xia <xiawenc@linux.vnet.ibm.com>, qemu-devel@nongnu.org
+Cc: kwolf@redhat.com, Wenchao Xia <xiawenc@linux.vnet.ibm.com>,
+ qemu-devel@nongnu.org, stefanha@gmail.com, armbru@redhat.com,
+ lcapitulino@redhat.com, pbonzini@redhat.com
+Date: Tue,  2 Apr 2013 19:47:26 +0800
+Message-id: 1364903250-10429-14-git-send-email-xiawenc@linux.vnet.ibm.com
+Subject: [PATCH 13/17] block: dump to buffer for bdrv_snapshot_dump() and
+ bdrv_image_info_dump()
+
+  This patch would allow hmp use them just like qemu-img, and avoid
+string truncation.
+
+Signed-off-by: Wenchao Xia <xiawenc@linux.vnet.ibm.com>
+---
+ block/qapi.c         |   65 +++++++++++++++++++++++++++-----------------------
+ include/block/qapi.h |    4 +-
+ qemu-img.c           |   22 ++++++++++++----
+ savevm.c             |   11 ++++++--
+ 4 files changed, 61 insertions(+), 41 deletions(-)
+
+diff --git a/block/qapi.c b/block/qapi.c
+index df63c97..e27519e 100644
+--- a/block/qapi.c
++++ b/block/qapi.c
+@@ -327,7 +327,7 @@ BlockInfoList *qmp_query_block(Error **errp)
+     return NULL;
+ }
+ 
+-char *bdrv_snapshot_dump(char *buf, int buf_size, QEMUSnapshotInfo *sn)
++void bdrv_snapshot_dump(GString *buf, QEMUSnapshotInfo *sn)
+ {
+     char buf1[128], date_buf[128], clock_buf[128];
+     struct tm tm;
+@@ -335,9 +335,8 @@ char *bdrv_snapshot_dump(char *buf, int buf_size, QEMUSnapshotInfo *sn)
+     int64_t secs;
+ 
+     if (!sn) {
+-        snprintf(buf, buf_size,
+-                 "%-10s%-20s%7s%20s%15s",
+-                 "ID", "TAG", "VM SIZE", "DATE", "VM CLOCK");
++        g_string_append_printf(buf, "%-10s%-20s%7s%20s%15s",
++                               "ID", "TAG", "VM SIZE", "DATE", "VM CLOCK");
+     } else {
+         ti = sn->date_sec;
+         localtime_r(&ti, &tm);
+@@ -350,17 +349,17 @@ char *bdrv_snapshot_dump(char *buf, int buf_size, QEMUSnapshotInfo *sn)
+                  (int)((secs / 60) % 60),
+                  (int)(secs % 60),
+                  (int)((sn->vm_clock_nsec / 1000000) % 1000));
+-        snprintf(buf, buf_size,
+-                 "%-10s%-20s%7s%20s%15s",
+-                 sn->id_str, sn->name,
+-                 get_human_readable_size(buf1, sizeof(buf1), sn->vm_state_size),
+-                 date_buf,
+-                 clock_buf);
++        g_string_append_printf(buf,
++                               "%-10s%-20s%7s%20s%15s",
++                               sn->id_str, sn->name,
++                               get_human_readable_size(buf1, sizeof(buf1),
++                                                       sn->vm_state_size),
++                               date_buf,
++                               clock_buf);
+     }
+-    return buf;
+ }
+ 
+-void bdrv_image_info_dump(ImageInfo *info)
++void bdrv_image_info_dump(GString *buf, ImageInfo *info)
+ {
+     char size_buf[128], dsize_buf[128];
+     if (!info->has_actual_size) {
+@@ -370,43 +369,48 @@ void bdrv_image_info_dump(ImageInfo *info)
+                                 info->actual_size);
+     }
+     get_human_readable_size(size_buf, sizeof(size_buf), info->virtual_size);
+-    printf("image: %s\n"
+-           "file format: %s\n"
+-           "virtual size: %s (%" PRId64 " bytes)\n"
+-           "disk size: %s\n",
+-           info->filename, info->format, size_buf,
+-           info->virtual_size,
+-           dsize_buf);
++    g_string_append_printf(buf,
++                           "image: %s\n"
++                           "file format: %s\n"
++                           "virtual size: %s (%" PRId64 " bytes)\n"
++                           "disk size: %s\n",
++                           info->filename, info->format, size_buf,
++                           info->virtual_size,
++                           dsize_buf);
+ 
+     if (info->has_encrypted && info->encrypted) {
+-        printf("encrypted: yes\n");
++        g_string_append_printf(buf, "encrypted: yes\n");
+     }
+ 
+     if (info->has_cluster_size) {
+-        printf("cluster_size: %" PRId64 "\n", info->cluster_size);
++        g_string_append_printf(buf, "cluster_size: %" PRId64 "\n",
++                               info->cluster_size);
+     }
+ 
+     if (info->has_dirty_flag && info->dirty_flag) {
+-        printf("cleanly shut down: no\n");
++        g_string_append_printf(buf, "cleanly shut down: no\n");
+     }
+ 
+     if (info->has_backing_filename) {
+-        printf("backing file: %s", info->backing_filename);
++        g_string_append_printf(buf, "backing file: %s",
++                               info->backing_filename);
+         if (info->has_full_backing_filename) {
+-            printf(" (actual path: %s)", info->full_backing_filename);
++            g_string_append_printf(buf, " (actual path: %s)",
++                                   info->full_backing_filename);
+         }
+-        putchar('\n');
++        g_string_append_printf(buf, "\n");
+         if (info->has_backing_filename_format) {
+-            printf("backing file format: %s\n", info->backing_filename_format);
++            g_string_append_printf(buf, "backing file format: %s\n",
++                                   info->backing_filename_format);
+         }
+     }
+ 
+     if (info->has_snapshots) {
+         SnapshotInfoList *elem;
+-        char buf[256];
+ 
+-        printf("Snapshot list:\n");
+-        printf("%s\n", bdrv_snapshot_dump(buf, sizeof(buf), NULL));
++        g_string_append_printf(buf, "Snapshot list:\n");
++        bdrv_snapshot_dump(buf, NULL);
++        g_string_append_printf(buf, "\n");
+ 
+         /* Ideally bdrv_snapshot_dump() would operate on SnapshotInfoList but
+          * we convert to the block layer's native QEMUSnapshotInfo for now.
+@@ -422,7 +426,8 @@ void bdrv_image_info_dump(ImageInfo *info)
+ 
+             pstrcpy(sn.id_str, sizeof(sn.id_str), elem->value->id);
+             pstrcpy(sn.name, sizeof(sn.name), elem->value->name);
+-            printf("%s\n", bdrv_snapshot_dump(buf, sizeof(buf), &sn));
++            bdrv_snapshot_dump(buf, &sn);
++            g_string_append_printf(buf, "\n");
+         }
+     }
+ }
+diff --git a/include/block/qapi.h b/include/block/qapi.h
+index 237660f..dc1e090 100644
+--- a/include/block/qapi.h
++++ b/include/block/qapi.h
+@@ -38,6 +38,6 @@ int bdrv_query_image_info(BlockDriverState *bs,
+ void bdrv_query_info(BlockDriverState *bs,
+                      BlockInfo **p_info,
+                      Error **errp);
+-char *bdrv_snapshot_dump(char *buf, int buf_size, QEMUSnapshotInfo *sn);
+-void bdrv_image_info_dump(ImageInfo *info);
++void bdrv_snapshot_dump(GString *buf, QEMUSnapshotInfo *sn);
++void bdrv_image_info_dump(GString *buf, ImageInfo *info);
+ #endif
+diff --git a/qemu-img.c b/qemu-img.c
+index 5b229a9..032f68c 100644
+--- a/qemu-img.c
++++ b/qemu-img.c
+@@ -1558,18 +1558,24 @@ static void dump_snapshots(BlockDriverState *bs)
+ {
+     QEMUSnapshotInfo *sn_tab, *sn;
+     int nb_sns, i;
+-    char buf[256];
++    GString *buf = g_string_new(NULL);
+ 
+     nb_sns = bdrv_snapshot_list(bs, &sn_tab);
+     if (nb_sns <= 0)
+         return;
+-    printf("Snapshot list:\n");
+-    printf("%s\n", bdrv_snapshot_dump(buf, sizeof(buf), NULL));
++    g_string_append_printf(buf, "Snapshot list:\n");
++    bdrv_snapshot_dump(buf, NULL);
++    g_string_append_printf(buf, "\n");
+     for(i = 0; i < nb_sns; i++) {
+         sn = &sn_tab[i];
+-        printf("%s\n", bdrv_snapshot_dump(buf, sizeof(buf), sn));
++        bdrv_snapshot_dump(buf, sn);
++        g_string_append_printf(buf, "\n");
+     }
++
++    printf("%s", buf->str);
++    g_string_free(buf, true);
+     g_free(sn_tab);
++
+ }
+ 
+ static void dump_json_image_info_list(ImageInfoList *list)
+@@ -1610,15 +1616,19 @@ static void dump_human_image_info_list(ImageInfoList *list)
+ {
+     ImageInfoList *elem;
+     bool delim = false;
++    GString *buf = g_string_new(NULL);
+ 
+     for (elem = list; elem; elem = elem->next) {
+         if (delim) {
+-            printf("\n");
++            g_string_append_printf(buf, "\n");
+         }
+         delim = true;
+ 
+-        bdrv_image_info_dump(elem->value);
++        bdrv_image_info_dump(buf, elem->value);
+     }
++
++    printf("%s", buf->str);
++    g_string_free(buf, true);
+ }
+ 
+ static gboolean str_equal_func(gconstpointer a, gconstpointer b)
+diff --git a/savevm.c b/savevm.c
+index e4e0008..ce0bbe1 100644
+--- a/savevm.c
++++ b/savevm.c
+@@ -2466,7 +2466,7 @@ void do_info_snapshots(Monitor *mon, const QDict *qdict)
+     int nb_sns, i, ret, available;
+     int total;
+     int *available_snapshots;
+-    char buf[256];
++    GString *buf = NULL;
+ 
+     bs = bdrv_snapshots();
+     if (!bs) {
+@@ -2509,11 +2509,16 @@ void do_info_snapshots(Monitor *mon, const QDict *qdict)
+     }
+ 
+     if (total > 0) {
+-        monitor_printf(mon, "%s\n", bdrv_snapshot_dump(buf, sizeof(buf), NULL));
++        buf = g_string_new(NULL);
++        bdrv_snapshot_dump(buf, NULL);
++        g_string_append_printf(buf, "\n");
+         for (i = 0; i < total; i++) {
+             sn = &sn_tab[available_snapshots[i]];
+-            monitor_printf(mon, "%s\n", bdrv_snapshot_dump(buf, sizeof(buf), sn));
++            bdrv_snapshot_dump(buf, sn);
++            g_string_append_printf(buf, "\n");
+         }
++        monitor_printf(mon, "%s", buf->str);
++        g_string_free(buf, true);
+     } else {
+         monitor_printf(mon, "There is no suitable snapshot available\n");
+     }
+-- 
+1.7.1
+
+
+

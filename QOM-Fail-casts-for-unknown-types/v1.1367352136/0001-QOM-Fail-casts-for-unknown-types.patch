@@ -1,0 +1,42 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Alexander Graf <agraf@suse.de>
+To: Alexander Graf <agraf@suse.de>, qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, aliguori@us.ibm.com,
+ qemu-devel@nongnu.org, dingel@linux.vnet.ibm.com, borntraeger@de.ibm.com,
+ av1474@comtv.ru, pbonzini@redhat.com
+Date: Tue, 30 Apr 2013 15:02:16 +0200
+Message-id: 1367326936-28539-1-git-send-email-agraf@suse.de
+Subject: [PATCH 1/1] QOM: Fail casts for unknown types
+
+When we try to cast an object to an unknown type, fail the cast. Today
+we would simply run into an assert().
+
+This fixes a bug on qemu-system-s390x for me that gets triggered by the
+audio code looking for PCI and ISA buses.
+
+Signed-off-by: Alexander Graf <agraf@suse.de>
+Reviewed-by: Paolo Bonzini <pbonzini@redhat.com>
+Reviewed-by: Andreas Färber <afaerber@suse.de>
+---
+ qom/object.c |    5 +++++
+ 1 files changed, 5 insertions(+), 0 deletions(-)
+
+diff --git a/qom/object.c b/qom/object.c
+index dd53d24..75e6aac 100644
+--- a/qom/object.c
++++ b/qom/object.c
+@@ -453,6 +453,11 @@ ObjectClass *object_class_dynamic_cast(ObjectClass *class,
+     TypeImpl *type = class->type;
+     ObjectClass *ret = NULL;
+ 
++    if (!target_type) {
++        /* target class type unknown, so fail the cast */
++        return NULL;
++    }
++
+     if (type->class->interfaces &&
+             type_is_ancestor(target_type, type_interface)) {
+         int found = 0;
+-- 
+1.6.0.2
+

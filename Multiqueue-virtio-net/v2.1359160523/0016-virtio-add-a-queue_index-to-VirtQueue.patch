@@ -1,0 +1,72 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Jason Wang <jasowang@redhat.com>
+To: aliguori@us.ibm.com, shajnocz@redhat.com, qemu-devel@nongnu.org,
+ mst@redhat.com
+Cc: krkumar2@in.ibm.com, kvm@vger.kernel.org, mprivozn@redhat.com,
+ rusty@rustcorp.com.au, Jason Wang <jasowang@redhat.com>,
+ gaowanlong@cn.fujitsu.com, jwhan@filewood.snu.ac.kr, shiyer@redhat.com
+Date: Fri, 25 Jan 2013 18:35:39 +0800
+Message-id: 1359110143-42984-17-git-send-email-jasowang@redhat.com
+Subject: [PATCH 16/20] virtio: add a queue_index to VirtQueue
+
+Add a queue_index to VirtQueue and a helper to fetch it, this could be used by
+multiqueue supported device.
+
+Signed-off-by: Jason Wang <jasowang@redhat.com>
+---
+ hw/virtio.c |    8 ++++++++
+ hw/virtio.h |    1 +
+ 2 files changed, 9 insertions(+), 0 deletions(-)
+
+diff --git a/hw/virtio.c b/hw/virtio.c
+index d8c77b0..e259348 100644
+--- a/hw/virtio.c
++++ b/hw/virtio.c
+@@ -73,6 +73,8 @@ struct VirtQueue
+     /* Notification enabled? */
+     bool notification;
+ 
++    uint16_t queue_index;
++
+     int inuse;
+ 
+     uint16_t vector;
+@@ -931,6 +933,7 @@ void virtio_init(VirtIODevice *vdev, const char *name,
+     for (i = 0; i < VIRTIO_PCI_QUEUE_MAX; i++) {
+         vdev->vq[i].vector = VIRTIO_NO_VECTOR;
+         vdev->vq[i].vdev = vdev;
++        vdev->vq[i].queue_index = i;
+     }
+ 
+     vdev->name = name;
+@@ -1018,6 +1021,11 @@ VirtQueue *virtio_get_queue(VirtIODevice *vdev, int n)
+     return vdev->vq + n;
+ }
+ 
++uint16_t virtio_get_queue_index(VirtQueue *vq)
++{
++    return vq->queue_index;
++}
++
+ static void virtio_queue_guest_notifier_read(EventNotifier *n)
+ {
+     VirtQueue *vq = container_of(n, VirtQueue, guest_notifier);
+diff --git a/hw/virtio.h b/hw/virtio.h
+index d3da1d2..a29a54d 100644
+--- a/hw/virtio.h
++++ b/hw/virtio.h
+@@ -280,6 +280,7 @@ hwaddr virtio_queue_get_ring_size(VirtIODevice *vdev, int n);
+ uint16_t virtio_queue_get_last_avail_idx(VirtIODevice *vdev, int n);
+ void virtio_queue_set_last_avail_idx(VirtIODevice *vdev, int n, uint16_t idx);
+ VirtQueue *virtio_get_queue(VirtIODevice *vdev, int n);
++uint16_t virtio_get_queue_index(VirtQueue *vq);
+ int virtio_queue_get_id(VirtQueue *vq);
+ EventNotifier *virtio_queue_get_guest_notifier(VirtQueue *vq);
+ void virtio_queue_set_guest_notifier_fd_handler(VirtQueue *vq, bool assign,
+-- 
+1.7.1
+
+--
+To unsubscribe from this list: send the line "unsubscribe kvm" in
+the body of a message to majordomo@vger.kernel.org
+More majordomo info at  http://vger.kernel.org/majordomo-info.html

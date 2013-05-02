@@ -1,0 +1,159 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Amos Kong <akong@redhat.com>
+To: Anthony Liguori <aliguori@us.ibm.com>, Paolo Bonzini <pbonzini@redhat.com>,
+ qemu-devel <qemu-devel@nongnu.org>, Luiz Capitulino <lcapitulino@redhat.com>,
+ Anthony Liguori <anthony@codemonkey.ws>, qemu-devel@nongnu.org,
+ Amos Kong <akong@redhat.com>, lcapitulino@redhat.com,
+ Eric Blake <eblake@redhat.com>, Gerd Hoffmann <kraxel@redhat.com>
+Cc: Paolo Bonzini <pbonzini@redhat.com>, pkrempa@redhat.com,
+ qemu-devel <qemu-devel@nongnu.org>, jan.kiszka@siemens.com,
+ qemu-devel@nongnu.org, Amos Kong <akong@redhat.com>, lcapitulino@redhat.com,
+ Luiz Capitulino <lcapitulino@redhat.com>, kraxel@redhat.com, zhwang@redhat.com
+Date: Fri, 19 Apr 2013 12:44:18 +0800
+Message-id: 1366346658-4680-1-git-send-email-akong@redhat.com
+Subject: [PATCH 1/1] monitor: intervally send down events to guest in hold time
+
+(qemu) sendkey a 1000
+
+Current design is that qemu only send one down event to guest,
+and delay sometime, then send one up event. In this case, only
+key can be identified by guest.
+
+This patch changed qemu to intervally send down events to guest
+in the hold time, the interval is 100ms.
+
+(qemu) sendkey a 1000
+
+qemu will send 9 down events, 1 up event to guest, we can see
+9 'a' in guest screen.
+
+Signed-off-by: Amos Kong <akong@redhat.com>
+---
+This patch based on Luiz's qmp-unstable/queue/qmp
+
+Signed-off-by: Amos Kong <akong@redhat.com>
+---
+ hmp-commands.hx |    4 +++-
+ qmp-commands.hx |    3 ++-
+ ui/input.c      |   38 ++++++++++++++++++++++++++------------
+ 3 files changed, 31 insertions(+), 14 deletions(-)
+
+diff --git a/hmp-commands.hx b/hmp-commands.hx
+index df44906..a16961e 100644
+--- a/hmp-commands.hx
++++ b/hmp-commands.hx
+@@ -557,7 +557,9 @@ STEXI
+ 
+ Send @var{keys} to the guest. @var{keys} could be the name of the
+ key or the raw value in hexadecimal format. Use @code{-} to press
+-several keys simultaneously. Example:
++several keys simultaneously. The default hold time is 100, in the
++hold time, qemu will intervally send down events to guest, the
++interval is 100ms. Example:
+ @example
+ sendkey ctrl-alt-f1
+ @end example
+diff --git a/qmp-commands.hx b/qmp-commands.hx
+index 4d65422..081f736 100644
+--- a/qmp-commands.hx
++++ b/qmp-commands.hx
+@@ -348,7 +348,8 @@ Arguments:
+ keys array:
+     - "key": key sequence (a json-array of key enum values)
+ 
+-- hold-time: time to delay key up events, milliseconds. Defaults to 100
++- hold-time: time to intervally send down events to guest, the interval
++             is 100ms. Defaults to 100 milliseconds
+              (json-int, optional)
+ 
+ Example:
+diff --git a/ui/input.c b/ui/input.c
+index ecfeb43..143c421 100644
+--- a/ui/input.c
++++ b/ui/input.c
+@@ -214,6 +214,7 @@ int index_from_keycode(int code)
+ static int *keycodes;
+ static int keycodes_size;
+ static QEMUTimer *key_timer;
++static int rest_time;
+ 
+ static int keycode_from_keyvalue(const KeyValue *value)
+ {
+@@ -232,8 +233,27 @@ static void free_keycodes(void)
+     keycodes_size = 0;
+ }
+ 
+-static void release_keys(void *opaque)
++static void enter_keys(void *opaque)
+ {
++    int i, time;
++
++    /* key down events */
++    for (i = 0; i < keycodes_size; i++) {
++        if (keycodes[i] & 0x80) {
++            kbd_put_keycode(0xe0);
++        }
++        kbd_put_keycode(keycodes[i] & 0x7f);
++    }
++
++    rest_time -= 100;
++    if (rest_time > 0) {
++        time = rest_time > 100 ? 100 : rest_time;
++        qemu_mod_timer(key_timer, qemu_get_clock_ns(vm_clock) +
++                       muldiv64(get_ticks_per_sec(), time, 1000));
++        return;
++    }
++
++    /* key up events */
+     while (keycodes_size > 0) {
+         if (keycodes[--keycodes_size] & 0x80) {
+             kbd_put_keycode(0xe0);
+@@ -251,20 +271,21 @@ void qmp_send_key(KeyValueList *keys, bool has_hold_time, int64_t hold_time,
+     KeyValueList *p;
+ 
+     if (!key_timer) {
+-        key_timer = qemu_new_timer_ns(vm_clock, release_keys, NULL);
++        key_timer = qemu_new_timer_ns(vm_clock, enter_keys, NULL);
+     }
+ 
+     if (keycodes != NULL) {
+         qemu_del_timer(key_timer);
+-        release_keys(NULL);
++        enter_keys(NULL);
+     }
+ 
+     if (!has_hold_time) {
+         hold_time = 100;
+     }
+ 
++    rest_time = hold_time;
++
+     for (p = keys; p != NULL; p = p->next) {
+-        /* key down events */
+         keycode = keycode_from_keyvalue(p->value);
+         if (keycode < 0x01 || keycode > 0xff) {
+             error_setg(errp, "invalid hex keycode 0x%x", keycode);
+@@ -272,18 +293,11 @@ void qmp_send_key(KeyValueList *keys, bool has_hold_time, int64_t hold_time,
+             return;
+         }
+ 
+-        if (keycode & 0x80) {
+-            kbd_put_keycode(0xe0);
+-        }
+-        kbd_put_keycode(keycode & 0x7f);
+-
+         keycodes = g_realloc(keycodes, sizeof(int) * (keycodes_size + 1));
+         keycodes[keycodes_size++] = keycode;
+     }
+ 
+-    /* delayed key up events */
+-    qemu_mod_timer(key_timer, qemu_get_clock_ns(vm_clock) +
+-                   muldiv64(get_ticks_per_sec(), hold_time, 1000));
++    enter_keys(NULL);
+ }
+ 
+ void qemu_add_kbd_event_handler(QEMUPutKBDEvent *func, void *opaque)
+-- 
+1.7.1
+
+

@@ -1,0 +1,1 @@
+../libqos-support/v1.1362491604/0005-fw_cfg-add-qtest-test-harness.patch

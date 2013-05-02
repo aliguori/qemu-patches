@@ -1,0 +1,72 @@
+From patches Mon Sep 17 00:00:00 2001
+From: "Michael S. Tsirkin" <mst@redhat.com>
+To: pbonzini@redhat.com, gleb@redhat.com, mtosatti@redhat.com,
+ qemu-devel@nongnu.org, kvm@vger.kernel.org
+Cc: 
+Date: Thu, 4 Apr 2013 13:40:15 +0300
+Message-id: 487d02412c9626c2b5c1c6758afb796390372239.1365071407.git.mst@redhat.com
+Subject: [PATCH 6/6] pci-testdev: add pv mmio test
+
+Add ability to test the speed of PV MMIO.
+
+Signed-off-by: Michael S. Tsirkin <mst@redhat.com>
+---
+ hw/pci-testdev.c | 11 +++++++----
+ 1 file changed, 7 insertions(+), 4 deletions(-)
+
+diff --git a/hw/pci-testdev.c b/hw/pci-testdev.c
+index f0ebf99..9a50631 100644
+--- a/hw/pci-testdev.c
++++ b/hw/pci-testdev.c
+@@ -19,6 +19,7 @@ typedef struct IOTest {
+     EventNotifier notifier;
+     bool hasnotifier;
+     unsigned size;
++    bool pv;
+     bool match_data;
+     PCITestDevHdr *hdr;
+     unsigned bufsize;
+@@ -33,7 +34,8 @@ typedef struct IOTest {
+ static const char *iotest_test[] = {
+     "no-eventfd",
+     "wildcard-eventfd",
+-    "datamatch-eventfd"
++    "datamatch-eventfd",
++    "pv-eventfd"
+ };
+ 
+ static const char *iotest_type[] = {
+@@ -80,7 +82,7 @@ static int pci_testdev_start(IOTest *test)
+     memory_region_add_eventfd(test->mr,
+                               le32_to_cpu(test->hdr->offset),
+                               test->size,
+-                              false,
++                              test->pv,
+                               test->match_data,
+                               test->hdr->data,
+                               &test->notifier);
+@@ -95,7 +97,7 @@ static void pci_testdev_stop(IOTest *test)
+     memory_region_del_eventfd(test->mr,
+                               le32_to_cpu(test->hdr->offset),
+                               test->size,
+-                              false,
++                              test->pv,
+                               test->match_data,
+                               test->hdr->data,
+                               &test->notifier);
+@@ -237,7 +239,8 @@ static int pci_testdev_init(PCIDevice *pci_dev)
+         g_free(name);
+         test->hdr->offset = cpu_to_le32(IOTEST_SIZE(i) + i * IOTEST_ACCESS_WIDTH);
+         test->size = IOTEST_ACCESS_WIDTH;
+-        test->match_data = strcmp(IOTEST_TEST(i), "wildcard-eventfd");
++        test->pv = !strcmp(IOTEST_TEST(i), "pv-eventfd");
++        test->match_data = !strcmp(IOTEST_TEST(i), "datamatch-eventfd");
+         test->hdr->test = i;
+         test->hdr->data = test->match_data ? IOTEST_DATAMATCH : IOTEST_NOMATCH;
+         test->hdr->width = IOTEST_ACCESS_WIDTH;
+-- 
+MST
+--
+To unsubscribe from this list: send the line "unsubscribe kvm" in
+the body of a message to majordomo@vger.kernel.org
+More majordomo info at  http://vger.kernel.org/majordomo-info.html

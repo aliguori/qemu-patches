@@ -1,0 +1,88 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Wenchao Xia <xiawenc@linux.vnet.ibm.com>
+To: qemu-devel@nongnu.org
+Cc: kwolf@redhat.com, phrdina@redhat.com,
+ Wenchao Xia <xiawenc@linux.vnet.ibm.com>, stefanha@gmail.com,
+ armbru@redhat.com, lcapitulino@redhat.com, pbonzini@redhat.com
+Date: Sat, 13 Apr 2013 16:56:47 +0800
+Message-id: 1365843407-16504-19-git-send-email-xiawenc@linux.vnet.ibm.com
+Subject: [PATCH 18/18] hmp: add parameters device and -v for info block
+
+  With these parameters, user can choose the information to be showed,
+to avoid message flood in the monitor.
+
+Signed-off-by: Wenchao Xia <xiawenc@linux.vnet.ibm.com>
+Reviewed-by: Kevin Wolf <kwolf@redhat.com>
+---
+ hmp.c     |   23 +++++++++++++++--------
+ monitor.c |    7 ++++---
+ 2 files changed, 19 insertions(+), 11 deletions(-)
+
+diff --git a/hmp.c b/hmp.c
+index 1d13030..4780873 100644
+--- a/hmp.c
++++ b/hmp.c
+@@ -279,10 +279,15 @@ void hmp_info_block(Monitor *mon, const QDict *qdict)
+ {
+     BlockInfoList *block_list, *info;
+     ImageInfo *image_info;
++    const char *device = qdict_get_try_str(qdict, "device");
++    int verbose = qdict_get_try_bool(qdict, "verbose", 0);
+ 
+     block_list = qmp_query_block(NULL);
+ 
+     for (info = block_list; info; info = info->next) {
++        if (device && strcmp(device, info->value->device)) {
++            continue;
++        }
+         monitor_printf(mon, "%s: removable=%d",
+                        info->value->device, info->value->removable);
+ 
+@@ -321,14 +326,16 @@ void hmp_info_block(Monitor *mon, const QDict *qdict)
+                             info->value->inserted->iops_rd,
+                             info->value->inserted->iops_wr);
+ 
+-            monitor_printf(mon, " images:\n");
+-            image_info = info->value->inserted->image;
+-            while (1) {
+-                bdrv_image_info_dump(image_info);
+-                if (image_info->has_backing_image) {
+-                    image_info = image_info->backing_image;
+-                } else {
+-                    break;
++            if (verbose) {
++                monitor_printf(mon, " images:\n");
++                image_info = info->value->inserted->image;
++                while (1) {
++                    bdrv_image_info_dump(image_info);
++                    if (image_info->has_backing_image) {
++                        image_info = image_info->backing_image;
++                    } else {
++                        break;
++                    }
+                 }
+             }
+         } else {
+diff --git a/monitor.c b/monitor.c
+index a2b1e3f..91a7066 100644
+--- a/monitor.c
++++ b/monitor.c
+@@ -2474,9 +2474,10 @@ static mon_cmd_t info_cmds[] = {
+     },
+     {
+         .name       = "block",
+-        .args_type  = "",
+-        .params     = "",
+-        .help       = "show the block devices",
++        .args_type  = "verbose:-v,device:B?",
++        .params     = "[-v] [device]",
++        .help       = "show info of one block device or all block devices "
++                      "(and details of images with -v option)",
+         .mhandler.cmd = hmp_info_block,
+     },
+     {
+-- 
+1.7.1
+
+
+

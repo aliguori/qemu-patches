@@ -1,0 +1,86 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Stefan Hajnoczi <stefanha@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Nick Thomas <nick@bytemark.co.uk>, Paolo Bonzini <pbonzini@redhat.com>,
+ Stefan Hajnoczi <stefanha@redhat.com>, Kevin Wolf <kwolf@redhat.com>
+Date: Thu,  2 May 2013 14:23:07 +0200
+Message-id: 1367497388-5962-2-git-send-email-stefanha@redhat.com
+Subject: [PATCH 1/2] nbd: use g_slice_new() instead of a freelist
+
+Use GLib's efficient slice allocator instead of open-coding the request
+freelist.  This patch simplifies the NBDRequest code.
+
+Now we qemu_blockalign() the req->data buffer each time but the next
+patch switches from a fixed size buffer to a dynamic size anyway.
+
+Signed-off-by: Stefan Hajnoczi <stefanha@redhat.com>
+---
+ nbd.c | 23 ++++++-----------------
+ 1 file changed, 6 insertions(+), 17 deletions(-)
+
+diff --git a/nbd.c b/nbd.c
+index 85187ff..761f4ec 100644
+--- a/nbd.c
++++ b/nbd.c
+@@ -98,7 +98,6 @@ struct NBDExport {
+     off_t size;
+     uint32_t nbdflags;
+     QTAILQ_HEAD(, NBDClient) clients;
+-    QSIMPLEQ_HEAD(, NBDRequest) requests;
+     QTAILQ_ENTRY(NBDExport) next;
+ };
+ 
+@@ -850,13 +849,8 @@ static NBDRequest *nbd_request_get(NBDClient *client)
+     assert(client->nb_requests <= MAX_NBD_REQUESTS - 1);
+     client->nb_requests++;
+ 
+-    if (QSIMPLEQ_EMPTY(&exp->requests)) {
+-        req = g_malloc0(sizeof(NBDRequest));
+-        req->data = qemu_blockalign(exp->bs, NBD_BUFFER_SIZE);
+-    } else {
+-        req = QSIMPLEQ_FIRST(&exp->requests);
+-        QSIMPLEQ_REMOVE_HEAD(&exp->requests, entry);
+-    }
++    req = g_slice_new0(NBDRequest);
++    req->data = qemu_blockalign(exp->bs, NBD_BUFFER_SIZE);
+     nbd_client_get(client);
+     req->client = client;
+     return req;
+@@ -865,7 +859,10 @@ static NBDRequest *nbd_request_get(NBDClient *client)
+ static void nbd_request_put(NBDRequest *req)
+ {
+     NBDClient *client = req->client;
+-    QSIMPLEQ_INSERT_HEAD(&client->exp->requests, req, entry);
++
++    qemu_vfree(req->data);
++    g_slice_free(NBDRequest, req);
++
+     if (client->nb_requests-- == MAX_NBD_REQUESTS) {
+         qemu_notify_event();
+     }
+@@ -877,7 +874,6 @@ NBDExport *nbd_export_new(BlockDriverState *bs, off_t dev_offset,
+                           void (*close)(NBDExport *))
+ {
+     NBDExport *exp = g_malloc0(sizeof(NBDExport));
+-    QSIMPLEQ_INIT(&exp->requests);
+     exp->refcount = 1;
+     QTAILQ_INIT(&exp->clients);
+     exp->bs = bs;
+@@ -953,13 +949,6 @@ void nbd_export_put(NBDExport *exp)
+             exp->close(exp);
+         }
+ 
+-        while (!QSIMPLEQ_EMPTY(&exp->requests)) {
+-            NBDRequest *first = QSIMPLEQ_FIRST(&exp->requests);
+-            QSIMPLEQ_REMOVE_HEAD(&exp->requests, entry);
+-            qemu_vfree(first->data);
+-            g_free(first);
+-        }
+-
+         g_free(exp);
+     }
+ }
+-- 
+1.8.1.4
+
+

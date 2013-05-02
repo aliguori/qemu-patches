@@ -1,0 +1,45 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: 
+Date: Fri, 27 Jul 2012 17:02:32 +0200
+Message-id: 1343401379-19495-6-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 05/32] lsi: avoid redundant tests of s->current != NULL
+
+Simplify the code by checking against req->hba_private directly,
+and asserting that it is non-NULL before a command is completed
+or canceled.
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ hw/lsi53c895a.c |    5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/hw/lsi53c895a.c b/hw/lsi53c895a.c
+index 078ab6d..5f6cb17 100644
+--- a/hw/lsi53c895a.c
++++ b/hw/lsi53c895a.c
+@@ -706,7 +706,7 @@ static void lsi_command_complete(SCSIRequest *req, uint32_t status, size_t resid
+         lsi_set_phase(s, PHASE_ST);
+     }
+ 
+-    if (s->current && req == s->current->req) {
++    if (req->hba_private == s->current) {
+         req->hba_private = NULL;
+         lsi_request_free(s, s->current);
+         scsi_req_unref(req);
+@@ -720,7 +720,8 @@ static void lsi_transfer_data(SCSIRequest *req, uint32_t len)
+     LSIState *s = DO_UPCAST(LSIState, dev.qdev, req->bus->qbus.parent);
+     int out;
+ 
+-    if (s->waiting == 1 || !s->current || req->hba_private != s->current ||
++    assert(req->hba_private);
++    if (s->waiting == 1 || req->hba_private != s->current ||
+         (lsi_irq_on_rsl(s) && !(s->scntl1 & LSI_SCNTL1_CON))) {
+         if (lsi_queue_req(s, req, len)) {
+             return;
+-- 
+1.7.10.4
+
+
+

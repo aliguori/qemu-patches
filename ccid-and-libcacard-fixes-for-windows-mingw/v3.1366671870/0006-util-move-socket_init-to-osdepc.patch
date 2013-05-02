@@ -1,0 +1,86 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Alon Levy <alevy@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: mlureau@redhat.com
+Date: Mon, 22 Apr 2013 18:04:36 +0300
+Message-id: 1366643098-2566-7-git-send-email-alevy@redhat.com
+Subject: [PATCH 06/28] util: move socket_init() to osdep.c
+
+From: Marc-André Lureau <marcandre.lureau@redhat.com>
+
+vscclient needs to call socket_init() for portability.
+Moving to osdep.c since it has no internal dependency.
+
+Signed-off-by: Marc-André Lureau <marcandre.lureau@redhat.com>
+---
+ util/osdep.c        | 23 +++++++++++++++++++++++
+ util/qemu-sockets.c | 24 ------------------------
+ 2 files changed, 23 insertions(+), 24 deletions(-)
+
+diff --git a/util/osdep.c b/util/osdep.c
+index bd59ac9..6ae5aaf 100644
+--- a/util/osdep.c
++++ b/util/osdep.c
+@@ -406,3 +406,26 @@ bool fips_get_state(void)
+     return fips_enabled;
+ }
+ 
++#ifdef _WIN32
++static void socket_cleanup(void)
++{
++    WSACleanup();
++}
++#endif
++
++int socket_init(void)
++{
++#ifdef _WIN32
++    WSADATA Data;
++    int ret, err;
++
++    ret = WSAStartup(MAKEWORD(2, 2), &Data);
++    if (ret != 0) {
++        err = WSAGetLastError();
++        fprintf(stderr, "WSAStartup: %d\n", err);
++        return -1;
++    }
++    atexit(socket_cleanup);
++#endif
++    return 0;
++}
+diff --git a/util/qemu-sockets.c b/util/qemu-sockets.c
+index 94581aa..fdd8dc4 100644
+--- a/util/qemu-sockets.c
++++ b/util/qemu-sockets.c
+@@ -974,27 +974,3 @@ int socket_dgram(SocketAddress *remote, SocketAddress *local, Error **errp)
+     qemu_opts_del(opts);
+     return fd;
+ }
+-
+-#ifdef _WIN32
+-static void socket_cleanup(void)
+-{
+-    WSACleanup();
+-}
+-#endif
+-
+-int socket_init(void)
+-{
+-#ifdef _WIN32
+-    WSADATA Data;
+-    int ret, err;
+-
+-    ret = WSAStartup(MAKEWORD(2,2), &Data);
+-    if (ret != 0) {
+-        err = WSAGetLastError();
+-        fprintf(stderr, "WSAStartup: %d\n", err);
+-        return -1;
+-    }
+-    atexit(socket_cleanup);
+-#endif
+-    return 0;
+-}
+-- 
+1.8.2
+
+

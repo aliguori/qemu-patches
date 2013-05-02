@@ -1,0 +1,36 @@
+From patches Mon Sep 17 00:00:00 2001
+From: =?utf-8?q?Andreas_F=C3=A4rber_=3Cafaerber=40suse=2Ede=3E?=
+To: qemu-devel@nongnu.org
+Cc: peter.maydell@linaro.org, Peter Maydell <peter.mayell@linaro.org>,
+ =?UTF-8?q?Andreas=20F=C3=A4rber?= <afaerber@suse.de>, aurelien@aurel32.net
+Date: Tue,  9 Apr 2013 16:51:22 +0200
+Message-id: 1365519084-4229-1-git-send-email-afaerber@suse.de
+Subject: [PATCH 0/2] target-sh4: SuperHCPU fixups
+
+Hello Peter and Aurélien,
+
+This mini-series fixes fallout from my last qom-cpu pull:
+A patch relocating class-level fields had been cherry-picked without the
+necessary prerequisites.
+This series redoes those type changes; follow-up cleanups are left out for time reasons.
+
+Regards,
+Andreas
+
+Cc: Peter Maydell <peter.mayell@linaro.org>
+Cc: Aurélien Jarno <aurelien@aurel32.net>
+
+Andreas Färber (2):
+  shix: Catch CPU initialization errors
+  sh7750: Change cpu field type to SuperHCPU
+
+ hw/sh4/r2d.c        |  2 +-
+ hw/sh4/sh7750.c     | 91 +++++++++++++++++++++++++++--------------------------
+ hw/sh4/shix.c       | 10 ++++--
+ include/hw/sh4/sh.h |  2 +-
+ 4 files changed, 55 insertions(+), 50 deletions(-)
+
+-- 
+1.8.1.4
+
+

@@ -1,0 +1,99 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Liu Ping Fan <qemulist@gmail.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <anthony@codemonkey.ws>,
+ Paolo Bonzini <pbonzini@redhat.com>, Jan Kiszka <jan.kiszka@siemens.com>,
+ Stefan Hajnoczi <stefanha@redhat.com>, mdroth <mdroth@linux.vnet.ibm.com>
+Date: Fri, 26 Apr 2013 10:47:29 +0800
+Message-id: 1366944455-14239-9-git-send-email-qemulist@gmail.com
+Subject: [PATCH 08/14] net: introduce lock to protect NetQueue
+
+From: Liu Ping Fan <pingfank@linux.vnet.ibm.com>
+
+NetQueue will be accessed by nc and its peers at the same time,
+need lock to protect it.
+
+Signed-off-by: Liu Ping Fan <pingfank@linux.vnet.ibm.com>
+---
+ net/queue.c |   11 +++++++++++
+ 1 files changed, 11 insertions(+), 0 deletions(-)
+
+diff --git a/net/queue.c b/net/queue.c
+index 859d02a..2856c1d 100644
+--- a/net/queue.c
++++ b/net/queue.c
+@@ -53,6 +53,7 @@ struct NetQueue {
+     uint32_t nq_maxlen;
+     uint32_t nq_count;
+ 
++    QemuMutex lock;
+     QTAILQ_HEAD(packets, NetPacket) packets;
+ 
+     unsigned delivering : 1;
+@@ -68,6 +69,7 @@ NetQueue *qemu_new_net_queue(void *opaque)
+     queue->nq_maxlen = 10000;
+     queue->nq_count = 0;
+ 
++    qemu_mutex_init(&queue->lock);
+     QTAILQ_INIT(&queue->packets);
+ 
+     queue->delivering = 0;
+@@ -107,7 +109,9 @@ static void qemu_net_queue_append(NetQueue *queue,
+     memcpy(packet->data, buf, size);
+ 
+     queue->nq_count++;
++    qemu_mutex_lock(&queue->lock);
+     QTAILQ_INSERT_TAIL(&queue->packets, packet, entry);
++    qemu_mutex_unlock(&queue->lock);
+ }
+ 
+ static void qemu_net_queue_append_iov(NetQueue *queue,
+@@ -142,7 +146,9 @@ static void qemu_net_queue_append_iov(NetQueue *queue,
+     }
+ 
+     queue->nq_count++;
++    qemu_mutex_lock(&queue->lock);
+     QTAILQ_INSERT_TAIL(&queue->packets, packet, entry);
++    qemu_mutex_unlock(&queue->lock);
+ }
+ 
+ static ssize_t qemu_net_queue_deliver(NetQueue *queue,
+@@ -229,6 +235,7 @@ void qemu_net_queue_purge(NetQueue *queue, NetClientState *from)
+ {
+     NetPacket *packet, *next;
+ 
++    qemu_mutex_lock(&queue->lock);
+     QTAILQ_FOREACH_SAFE(packet, &queue->packets, entry, next) {
+         if (packet->sender == from) {
+             QTAILQ_REMOVE(&queue->packets, packet, entry);
+@@ -236,10 +243,12 @@ void qemu_net_queue_purge(NetQueue *queue, NetClientState *from)
+             g_free(packet);
+         }
+     }
++    qemu_mutex_unlock(&queue->lock);
+ }
+ 
+ bool qemu_net_queue_flush(NetQueue *queue)
+ {
++    qemu_mutex_lock(&queue->lock);
+     while (!QTAILQ_EMPTY(&queue->packets)) {
+         NetPacket *packet;
+         int ret;
+@@ -256,6 +265,7 @@ bool qemu_net_queue_flush(NetQueue *queue)
+         if (ret == 0) {
+             queue->nq_count++;
+             QTAILQ_INSERT_HEAD(&queue->packets, packet, entry);
++            qemu_mutex_unlock(&queue->lock);
+             return false;
+         }
+ 
+@@ -265,5 +275,6 @@ bool qemu_net_queue_flush(NetQueue *queue)
+ 
+         g_free(packet);
+     }
++    qemu_mutex_unlock(&queue->lock);
+     return true;
+ }
+-- 
+1.7.4.4
+

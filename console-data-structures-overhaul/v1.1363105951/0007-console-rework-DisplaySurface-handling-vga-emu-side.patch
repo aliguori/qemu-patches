@@ -1,0 +1,403 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Gerd Hoffmann <kraxel@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>,
+ Stefano Stabellini <stefano.stabellini@eu.citrix.com>,
+ "open list:X86" <xen-devel@lists.xensource.com>,
+ Gerd Hoffmann <kraxel@redhat.com>
+Date: Tue, 12 Mar 2013 11:32:38 +0100
+Message-id: 1363084369-27517-8-git-send-email-kraxel@redhat.com
+Subject: [PATCH 07/18] console: rework DisplaySurface handling [vga emu side]
+
+Decouple DisplaySurface allocation & deallocation from DisplayState.
+Replace dpy_gfx_resize + dpy_gfx_setdata with a dpy_gfx_replace_surface
+function.
+
+This handles the graphic hardware emulation.
+
+Signed-off-by: Gerd Hoffmann <kraxel@redhat.com>
+---
+ hw/arm/nseries.c     |    7 -----
+ hw/arm/palm.c        |    7 -----
+ hw/qxl-render.c      |   12 ++++-----
+ hw/vga.c             |   17 ++++++------
+ hw/xenfb.c           |    8 +++---
+ include/ui/console.h |   11 +++-----
+ trace-events         |    5 ++--
+ ui/console.c         |   71 +++++++++++++++++++++-----------------------------
+ 8 files changed, 54 insertions(+), 84 deletions(-)
+
+diff --git a/hw/arm/nseries.c b/hw/arm/nseries.c
+index c5bf9f9..6747c1c 100644
+--- a/hw/arm/nseries.c
++++ b/hw/arm/nseries.c
+@@ -1290,7 +1290,6 @@ static void n8x0_init(QEMUMachineInitArgs *args,
+     MemoryRegion *sysmem = get_system_memory();
+     struct n800_s *s = (struct n800_s *) g_malloc0(sizeof(*s));
+     int sdram_size = binfo->ram_size;
+-    DisplayState *ds;
+ 
+     s->mpu = omap2420_mpu_init(sysmem, sdram_size, args->cpu_model);
+ 
+@@ -1370,12 +1369,6 @@ static void n8x0_init(QEMUMachineInitArgs *args,
+         n800_setup_nolo_tags(nolo_tags);
+         cpu_physical_memory_write(OMAP2_SRAM_BASE, nolo_tags, 0x10000);
+     }
+-    /* FIXME: We shouldn't really be doing this here.  The LCD controller
+-       will set the size once configured, so this just sets an initial
+-       size until the guest activates the display.  */
+-    ds = get_displaystate();
+-    ds->surface = qemu_resize_displaysurface(ds, 800, 480);
+-    dpy_gfx_resize(ds);
+ }
+ 
+ static struct arm_boot_info n800_binfo = {
+diff --git a/hw/arm/palm.c b/hw/arm/palm.c
+index 91bc74a..baeb585 100644
+--- a/hw/arm/palm.c
++++ b/hw/arm/palm.c
+@@ -205,7 +205,6 @@ static void palmte_init(QEMUMachineInitArgs *args)
+     static uint32_t cs2val = 0x0000e1a0;
+     static uint32_t cs3val = 0xe1a0e1a0;
+     int rom_size, rom_loaded = 0;
+-    DisplayState *ds = get_displaystate();
+     MemoryRegion *flash = g_new(MemoryRegion, 1);
+     MemoryRegion *cs = g_new(MemoryRegion, 4);
+ 
+@@ -268,12 +267,6 @@ static void palmte_init(QEMUMachineInitArgs *args)
+         palmte_binfo.initrd_filename = initrd_filename;
+         arm_load_kernel(mpu->cpu, &palmte_binfo);
+     }
+-
+-    /* FIXME: We shouldn't really be doing this here.  The LCD controller
+-       will set the size once configured, so this just sets an initial
+-       size until the guest activates the display.  */
+-    ds->surface = qemu_resize_displaysurface(ds, 320, 320);
+-    dpy_gfx_resize(ds);
+ }
+ 
+ static QEMUMachine palmte_machine = {
+diff --git a/hw/qxl-render.c b/hw/qxl-render.c
+index d77df42..8a19272 100644
+--- a/hw/qxl-render.c
++++ b/hw/qxl-render.c
+@@ -98,6 +98,7 @@ static void qxl_set_rect_to_surface(PCIQXLDevice *qxl, QXLRect *area)
+ static void qxl_render_update_area_unlocked(PCIQXLDevice *qxl)
+ {
+     VGACommonState *vga = &qxl->vga;
++    DisplaySurface *surface;
+     int i;
+ 
+     if (qxl->guest_primary.resized) {
+@@ -112,8 +113,7 @@ static void qxl_render_update_area_unlocked(PCIQXLDevice *qxl)
+                qxl->guest_primary.bytes_pp,
+                qxl->guest_primary.bits_pp);
+         if (qxl->guest_primary.qxl_stride > 0) {
+-            qemu_free_displaysurface(vga->ds);
+-            vga->ds->surface = qemu_create_displaysurface_from
++            surface = qemu_create_displaysurface_from
+                 (qxl->guest_primary.surface.width,
+                  qxl->guest_primary.surface.height,
+                  qxl->guest_primary.bits_pp,
+@@ -121,11 +121,11 @@ static void qxl_render_update_area_unlocked(PCIQXLDevice *qxl)
+                  qxl->guest_primary.data,
+                  false);
+         } else {
+-            qemu_resize_displaysurface(vga->ds,
+-                    qxl->guest_primary.surface.width,
+-                    qxl->guest_primary.surface.height);
++            surface = qemu_create_displaysurface
++                (qxl->guest_primary.surface.width,
++                 qxl->guest_primary.surface.height);
+         }
+-        dpy_gfx_resize(vga->ds);
++        dpy_gfx_replace_surface(vga->ds, surface);
+     }
+     for (i = 0; i < qxl->num_dirty_rects; i++) {
+         if (qemu_spice_rect_is_empty(qxl->dirty+i)) {
+diff --git a/hw/vga.c b/hw/vga.c
+index 2213bc1..13d5066 100644
+--- a/hw/vga.c
++++ b/hw/vga.c
+@@ -1691,11 +1691,11 @@ static void vga_draw_graphic(VGACommonState *s, int full_update)
+         height != s->last_height ||
+         s->last_depth != depth) {
+         if (depth == 32 || (depth == 16 && !byteswap)) {
+-            qemu_free_displaysurface(s->ds);
+-            s->ds->surface = qemu_create_displaysurface_from(disp_width, height, depth,
+-                    s->line_offset,
++            DisplaySurface *surface;
++            surface = qemu_create_displaysurface_from(disp_width,
++                    height, depth, s->line_offset,
+                     s->vram_ptr + (s->start_addr * 4), byteswap);
+-            dpy_gfx_resize(s->ds);
++            dpy_gfx_replace_surface(s->ds, surface);
+         } else {
+             qemu_console_resize(s->ds, disp_width, height);
+         }
+@@ -1709,12 +1709,11 @@ static void vga_draw_graphic(VGACommonState *s, int full_update)
+     } else if (is_buffer_shared(s->ds->surface) &&
+                (full_update || ds_get_data(s->ds) != s->vram_ptr
+                 + (s->start_addr * 4))) {
+-        qemu_free_displaysurface(s->ds);
+-        s->ds->surface = qemu_create_displaysurface_from(disp_width,
+-                height, depth,
+-                s->line_offset,
++        DisplaySurface *surface;
++        surface = qemu_create_displaysurface_from(disp_width,
++                height, depth, s->line_offset,
+                 s->vram_ptr + (s->start_addr * 4), byteswap);
+-        dpy_gfx_setdata(s->ds);
++        dpy_gfx_replace_surface(s->ds, surface);
+     }
+ 
+     s->rgb_to_pixel =
+diff --git a/hw/xenfb.c b/hw/xenfb.c
+index 3462ded..7779097 100644
+--- a/hw/xenfb.c
++++ b/hw/xenfb.c
+@@ -703,6 +703,7 @@ static void xenfb_send_refresh_period(struct XenFB *xenfb, int period)
+ static void xenfb_update(void *opaque)
+ {
+     struct XenFB *xenfb = opaque;
++    DisplaySurface *surface;
+     int i;
+ 
+     if (xenfb->c.xendev.be_state != XenbusStateConnected)
+@@ -753,21 +754,20 @@ static void xenfb_update(void *opaque)
+         case 16:
+         case 32:
+             /* console.c supported depth -> buffer can be used directly */
+-            qemu_free_displaysurface(xenfb->c.ds);
+-            xenfb->c.ds->surface = qemu_create_displaysurface_from
++            surface = qemu_create_displaysurface_from
+                 (xenfb->width, xenfb->height, xenfb->depth,
+                  xenfb->row_stride, xenfb->pixels + xenfb->offset,
+                  false);
+             break;
+         default:
+             /* we must convert stuff */
+-            qemu_resize_displaysurface(xenfb->c.ds, xenfb->width, xenfb->height);
++            surface = qemu_create_displaysurface(xenfb->width, xenfb->height);
+             break;
+         }
++        dpy_gfx_replace_surface(xenfb->c.ds, surface);
+         xen_be_printf(&xenfb->c.xendev, 1, "update: resizing: %dx%d @ %d bpp%s\n",
+                       xenfb->width, xenfb->height, xenfb->depth,
+                       is_buffer_shared(xenfb->c.ds->surface) ? " (shared)" : "");
+-        dpy_gfx_resize(xenfb->c.ds);
+         xenfb->up_fullscreen = 1;
+     }
+ 
+diff --git a/include/ui/console.h b/include/ui/console.h
+index 0fe9e50..bbf3b1d 100644
+--- a/include/ui/console.h
++++ b/include/ui/console.h
+@@ -210,11 +210,8 @@ DisplaySurface* qemu_create_displaysurface_from(int width, int height, int bpp,
+ PixelFormat qemu_different_endianness_pixelformat(int bpp);
+ PixelFormat qemu_default_pixelformat(int bpp);
+ 
+-DisplaySurface *qemu_create_displaysurface(DisplayState *ds,
+-                                           int width, int height);
+-DisplaySurface *qemu_resize_displaysurface(DisplayState *ds,
+-                                           int width, int height);
+-void qemu_free_displaysurface(DisplayState *ds);
++DisplaySurface *qemu_create_displaysurface(int width, int height);
++void qemu_free_displaysurface(DisplaySurface *surface);
+ 
+ static inline int is_surface_bgr(DisplaySurface *surface)
+ {
+@@ -236,8 +233,8 @@ void register_displaychangelistener(DisplayState *ds,
+ void unregister_displaychangelistener(DisplayChangeListener *dcl);
+ 
+ void dpy_gfx_update(DisplayState *s, int x, int y, int w, int h);
+-void dpy_gfx_resize(DisplayState *s);
+-void dpy_gfx_setdata(DisplayState *s);
++void dpy_gfx_replace_surface(DisplayState *s,
++                             DisplaySurface *surface);
+ void dpy_refresh(DisplayState *s);
+ void dpy_gfx_copy(struct DisplayState *s, int src_x, int src_y,
+                   int dst_x, int dst_y, int w, int h);
+diff --git a/trace-events b/trace-events
+index f81d406..b820595 100644
+--- a/trace-events
++++ b/trace-events
+@@ -957,8 +957,9 @@ dma_bdrv_cb(void *dbs, int ret) "dbs=%p ret=%d"
+ dma_map_wait(void *dbs) "dbs=%p"
+ 
+ # console.h
+-displaysurface_free(void *display_state, void *display_surface) "state=%p surface=%p"
+-displaysurface_resize(void *display_state, void *display_surface, int width, int height) "state=%p surface=%p %dx%d"
++displaysurface_create(void *display_surface, int w, int h) "surface=%p, %dx%d"
++displaysurface_create_from(void *display_surface, int w, int h, int bpp, int swap) "surface=%p, %dx%d, bpp %d, bswap %d"
++displaysurface_free(void *display_surface) "surface=%p"
+ displaychangelistener_register(void *dcl, const char *name) "%p [ %s ]"
+ displaychangelistener_unregister(void *dcl, const char *name) "%p [ %s ]"
+ 
+diff --git a/ui/console.c b/ui/console.c
+index 3bf0e98..705da60 100644
+--- a/ui/console.c
++++ b/ui/console.c
+@@ -1099,8 +1099,9 @@ void console_select(unsigned int index)
+         }
+         active_console = s;
+         if (ds->have_gfx) {
+-            ds->surface = qemu_resize_displaysurface(ds, s->g_width, s->g_height);
+-            dpy_gfx_resize(ds);
++            DisplaySurface *surface;
++            surface = qemu_create_displaysurface(s->g_width, s->g_height);
++            dpy_gfx_replace_surface(ds, surface);
+         }
+         if (ds->have_text) {
+             dpy_text_resize(ds, s->width, s->height);
+@@ -1316,34 +1317,24 @@ static void qemu_alloc_display(DisplaySurface *surface, int width, int height,
+ #endif
+ }
+ 
+-DisplaySurface *qemu_create_displaysurface(DisplayState *ds,
+-                                           int width, int height)
++DisplaySurface *qemu_create_displaysurface(int width, int height)
+ {
+     DisplaySurface *surface = g_new0(DisplaySurface, 1);
+-
+     int linesize = width * 4;
++
++    trace_displaysurface_create(surface, width, height);
+     qemu_alloc_display(surface, width, height, linesize,
+                        qemu_default_pixelformat(32), 0);
+     return surface;
+ }
+ 
+-DisplaySurface *qemu_resize_displaysurface(DisplayState *ds,
+-                                           int width, int height)
+-{
+-    int linesize = width * 4;
+-
+-    trace_displaysurface_resize(ds, ds->surface, width, height);
+-    qemu_alloc_display(ds->surface, width, height, linesize,
+-                       qemu_default_pixelformat(32), 0);
+-    return ds->surface;
+-}
+-
+ DisplaySurface *qemu_create_displaysurface_from(int width, int height, int bpp,
+                                                 int linesize, uint8_t *data,
+                                                 bool byteswap)
+ {
+     DisplaySurface *surface = g_new0(DisplaySurface, 1);
+ 
++    trace_displaysurface_create_from(surface, width, height, bpp, byteswap);
+     if (byteswap) {
+         surface->pf = qemu_different_endianness_pixelformat(bpp);
+     } else {
+@@ -1364,14 +1355,14 @@ DisplaySurface *qemu_create_displaysurface_from(int width, int height, int bpp,
+     return surface;
+ }
+ 
+-void qemu_free_displaysurface(DisplayState *ds)
++void qemu_free_displaysurface(DisplaySurface *surface)
+ {
+-    trace_displaysurface_free(ds, ds->surface);
+-    if (ds->surface == NULL) {
++    if (surface == NULL) {
+         return;
+     }
+-    qemu_pixman_image_unref(ds->surface->image);
+-    g_free(ds->surface);
++    trace_displaysurface_free(surface);
++    qemu_pixman_image_unref(surface->image);
++    g_free(surface);
+ }
+ 
+ void register_displaychangelistener(DisplayState *ds,
+@@ -1414,24 +1405,19 @@ void dpy_gfx_update(DisplayState *s, int x, int y, int w, int h)
+     }
+ }
+ 
+-void dpy_gfx_resize(DisplayState *s)
++void dpy_gfx_replace_surface(DisplayState *s,
++                             DisplaySurface *surface)
+ {
++    DisplaySurface *old_surface = s->surface;
+     struct DisplayChangeListener *dcl;
++
++    s->surface = surface;
+     QLIST_FOREACH(dcl, &s->listeners, next) {
+         if (dcl->ops->dpy_gfx_resize) {
+             dcl->ops->dpy_gfx_resize(dcl, s);
+         }
+     }
+-}
+-
+-void dpy_gfx_setdata(DisplayState *s)
+-{
+-    struct DisplayChangeListener *dcl;
+-    QLIST_FOREACH(dcl, &s->listeners, next) {
+-        if (dcl->ops->dpy_gfx_setdata) {
+-            dcl->ops->dpy_gfx_setdata(dcl, s);
+-        }
+-    }
++    qemu_free_displaysurface(old_surface);
+ }
+ 
+ void dpy_refresh(DisplayState *s)
+@@ -1521,6 +1507,7 @@ bool dpy_cursor_define_supported(struct DisplayState *s)
+ static void dumb_display_init(void)
+ {
+     DisplayState *ds = g_malloc0(sizeof(DisplayState));
++    DisplaySurface *surface;
+     int width = 640;
+     int height = 480;
+ 
+@@ -1528,7 +1515,9 @@ static void dumb_display_init(void)
+         width = active_console->g_width;
+         height = active_console->g_height;
+     }
+-    ds->surface = qemu_create_displaysurface(ds, width, height);
++    surface = qemu_create_displaysurface(width, height);
++    dpy_gfx_replace_surface(ds, surface);
++
+     register_displaystate(ds);
+ }
+ 
+@@ -1561,22 +1550,19 @@ DisplayState *graphic_console_init(vga_hw_update_ptr update,
+ {
+     QemuConsole *s;
+     DisplayState *ds;
++    DisplaySurface *surface;
+ 
+     ds = (DisplayState *) g_malloc0(sizeof(DisplayState));
+-    ds->surface = qemu_create_displaysurface(ds, 640, 480);
+-
+     s = new_console(ds, GRAPHIC_CONSOLE);
+-    if (s == NULL) {
+-        qemu_free_displaysurface(ds);
+-        g_free(ds);
+-        return NULL;
+-    }
+     s->hw_update = update;
+     s->hw_invalidate = invalidate;
+     s->hw_screen_dump = screen_dump;
+     s->hw_text_update = text_update;
+     s->hw = opaque;
+ 
++    surface = qemu_create_displaysurface(640, 480);
++    dpy_gfx_replace_surface(ds, surface);
++
+     register_displaystate(ds);
+     return ds;
+ }
+@@ -1748,8 +1734,9 @@ void qemu_console_resize(DisplayState *ds, int width, int height)
+     s->g_width = width;
+     s->g_height = height;
+     if (is_graphic_console()) {
+-        ds->surface = qemu_resize_displaysurface(ds, width, height);
+-        dpy_gfx_resize(ds);
++        DisplaySurface *surface;
++        surface = qemu_create_displaysurface(width, height);
++        dpy_gfx_replace_surface(ds, surface);
+     }
+ }
+ 
+-- 
+1.7.9.7
+

@@ -1,0 +1,4 @@
+0000-seabios-move-acpi-table-formatting-out-of-bios.txt
+0001-linker-utility-to-patch-in-memory-ROM-files.patch
+0002-acpi-load-and-link-tables-from--etc-acpi-.patch
+0003-acpi-add-an-option-to-disable-builtin-tables.patch

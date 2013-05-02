@@ -1,0 +1,95 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Igor Mammedov <imammedo@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, ehabkost@redhat.com, mst@redhat.com,
+ jan.kiszka@siemens.com, claudio.fontana@huawei.com, aderumier@odiso.com,
+ lcapitulino@redhat.com, jfrei@linux.vnet.ibm.com, yang.z.zhang@intel.com,
+ pbonzini@redhat.com, eblake@redhat.com, afaerber@suse.de,
+ lig.fnst@cn.fujitsu.com, rth@twiddle.net
+Date: Mon, 29 Apr 2013 17:02:55 +0200
+Message-id: 1367247776-7695-7-git-send-email-imammedo@redhat.com
+Subject: [PATCH 6/7] target-i386: implement machine->hot_add_cpu hook
+
+Signed-off-by: Igor Mammedov <imammedo@redhat.com>
+---
+v2:
+  * override .hot_add_cpu staticaly starting with 1.5 machine
+---
+ hw/i386/pc.c         | 22 ++++++++++++++++++++++
+ hw/i386/pc_piix.c    |  1 +
+ hw/i386/pc_q35.c     |  1 +
+ include/hw/i386/pc.h |  1 +
+ 4 files changed, 25 insertions(+)
+
+diff --git a/hw/i386/pc.c b/hw/i386/pc.c
+index 26644a1..2bdad17 100644
+--- a/hw/i386/pc.c
++++ b/hw/i386/pc.c
+@@ -915,6 +915,28 @@ static X86CPU *pc_new_cpu(const char *cpu_model, int64_t apic_id,
+     return cpu;
+ }
+ 
++void pc_hot_add_cpu(const int64_t id, Error **errp)
++{
++    DeviceState *icc_bridge;
++    int64_t apic_id = x86_cpu_apic_id_from_index(id);
++
++    if (cpu_exists(apic_id)) {
++        error_setg(errp, "Unable to add CPU: %" PRIi64
++                   ", it already exists", id);
++        return;
++    }
++
++    if (id >= max_cpus) {
++        error_setg(errp, "Unable to add CPU: %" PRIi64
++                   ", max allowed: %d", id, max_cpus - 1);
++        return;
++    }
++
++    icc_bridge = DEVICE(object_resolve_path_type("icc-bridge",
++                                                 TYPE_ICC_BRIDGE, NULL));
++    pc_new_cpu(machine_args.cpu_model, apic_id, icc_bridge, errp);
++}
++
+ void pc_cpus_init(QEMUMachineInitArgs *args, DeviceState *icc_bridge)
+ {
+     int i;
+diff --git a/hw/i386/pc_piix.c b/hw/i386/pc_piix.c
+index bdfac59..ccb230e 100644
+--- a/hw/i386/pc_piix.c
++++ b/hw/i386/pc_piix.c
+@@ -291,6 +291,7 @@ static QEMUMachine pc_i440fx_machine_v1_5 = {
+     .alias = "pc",
+     .desc = "Standard PC (i440FX + PIIX, 1996)",
+     .init = pc_init_pci,
++    .hot_add_cpu = pc_hot_add_cpu,
+     .max_cpus = 255,
+     .is_default = 1,
+     DEFAULT_MACHINE_OPTIONS,
+diff --git a/hw/i386/pc_q35.c b/hw/i386/pc_q35.c
+index a6f0960..24dc34f 100644
+--- a/hw/i386/pc_q35.c
++++ b/hw/i386/pc_q35.c
+@@ -209,6 +209,7 @@ static QEMUMachine pc_q35_machine_v1_5 = {
+     .alias = "q35",
+     .desc = "Standard PC (Q35 + ICH9, 2009)",
+     .init = pc_q35_init,
++    .hot_add_cpu = pc_hot_add_cpu,
+     .max_cpus = 255,
+     DEFAULT_MACHINE_OPTIONS,
+ };
+diff --git a/include/hw/i386/pc.h b/include/hw/i386/pc.h
+index c86059f..89bf4e1 100644
+--- a/include/hw/i386/pc.h
++++ b/include/hw/i386/pc.h
+@@ -80,6 +80,7 @@ void pc_register_ferr_irq(qemu_irq irq);
+ void pc_acpi_smi_interrupt(void *opaque, int irq, int level);
+ 
+ void pc_cpus_init(QEMUMachineInitArgs *args, DeviceState *icc_bridge);
++void pc_hot_add_cpu(const int64_t id, Error **errp);
+ void pc_acpi_init(const char *default_dsdt);
+ void *pc_memory_init(MemoryRegion *system_memory,
+                     const char *kernel_filename,
+-- 
+1.8.2.1
+

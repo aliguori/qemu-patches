@@ -1,0 +1,69 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Alexander Graf <agraf@suse.de>
+To: Alexander Graf <agraf@suse.de>, qemu-devel@nongnu.org
+Cc: Christian Borntraeger <borntraeger@de.ibm.com>, qemu-devel@nongnu.org,
+ Dominik Dingel <dingel@linux.vnet.ibm.com>
+Date: Mon, 22 Apr 2013 21:18:16 +0200
+Message-id: 1366658298-9275-11-git-send-email-agraf@suse.de
+Subject: [PATCH 10/12] S390: ccw firmware: Add Makefile
+
+This patch adds a makefile, so we can build our ccw firmware. Also
+add the resulting binaries to .gitignore, so that nobody is annoyed
+they might be in the tree.
+
+Signed-off-by: Alexander Graf <agraf@suse.de>
+---
+ .gitignore                |    2 ++
+ pc-bios/s390-ccw/Makefile |   26 ++++++++++++++++++++++++++
+ 2 files changed, 28 insertions(+), 0 deletions(-)
+ create mode 100644 pc-bios/s390-ccw/Makefile
+
+diff --git a/.gitignore b/.gitignore
+index 27ad002..c08e2cc 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -95,6 +95,8 @@ pc-bios/optionrom/kvmvapic.asm
+ pc-bios/optionrom/kvmvapic.bin
+ pc-bios/optionrom/kvmvapic.raw
+ pc-bios/optionrom/kvmvapic.img
++pc-bios/s390-ccw/s390-ccw.elf
++pc-bios/s390-ccw/s390-ccw.img
+ .stgit-*
+ cscope.*
+ tags
+diff --git a/pc-bios/s390-ccw/Makefile b/pc-bios/s390-ccw/Makefile
+new file mode 100644
+index 0000000..c126194
+--- /dev/null
++++ b/pc-bios/s390-ccw/Makefile
+@@ -0,0 +1,26 @@
++all: build-all
++# Dummy command so that make thinks it has done something
++	@true
++
++include ../../config-host.mak
++include $(SRC_PATH)/rules.mak
++
++$(call set-vpath, $(SRC_PATH)/pc-bios/s390-ccw)
++
++.PHONY : all clean build-all
++
++OBJECTS=main.o bootmap.o sclp-ascii.o virtio.o start.o
++CFLAGS += -fno-stack-protector
++# XXX find a more clever to locate the bootloader
++LDFLAGS += -Wl,-Ttext,0x7e00000,-Tbss,0x7f00000 -nostdlib
++
++build-all: s390-ccw.img
++
++s390-ccw.elf: $(OBJECTS)
++	$(call quiet-command,$(CC) $(LDFLAGS) -o $@ $(OBJECTS),"  Building $(TARGET_DIR)$@")
++
++s390-ccw.img: s390-ccw.elf
++	$(call quiet-command,strip $@,"  Stripping $(TARGET_DIR)$@")
++
++clean:
++	rm -f *.o *.d *.img *~
+-- 
+1.6.0.2
+
+

@@ -1,0 +1,36 @@
+From patches Mon Sep 17 00:00:00 2001
+From: John Rigby <john.rigby@linaro.org>
+To: qemu-devel@nongnu.org
+Cc: Peter Maydell <peter.maydell@linaro.org>,
+ John Rigby <john.rigby@linaro.org>, patches@linaro.org
+Date: Tue, 30 Apr 2013 10:04:21 -0600
+Message-id: 1367337863-24730-1-git-send-email-john.rigby@linaro.org
+Subject: [PATCH 0/2] Add mach-virt platform
+
+First modify arm fdt handling so boards can provide a blob
+rather than requiring one on command line.
+
+Next add mach-virt platform that creates fdt blob from scratch
+describing its minimal hw which is a pl011 uart and a sp804 timer.
+
+Tested on amd64 host with full system emulation and also using kvm
+on an arndale board
+
+v2 changes: remove bogus cruft from mach-virt.c that was leftover
+from checkpatch fixing
+
+John Rigby (2):
+  ARM: Allow boards to provide an fdt blob
+  ARM: Add mach-virt platform
+
+ hw/arm/Makefile.objs |    2 +-
+ hw/arm/boot.c        |   31 +++--
+ hw/arm/mach-virt.c   |  337 ++++++++++++++++++++++++++++++++++++++++++++++++++
+ include/hw/arm/arm.h |    6 +
+ 4 files changed, 364 insertions(+), 12 deletions(-)
+ create mode 100644 hw/arm/mach-virt.c
+
+-- 
+1.7.9.5
+
+

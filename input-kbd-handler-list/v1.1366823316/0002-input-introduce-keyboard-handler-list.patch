@@ -1,0 +1,158 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Gerd Hoffmann <kraxel@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, Gerd Hoffmann <kraxel@redhat.com>
+Date: Wed, 24 Apr 2013 12:08:38 +0200
+Message-id: 1366798118-3248-3-git-send-email-kraxel@redhat.com
+Subject: [PATCH 2/2] input: introduce keyboard handler list
+
+Add a linked list of keyboard handlers.  Added handlers will go
+to the head of the list.  Removed handlers will be zapped from
+the list.  The head of the list will be used for events.
+
+This fixes the keyboard-dead-after-usb-kbd-unplug issue, key events
+will be re-routed to the ps/2 kbd instead of being discarded.
+
+[ v2: fix cut+paste bug found my Markus ]
+
+Signed-off-by: Gerd Hoffmann <kraxel@redhat.com>
+---
+ hw/input/hid.c         |    4 ++--
+ include/hw/input/hid.h |    1 +
+ include/ui/console.h   |    6 ++++--
+ ui/input.c             |   37 +++++++++++++++++++++++++------------
+ 4 files changed, 32 insertions(+), 16 deletions(-)
+
+diff --git a/hw/input/hid.c b/hw/input/hid.c
+index 5fbde98..14b3125 100644
+--- a/hw/input/hid.c
++++ b/hw/input/hid.c
+@@ -415,7 +415,7 @@ void hid_free(HIDState *hs)
+ {
+     switch (hs->kind) {
+     case HID_KEYBOARD:
+-        qemu_remove_kbd_event_handler();
++        qemu_remove_kbd_event_handler(hs->kbd.eh_entry);
+         break;
+     case HID_MOUSE:
+     case HID_TABLET:
+@@ -431,7 +431,7 @@ void hid_init(HIDState *hs, int kind, HIDEventFunc event)
+     hs->event = event;
+ 
+     if (hs->kind == HID_KEYBOARD) {
+-        qemu_add_kbd_event_handler(hid_keyboard_event, hs);
++        hs->kbd.eh_entry = qemu_add_kbd_event_handler(hid_keyboard_event, hs);
+     } else if (hs->kind == HID_MOUSE) {
+         hs->ptr.eh_entry = qemu_add_mouse_event_handler(hid_pointer_event, hs,
+                                                         0, "QEMU HID Mouse");
+diff --git a/include/hw/input/hid.h b/include/hw/input/hid.h
+index 56c71ed..2567879 100644
+--- a/include/hw/input/hid.h
++++ b/include/hw/input/hid.h
+@@ -31,6 +31,7 @@ typedef struct HIDKeyboardState {
+     uint8_t leds;
+     uint8_t key[16];
+     int32_t keys;
++    QEMUPutKbdEntry *eh_entry;
+ } HIDKeyboardState;
+ 
+ struct HIDState {
+diff --git a/include/ui/console.h b/include/ui/console.h
+index 5cc5d0c..1c82f51 100644
+--- a/include/ui/console.h
++++ b/include/ui/console.h
+@@ -29,10 +29,12 @@ typedef void QEMUPutLEDEvent(void *opaque, int ledstate);
+ typedef void QEMUPutMouseEvent(void *opaque, int dx, int dy, int dz, int buttons_state);
+ 
+ typedef struct QEMUPutMouseEntry QEMUPutMouseEntry;
++typedef struct QEMUPutKbdEntry QEMUPutKbdEntry;
+ typedef struct QEMUPutLEDEntry QEMUPutLEDEntry;
+ 
+-void qemu_add_kbd_event_handler(QEMUPutKBDEvent *func, void *opaque);
+-void qemu_remove_kbd_event_handler(void);
++QEMUPutKbdEntry *qemu_add_kbd_event_handler(QEMUPutKBDEvent *func,
++                                            void *opaque);
++void qemu_remove_kbd_event_handler(QEMUPutKbdEntry *entry);
+ QEMUPutMouseEntry *qemu_add_mouse_event_handler(QEMUPutMouseEvent *func,
+                                                 void *opaque, int absolute,
+                                                 const char *name);
+diff --git a/ui/input.c b/ui/input.c
+index d8793e7..8ca1a03 100644
+--- a/ui/input.c
++++ b/ui/input.c
+@@ -41,18 +41,25 @@ struct QEMUPutMouseEntry {
+     QTAILQ_ENTRY(QEMUPutMouseEntry) node;
+ };
+ 
++struct QEMUPutKbdEntry {
++    QEMUPutKBDEvent *put_kbd;
++    void *opaque;
++    QTAILQ_ENTRY(QEMUPutKbdEntry) next;
++};
++
+ struct QEMUPutLEDEntry {
+     QEMUPutLEDEvent *put_led;
+     void *opaque;
+     QTAILQ_ENTRY(QEMUPutLEDEntry) next;
+ };
+ 
+-static QEMUPutKBDEvent *qemu_put_kbd_event;
+-static void *qemu_put_kbd_event_opaque;
+-static QTAILQ_HEAD(, QEMUPutLEDEntry) led_handlers = QTAILQ_HEAD_INITIALIZER(led_handlers);
++static QTAILQ_HEAD(, QEMUPutLEDEntry) led_handlers =
++    QTAILQ_HEAD_INITIALIZER(led_handlers);
++static QTAILQ_HEAD(, QEMUPutKbdEntry) kbd_handlers =
++    QTAILQ_HEAD_INITIALIZER(kbd_handlers);
+ static QTAILQ_HEAD(, QEMUPutMouseEntry) mouse_handlers =
+     QTAILQ_HEAD_INITIALIZER(mouse_handlers);
+-static NotifierList mouse_mode_notifiers = 
++static NotifierList mouse_mode_notifiers =
+     NOTIFIER_LIST_INITIALIZER(mouse_mode_notifiers);
+ 
+ static const int key_defs[] = {
+@@ -304,16 +311,20 @@ void qmp_send_key(KeyValueList *keys, bool has_hold_time, int64_t hold_time,
+                    muldiv64(get_ticks_per_sec(), hold_time, 1000));
+ }
+ 
+-void qemu_add_kbd_event_handler(QEMUPutKBDEvent *func, void *opaque)
++QEMUPutKbdEntry *qemu_add_kbd_event_handler(QEMUPutKBDEvent *func, void *opaque)
+ {
+-    qemu_put_kbd_event_opaque = opaque;
+-    qemu_put_kbd_event = func;
++    QEMUPutKbdEntry *entry;
++
++    entry = g_malloc0(sizeof(QEMUPutKbdEntry));
++    entry->put_kbd = func;
++    entry->opaque = opaque;
++    QTAILQ_INSERT_HEAD(&kbd_handlers, entry, next);
++    return entry;
+ }
+ 
+-void qemu_remove_kbd_event_handler(void)
++void qemu_remove_kbd_event_handler(QEMUPutKbdEntry *entry)
+ {
+-    qemu_put_kbd_event_opaque = NULL;
+-    qemu_put_kbd_event = NULL;
++    QTAILQ_REMOVE(&kbd_handlers, entry, next);
+ }
+ 
+ static void check_mode_change(void)
+@@ -397,11 +408,13 @@ void qemu_remove_led_event_handler(QEMUPutLEDEntry *entry)
+ 
+ void kbd_put_keycode(int keycode)
+ {
++    QEMUPutKbdEntry *entry = QTAILQ_FIRST(&kbd_handlers);
++
+     if (!runstate_is_running() && !runstate_check(RUN_STATE_SUSPENDED)) {
+         return;
+     }
+-    if (qemu_put_kbd_event) {
+-        qemu_put_kbd_event(qemu_put_kbd_event_opaque, keycode);
++    if (entry) {
++        entry->put_kbd(entry->opaque, keycode);
+     }
+ }
+ 
+-- 
+1.7.9.7
+

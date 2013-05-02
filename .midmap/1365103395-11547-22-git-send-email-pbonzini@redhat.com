@@ -1,0 +1,1 @@
+../hw--reorganization-part-2/v3.1365128560/0021-hw-move-ISA-bridges-and-devices-to-hw-isa--configure-with-default-configs-.patch

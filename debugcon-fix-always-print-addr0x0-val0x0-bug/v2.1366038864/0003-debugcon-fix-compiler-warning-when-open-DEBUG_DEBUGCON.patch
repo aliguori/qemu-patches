@@ -1,0 +1,57 @@
+From patches Mon Sep 17 00:00:00 2001
+From: liguang <lig.fnst@cn.fujitsu.com>
+To: Jesse Larrew <jlarrew@linux.vnet.ibm.com>, qemu-devel@nongnu.org,
+ liguang <lig.fnst@cn.fujitsu.com>
+Cc: Anthony Liguori <aliguori@us.ibm.com>, qemu-devel@nongnu.org,
+ liguang <lig.fnst@cn.fujitsu.com>
+Date: Mon, 15 Apr 2013 10:14:26 +0800
+Message-id: 1365992066-24348-3-git-send-email-lig.fnst@cn.fujitsu.com
+Subject: [PATCH 3/3] debugcon: fix compiler warning when open DEBUG_DEBUGCON
+
+compiler warnings:
+  CC    hw/char/debugcon.o
+hw/char/debugcon.c: In function ‘debugcon_ioport_write’:
+hw/char/debugcon.c:58: warning: format ‘%02x’ expects type ‘unsigned int’, but argument 3 has type ‘uint64_t’
+hw/char/debugcon.c: In function ‘debugcon_ioport_read’:
+hw/char/debugcon.c:70: warning: format ‘%04x’ expects type ‘unsigned int’, but argument 2 has type ‘hwaddr’
+
+Signed-off-by: liguang <lig.fnst@cn.fujitsu.com>
+---
+ hw/char/debugcon.c |    6 +++---
+ 1 files changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/hw/char/debugcon.c b/hw/char/debugcon.c
+index b6f2b06..a0d3633 100644
+--- a/hw/char/debugcon.c
++++ b/hw/char/debugcon.c
+@@ -33,7 +33,7 @@
+ #define ISA_DEBUGCON_DEVICE(obj) \
+      OBJECT_CHECK(ISADebugconState, (obj), TYPE_ISA_DEBUGCON_DEVICE)
+ 
+-//#define DEBUG_DEBUGCON
++#define DEBUG_DEBUGCON
+ 
+ typedef struct DebugconState {
+     MemoryRegion io;
+@@ -55,7 +55,7 @@ static void debugcon_ioport_write(void *opaque, hwaddr addr, uint64_t val,
+     unsigned char ch = val;
+ 
+ #ifdef DEBUG_DEBUGCON
+-    printf(" [debugcon: write addr=0x%04" HWADDR_PRIx " val=0x%02]\n", addr, val);
++    printf(" [debugcon: write addr=0x%04" HWADDR_PRIx " val=0x%02" PRIx64 "]\n", addr, val);
+ #endif
+ 
+     qemu_chr_fe_write(s->chr, &ch, 1);
+@@ -67,7 +67,7 @@ static uint64_t debugcon_ioport_read(void *opaque, hwaddr addr, unsigned width)
+     DebugconState *s = opaque;
+ 
+ #ifdef DEBUG_DEBUGCON
+-    printf("debugcon: read addr=0x%04x\n", addr);
++    printf("debugcon: read addr=0x%04" HWADDR_PRIx "\n", addr);
+ #endif
+ 
+     return s->readback;
+-- 
+1.7.2.5
+
+

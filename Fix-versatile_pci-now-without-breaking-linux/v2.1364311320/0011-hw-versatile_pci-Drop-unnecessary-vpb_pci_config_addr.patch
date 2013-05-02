@@ -1,0 +1,61 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Peter Maydell <peter.maydell@linaro.org>
+To: qemu-devel@nongnu.org
+Cc: Arnd Bergmann <arnd@arndb.de>, patches@linaro.org,
+ Aurelien Jarno <aurelien@aurel32.net>, "Michael S. Tsirkin" <mst@redhat.com>,
+ Paul Brook <paul@codesourcery.com>,
+ =?UTF-8?q?Andreas=20F=C3=A4rber?= <afaerber@suse.de>,
+ Will Deacon <will.deacon@arm.com>
+Date: Tue, 26 Mar 2013 10:22:11 +0000
+Message-id: 1364293331-8722-12-git-send-email-peter.maydell@linaro.org
+Subject: [PATCH 11/11] hw/versatile_pci: Drop unnecessary vpb_pci_config_addr()
+
+Drop the vpb_pci_config_addr() function -- it is unnecessary since
+the size of the memory regions means the hwaddr is always within
+the 24 bit size. (This function was probably a leftover from when
+read/write functions were called with absolute addresses rather
+than relative ones.)
+
+Signed-off-by: Peter Maydell <peter.maydell@linaro.org>
+---
+ hw/versatile_pci.c |    9 ++-------
+ 1 file changed, 2 insertions(+), 7 deletions(-)
+
+diff --git a/hw/versatile_pci.c b/hw/versatile_pci.c
+index 1575dd7..20092fe 100644
+--- a/hw/versatile_pci.c
++++ b/hw/versatile_pci.c
+@@ -192,11 +192,6 @@ static const MemoryRegionOps pci_vpb_reg_ops = {
+     },
+ };
+ 
+-static inline uint32_t vpb_pci_config_addr(hwaddr addr)
+-{
+-    return addr & 0xffffff;
+-}
+-
+ static void pci_vpb_config_write(void *opaque, hwaddr addr,
+                                  uint64_t val, unsigned size)
+ {
+@@ -222,7 +217,7 @@ static void pci_vpb_config_write(void *opaque, hwaddr addr,
+             }
+         }
+     }
+-    pci_data_write(&s->pci_bus, vpb_pci_config_addr(addr), val, size);
++    pci_data_write(&s->pci_bus, addr, val, size);
+ }
+ 
+ static uint64_t pci_vpb_config_read(void *opaque, hwaddr addr,
+@@ -230,7 +225,7 @@ static uint64_t pci_vpb_config_read(void *opaque, hwaddr addr,
+ {
+     PCIVPBState *s = (PCIVPBState *)opaque;
+     uint32_t val;
+-    val = pci_data_read(&s->pci_bus, vpb_pci_config_addr(addr), size);
++    val = pci_data_read(&s->pci_bus, addr, size);
+     return val;
+ }
+ 
+-- 
+1.7.9.5
+
+

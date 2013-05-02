@@ -1,0 +1,6 @@
+0000-block-make-qmp_transaction-extendable.txt
+0001-block-package-preparation-code-in-qmp_transaction.patch
+0002-block-move-input-parsing-code-in-qmp_transaction.patch
+0003-block-package-committing-code-in-qmp_transaction.patch
+0004-block-package-rolling-back-code-in-qmp_transaction.patch
+0005-block-make-all-steps-in-qmp_transaction-as-callback.patch

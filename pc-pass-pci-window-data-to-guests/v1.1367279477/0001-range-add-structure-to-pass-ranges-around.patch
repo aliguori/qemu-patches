@@ -1,0 +1,55 @@
+From patches Mon Sep 17 00:00:00 2001
+From: "Michael S. Tsirkin" <mst@redhat.com>
+To: Anthony Liguori <aliguori@us.ibm.com>, kevin@koconnor.net,
+ lersek@redhat.com, qemu-devel@nongnu.org
+Cc: 
+Date: Mon, 29 Apr 2013 18:51:21 +0300
+Message-id: fbb8582d1ab59a17f76e32d6699aa2d24c954214.1367250562.git.mst@redhat.com
+Subject: [PATCH 1/3] range: add structure to pass ranges around
+
+Convenient structure to pass ranges around,
+and calculate length avoiding 64 bit overlap issues.
+
+Signed-off-by: Michael S. Tsirkin <mst@redhat.com>
+---
+ include/qemu/range.h | 24 ++++++++++++++++++++++++
+ 1 file changed, 24 insertions(+)
+
+diff --git a/include/qemu/range.h b/include/qemu/range.h
+index 3502372..aeef1fb 100644
+--- a/include/qemu/range.h
++++ b/include/qemu/range.h
+@@ -1,6 +1,30 @@
+ #ifndef QEMU_RANGE_H
+ #define QEMU_RANGE_H
+ 
++#include <inttypes.h>
++
++struct Range {
++    uint64_t min;
++    uint64_t max;
++};
++typedef struct Range Range;
++
++/* max <= min means not valid */
++static inline bool range_valid(Range *r)
++{
++    return r->max > r->min;
++}
++
++static inline uint64_t range_len(Range *r)
++{
++    return range_valid(r) ? r->max - r->min + 1 : 0;
++}
++
++static inline uint64_t range_start(Range *r)
++{
++    return r->min;
++}
++
+ /* Get last byte of a range from offset + length.
+  * Undefined for ranges that wrap around 0. */
+ static inline uint64_t range_get_last(uint64_t offset, uint64_t len)
+-- 
+MST
+

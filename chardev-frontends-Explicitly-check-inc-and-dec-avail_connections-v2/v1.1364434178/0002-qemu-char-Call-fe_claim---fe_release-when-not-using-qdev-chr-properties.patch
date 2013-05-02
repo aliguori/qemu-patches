@@ -1,0 +1,250 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Hans de Goede <hdegoede@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Hans de Goede <hdegoede@redhat.com>, Paolo Bonzini <pbonzini@redhat.com>
+Date: Wed, 27 Mar 2013 20:29:40 +0100
+Message-id: 1364412581-3672-3-git-send-email-hdegoede@redhat.com
+Subject: [PATCH 2/3] qemu-char: Call fe_claim / fe_release when not using qdev
+ chr properties
+
+chardev-frontends need to explictly check, increase and decrement the
+avail_connections "property" of the chardev when they are not using a
+qdev-chardev-property for the chardev.
+
+This fixes things like:
+qemu-kvm -chardev stdio,id=foo -device isa-serial,chardev=foo \
+  -mon chardev=foo
+
+Working, where they should fail. Most of the changes here are due to
+old hardware emulation code which is using serial_hds directly rather then
+a qdev-chardev-property.
+
+Signed-off-by: Hans de Goede <hdegoede@redhat.com>
+---
+ backends/rng-egd.c |  6 ++++++
+ gdbstub.c          |  1 +
+ hw/arm/pxa2xx.c    |  4 +++-
+ hw/bt-hci-csr.c    |  1 +
+ hw/ipoctal232.c    |  1 +
+ hw/ivshmem.c       |  1 +
+ hw/mcf_uart.c      |  1 +
+ hw/sh_serial.c     |  4 +++-
+ hw/xen_console.c   | 18 ++++++++++++++----
+ net/slirp.c        |  1 +
+ qemu-char.c        | 10 +++++++++-
+ vl.c               |  1 +
+ 12 files changed, 42 insertions(+), 7 deletions(-)
+
+diff --git a/backends/rng-egd.c b/backends/rng-egd.c
+index 5e012e9..cc6f5ee 100644
+--- a/backends/rng-egd.c
++++ b/backends/rng-egd.c
+@@ -149,6 +149,11 @@ static void rng_egd_opened(RngBackend *b, Error **errp)
+         return;
+     }
+ 
++    if (qemu_chr_fe_claim(s->chr) != 0) {
++        error_set(errp, QERR_DEVICE_IN_USE, s->chr_name);
++        return;
++    }
++
+     /* FIXME we should resubmit pending requests when the CDS reconnects. */
+     qemu_chr_add_handlers(s->chr, rng_egd_chr_can_read, rng_egd_chr_read,
+                           NULL, s);
+@@ -191,6 +196,7 @@ static void rng_egd_finalize(Object *obj)
+ 
+     if (s->chr) {
+         qemu_chr_add_handlers(s->chr, NULL, NULL, NULL, NULL);
++        qemu_chr_fe_release(s->chr);
+     }
+ 
+     g_free(s->chr_name);
+diff --git a/gdbstub.c b/gdbstub.c
+index a666cb5..a0288a7 100644
+--- a/gdbstub.c
++++ b/gdbstub.c
+@@ -3025,6 +3025,7 @@ int gdbserver_start(const char *device)
+         if (!chr)
+             return -1;
+ 
++        qemu_chr_fe_claim_no_fail(chr);
+         qemu_chr_add_handlers(chr, gdb_chr_can_receive, gdb_chr_receive,
+                               gdb_chr_event, NULL);
+     }
+diff --git a/hw/arm/pxa2xx.c b/hw/arm/pxa2xx.c
+index 7467cca..b7ca511 100644
+--- a/hw/arm/pxa2xx.c
++++ b/hw/arm/pxa2xx.c
+@@ -1981,9 +1981,11 @@ static PXA2xxFIrState *pxa2xx_fir_init(MemoryRegion *sysmem,
+     memory_region_init_io(&s->iomem, &pxa2xx_fir_ops, s, "pxa2xx-fir", 0x1000);
+     memory_region_add_subregion(sysmem, base, &s->iomem);
+ 
+-    if (chr)
++    if (chr) {
++        qemu_chr_fe_claim_no_fail(chr);
+         qemu_chr_add_handlers(chr, pxa2xx_fir_is_empty,
+                         pxa2xx_fir_rx, pxa2xx_fir_event, s);
++    }
+ 
+     register_savevm(NULL, "pxa2xx_fir", 0, 0, pxa2xx_fir_save,
+                     pxa2xx_fir_load, s);
+diff --git a/hw/bt-hci-csr.c b/hw/bt-hci-csr.c
+index e4ada3c..55c819b 100644
+--- a/hw/bt-hci-csr.c
++++ b/hw/bt-hci-csr.c
+@@ -439,6 +439,7 @@ CharDriverState *uart_hci_init(qemu_irq wakeup)
+     s->chr.opaque = s;
+     s->chr.chr_write = csrhci_write;
+     s->chr.chr_ioctl = csrhci_ioctl;
++    s->chr.avail_connections = 1;
+ 
+     s->hci = qemu_next_hci();
+     s->hci->opaque = s;
+diff --git a/hw/ipoctal232.c b/hw/ipoctal232.c
+index 1da6a99..345efae 100644
+--- a/hw/ipoctal232.c
++++ b/hw/ipoctal232.c
+@@ -556,6 +556,7 @@ static int ipoctal_init(IPackDevice *ip)
+ 
+             if (ch->dev) {
+                 index++;
++                qemu_chr_fe_claim_no_fail(ch->dev);
+                 qemu_chr_add_handlers(ch->dev, hostdev_can_receive,
+                                       hostdev_receive, hostdev_event, ch);
+                 DPRINTF("Redirecting channel %u to %s (%s)\n",
+diff --git a/hw/ivshmem.c b/hw/ivshmem.c
+index 68a2cf2..af2789e 100644
+--- a/hw/ivshmem.c
++++ b/hw/ivshmem.c
+@@ -292,6 +292,7 @@ static CharDriverState* create_eventfd_chr_device(void * opaque, EventNotifier *
+         fprintf(stderr, "creating eventfd for eventfd %d failed\n", eventfd);
+         exit(-1);
+     }
++    qemu_chr_fe_claim_no_fail(chr);
+ 
+     /* if MSI is supported we need multiple interrupts */
+     if (ivshmem_has_feature(s, IVSHMEM_MSI)) {
+diff --git a/hw/mcf_uart.c b/hw/mcf_uart.c
+index aacf0f0..e5de801 100644
+--- a/hw/mcf_uart.c
++++ b/hw/mcf_uart.c
+@@ -280,6 +280,7 @@ void *mcf_uart_init(qemu_irq irq, CharDriverState *chr)
+     s->chr = chr;
+     s->irq = irq;
+     if (chr) {
++        qemu_chr_fe_claim_no_fail(chr);
+         qemu_chr_add_handlers(chr, mcf_uart_can_receive, mcf_uart_receive,
+                               mcf_uart_event, s);
+     }
+diff --git a/hw/sh_serial.c b/hw/sh_serial.c
+index 40e797c..4629695 100644
+--- a/hw/sh_serial.c
++++ b/hw/sh_serial.c
+@@ -396,9 +396,11 @@ void sh_serial_init(MemoryRegion *sysmem,
+ 
+     s->chr = chr;
+ 
+-    if (chr)
++    if (chr) {
++        qemu_chr_fe_claim_no_fail(chr);
+         qemu_chr_add_handlers(chr, sh_serial_can_receive1, sh_serial_receive1,
+ 			      sh_serial_event, s);
++    }
+ 
+     s->eri = eri_source;
+     s->rxi = rxi_source;
+diff --git a/hw/xen_console.c b/hw/xen_console.c
+index a8db6f8..c56ef47 100644
+--- a/hw/xen_console.c
++++ b/hw/xen_console.c
+@@ -241,9 +241,17 @@ static int con_initialise(struct XenDevice *xendev)
+ 	return -1;
+ 
+     xen_be_bind_evtchn(&con->xendev);
+-    if (con->chr)
+-        qemu_chr_add_handlers(con->chr, xencons_can_receive, xencons_receive,
+-                              NULL, con);
++    if (con->chr) {
++        if (qemu_chr_fe_claim(con->chr) == 0) {
++            qemu_chr_add_handlers(con->chr, xencons_can_receive,
++                                  xencons_receive, NULL, con);
++        } else {
++            xen_be_printf(xendev, 0,
++                          "xen_console_init error chardev %s already used\n",
++                          con->chr->label);
++            con->chr = NULL;
++        }
++    }
+ 
+     xen_be_printf(xendev, 1, "ring mfn %d, remote port %d, local port %d, limit %zd\n",
+ 		  con->ring_ref,
+@@ -260,8 +268,10 @@ static void con_disconnect(struct XenDevice *xendev)
+     if (!xendev->dev) {
+         return;
+     }
+-    if (con->chr)
++    if (con->chr) {
+         qemu_chr_add_handlers(con->chr, NULL, NULL, NULL, NULL);
++        qemu_chr_fe_release(con->chr);
++    }
+     xen_be_unbind_evtchn(&con->xendev);
+ 
+     if (con->sring) {
+diff --git a/net/slirp.c b/net/slirp.c
+index 4df550f..eabfee6 100644
+--- a/net/slirp.c
++++ b/net/slirp.c
+@@ -660,6 +660,7 @@ static int slirp_guestfwd(SlirpState *s, const char *config_str,
+         fwd->port = port;
+         fwd->slirp = s->slirp;
+ 
++        qemu_chr_fe_claim_no_fail(fwd->hd);
+         qemu_chr_add_handlers(fwd->hd, guestfwd_can_read, guestfwd_read,
+                               NULL, fwd);
+     }
+diff --git a/qemu-char.c b/qemu-char.c
+index da6cbe2..f49750e 100644
+--- a/qemu-char.c
++++ b/qemu-char.c
+@@ -3377,6 +3377,7 @@ CharDriverState *qemu_chr_new(const char *label, const char *filename, void (*in
+         error_free(err);
+     }
+     if (chr && qemu_opt_get_bool(opts, "mux", 0)) {
++        qemu_chr_fe_claim_no_fail(chr);
+         monitor_init(chr, MONITOR_USE_READLINE);
+     }
+     return chr;
+@@ -3489,9 +3490,16 @@ CharDriverState *qemu_chr_find(const char *name)
+ CharDriverState *qemu_char_get_next_serial(void)
+ {
+     static int next_serial;
++    CharDriverState *chr;
+ 
+     /* FIXME: This function needs to go away: use chardev properties!  */
+-    return serial_hds[next_serial++];
++
++    while (next_serial < MAX_SERIAL_PORTS && serial_hds[next_serial]) {
++        chr = serial_hds[next_serial++];
++        qemu_chr_fe_claim_no_fail(chr);
++        return chr;
++    }
++    return NULL;
+ }
+ 
+ QemuOptsList qemu_chardev_opts = {
+diff --git a/vl.c b/vl.c
+index aeed7f4..76cd991 100644
+--- a/vl.c
++++ b/vl.c
+@@ -2391,6 +2391,7 @@ static int mon_init_func(QemuOpts *opts, void *opaque)
+         exit(1);
+     }
+ 
++    qemu_chr_fe_claim_no_fail(chr);
+     monitor_init(chr, flags);
+     return 0;
+ }
+-- 
+1.8.1.4
+
+

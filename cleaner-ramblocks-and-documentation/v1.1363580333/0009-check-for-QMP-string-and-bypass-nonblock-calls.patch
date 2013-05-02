@@ -1,0 +1,114 @@
+From patches Mon Sep 17 00:00:00 2001
+From: mrhines@linux.vnet.ibm.com
+To: Paolo Bonzini <pbonzini@redhat.com>, qemu-devel@nongnu.org,
+ mrhines@linux.vnet.ibm.com, "Michael R. Hines" <mrhines@linux.vnet.ibm.com>
+Cc: Anthony Liguori <aliguori@us.ibm.com>, mst@redhat.com,
+ qemu-devel@nongnu.org, Michael R Hines <mrhines@us.ibm.com>,
+ Bulent Abali <abali@us.ibm.com>, owasserm@redhat.com, pbonzini@redhat.com,
+ Gokul B Kandiraju <gokul@us.ibm.com>
+Date: Sun, 17 Mar 2013 23:19:02 -0400
+Message-id: 1363576743-6146-10-git-send-email-mrhines@linux.vnet.ibm.com
+Subject: [PATCH 09/10] check for QMP string and bypass nonblock() calls
+
+From: "Michael R. Hines" <mrhines@us.ibm.com>
+
+Since we're not using TCP anymore, we skip these calls.
+
+Also print a little extra text while debugging, like "gbps"
+which is helpful to know how the link is being utilized.
+
+Signed-off-by: Michael R. Hines <mrhines@us.ibm.com>
+---
+ include/migration/migration.h |    3 +++
+ migration.c                   |   19 +++++++++++++------
+ 2 files changed, 16 insertions(+), 6 deletions(-)
+
+diff --git a/include/migration/migration.h b/include/migration/migration.h
+index bb617fd..88ab5f6 100644
+--- a/include/migration/migration.h
++++ b/include/migration/migration.h
+@@ -20,6 +20,7 @@
+ #include "qemu/notify.h"
+ #include "qapi/error.h"
+ #include "migration/vmstate.h"
++#include "migration/rdma.h"
+ #include "qapi-types.h"
+ 
+ struct MigrationParams {
+@@ -102,6 +103,7 @@ uint64_t xbzrle_mig_bytes_transferred(void);
+ uint64_t xbzrle_mig_pages_transferred(void);
+ uint64_t xbzrle_mig_pages_overflow(void);
+ uint64_t xbzrle_mig_pages_cache_miss(void);
++uint64_t delta_norm_mig_bytes_transferred(void);
+ 
+ /**
+  * @migrate_add_blocker - prevent migration from proceeding
+@@ -122,6 +124,7 @@ int xbzrle_encode_buffer(uint8_t *old_buf, uint8_t *new_buf, int slen,
+ int xbzrle_decode_buffer(uint8_t *src, int slen, uint8_t *dst, int dlen);
+ 
+ int migrate_use_xbzrle(void);
++void *migrate_use_rdma(QEMUFile *f);
+ int64_t migrate_xbzrle_cache_size(void);
+ 
+ int64_t xbzrle_cache_resize(int64_t new_size);
+diff --git a/migration.c b/migration.c
+index 185d112..634437a 100644
+--- a/migration.c
++++ b/migration.c
+@@ -15,6 +15,7 @@
+ 
+ #include "qemu-common.h"
+ #include "migration/migration.h"
++#include "migration/rdma.h"
+ #include "monitor/monitor.h"
+ #include "migration/qemu-file.h"
+ #include "sysemu/sysemu.h"
+@@ -77,6 +78,8 @@ void qemu_start_incoming_migration(const char *uri, Error **errp)
+ 
+     if (strstart(uri, "tcp:", &p))
+         tcp_start_incoming_migration(p, errp);
++    else if (strstart(uri, "rdma:", &p))
++        rdma_start_incoming_migration(p, errp);
+ #if !defined(WIN32)
+     else if (strstart(uri, "exec:", &p))
+         exec_start_incoming_migration(p, errp);
+@@ -118,10 +121,11 @@ static void process_incoming_migration_co(void *opaque)
+ void process_incoming_migration(QEMUFile *f)
+ {
+     Coroutine *co = qemu_coroutine_create(process_incoming_migration_co);
+-    int fd = qemu_get_fd(f);
+-
+-    assert(fd != -1);
+-    socket_set_nonblock(fd);
++    if(!migrate_use_rdma(f)) {
++        int fd = qemu_get_fd(f);
++        assert(fd != -1);
++        socket_set_nonblock(fd);
++    }
+     qemu_coroutine_enter(co, f);
+ }
+ 
+@@ -404,6 +408,8 @@ void qmp_migrate(const char *uri, bool has_blk, bool blk,
+ 
+     if (strstart(uri, "tcp:", &p)) {
+         tcp_start_outgoing_migration(s, p, &local_err);
++    } else if (strstart(uri, "rdma:", &p)) {
++        rdma_start_outgoing_migration(s, p, &local_err);
+ #if !defined(WIN32)
+     } else if (strstart(uri, "exec:", &p)) {
+         exec_start_outgoing_migration(s, p, &local_err);
+@@ -545,8 +551,9 @@ static void *migration_thread(void *opaque)
+             max_size = bandwidth * migrate_max_downtime() / 1000000;
+ 
+             DPRINTF("transferred %" PRIu64 " time_spent %" PRIu64
+-                    " bandwidth %g max_size %" PRId64 "\n",
+-                    transferred_bytes, time_spent, bandwidth, max_size);
++                    " bandwidth %g (%0.2f mbps) max_size %" PRId64 "\n",
++                    transferred_bytes, time_spent, 
++                    bandwidth, Gbps(transferred_bytes, time_spent), max_size);
+             /* if we haven't sent anything, we don't want to recalculate
+                10000 is a small enough number for our purposes */
+             if (s->dirty_bytes_rate && transferred_bytes > 10000) {
+-- 
+1.7.10.4
+

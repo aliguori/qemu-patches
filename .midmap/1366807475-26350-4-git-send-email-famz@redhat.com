@@ -1,0 +1,1 @@
+../vmdk-zeroed-grain-GTE-support/v3.1366854269/0003-vmdk-Add-option-to-create-zeroed-grain-image.patch

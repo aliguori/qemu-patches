@@ -1,0 +1,10 @@
+0000-x86-feature-words-array-v11--feature-words-property.txt
+0001-target-i386-cleanup-Group-together-level-xlevel-xlevel2-fields.patch
+0002-target-i386-kvmc-Code-formatting-changes.patch
+0003-target-i386-cpuc-Break-lines-so-they-dont-get-too-long.patch
+0004-target-i386-Replace-cpuid_features-fields-with-a-feature-word-array.patch
+0005-target-i386-Add-ECX-information-to-FeatureWordInfo.patch
+0006-target-i386-Add-feature-words-property.patch
+0007-target-i386-Use-FeatureWord-loop-on-filter_features_for_kvm.patch
+0008-target-i386-Introduce-X86CPUfiltered_features-field.patch
+0009-target-i386-Add-filtered-features-property-to-X86CPU.patch

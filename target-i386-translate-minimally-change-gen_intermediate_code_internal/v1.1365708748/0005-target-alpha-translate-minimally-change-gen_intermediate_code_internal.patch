@@ -1,0 +1,48 @@
+From patches Mon Sep 17 00:00:00 2001
+From: liguang <lig.fnst@cn.fujitsu.com>
+To: qemu-devel@nongnu.org
+Cc: liguang <lig.fnst@cn.fujitsu.com>
+Date: Thu, 11 Apr 2013 14:32:32 +0800
+Message-id: 1365661963-15396-5-git-send-email-lig.fnst@cn.fujitsu.com
+Subject: [PATCH 05/16] target-alpha/translate: minimally change
+ gen_intermediate_code_internal
+
+Signed-off-by: liguang <lig.fnst@cn.fujitsu.com>
+---
+ target-alpha/translate.c |   12 ++++++------
+ 1 files changed, 6 insertions(+), 6 deletions(-)
+
+diff --git a/target-alpha/translate.c b/target-alpha/translate.c
+index 4db16db..589f6a1 100644
+--- a/target-alpha/translate.c
++++ b/target-alpha/translate.c
+@@ -3425,9 +3425,9 @@ static inline void gen_intermediate_code_internal(CPUAlphaState *env,
+         if (search_pc) {
+             j = tcg_ctx.gen_opc_ptr - tcg_ctx.gen_opc_buf;
+             if (lj < j) {
+-                lj++;
+-                while (lj < j)
+-                    tcg_ctx.gen_opc_instr_start[lj++] = 0;
++                while (++lj < j) {
++                    tcg_ctx.gen_opc_instr_start[lj] = 0;
++                }
+             }
+             tcg_ctx.gen_opc_pc[lj] = ctx.pc;
+             tcg_ctx.gen_opc_instr_start[lj] = 1;
+@@ -3483,9 +3483,9 @@ static inline void gen_intermediate_code_internal(CPUAlphaState *env,
+     *tcg_ctx.gen_opc_ptr = INDEX_op_end;
+     if (search_pc) {
+         j = tcg_ctx.gen_opc_ptr - tcg_ctx.gen_opc_buf;
+-        lj++;
+-        while (lj <= j)
+-            tcg_ctx.gen_opc_instr_start[lj++] = 0;
++        while (++lj <= j) {
++            tcg_ctx.gen_opc_instr_start[lj] = 0;
++        }
+     } else {
+         tb->size = ctx.pc - pc_start;
+         tb->icount = num_insns;
+-- 
+1.7.2.5
+
+

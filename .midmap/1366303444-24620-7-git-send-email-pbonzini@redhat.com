@@ -1,0 +1,1 @@
+../make-audio-card-configuration-uniform/v1.1366328636/0006-qom-do-not-return-root-for-empty-path.patch

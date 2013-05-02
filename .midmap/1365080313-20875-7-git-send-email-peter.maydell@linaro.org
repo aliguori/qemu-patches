@@ -1,0 +1,1 @@
+../Fix-versatile_pci-without-breaking-linux/v3.1365101902/0006-versatile_pci-Put-the-host-bridge-PCI-device-at-slot-29.patch

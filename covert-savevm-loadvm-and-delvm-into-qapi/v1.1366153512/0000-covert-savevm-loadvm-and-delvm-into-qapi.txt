@@ -1,0 +1,99 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Pavel Hrdina <phrdina@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: phrdina@redhat.com, armbru@redhat.com, lcapitulino@redhat.com
+Date: Tue, 16 Apr 2013 18:05:12 +0200
+Message-id: cover.1366127809.git.phrdina@redhat.com
+Subject: [PATCH 00/11] covert savevm, loadvm and delvm into qapi
+
+I'm sending patches for all commands in one patch series because the
+savevm command depends on delvm command.
+
+This patch series introduces new design of these commands:
+
+* QMP vm-snapshot-save:
+    - { 'command': 'vm-snapshot-save',
+        'data': { 'name': 'str' },
+        'returns': 'SnapshotInfo' }
+    - vm-snapshot-save returns an error if there is an existing snapshot with
+      the same name
+    - you cannot provide an id for a new snapshot
+    - all information about created snapshot will be returned
+
+* QMP vm-snapshot-load
+    - { 'command': 'vm-snapshot-load',
+        'data': { '*name': 'str', '*id': 'str' },
+        'returns': 'SnapshotInfo' }
+    - one of the name or id must be provided
+    - if both are provided they will match only the snapshot with the same name
+      and id
+    - returns SnapshotInfo only if the snapshot exists.
+
+* QMP vm-snapshot-delete:
+    - { 'command': 'vm-snapshot-delete',
+        'data': { '*name': 'str', '*id': 'str' },
+        'returns': 'SnapshotInfo' }
+    - same rules as vm-snapshot-load
+
+* HMP savevm:
+    - args_type = "force:-f,name:s?",
+    - if the name is not provided the HMP command will generates new one for QMP
+      command
+    - if there is already a snapshot with provided or generated name it will
+      fails
+    - there will be an optional -f parameter to force saving requested snapshot
+      and it will internally use vm-snapshot-delete and then vm-snapshot-save
+    - all information about created snapshot will be printed
+
+* HMP loadvm:
+    - args_type = "id:-i,name:s",
+    - follow the same behavior as the QMP command
+    - it load snapshot that match the provided name
+    - if an id flag is provided, it load snapshot that match the name parameter
+      as an id of snapshot
+
+* HMP delvm:
+    - args_type = "id:-i,name:s"
+    - same rules as loadvm
+
+Pavel Hrdina (11):
+  qemu-img: introduce qemu_img_handle_error()
+  block: update error reporting for bdrv_snapshot_delete() and related
+    functions
+  savevm: update bdrv_snapshot_find() to find snapshot by id or name
+  qapi: Convert delvm
+  block: update error reporting for bdrv_snapshot_goto() and related
+    functions
+  savevm: update error reporting for qemu_loadvm_state()
+  qapi: Convert loadvm
+  block: update error reporting for bdrv_snapshot_create() and related
+    functions
+  savevm: update error reporting off qemu_savevm_state() and related
+    functions
+  qapi: Convert savevm
+  savevm: remove backward compatibility from bdrv_snapshot_find()
+
+ block.c                   | 100 +++++++------
+ block/qcow2-snapshot.c    |  71 ++++++---
+ block/qcow2.h             |  16 +-
+ block/rbd.c               |  50 ++++---
+ block/sheepdog.c          |  61 ++++----
+ hmp-commands.hx           |  48 +++---
+ hmp.c                     | 119 +++++++++++++++
+ hmp.h                     |   3 +
+ include/block/block.h     |  17 ++-
+ include/block/block_int.h |  17 ++-
+ include/sysemu/sysemu.h   |  12 +-
+ migration.c               |  15 +-
+ monitor.c                 |  12 --
+ qapi-schema.json          |  54 +++++++
+ qemu-img.c                |  54 ++++---
+ qmp-commands.hx           | 127 +++++++++++++++-
+ savevm.c                  | 363 +++++++++++++++++++++++++---------------------
+ vl.c                      |   7 +-
+ 18 files changed, 782 insertions(+), 364 deletions(-)
+
+-- 
+1.8.1.4
+
+

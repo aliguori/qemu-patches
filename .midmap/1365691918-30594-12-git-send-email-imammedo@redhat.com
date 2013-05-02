@@ -1,0 +1,1 @@
+../target-i386-CPU-hot-add-with-cpu-add-QMP-command/v3.1365717099/0011-target-i386-introduce-apic-id-property.patch

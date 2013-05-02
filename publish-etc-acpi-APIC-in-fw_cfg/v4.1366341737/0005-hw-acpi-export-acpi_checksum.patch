@@ -1,0 +1,47 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Laszlo Ersek <lersek@redhat.com>
+To: Laszlo Ersek <lersek@redhat.com>, qemu-devel@nongnu.org, mst@redhat.com
+Cc: 
+Date: Thu, 18 Apr 2013 22:22:22 +0200
+Message-id: 1366316544-1428-6-git-send-email-lersek@redhat.com
+Subject: [PATCH 5/7] hw/acpi: export acpi_checksum()
+
+Again, this enables reuse when preparing per-table fw_cfg blobs later.
+
+Signed-off-by: Laszlo Ersek <lersek@redhat.com>
+Acked-by: Michael S. Tsirkin <mst@redhat.com>
+Reviewed-by: Anthony Liguori <aliguori@us.ibm.com>
+---
+ include/hw/acpi/acpi.h |    2 ++
+ hw/acpi/core.c         |    2 +-
+ 2 files changed, 3 insertions(+), 1 deletions(-)
+
+diff --git a/include/hw/acpi/acpi.h b/include/hw/acpi/acpi.h
+index bc7e107..7e51110 100644
+--- a/include/hw/acpi/acpi.h
++++ b/include/hw/acpi/acpi.h
+@@ -180,4 +180,6 @@ typedef struct acpi_table_std_header {
+ } QEMU_PACKED AcpiTableStdHdr;
+ 
+ extern const AcpiTableStdHdr acpi_dfl_hdr;
++
++int acpi_checksum(const uint8_t *data, int len);
+ #endif /* !QEMU_HW_ACPI_H */
+diff --git a/hw/acpi/core.c b/hw/acpi/core.c
+index 36a4d03..3be7e09 100644
+--- a/hw/acpi/core.c
++++ b/hw/acpi/core.c
+@@ -69,7 +69,7 @@ static void acpi_register_config(void)
+ 
+ machine_init(acpi_register_config);
+ 
+-static int acpi_checksum(const uint8_t *data, int len)
++int acpi_checksum(const uint8_t *data, int len)
+ {
+     int sum, i;
+     sum = 0;
+-- 
+1.7.1
+
+
+

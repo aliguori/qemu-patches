@@ -1,0 +1,86 @@
+From patches Mon Sep 17 00:00:00 2001
+From: "Igor Mammedov" <imammedo@redhat.com>
+To: Igor Mammedov <imammedo@redhat.com>, qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, peter.maydell@linaro.org,
+ aliguori@us.ibm.com, ehabkost@redhat.com, stefano.stabellini@eu.citrix.com,
+ quintela@redhat.com, qemu-devel@nongnu.org, mst@redhat.com,
+ anthony.perard@citrix.com, pbonzini@redhat.com, afaerber@suse.de
+Date: Thu, 25 Apr 2013 16:05:24 +0200
+Message-id: 1366898737-6201-3-git-send-email-imammedo@redhat.com
+Subject: [PATCH 02/15] cpu: add helper cpu_exists(),
+ to check if CPU with specified id exists
+
+Signed-off-by: Igor Mammedov <imammedo@redhat.com>
+---
+v3:
+  * use qemu_for_each_cpu() instead of recursion
+v2:
+  * s/get_firmware_id()/get_arch_id()/ rebase fixup
+  * remove check for get_arch_id being NULL, since it's always defined
+---
+ include/qom/cpu.h |   10 ++++++++++
+ qom/cpu.c         |   26 ++++++++++++++++++++++++++
+ 2 files changed, 36 insertions(+), 0 deletions(-)
+
+diff --git a/include/qom/cpu.h b/include/qom/cpu.h
+index f64727e..4c44f06 100644
+--- a/include/qom/cpu.h
++++ b/include/qom/cpu.h
+@@ -233,6 +233,16 @@ void qemu_for_each_cpu(void (*func)(CPUState *cpu, void *data), void *data);
+  */
+ CPUState *qemu_get_cpu(int index);
+ 
++/**
++ * cpu_exists:
++ * @id - guest exposed CPU ID to lookup
++ *
++ * Search for CPU with specified ID.
++ *
++ * Returns: true - CPU is found, false - CPU isn't found
++ */
++bool cpu_exists(int64_t id);
++
+ #ifndef CONFIG_USER_ONLY
+ 
+ typedef void (*CPUInterruptHandler)(CPUState *, int);
+diff --git a/qom/cpu.c b/qom/cpu.c
+index 9a4457b..3f79398 100644
+--- a/qom/cpu.c
++++ b/qom/cpu.c
+@@ -24,6 +24,32 @@
+ #include "qemu/notify.h"
+ #include "sysemu/sysemu.h"
+ 
++typedef struct CPU_exists_args {
++    int64_t id;
++    bool found;
++} CPU_exists_args;
++
++static void cpu_exist_cb(CPUState *cpu, void *data)
++{
++    CPUClass *klass = CPU_GET_CLASS(cpu);
++    CPU_exists_args *arg = data;
++
++    if (klass->get_arch_id(cpu) == arg->id) {
++        arg->found = true;
++    }
++}
++
++bool cpu_exists(int64_t id)
++{
++    CPU_exists_args data = {
++        .id = id,
++        .found = false,
++    };
++
++    qemu_for_each_cpu(cpu_exist_cb, &data);
++    return data.found;
++}
++
+ /* CPU hot-plug notifiers */
+ static NotifierList cpu_added_notifiers =
+     NOTIFIER_LIST_INITIALIZER(cpu_add_notifiers);
+-- 
+1.7.1
+
+

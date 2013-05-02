@@ -1,0 +1,42 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Gabriel Kerneis <gabriel@kerneis.info>
+To: Gabriel Kerneis <gabriel@kerneis.info>, Alexander Graf <agraf@suse.de>,
+ Richard Henderson <rth@twiddle.net>
+Cc: qemu-trivial@nongnu.org, Gabriel Kerneis <gabriel@kerneis.info>,
+ Alexander Graf <agraf@suse.de>, qemu-devel@nongnu.org,
+ Richard Henderson <rth@twiddle.net>
+Date: Tue, 23 Apr 2013 18:15:12 +0100
+Message-id: 1366737312-8598-1-git-send-email-gabriel@kerneis.info
+Subject: [PATCH 1/1] s390x: use CONFIG_INT128 to detect __uint128_t
+
+Target s390x uses ad-hoc macro magic to guess if the compiler
+supports the GCC extension __uint128_t.  This patch uses the
+the dedicated macro CONFIG_INT128 defined by configure instead.
+
+This fixes compilation with the CIL source code analyzer, which
+uses GCC as a preprocessor but does not support __uint128_t.
+
+Signed-off-by: Gabriel Kerneis <gabriel@kerneis.info>
+Reviewed-by: Richard Henderson <rth@twiddle.net>
+---
+ target-s390x/int_helper.c |    3 +--
+ 1 file changed, 1 insertion(+), 2 deletions(-)
+
+diff --git a/target-s390x/int_helper.c b/target-s390x/int_helper.c
+index af16b21..85e49aa 100644
+--- a/target-s390x/int_helper.c
++++ b/target-s390x/int_helper.c
+@@ -97,8 +97,7 @@ uint64_t HELPER(divu64)(CPUS390XState *env, uint64_t ah, uint64_t al,
+         ret = al / b;
+     } else {
+         /* ??? Move i386 idivq helper to host-utils.  */
+-#if HOST_LONG_BITS == 64 && defined(__GNUC__)
+-        /* assuming 64-bit hosts have __uint128_t */
++#ifdef CONFIG_INT128
+         __uint128_t a = ((__uint128_t)ah << 64) | al;
+         __uint128_t q = a / b;
+         env->retxl = a % b;
+-- 
+1.7.10.4
+
+

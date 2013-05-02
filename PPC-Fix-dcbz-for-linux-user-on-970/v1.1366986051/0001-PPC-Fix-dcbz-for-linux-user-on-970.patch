@@ -1,0 +1,38 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Alexander Graf <agraf@suse.de>
+To: Alexander Graf <agraf@suse.de>, qemu-ppc@nongnu.org
+Cc: qemu-ppc@nongnu.org, Riku Voipio <riku.voipio@iki.fi>,
+ qemu-devel@nongnu.org
+Date: Fri, 26 Apr 2013 09:20:51 +0200
+Message-id: 1366960851-21883-1-git-send-email-agraf@suse.de
+Subject: [PATCH 1/1] PPC: Fix dcbz for linux-user on 970
+
+The default with linux-user for dcbz on 970 is to emulate 32 byte clears.
+However, redoing the dcbzl support we added a check to not honor the bit
+in HID5 that sets this.
+
+Remove the #ifdef check on linux user, so that we get 32 byte clears again.
+
+Reported-by: Riku Voipio <riku.voipio@iki.fi>
+Signed-off-by: Alexander Graf <agraf@suse.de>
+---
+ target-ppc/mem_helper.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+diff --git a/target-ppc/mem_helper.c b/target-ppc/mem_helper.c
+index 9783e52..d8e63ca 100644
+--- a/target-ppc/mem_helper.c
++++ b/target-ppc/mem_helper.c
+@@ -140,7 +140,7 @@ void helper_dcbz(CPUPPCState *env, target_ulong addr, uint32_t is_dcbzl)
+ {
+     int dcbz_size = env->dcache_line_size;
+ 
+-#if !defined(CONFIG_USER_ONLY) && defined(TARGET_PPC64)
++#if defined(TARGET_PPC64)
+     if (!is_dcbzl &&
+         (env->excp_model == POWERPC_EXCP_970) &&
+         ((env->spr[SPR_970_HID5] >> 7) & 0x3) == 1) {
+-- 
+1.6.0.2
+
+

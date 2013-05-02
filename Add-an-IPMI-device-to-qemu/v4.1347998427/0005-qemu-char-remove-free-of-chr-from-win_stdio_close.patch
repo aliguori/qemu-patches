@@ -1,0 +1,34 @@
+From patches Mon Sep 17 00:00:00 2001
+From: minyard@acm.org
+To: qemu-devel@nongnu.org
+Cc: Corey Minyard <cminyard@mvista.com>
+Date: Tue, 18 Sep 2012 15:00:32 -0500
+Message-id: 1347998443-20599-6-git-send-email-minyard@acm.org
+Subject: [PATCH 05/16] qemu-char: remove free of chr from win_stdio_close
+
+From: Corey Minyard <cminyard@mvista.com>
+
+This will result in a double free on close, because it's freed
+in qemu_chr_delete() right after calling the close function.
+
+Signed-off-by: Corey Minyard <cminyard@mvista.com>
+---
+ qemu-char.c |    1 -
+ 1 files changed, 0 insertions(+), 1 deletions(-)
+
+diff --git a/qemu-char.c b/qemu-char.c
+index 9e3ac40..a94d9ef 100644
+--- a/qemu-char.c
++++ b/qemu-char.c
+@@ -1949,7 +1949,6 @@ static void win_stdio_close(CharDriverState *chr)
+     }
+ 
+     g_free(chr->opaque);
+-    g_free(chr);
+     stdio_nb_clients--;
+ }
+ 
+-- 
+1.7.4.1
+
+

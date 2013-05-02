@@ -1,0 +1,103 @@
+From patches Mon Sep 17 00:00:00 2001
+From: =?utf-8?q?Andreas_F=C3=A4rber_=3Cafaerber=40suse=2Ede=3E?=
+To: qemu-devel@nongnu.org
+Cc: Igor Mammedov <imammedo@redhat.com>,
+ =?UTF-8?q?Andreas=20F=C3=A4rber?= <afaerber@suse.de>
+Date: Tue, 16 Apr 2013 02:46:42 +0200
+Message-id: 1366073209-27119-6-git-send-email-afaerber@suse.de
+Subject: [PATCH 05/12] target-i386: Split APIC creation from initialization in
+ x86_cpu_realizefn()
+
+From: Igor Mammedov <imammedo@redhat.com>
+
+When APIC is hotplugged during CPU hotplug, device_set_realized()
+calls device_reset() on it. And if QEMU runs in KVM mode, following
+call chain will fail:
+    apic_reset_common()
+        -> kvm_apic_vapic_base_update()
+            -> kvm_vcpu_ioctl(cpu->kvm_fd,...)
+due to cpu->kvm_fd not being initialized yet.
+
+cpu->kvm_fd is initialized during qemu_init_vcpu() but x86_cpu_apic_init()
+can't be moved after it because kvm_init_vcpu() -> kvm_arch_reset_vcpu()
+relies on APIC to determine if CPU is BSP for setting initial env->mp_state.
+
+So split APIC device creation from its initialization and realize APIC
+after CPU is created, when it's safe to call APIC's reset method.
+
+Signed-off-by: Igor Mammedov <imammedo@redhat.com>
+Reviewed-by: liguang <lig.fnst@cn.fujitsu.com>
+Reviewed-by: Eduardo Habkost <ehabkost@redhat.com>
+Signed-off-by: Andreas Färber <afaerber@suse.de>
+---
+ target-i386/cpu.c | 24 +++++++++++++++++++++---
+ 1 file changed, 21 insertions(+), 3 deletions(-)
+
+diff --git a/target-i386/cpu.c b/target-i386/cpu.c
+index 9d45f09..5d05803 100644
+--- a/target-i386/cpu.c
++++ b/target-i386/cpu.c
+@@ -2050,9 +2050,8 @@ static void mce_init(X86CPU *cpu)
+ }
+ 
+ #ifndef CONFIG_USER_ONLY
+-static void x86_cpu_apic_init(X86CPU *cpu, Error **errp)
++static void x86_cpu_apic_create(X86CPU *cpu, Error **errp)
+ {
+-    static int apic_mapped;
+     CPUX86State *env = &cpu->env;
+     APICCommonState *apic;
+     const char *apic_type = "apic";
+@@ -2075,6 +2074,16 @@ static void x86_cpu_apic_init(X86CPU *cpu, Error **errp)
+     /* TODO: convert to link<> */
+     apic = APIC_COMMON(env->apic_state);
+     apic->cpu = cpu;
++}
++
++static void x86_cpu_apic_realize(X86CPU *cpu, Error **errp)
++{
++    CPUX86State *env = &cpu->env;
++    static int apic_mapped;
++
++    if (env->apic_state == NULL) {
++        return;
++    }
+ 
+     if (qdev_init(env->apic_state)) {
+         error_setg(errp, "APIC device '%s' could not be initialized",
+@@ -2092,6 +2101,10 @@ static void x86_cpu_apic_init(X86CPU *cpu, Error **errp)
+         apic_mapped = 1;
+     }
+ }
++#else
++static void x86_cpu_apic_realize(X86CPU *cpu, Error **errp)
++{
++}
+ #endif
+ 
+ static void x86_cpu_realizefn(DeviceState *dev, Error **errp)
+@@ -2142,7 +2155,7 @@ static void x86_cpu_realizefn(DeviceState *dev, Error **errp)
+     qemu_register_reset(x86_cpu_machine_reset_cb, cpu);
+ 
+     if (cpu->env.cpuid_features & CPUID_APIC || smp_cpus > 1) {
+-        x86_cpu_apic_init(cpu, &local_err);
++        x86_cpu_apic_create(cpu, &local_err);
+         if (local_err != NULL) {
+             goto out;
+         }
+@@ -2151,6 +2164,11 @@ static void x86_cpu_realizefn(DeviceState *dev, Error **errp)
+ 
+     mce_init(cpu);
+     qemu_init_vcpu(&cpu->env);
++
++    x86_cpu_apic_realize(cpu, &local_err);
++    if (local_err != NULL) {
++        goto out;
++    }
+     cpu_reset(CPU(cpu));
+ 
+     xcc->parent_realize(dev, &local_err);
+-- 
+1.8.1.4
+
+

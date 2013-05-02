@@ -1,0 +1,33 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Markus Armbruster <armbru@redhat.com>
+To: Blue Swirl <blauwirbel@gmail.com>, Markus Armbruster <armbru@redhat.com>,
+ qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, blauwirbel@gmail.com,
+ qemu-devel@nongnu.org
+Date: Thu, 14 Mar 2013 18:49:16 +0100
+Message-id: 1363283360-26220-1-git-send-email-armbru@redhat.com
+Subject: [PATCH 0/4] Fix JSON string formatter
+
+This should unbreak "make check" on machines where char is unsigned.
+Blue, please give it a whirl.
+
+The JSON parser is still as broken as ever.  Left for another day.
+
+Markus Armbruster (4):
+  unicode: New mod_utf8_codepoint()
+  check-qjson: Fix up a few bogus comments
+  check-qjson: Test noncharacters other than U+FFFE, U+FFFF in strings
+  qjson: to_json() case QTYPE_QSTRING is buggy, rewrite
+
+ include/qemu-common.h |   3 +
+ qobject/qjson.c       | 102 ++++++++----------
+ tests/check-qjson.c   | 280 +++++++++++++++++++++++++++++---------------------
+ util/Makefile.objs    |   1 +
+ util/unicode.c        |  96 +++++++++++++++++
+ 5 files changed, 306 insertions(+), 176 deletions(-)
+ create mode 100644 util/unicode.c
+
+Tested-by: Blue Swirl <blauwirbel@gmail.com>
+-- 
+1.7.11.7
+

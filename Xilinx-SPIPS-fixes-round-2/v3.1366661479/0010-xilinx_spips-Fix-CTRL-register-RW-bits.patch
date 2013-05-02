@@ -1,0 +1,57 @@
+From patches Mon Sep 17 00:00:00 2001
+From: peter.crosthwaite@xilinx.com
+To: qemu-devel@nongnu.org
+Cc: peter.maydell@linaro.org, edgar.iglesias@gmail.com
+Date: Mon, 22 Apr 2013 15:17:48 +1000
+Message-id: c794071e85a6c016a9270f617d1188c5fa58ae04.1366606958.git.peter.crosthwaite@xilinx.com
+Subject: [PATCH 10/15] xilinx_spips: Fix CTRL register RW bits
+
+From: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+
+The CTRL register was RAZ/WI on some of the RW bits. Even though the
+function behind these bits is invalid in QEMU, they should still be
+guest accessible. Fix.
+
+Signed-off-by: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+Reviewed-by: Peter Maydell <peter.maydell@linaro.org>
+---
+changed from v1
+Macroified magic number (PMM review)
+
+ hw/ssi/xilinx_spips.c |    5 +++--
+ 1 files changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/hw/ssi/xilinx_spips.c b/hw/ssi/xilinx_spips.c
+index 2ee3958..b622c5f 100644
+--- a/hw/ssi/xilinx_spips.c
++++ b/hw/ssi/xilinx_spips.c
+@@ -56,6 +56,7 @@
+ #define CLK_PH              (1 << 2)
+ #define CLK_POL             (1 << 1)
+ #define MODE_SEL            (1 << 0)
++#define R_CONFIG_RSVD       (0x7bf40000)
+ 
+ /* interrupt mechanism */
+ #define R_INTR_STATUS       (0x04 / 4)
+@@ -355,7 +356,7 @@ static uint64_t xilinx_spips_read(void *opaque, hwaddr addr,
+     addr >>= 2;
+     switch (addr) {
+     case R_CONFIG:
+-        mask = 0x0002FFFF;
++        mask = ~(R_CONFIG_RSVD | MAN_START_COM);
+         break;
+     case R_INTR_STATUS:
+         ret = s->regs[addr] & IXR_ALL;
+@@ -415,7 +416,7 @@ static void xilinx_spips_write(void *opaque, hwaddr addr,
+     addr >>= 2;
+     switch (addr) {
+     case R_CONFIG:
+-        mask = 0x0002FFFF;
++        mask = ~(R_CONFIG_RSVD | MAN_START_COM);
+         if (value & MAN_START_COM) {
+             man_start_com = 1;
+         }
+-- 
+1.7.0.4
+
+

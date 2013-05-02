@@ -1,0 +1,45 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Stefan Hajnoczi <stefanha@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>,
+ Stefan Hajnoczi <stefanha@redhat.com>
+Date: Fri, 26 Apr 2013 13:44:33 +0200
+Message-id: 1366976682-10251-14-git-send-email-stefanha@redhat.com
+Subject: [PATCH 07/11] ide: refuse WIN_READ_NATIVE_MAX on empty device
+
+What is the highest addressable sector on an empty CD-ROM?  Nothing is
+addressable so produce an error.
+
+This patch prevents a divide-by-zero in ide_set_sector() since
+s->sectors and s->heads would be 0.  Not to mention that a sector=-1
+argument would be nonsense.
+
+Note that WIN_READ_NATIVE_MAX can be triggered using hdparm -N 1024
+/dev/cdrom.  The LBA bit will be set to 1 though, so the only easy way
+to go down the ide_set_sector() CHS code path which divides by zero is
+to comment out the s->select & 0x40 case for testing.
+
+Signed-off-by: Stefan Hajnoczi <stefanha@redhat.com>
+Reviewed-by: Markus Armbruster <armbru@redhat.com>
+---
+ hw/ide/core.c | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/hw/ide/core.c b/hw/ide/core.c
+index 87d67b7..c7a8041 100644
+--- a/hw/ide/core.c
++++ b/hw/ide/core.c
+@@ -1262,6 +1262,10 @@ void ide_exec_cmd(IDEBus *bus, uint32_t val)
+         lba48 = 1;
+         /* fall through */
+     case WIN_READ_NATIVE_MAX:
++        /* Refuse if no sectors are addressable (e.g. medium not inserted) */
++        if (s->nb_sectors == 0) {
++            goto abort_cmd;
++        }
+ 	ide_cmd_lba48_transform(s, lba48);
+         ide_set_sector(s, s->nb_sectors - 1);
+         s->status = READY_STAT | SEEK_STAT;
+-- 
+1.8.1.4
+

@@ -1,0 +1,30 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Dominik Dingel <dingel@linux.vnet.ibm.com>
+To: Dominik Dingel <dingel@linux.vnet.ibm.com>, qemu-devel@nongnu.org
+Cc: Christian Borntraeger <borntraeger@de.ibm.com>, qemu-devel@nongnu.org,
+ Dominik Dingel <dingel@linux.vnet.ibm.com>
+Date: Tue, 30 Apr 2013 19:15:55 +0200
+Message-id: 1367342159-21545-1-git-send-email-dingel@linux.vnet.ibm.com
+Subject: [PATCH 0/4] Enhance s390 BIOS to enable boot device selection
+
+This patchset allows the s390 platform to boot from a specified virtio-ccw-blk device, passed on the commandline.
+
+v2 -> v3
+- merge function s390_ipl_cpu and s390_ipl_reset
+- refactor boot logic for device
+- refactor BIOS code to be more explizit
+
+
+Dominik Dingel (4):
+  S390: Merging s390_ipl_cpu and s390_ipl_reset
+  S390: Add virtio-blk boot
+  S390: BIOS boot from given device
+  S390: Sync Blob with source changes
+
+ hw/s390x/ipl.c           |   34 +++++++++++++++++++++++-----------
+ pc-bios/s390-ccw.img     |  Bin 9432 -> 17528 bytes
+ pc-bios/s390-ccw/main.c  |   24 ++++++++++++++++++------
+ pc-bios/s390-ccw/start.S |    2 ++
+ 4 files changed, 43 insertions(+), 17 deletions(-)
+
+

@@ -1,0 +1,154 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Dong Xu Wang <wdongxu@linux.vnet.ibm.com>
+To: qemu-devel@nongnu.org
+Cc: kwolf@redhat.com, wdongxu@cn.ibm.com,
+ Dong Xu Wang <wdongxu@linux.vnet.ibm.com>, stefanha@redhat.com,
+ armbru@redhat.com
+Date: Wed, 10 Apr 2013 14:25:07 +0800
+Message-id: 1365575111-4476-3-git-send-email-wdongxu@linux.vnet.ibm.com
+Subject: [PATCH 2/6] avoid duplication of default value in QemuOpts
+
+According Markus's comments, his patch will move the default value entirely
+to QemuOptDesc.
+
+When getting the value of an option that hasn't been set, and
+QemuOptDesc has a default value, return that.  Else, behave as
+before.
+
+Example: qemu_opt_get_number(opts, "foo", 42)
+
+   If "foo" has been set in opts, return its value.
+
+   Else, if opt's QemuOptDesc has a default value for "foo", return
+   that.
+
+   Else, return 42.
+
+   Note that the last argument is useless when QemuOptDesc has a
+   default value.  Ugly.  If it bothers us, assert that the argument
+   equals the default from QemuOptDesc.
+
+Example: qemu_opt_get(opts, "bar")
+
+   If "bar" has been set in opts, return its value.
+
+   Else, if opt's QemuOptDesc has a default value for "bar", return
+   that.
+
+   Else, return NULL.
+
+Signed-off-by: Dong Xu Wang <wdongxu@linux.vnet.ibm.com>
+---
+ util/qemu-option.c | 58 +++++++++++++++++++++++++++++++++++++-----------------
+ 1 file changed, 40 insertions(+), 18 deletions(-)
+
+diff --git a/util/qemu-option.c b/util/qemu-option.c
+index 57cdd57..4f94000 100644
+--- a/util/qemu-option.c
++++ b/util/qemu-option.c
+@@ -525,10 +525,28 @@ static QemuOpt *qemu_opt_find(QemuOpts *opts, const char *name)
+     return NULL;
+ }
+ 
++static const QemuOptDesc *find_desc_by_name(const QemuOptDesc *desc,
++                                            const char *name)
++{
++    int i;
++
++    for (i = 0; desc[i].name != NULL; i++) {
++        if (strcmp(desc[i].name, name) == 0) {
++            return &desc[i];
++        }
++    }
++
++    return NULL;
++}
++
+ const char *qemu_opt_get(QemuOpts *opts, const char *name)
+ {
+     QemuOpt *opt = qemu_opt_find(opts, name);
+-    return opt ? opt->str : NULL;
++    const QemuOptDesc *desc;
++    desc = find_desc_by_name(opts->list->desc, name);
++
++    return opt ? opt->str :
++        (desc && desc->def_value_str ? desc->def_value_str : NULL);
+ }
+ 
+ bool qemu_opt_has_help_opt(QemuOpts *opts)
+@@ -546,9 +564,15 @@ bool qemu_opt_has_help_opt(QemuOpts *opts)
+ bool qemu_opt_get_bool(QemuOpts *opts, const char *name, bool defval)
+ {
+     QemuOpt *opt = qemu_opt_find(opts, name);
++    const QemuOptDesc *desc;
+ 
+-    if (opt == NULL)
++    if (opt == NULL) {
++        desc = find_desc_by_name(opts->list->desc, name);
++        if (desc && desc->def_value_str) {
++            parse_option_bool(name, desc->def_value_str, &defval, NULL);
++        }
+         return defval;
++    }
+     assert(opt->desc && opt->desc->type == QEMU_OPT_BOOL);
+     return opt->value.boolean;
+ }
+@@ -556,9 +580,15 @@ bool qemu_opt_get_bool(QemuOpts *opts, const char *name, bool defval)
+ uint64_t qemu_opt_get_number(QemuOpts *opts, const char *name, uint64_t defval)
+ {
+     QemuOpt *opt = qemu_opt_find(opts, name);
++    const QemuOptDesc *desc;
+ 
+-    if (opt == NULL)
++    if (opt == NULL) {
++        desc = find_desc_by_name(opts->list->desc, name);
++        if (desc && desc->def_value_str) {
++            parse_option_number(name, desc->def_value_str, &defval, NULL);
++        }
+         return defval;
++    }
+     assert(opt->desc && opt->desc->type == QEMU_OPT_NUMBER);
+     return opt->value.uint;
+ }
+@@ -566,9 +596,15 @@ uint64_t qemu_opt_get_number(QemuOpts *opts, const char *name, uint64_t defval)
+ uint64_t qemu_opt_get_size(QemuOpts *opts, const char *name, uint64_t defval)
+ {
+     QemuOpt *opt = qemu_opt_find(opts, name);
++    const QemuOptDesc *desc;
+ 
+-    if (opt == NULL)
++    if (opt == NULL) {
++        desc = find_desc_by_name(opts->list->desc, name);
++        if (desc && desc->def_value_str) {
++            parse_option_size(name, desc->def_value_str, &defval, NULL);
++        }
+         return defval;
++    }
+     assert(opt->desc && opt->desc->type == QEMU_OPT_SIZE);
+     return opt->value.uint;
+ }
+@@ -609,20 +645,6 @@ static bool opts_accepts_any(const QemuOpts *opts)
+     return opts->list->desc[0].name == NULL;
+ }
+ 
+-static const QemuOptDesc *find_desc_by_name(const QemuOptDesc *desc,
+-                                            const char *name)
+-{
+-    int i;
+-
+-    for (i = 0; desc[i].name != NULL; i++) {
+-        if (strcmp(desc[i].name, name) == 0) {
+-            return &desc[i];
+-        }
+-    }
+-
+-    return NULL;
+-}
+-
+ static void opt_set(QemuOpts *opts, const char *name, const char *value,
+                     bool prepend, Error **errp)
+ {
+-- 
+1.7.11.7
+
+

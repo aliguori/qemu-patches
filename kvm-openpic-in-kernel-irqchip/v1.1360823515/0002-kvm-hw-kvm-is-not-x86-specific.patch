@@ -1,0 +1,52 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Scott Wood <scottwood@freescale.com>
+To: Alexander Graf <agraf@suse.de>, Scott Wood <scottwood@freescale.com>
+Cc: Paolo Bonzini <pbonzini@redhat.com>, qemu-devel@nongnu.org,
+ Scott Wood <scottwood@freescale.com>, qemu-ppc@nongnu.org,
+ qemu-devel qemu-devel <qemu-devel@nongnu.org>,
+ "qemu-ppc@nongnu.org list:PowerPC" <qemu-ppc@nongnu.org>
+Date: Thu, 14 Feb 2013 00:31:57 -0600
+Message-id: 1360823521-32306-3-git-send-email-scottwood@freescale.com
+Subject: [PATCH 2/6] kvm: hw/kvm is not x86-specific
+
+Signed-off-by: Scott Wood <scottwood@freescale.com>
+---
+ hw/Makefile.objs      |    1 +
+ hw/i386/Makefile.objs |    1 -
+ hw/kvm/Makefile.objs  |    2 +-
+ 3 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/hw/Makefile.objs b/hw/Makefile.objs
+index 447e32a..46bc395 100644
+--- a/hw/Makefile.objs
++++ b/hw/Makefile.objs
+@@ -216,4 +216,5 @@ obj-$(CONFIG_LINUX) += vfio_pci.o
+ endif
+ 
+ $(obj)/baum.o: QEMU_CFLAGS += $(SDL_CFLAGS) 
++obj-$(CONFIG_KVM) += kvm/
+ endif
+diff --git a/hw/i386/Makefile.objs b/hw/i386/Makefile.objs
+index 025803a..370f799 100644
+--- a/hw/i386/Makefile.objs
++++ b/hw/i386/Makefile.objs
+@@ -10,7 +10,6 @@ obj-y += lpc_ich9.o q35.o pc_q35.o
+ obj-$(CONFIG_XEN) += xen_platform.o xen_apic.o
+ obj-$(CONFIG_XEN_PCI_PASSTHROUGH) += xen-host-pci-device.o
+ obj-$(CONFIG_XEN_PCI_PASSTHROUGH) += xen_pt.o xen_pt_config_init.o xen_pt_msi.o
+-obj-y += kvm/
+ obj-$(CONFIG_SPICE) += qxl.o qxl-logger.o qxl-render.o
+ obj-y += pc-testdev.o
+ 
+diff --git a/hw/kvm/Makefile.objs b/hw/kvm/Makefile.objs
+index f620d7f..6ccb6ed 100644
+--- a/hw/kvm/Makefile.objs
++++ b/hw/kvm/Makefile.objs
+@@ -1 +1 @@
+-obj-$(CONFIG_KVM) += clock.o apic.o i8259.o ioapic.o i8254.o pci-assign.o
++obj-$(TARGET_I386) += clock.o apic.o i8259.o ioapic.o i8254.o pci-assign.o
+-- 
+1.7.9.5
+
+
+

@@ -1,0 +1,1 @@
+../Fix-versatile_pci-now-without-breaking-linux/v2.1364311320/0002-versatile_pci-Expose-PCI-I-O-region-on-Versatile-PB.patch

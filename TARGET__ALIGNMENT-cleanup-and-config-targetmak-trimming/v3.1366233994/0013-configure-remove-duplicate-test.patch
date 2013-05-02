@@ -1,0 +1,103 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: peter.maydell@linaro.org, edgar.iglesias@gmail.com
+Date: Wed, 17 Apr 2013 16:26:47 +0200
+Message-id: 1366208807-4433-14-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 13/13] configure: remove duplicate test
+
+We already had a test to add -march=i486 when needed.  Make the
+existing test independent of vhost-net, so that it is also used
+under Win32.
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ configure | 56 ++++++++++++++++++++++++++------------------------------
+ 1 file changed, 26 insertions(+), 30 deletions(-)
+
+diff --git a/configure b/configure
+index 78afded..9525bd7 100755
+--- a/configure
++++ b/configure
+@@ -574,11 +574,6 @@ if test "$mingw32" = "yes" ; then
+   QEMU_CFLAGS="-DWIN32_LEAN_AND_MEAN -DWINVER=0x501 $QEMU_CFLAGS"
+   # enable C99/POSIX format strings (needs mingw32-runtime 3.15 or later)
+   QEMU_CFLAGS="-D__USE_MINGW_ANSI_STDIO=1 $QEMU_CFLAGS"
+-  if test "$cpu" = "i386"; then
+-    # We need something better than i386 for __sync_val_compare_and_swap
+-    # and can expect that QEMU will only run on i686 or later.
+-    QEMU_CFLAGS="-march=i686 $QEMU_CFLAGS"
+-  fi
+   LIBS="-lwinmm -lws2_32 -liphlpapi $LIBS"
+ cat > $TMPC << EOF
+ int main(void) { return 0; }
+@@ -1323,9 +1318,33 @@ EOF
+   fi
+ fi
+ 
+-#
++##########################################
++# __sync_fetch_and_and requires at least -march=i486. Many toolchains
++# use i686 as default anyway, but for those that don't, an explicit
++# specification is necessary
++
++if test "$cpu" = "i386"; then
++  cat > $TMPC << EOF
++static int sfaa(int *ptr)
++{
++  return __sync_fetch_and_and(ptr, 0);
++}
++
++int main(void)
++{
++  int val = 42;
++  sfaa(&val);
++  return val;
++}
++EOF
++  if ! compile_prog "" "" ; then
++    QEMU_CFLAGS="-march=i486 $QEMU_CFLAGS"
++  fi
++fi
++
++#########################################
+ # Solaris specific configure tool chain decisions
+-#
++
+ if test "$solaris" = "yes" ; then
+   if has $install; then
+     :
+@@ -3149,29 +3168,6 @@ if test "$trace_backend" = "dtrace"; then
+ fi
+ 
+ ##########################################
+-# __sync_fetch_and_and requires at least -march=i486. Many toolchains
+-# use i686 as default anyway, but for those that don't, an explicit
+-# specification is necessary
+-if test "$vhost_net" = "yes" && test "$cpu" = "i386"; then
+-  cat > $TMPC << EOF
+-static int sfaa(int *ptr)
+-{
+-  return __sync_fetch_and_and(ptr, 0);
+-}
+-
+-int main(void)
+-{
+-  int val = 42;
+-  sfaa(&val);
+-  return val;
+-}
+-EOF
+-  if ! compile_prog "" "" ; then
+-    QEMU_CFLAGS="-march=i486 $QEMU_CFLAGS"
+-  fi
+-fi
+-
+-##########################################
+ # check and set a backend for coroutine
+ 
+ # We prefer ucontext, but it's not always possible. The fallback
+-- 
+1.8.1.4
+
+

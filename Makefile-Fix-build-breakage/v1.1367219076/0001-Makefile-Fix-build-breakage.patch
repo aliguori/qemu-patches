@@ -1,0 +1,48 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Dunrong Huang <riegamaths@gmail.com>
+To: Dunrong Huang <riegamaths@gmail.com>, qemu-devel <qemu-devel@nongnu.org>
+Cc: Blue Swirl <blauwirbel@gmail.com>, Paolo Bonzini <pbonzini@redhat.com>,
+ sorenb@xilinx.com, qemu-devel <qemu-devel@nongnu.org>,
+ Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+Date: Mon, 29 Apr 2013 02:04:36 +0800
+Message-id: 1367172276-23293-1-git-send-email-riegamaths@gmail.com
+Subject: [PATCH 1/1] Makefile: Fix build breakage
+
+The following error occurs when building dtc module:
+
+	CHK version_gen.h
+	 CC libfdt/fdt.o
+cc1: error: dtc: No such file or directory [-Werror]
+cc1: all warnings being treated as errors
+make[1]: *** [libfdt/fdt.o] Error 1
+make: *** [subdir-dtc] Error 2
+
+In rules.mak, "-I$(<D) -I$(@D)" was expanded to "-Idtc -I." when
+building submodule dct. Due to the using of "-Wmissing-include-dirs,
+a warning would be rarsed. To avoid it, use dtc as the first prerequisite
+so that "$(^D)" was expanded to "."
+
+Cc: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+Cc: Blue Swirl <blauwirbel@gmail.com>
+Signed-off-by: Dunrong Huang <riegamaths@gmail.com>
+---
+ Makefile | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/Makefile b/Makefile
+index 8aca92f..64b0b1b 100644
+--- a/Makefile
++++ b/Makefile
+@@ -148,7 +148,7 @@ $(SRC_PATH)/pixman/configure:
+ DTC_MAKE_ARGS=-I$(SRC_PATH)/dtc VPATH=$(SRC_PATH)/dtc -C dtc V="$(V)" LIBFDT_srcdir=$(SRC_PATH)/dtc/libfdt
+ DTC_CFLAGS=$(CFLAGS) $(QEMU_CFLAGS) -I$(BUILD_DIR)/dtc -I$(SRC_PATH)/dtc -I$(SRC_PATH)/dtc/libfdt
+ 
+-subdir-dtc:dtc/libfdt dtc/tests
++subdir-dtc:dtc dtc/libfdt dtc/tests
+ 	$(call quiet-command,$(MAKE) $(DTC_MAKE_ARGS) CFLAGS="$(DTC_CFLAGS)" LDFLAGS="$(LDFLAGS)" ARFLAGS="$(ARFLAGS)" CC="$(CC)" AR="$(AR)" LD="$(LD)" $(SUBDIR_MAKEFLAGS) libfdt/libfdt.a,)
+ 
+ dtc/%:
+-- 
+1.8.1.5
+
+

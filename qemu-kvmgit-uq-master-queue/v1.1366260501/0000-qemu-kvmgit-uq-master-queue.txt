@@ -1,0 +1,37 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Marcelo Tosatti <mtosatti@redhat.com>
+To: Anthony Liguori <aliguori@us.ibm.com>
+Cc: Marcelo Tosatti <mtosatti@redhat.com>, qemu-devel@nongnu.org,
+ kvm@vger.kernel.org
+Date: Wed, 17 Apr 2013 23:48:21 -0300
+Message-id: cover.1366253306.git.mtosatti@redhat.com
+Subject: [PATCH 0/5] qemu-kvm.git uq/master queue
+
+The following changes since commit 1773d9ee6e7138e3956081670215e8bc0ae14828:
+
+  virtio-net: cleanup: init and exit function. (2013-04-17 10:28:59 -0500)
+
+are available in the git repository at:
+
+  git://git.kernel.org/pub/scm/virt/kvm/qemu-kvm.git uq/master
+
+for you to fetch changes up to 007e986ff2dd140348e76feb21cde1a51ce6c5b4:
+
+  vmxcap: Update according to SDM of January 2013 (2013-04-17 23:27:24 -0300)
+
+----------------------------------------------------------------
+Jan Kiszka (4):
+      vmxcap: Open MSR file in unbuffered mode
+      vmxcap: Augment reported information
+      vmxcap: Report APIC register emulation and RDTSCP control
+      vmxcap: Update according to SDM of January 2013
+
+Marcelo Tosatti (1):
+      target-i386: kvm: save/restore steal time MSR
+
+ scripts/kvm/vmxcap    | 26 +++++++++++++++++++++++---
+ target-i386/cpu.h     |  1 +
+ target-i386/kvm.c     | 13 +++++++++++++
+ target-i386/machine.c | 21 +++++++++++++++++++++
+ 4 files changed, 58 insertions(+), 3 deletions(-)
+

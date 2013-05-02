@@ -1,0 +1,41 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: stefanha@redhat.com
+Date: Fri, 19 Apr 2013 16:30:30 +0200
+Message-id: 1366381830-11267-4-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 3/3] nbd: set TCP_NODELAY
+
+From: Stefan Hajnoczi <stefanha@redhat.com>
+
+Disable the Nagle algorithm to reduce latency.  Note this means we must
+also use TCP_CORK when sending header followed by payload to avoid
+fragmenting lots of little packets.  The previous patch took care of
+that.
+
+Suggested-by: Nick Thomas <nick@bytemark.co.uk>
+Tested-by: Nick Thomas <nick@bytemark.co.uk>
+Signed-off-by: Stefan Hajnoczi <stefanha@redhat.com>
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ block/nbd.c | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/block/nbd.c b/block/nbd.c
+index 485bbf0..d9dc454 100644
+--- a/block/nbd.c
++++ b/block/nbd.c
+@@ -406,6 +406,9 @@ static int nbd_establish_connection(BlockDriverState *bs)
+         sock = unix_socket_outgoing(qemu_opt_get(s->socket_opts, "path"));
+     } else {
+         sock = tcp_socket_outgoing_opts(s->socket_opts);
++        if (sock >= 0) {
++            socket_set_nodelay(sock);
++        }
+     }
+ 
+     /* Failed to establish connection */
+-- 
+1.8.1.4
+
+

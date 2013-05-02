@@ -1,0 +1,199 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Gerd Hoffmann <kraxel@redhat.com>
+To: Markus Armbruster <armbru@redhat.com>, Gerd Hoffmann <kraxel@redhat.com>,
+ qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, Gerd Hoffmann <kraxel@redhat.com>,
+ qemu-devel@nongnu.org
+Date: Tue, 16 Apr 2013 11:39:25 +0200
+Message-id: 1366105178-26744-12-git-send-email-kraxel@redhat.com
+Subject: [PATCH 11/24] console: displaystate init revamp
+
+We have only one DisplayState, so there is no need for the "next"
+linking, rip it.  Also consolidate all displaystate initialization
+into init_displaystate().  This function is called by vl.c after
+creating the devices (and thus all QemuConsoles) and before
+initializing DisplayChangeListensers (aka gtk/sdl/vnc/spice ui).
+
+Signed-off-by: Gerd Hoffmann <kraxel@redhat.com>
+---
+ include/ui/console.h |    5 +---
+ ui/console.c         |   73 +++++++++++++++++++++++---------------------------
+ vl.c                 |    6 +----
+ 3 files changed, 36 insertions(+), 48 deletions(-)
+
+diff --git a/include/ui/console.h b/include/ui/console.h
+index a234c72..3725dae 100644
+--- a/include/ui/console.h
++++ b/include/ui/console.h
+@@ -189,12 +189,9 @@ struct DisplayState {
+     bool have_text;
+ 
+     QLIST_HEAD(, DisplayChangeListener) listeners;
+-
+-    struct DisplayState *next;
+ };
+ 
+-void register_displaystate(DisplayState *ds);
+-DisplayState *get_displaystate(void);
++DisplayState *init_displaystate(void);
+ DisplaySurface* qemu_create_displaysurface_from(int width, int height, int bpp,
+                                                 int linesize, uint8_t *data,
+                                                 bool byteswap);
+diff --git a/ui/console.c b/ui/console.c
+index 3834e39..e100593 100644
+--- a/ui/console.c
++++ b/ui/console.c
+@@ -163,6 +163,8 @@ static QemuConsole *active_console;
+ static QemuConsole *consoles[MAX_CONSOLES];
+ static int nb_consoles = 0;
+ 
++static void text_console_do_init(CharDriverState *chr, DisplayState *ds);
++
+ void vga_hw_update(void)
+ {
+     if (active_console && active_console->hw_update)
+@@ -1323,39 +1325,37 @@ bool dpy_cursor_define_supported(QemuConsole *con)
+     return false;
+ }
+ 
+-static void dumb_display_init(void)
+-{
+-    DisplayState *ds = g_malloc0(sizeof(DisplayState));
+-    int width = 640;
+-    int height = 480;
+-
+-    if (is_fixedsize_console()) {
+-        width = active_console->g_width;
+-        height = active_console->g_height;
+-    }
+-    ds->surface = qemu_create_displaysurface(width, height);
+-
+-    register_displaystate(ds);
+-}
+-
+ /***********************************************************/
+ /* register display */
+ 
+-void register_displaystate(DisplayState *ds)
++/* console.c internal use only */
++static DisplayState *get_alloc_displaystate(void)
+ {
+-    DisplayState **s;
+-    s = &display_state;
+-    while (*s != NULL)
+-        s = &(*s)->next;
+-    ds->next = NULL;
+-    *s = ds;
++    if (!display_state) {
++        display_state = g_new0(DisplayState, 1);
++    }
++    return display_state;
+ }
+ 
+-DisplayState *get_displaystate(void)
++/*
++ * Called by main(), after creating QemuConsoles
++ * and before initializing ui (sdl/vnc/...).
++ */
++DisplayState *init_displaystate(void)
+ {
++    int i;
++
+     if (!display_state) {
+-        dumb_display_init ();
++        display_state = g_new0(DisplayState, 1);
+     }
++
++    for (i = 0; i < nb_consoles; i++) {
++        if (consoles[i]->console_type != GRAPHIC_CONSOLE &&
++            consoles[i]->ds == NULL) {
++            text_console_do_init(consoles[i]->chr, display_state);
++        }
++    }
++
+     return display_state;
+ }
+ 
+@@ -1365,10 +1365,12 @@ QemuConsole *graphic_console_init(vga_hw_update_ptr update,
+                                   vga_hw_text_update_ptr text_update,
+                                   void *opaque)
+ {
++    int width = 640;
++    int height = 480;
+     QemuConsole *s;
+     DisplayState *ds;
+ 
+-    ds = (DisplayState *) g_malloc0(sizeof(DisplayState));
++    ds = get_alloc_displaystate();
+     trace_console_gfx_new();
+     s = new_console(ds, GRAPHIC_CONSOLE);
+     s->hw_update = update;
+@@ -1377,9 +1379,9 @@ QemuConsole *graphic_console_init(vga_hw_update_ptr update,
+     s->hw_text_update = text_update;
+     s->hw = opaque;
+ 
+-    ds->surface = qemu_create_displaysurface(640, 480);
+-
+-    register_displaystate(ds);
++    if (!ds->surface) {
++        ds->surface = qemu_create_displaysurface(width, height);
++    }
+     return s;
+ }
+ 
+@@ -1505,6 +1507,10 @@ static CharDriverState *text_console_init(ChardevVC *vc)
+     s->g_height = height;
+     chr->opaque = s;
+     chr->chr_set_echo = text_console_set_echo;
++
++    if (display_state) {
++        text_console_do_init(chr, display_state);
++    }
+     return chr;
+ }
+ 
+@@ -1520,17 +1526,6 @@ void register_vc_handler(VcHandler *handler)
+     vc_handler = handler;
+ }
+ 
+-void text_consoles_set_display(DisplayState *ds)
+-{
+-    int i;
+-
+-    for (i = 0; i < nb_consoles; i++) {
+-        if (consoles[i]->console_type != GRAPHIC_CONSOLE) {
+-            text_console_do_init(consoles[i]->chr, ds);
+-        }
+-    }
+-}
+-
+ void qemu_console_resize(QemuConsole *s, int width, int height)
+ {
+     s->g_width = width;
+diff --git a/vl.c b/vl.c
+index 0598998..63fe9a4 100644
+--- a/vl.c
++++ b/vl.c
+@@ -4331,8 +4331,7 @@ int main(int argc, char **argv, char **envp)
+ 
+     net_check_clients();
+ 
+-    /* just use the first displaystate for the moment */
+-    ds = get_displaystate();
++    ds = init_displaystate();
+ 
+     /* init local displays */
+     switch (display_type) {
+@@ -4388,9 +4387,6 @@ int main(int argc, char **argv, char **envp)
+     }
+ #endif
+ 
+-    /* display setup */
+-    text_consoles_set_display(ds);
+-
+     if (foreach_device_config(DEV_GDB, gdbserver_start) < 0) {
+         exit(1);
+     }
+-- 
+1.7.9.7
+

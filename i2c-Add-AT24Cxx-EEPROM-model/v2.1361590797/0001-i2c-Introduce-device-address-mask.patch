@@ -1,0 +1,250 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Jan Kiszka <jan.kiszka@siemens.com>
+To: Anthony Liguori <aliguori@us.ibm.com>, qemu-devel <qemu-devel@nongnu.org>
+Cc: 
+Date: Fri, 22 Feb 2013 21:39:58 +0100
+Message-id: cbf88f3639e8a52e817e2ea5706d17da0ec606b7.1361565596.git.jan.kiszka@siemens.com
+Subject: [PATCH 1/2] i2c: Introduce device address mask
+
+Some devices react on multiple addresses. To emulate this, we could
+register them multiple times, but that is cumbersome. The AT24C16, e.g.
+listens on 8 different addresses.
+
+Instead, introduce a device address mask that is applied on the
+transmitted address before matching it against the stored one. Moreover,
+the transmitted address is passed as additional parameter to the event
+callback of the device.
+
+Signed-off-by: Jan Kiszka <jan.kiszka@siemens.com>
+---
+ hw/ds1338.c   |    2 +-
+ hw/i2c.c      |    9 +++++----
+ hw/i2c.h      |    3 ++-
+ hw/lm832x.c   |    2 +-
+ hw/max7310.c  |    2 +-
+ hw/pxa2xx.c   |    3 ++-
+ hw/smbus.c    |    2 +-
+ hw/ssd0303.c  |    2 +-
+ hw/tmp105.c   |    2 +-
+ hw/tosa.c     |    2 +-
+ hw/twl92230.c |    2 +-
+ hw/wm8750.c   |    2 +-
+ hw/z2.c       |    2 +-
+ 13 files changed, 19 insertions(+), 16 deletions(-)
+
+diff --git a/hw/ds1338.c b/hw/ds1338.c
+index 6f70538..2f94b3b 100644
+--- a/hw/ds1338.c
++++ b/hw/ds1338.c
+@@ -88,7 +88,7 @@ static void inc_regptr(DS1338State *s)
+     }
+ }
+ 
+-static void ds1338_event(I2CSlave *i2c, enum i2c_event event)
++static void ds1338_event(I2CSlave *i2c, enum i2c_event event, uint8_t param)
+ {
+     DS1338State *s = FROM_I2C_SLAVE(DS1338State, i2c);
+ 
+diff --git a/hw/i2c.c b/hw/i2c.c
+index ec314a4..63f28dd 100644
+--- a/hw/i2c.c
++++ b/hw/i2c.c
+@@ -93,7 +93,7 @@ int i2c_start_transfer(i2c_bus *bus, uint8_t address, int recv)
+     QTAILQ_FOREACH(kid, &bus->qbus.children, sibling) {
+         DeviceState *qdev = kid->child;
+         I2CSlave *candidate = I2C_SLAVE(qdev);
+-        if (candidate->address == address) {
++        if (candidate->address == (address & candidate->address_mask)) {
+             slave = candidate;
+             break;
+         }
+@@ -108,7 +108,7 @@ int i2c_start_transfer(i2c_bus *bus, uint8_t address, int recv)
+        start condition.  */
+     bus->current_dev = slave;
+     if (sc->event) {
+-        sc->event(slave, recv ? I2C_START_RECV : I2C_START_SEND);
++        sc->event(slave, recv ? I2C_START_RECV : I2C_START_SEND, address);
+     }
+     return 0;
+ }
+@@ -124,7 +124,7 @@ void i2c_end_transfer(i2c_bus *bus)
+ 
+     sc = I2C_SLAVE_GET_CLASS(dev);
+     if (sc->event) {
+-        sc->event(dev, I2C_FINISH);
++        sc->event(dev, I2C_FINISH, 0);
+     }
+ 
+     bus->current_dev = NULL;
+@@ -175,7 +175,7 @@ void i2c_nack(i2c_bus *bus)
+ 
+     sc = I2C_SLAVE_GET_CLASS(dev);
+     if (sc->event) {
+-        sc->event(dev, I2C_NACK);
++        sc->event(dev, I2C_NACK, 0);
+     }
+ }
+ 
+@@ -207,6 +207,7 @@ static int i2c_slave_qdev_init(DeviceState *dev)
+     I2CSlave *s = I2C_SLAVE(dev);
+     I2CSlaveClass *sc = I2C_SLAVE_GET_CLASS(s);
+ 
++    s->address_mask = 0x7f;
+     return sc->init(s);
+ }
+ 
+diff --git a/hw/i2c.h b/hw/i2c.h
+index 0e80d5a..7a694b5 100644
+--- a/hw/i2c.h
++++ b/hw/i2c.h
+@@ -39,7 +39,7 @@ typedef struct I2CSlaveClass
+     int (*recv)(I2CSlave *s);
+ 
+     /* Notify the slave of a bus state change.  */
+-    void (*event)(I2CSlave *s, enum i2c_event event);
++    void (*event)(I2CSlave *s, enum i2c_event event, uint8_t param);
+ } I2CSlaveClass;
+ 
+ struct I2CSlave
+@@ -48,6 +48,7 @@ struct I2CSlave
+ 
+     /* Remaining fields for internal use by the I2C code.  */
+     uint8_t address;
++    uint8_t address_mask;
+ };
+ 
+ i2c_bus *i2c_init_bus(DeviceState *parent, const char *name);
+diff --git a/hw/lm832x.c b/hw/lm832x.c
+index 94b8ae0..072605d 100644
+--- a/hw/lm832x.c
++++ b/hw/lm832x.c
+@@ -378,7 +378,7 @@ static void lm_kbd_write(LM823KbdState *s, int reg, int byte, uint8_t value)
+     }
+ }
+ 
+-static void lm_i2c_event(I2CSlave *i2c, enum i2c_event event)
++static void lm_i2c_event(I2CSlave *i2c, enum i2c_event event, uint8_t param)
+ {
+     LM823KbdState *s = FROM_I2C_SLAVE(LM823KbdState, i2c);
+ 
+diff --git a/hw/max7310.c b/hw/max7310.c
+index c2df0b4..aaae0a2 100644
+--- a/hw/max7310.c
++++ b/hw/max7310.c
+@@ -123,7 +123,7 @@ static int max7310_tx(I2CSlave *i2c, uint8_t data)
+     return 0;
+ }
+ 
+-static void max7310_event(I2CSlave *i2c, enum i2c_event event)
++static void max7310_event(I2CSlave *i2c, enum i2c_event event, uint8_t param)
+ {
+     MAX7310State *s = (MAX7310State *) i2c;
+     s->len = 0;
+diff --git a/hw/pxa2xx.c b/hw/pxa2xx.c
+index d303320..ae01c05 100644
+--- a/hw/pxa2xx.c
++++ b/hw/pxa2xx.c
+@@ -1239,7 +1239,8 @@ static void pxa2xx_i2c_update(PXA2xxI2CState *s)
+ }
+ 
+ /* These are only stubs now.  */
+-static void pxa2xx_i2c_event(I2CSlave *i2c, enum i2c_event event)
++static void pxa2xx_i2c_event(I2CSlave *i2c, enum i2c_event event,
++                             uint8_t param)
+ {
+     PXA2xxI2CSlaveState *slave = FROM_I2C_SLAVE(PXA2xxI2CSlaveState, i2c);
+     PXA2xxI2CState *s = slave->host;
+diff --git a/hw/smbus.c b/hw/smbus.c
+index a908591..d84588e 100644
+--- a/hw/smbus.c
++++ b/hw/smbus.c
+@@ -66,7 +66,7 @@ static void smbus_do_write(SMBusDevice *dev)
+     }
+ }
+ 
+-static void smbus_i2c_event(I2CSlave *s, enum i2c_event event)
++static void smbus_i2c_event(I2CSlave *s, enum i2c_event event, uint8_t param)
+ {
+     SMBusDevice *dev = SMBUS_DEVICE(s);
+ 
+diff --git a/hw/ssd0303.c b/hw/ssd0303.c
+index 8777b16..faaea12 100644
+--- a/hw/ssd0303.c
++++ b/hw/ssd0303.c
+@@ -173,7 +173,7 @@ static int ssd0303_send(I2CSlave *i2c, uint8_t data)
+     return 0;
+ }
+ 
+-static void ssd0303_event(I2CSlave *i2c, enum i2c_event event)
++static void ssd0303_event(I2CSlave *i2c, enum i2c_event event, uint8_t param)
+ {
+     ssd0303_state *s = (ssd0303_state *)i2c;
+     switch (event) {
+diff --git a/hw/tmp105.c b/hw/tmp105.c
+index 3ad2d2f..2734c6e 100644
+--- a/hw/tmp105.c
++++ b/hw/tmp105.c
+@@ -170,7 +170,7 @@ static int tmp105_tx(I2CSlave *i2c, uint8_t data)
+     return 0;
+ }
+ 
+-static void tmp105_event(I2CSlave *i2c, enum i2c_event event)
++static void tmp105_event(I2CSlave *i2c, enum i2c_event event, uint8_t param)
+ {
+     TMP105State *s = TMP105(i2c);
+ 
+diff --git a/hw/tosa.c b/hw/tosa.c
+index efea109..2321625 100644
+--- a/hw/tosa.c
++++ b/hw/tosa.c
+@@ -157,7 +157,7 @@ static int tosa_dac_send(I2CSlave *i2c, uint8_t data)
+     return 0;
+ }
+ 
+-static void tosa_dac_event(I2CSlave *i2c, enum i2c_event event)
++static void tosa_dac_event(I2CSlave *i2c, enum i2c_event event, uint8_t param)
+ {
+     TosaDACState *s = FROM_I2C_SLAVE(TosaDACState, i2c);
+     s->len = 0;
+diff --git a/hw/twl92230.c b/hw/twl92230.c
+index 70d9b03..10b4099 100644
+--- a/hw/twl92230.c
++++ b/hw/twl92230.c
+@@ -706,7 +706,7 @@ static void menelaus_write(void *opaque, uint8_t addr, uint8_t value)
+     }
+ }
+ 
+-static void menelaus_event(I2CSlave *i2c, enum i2c_event event)
++static void menelaus_event(I2CSlave *i2c, enum i2c_event event, uint8_t param)
+ {
+     MenelausState *s = (MenelausState *) i2c;
+ 
+diff --git a/hw/wm8750.c b/hw/wm8750.c
+index d3ea5ba..060c534 100644
+--- a/hw/wm8750.c
++++ b/hw/wm8750.c
+@@ -297,7 +297,7 @@ static void wm8750_reset(I2CSlave *i2c)
+     s->i2c_len = 0;
+ }
+ 
+-static void wm8750_event(I2CSlave *i2c, enum i2c_event event)
++static void wm8750_event(I2CSlave *i2c, enum i2c_event event, uint8_t param)
+ {
+     WM8750State *s = (WM8750State *) i2c;
+ 
+diff --git a/hw/z2.c b/hw/z2.c
+index 731550f..7f2a613 100644
+--- a/hw/z2.c
++++ b/hw/z2.c
+@@ -216,7 +216,7 @@ static int aer915_send(I2CSlave *i2c, uint8_t data)
+     return 0;
+ }
+ 
+-static void aer915_event(I2CSlave *i2c, enum i2c_event event)
++static void aer915_event(I2CSlave *i2c, enum i2c_event event, uint8_t param)
+ {
+     AER915State *s = FROM_I2C_SLAVE(AER915State, i2c);
+     switch (event) {
+-- 
+1.7.3.4
+

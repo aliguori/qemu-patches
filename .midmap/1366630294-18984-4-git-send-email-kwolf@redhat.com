@@ -1,0 +1,1 @@
+../Block-patches/v1.1366655474/0003-qemu-img-do-not-zero-pad-the-compressed-write-buffer.patch

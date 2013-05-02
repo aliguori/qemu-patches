@@ -1,0 +1,1 @@
+../block-make-qmp_transaction-extendable/v1.1364857288/0001-block-add-function-deappend.patch

@@ -1,0 +1,1 @@
+../target-i386-CPU-hot-add-with-cpu-add-QMP-command/v5.1366730974/0018-target-i386-move-IOAPIC-to-ICC-bus.patch

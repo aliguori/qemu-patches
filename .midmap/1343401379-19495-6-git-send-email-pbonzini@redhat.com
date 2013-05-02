@@ -1,0 +1,1 @@
+../SCSI-patches-for-2012-08-27/v1.1343426547/0005-lsi-avoid-redundant-tests-of-s-current--NULL.patch

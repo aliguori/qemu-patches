@@ -1,0 +1,1 @@
+../target-i386-CPU-hot-add-with-cpu-add-QMP-command/v6.1366923922/0010-extend-memory_region_find-and-use-it-in-kvm-ioapic.patch

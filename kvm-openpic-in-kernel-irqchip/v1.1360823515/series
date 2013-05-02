@@ -1,0 +1,7 @@
+0000-kvm-openpic-in-kernel-irqchip.txt
+0001-kvm-update-linux-headers.patch
+0002-kvm-hw-kvm-is-not-x86-specific.patch
+0003-memory-add-memory_region_to_address.patch
+0004-openpic-factor-out-some-common-defines-into-openpich.patch
+0005-kvm-export-result-of-irqchip-config-check.patch
+0006-kvm-openpic-in-kernel-mpic-support.patch

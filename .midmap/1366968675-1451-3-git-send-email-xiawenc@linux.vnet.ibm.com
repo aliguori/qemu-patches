@@ -1,0 +1,1 @@
+../qapi-and-snapshot-code-clean-up-in-block-layer/v1.1367015468/0002-block-move-bdrv_snapshot_find-to-block-snapshotc.patch

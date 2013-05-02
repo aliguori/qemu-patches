@@ -1,0 +1,132 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Liu Yuan <namei.unix@gmail.com>
+To: Liu Yuan <namei.unix@gmail.com>, sheepdog@lists.wpkg.org
+Cc: MORITA Kazutaka <morita.kazutaka@lab.ntt.co.jp>, sheepdog@lists.wpkg.org,
+ Stefan Hajnoczi <stefanha@redhat.com>, Kevin Wolf <kwolf@redhat.com>,
+ qemu-devel@nongnu.org
+Date: Wed, 24 Apr 2013 17:46:41 +0800
+Message-id: 1366796802-6205-1-git-send-email-namei.unix@gmail.com
+Subject: [PATCH 1/1] sheepdog: fix loadvm operation
+
+From: Liu Yuan <tailai.ly@taobao.com>
+
+Currently the 'loadvm' opertaion works as following:
+1. switch to the snapshot
+2. mark current working VDI as a snapshot
+3. rely on sd_create_branch to create a new working VDI based on the snapshot
+
+This works not the same as other format as QCOW2. For e.g,
+
+qemu > savevm # get a live snapshot snap1
+qemu > savevm # snap2
+qemu > loadvm 1 # This will steally create snap3 of the working VDI
+
+Which will result in following snapshot chain:
+
+base <-- snap1 <-- snap2 <-- snap3
+          ^
+          |
+      working VDI
+
+snap3 was unnecessarily created and might be annoying users.
+
+This patch discard the unnecessary 'snap3' creation. and implement
+rollback(loadvm) operation to the specified snapshot by
+1. switch to the snapshot
+2. delete working VDI
+3. rely on sd_create_branch to create a new working VDI based on the snapshot
+
+The snapshot chain for above example will be:
+
+base <-- snap1 <-- snap2
+          ^
+          |
+      working VDI
+
+Cc: qemu-devel@nongnu.org
+Cc: MORITA Kazutaka <morita.kazutaka@lab.ntt.co.jp>
+Cc: Kevin Wolf <kwolf@redhat.com>
+Cc: Stefan Hajnoczi <stefanha@redhat.com>
+Signed-off-by: Liu Yuan <tailai.ly@taobao.com>
+---
+ block/sheepdog.c |   42 +++++++++++++++++++++++++++++++++++++++++-
+ 1 file changed, 41 insertions(+), 1 deletion(-)
+
+diff --git a/block/sheepdog.c b/block/sheepdog.c
+index 2fe0783..811f10d 100644
+--- a/block/sheepdog.c
++++ b/block/sheepdog.c
+@@ -36,6 +36,7 @@
+ #define SD_OP_GET_VDI_INFO   0x14
+ #define SD_OP_READ_VDIS      0x15
+ #define SD_OP_FLUSH_VDI      0x16
++#define SD_OP_DEL_VDI        0x17
+ 
+ #define SD_FLAG_CMD_WRITE    0x01
+ #define SD_FLAG_CMD_COW      0x02
+@@ -1553,7 +1554,7 @@ static int sd_create_branch(BDRVSheepdogState *s)
+ 
+     buf = g_malloc(SD_INODE_SIZE);
+ 
+-    ret = do_sd_create(s, s->name, s->inode.vdi_size, s->inode.vdi_id, &vid, 1);
++    ret = do_sd_create(s, s->name, s->inode.vdi_size, s->inode.vdi_id, &vid, 0);
+     if (ret) {
+         goto out;
+     }
+@@ -1869,6 +1870,40 @@ cleanup:
+     return ret;
+ }
+ 
++/* Delete current working VDI by the name */
++static int sd_delete(BDRVSheepdogState *s, char *name)
++{
++    unsigned int wlen = SD_MAX_VDI_LEN;
++    SheepdogVdiReq hdr = {
++        .opcode = SD_OP_DEL_VDI,
++        .vdi_id = s->inode.vdi_id,
++        .data_length = wlen,
++        .flags = SD_FLAG_CMD_WRITE,
++    };
++    SheepdogVdiRsp *rsp = (SheepdogVdiRsp *)&hdr;
++    int fd, ret;
++
++    fd = connect_to_sdog(s);
++    if (fd < 0) {
++        return fd;
++    }
++
++    ret = send_co_req(fd, (SheepdogReq *)&hdr, name, &wlen);
++    closesocket(fd);
++    if (!ret || rsp->result != SD_RES_SUCCESS) {
++        error_report("%s, %s", sd_strerror(rsp->result), name);
++        return -1;
++    }
++
++    return 0;
++}
++
++/*
++ * We implement rollback(loadvm) operation to the specified snapshot by
++ * 1) switch to the snapshot
++ * 2) delete working VDI
++ * 3) rely on sd_create_branch to create a new working VDI based on the snapshot
++ */
+ static int sd_snapshot_goto(BlockDriverState *bs, const char *snapshot_id)
+ {
+     BDRVSheepdogState *s = bs->opaque;
+@@ -1924,6 +1959,11 @@ static int sd_snapshot_goto(BlockDriverState *bs, const char *snapshot_id)
+ 
+     s->is_snapshot = true;
+ 
++    ret = sd_delete(s, vdi);
++    if (ret) {
++        error_report("Failed to delete %s", s->name);
++    }
++
+     g_free(buf);
+     g_free(old_s);
+ 
+-- 
+1.7.9.5
+
+

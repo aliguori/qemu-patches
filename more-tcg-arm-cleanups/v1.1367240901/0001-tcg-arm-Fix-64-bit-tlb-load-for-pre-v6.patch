@@ -1,0 +1,32 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Richard Henderson <rth@twiddle.net>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, aurelien@aurel32.net
+Date: Mon, 29 Apr 2013 08:08:22 -0700
+Message-id: 1367248103-1492-2-git-send-email-rth@twiddle.net
+Subject: [PATCH 1/2] tcg-arm: Fix 64-bit tlb load for pre-v6
+
+Found by inspection, since the effect of the bug was simply to
+send all memory ops through the slow path.
+
+Signed-off-by: Richard Henderson <rth@twiddle.net>
+---
+ tcg/arm/tcg-target.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/tcg/arm/tcg-target.c b/tcg/arm/tcg-target.c
+index 7216f7a..12edad4 100644
+--- a/tcg/arm/tcg-target.c
++++ b/tcg/arm/tcg-target.c
+@@ -1190,7 +1190,7 @@ static void tcg_out_tlb_read(TCGContext *s, TCGReg addrlo, TCGReg addrhi,
+         tcg_out_memop_12(s, COND_AL, INSN_LDR_IMM, TCG_REG_R0,
+                          TCG_REG_R2, tlb_offset, 1, 1);
+         if (TARGET_LONG_BITS == 64) {
+-            tcg_out_memop_12(s, COND_AL, INSN_LDR_IMM, TCG_REG_R0,
++            tcg_out_memop_12(s, COND_AL, INSN_LDR_IMM, TCG_REG_R1,
+                              TCG_REG_R2, 4, 1, 0);
+         }
+     }
+-- 
+1.8.1.4
+

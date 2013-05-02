@@ -1,0 +1,31 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Stefano Stabellini <Stefano.Stabellini@eu.citrix.com>
+To: Anthony Liguori <anthony@codemonkey.ws>
+Cc: Stefano Stabellini <Stefano.Stabellini@eu.citrix.com>,
+ hanweidong@huawei.com, wangzhenguo@huawei.com,
+ "qemu-devel@nongnu.org" <qemu-devel@nongnu.org>,
+ "xen-devel@lists.xensource.com" <xen-devel@lists.xensource.com>
+Date: Wed, 3 Apr 2013 13:06:42 +0100
+Message-id: alpine.DEB.2.02.1304031303190.5078@kaball.uk.xensource.com
+Subject: [PATCH 1/1] Xen mapcache fixes 2013-04-03
+
+Hi Anthony,
+please pull from the following tree based on
+162cbbd1736de2bca43fdefa7e98c54a361ee60d:
+
+git://xenbits.xen.org/people/sstabellini/qemu-dm.git xen-2013-04-03
+
+
+Hanweidong (1):
+      xen-mapcache: pass the right size argument to test_bits
+
+Stefano Stabellini (1):
+      xen-mapcache: replace last_address_index with a last_entry pointer
+
+ xen-mapcache.c |   58 +++++++++++++++++++++++++++++++++++--------------------
+ 1 files changed, 37 insertions(+), 21 deletions(-)
+
+
+Cheers,
+
+Stefano

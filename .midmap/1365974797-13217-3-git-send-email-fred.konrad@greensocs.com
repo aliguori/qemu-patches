@@ -1,0 +1,1 @@
+../virtio-refactoring-cleanup/v3.1365999989/0002-virtio-bus-make-virtio_x_bus_new-static.patch

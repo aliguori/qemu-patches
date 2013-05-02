@@ -1,0 +1,52 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Laszlo Ersek <lersek@redhat.com>
+To: aliguori@us.ibm.com, seabios@seabios.org, qemu-devel@nongnu.org
+Cc: 
+Date: Mon,  8 Apr 2013 15:13:18 +0200
+Message-id: 1365426803-1781-1-git-send-email-lersek@redhat.com
+Subject: [PATCH 0/5] publish etc/acpi/APIC in fw_cfg
+
+This series exports the MADT (APIC) ACPI table under the new
+"etc/acpi/APIC" fw_cfg file. I sought to follow the requirements set
+forth in [1], the new table is only visible in the patched/patched case.
+I cross-tested { master, patched } qemu with { master, patched } seabios
+(the APIC, DSDT and RSDT tables) using guest acpidump and dmesg.
+
+The -acpitable command line option is purposely ignored based on the
+last paragraph of [2]; the user isn't supposed to pass APIC with that
+option.
+
+checkpatch.pl complains a little but (as last time) it's a false alarm.
+
+The series is bisectable.
+
+[1] http://thread.gmane.org/gmane.comp.emulators.qemu/202005/focus=202072
+[2] http://thread.gmane.org/gmane.comp.bios.coreboot.seabios/5960/focus=6008
+
+Laszlo Ersek (5):
+  refer to FWCfgState explicitly
+  hw/acpi: extract standard table headers as a standalone structure
+  hw/acpi: export default ACPI headers using the type just introduced
+  hw/acpi: export acpi_checksum()
+  i386/pc: build ACPI MADT (APIC) for fw_cfg clients
+
+ hw/acpi.h           |   15 +++++
+ hw/loader.h         |    3 +-
+ hw/multiboot.h      |    4 +-
+ hw/pc.h             |   20 ++++---
+ hw/acpi.c           |   89 ++++++++++++++-------------
+ hw/acpi_piix4.c     |    2 +-
+ hw/i386/multiboot.c |    2 +-
+ hw/i386/pc.c        |  166 +++++++++++++++++++++++++++++++++++++++++++++++----
+ hw/i386/pc_piix.c   |    4 +-
+ hw/i386/pc_q35.c    |   10 ++-
+ hw/loader.c         |    2 +-
+ hw/sparc/sun4m.c    |    6 +-
+ hw/sparc64/sun4u.c  |    2 +-
+ 13 files changed, 248 insertions(+), 77 deletions(-)
+
+
+_______________________________________________
+SeaBIOS mailing list
+SeaBIOS@seabios.org
+http://www.seabios.org/mailman/listinfo/seabios

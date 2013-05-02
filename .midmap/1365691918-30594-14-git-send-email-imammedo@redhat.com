@@ -1,0 +1,1 @@
+../target-i386-CPU-hot-add-with-cpu-add-QMP-command/v3.1365717099/0013-target-i386-cpu-attach-ICC-bus-to-CPU-on-its-creation.patch

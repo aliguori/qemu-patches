@@ -1,0 +1,67 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Liu Yuan <namei.unix@gmail.com>
+To: qemu-devel@nongnu.org
+Cc: MORITA Kazutaka <morita.kazutaka@lab.ntt.co.jp>, sheepdog@lists.wpkg.org,
+ Stefan Hajnoczi <stefanha@redhat.com>, Kevin Wolf <kwolf@redhat.com>
+Date: Mon, 22 Apr 2013 20:19:41 +0800
+Message-id: 1366633182-9354-3-git-send-email-namei.unix@gmail.com
+Subject: [PATCH 2/3] sheepdog: use BDRV_SECTOR_SIZE
+
+From: Liu Yuan <tailai.ly@taobao.com>
+
+Cc: MORITA Kazutaka <morita.kazutaka@lab.ntt.co.jp>
+Cc: Kevin Wolf <kwolf@redhat.com>
+Cc: Stefan Hajnoczi <stefanha@redhat.com>
+Signed-off-by: Liu Yuan <tailai.ly@taobao.com>
+---
+ block/sheepdog.c |   11 +++++------
+ 1 file changed, 5 insertions(+), 6 deletions(-)
+
+diff --git a/block/sheepdog.c b/block/sheepdog.c
+index c099117..0b700a3 100644
+--- a/block/sheepdog.c
++++ b/block/sheepdog.c
+@@ -89,7 +89,6 @@
+ #define SD_NR_VDIS   (1U << 24)
+ #define SD_DATA_OBJ_SIZE (UINT64_C(1) << 22)
+ #define SD_MAX_VDI_SIZE (SD_DATA_OBJ_SIZE * MAX_DATA_OBJS)
+-#define SECTOR_SIZE 512
+ 
+ #define SD_INODE_SIZE (sizeof(SheepdogInode))
+ #define CURRENT_VDI_ID 0
+@@ -1220,7 +1219,7 @@ static int sd_open(BlockDriverState *bs, const char *filename,
+     s->min_dirty_data_idx = UINT32_MAX;
+     s->max_dirty_data_idx = 0;
+ 
+-    bs->total_sectors = s->inode.vdi_size / SECTOR_SIZE;
++    bs->total_sectors = s->inode.vdi_size / BDRV_SECTOR_SIZE;
+     pstrcpy(s->name, sizeof(s->name), vdi);
+     qemu_co_mutex_init(&s->lock);
+     g_free(buf);
+@@ -1605,10 +1604,10 @@ static int coroutine_fn sd_co_rw_vector(void *p)
+ {
+     SheepdogAIOCB *acb = p;
+     int ret = 0;
+-    unsigned long len, done = 0, total = acb->nb_sectors * SECTOR_SIZE;
+-    unsigned long idx = acb->sector_num * SECTOR_SIZE / SD_DATA_OBJ_SIZE;
++    unsigned long len, done = 0, total = acb->nb_sectors * BDRV_SECTOR_SIZE;
++    unsigned long idx = acb->sector_num * BDRV_SECTOR_SIZE / SD_DATA_OBJ_SIZE;
+     uint64_t oid;
+-    uint64_t offset = (acb->sector_num * SECTOR_SIZE) % SD_DATA_OBJ_SIZE;
++    uint64_t offset = (acb->sector_num * BDRV_SECTOR_SIZE) % SD_DATA_OBJ_SIZE;
+     BDRVSheepdogState *s = acb->common.bs->opaque;
+     SheepdogInode *inode = &s->inode;
+     AIOReq *aio_req;
+@@ -1727,7 +1726,7 @@ static coroutine_fn int sd_co_writev(BlockDriverState *bs, int64_t sector_num,
+     int ret;
+ 
+     if (bs->growable && sector_num + nb_sectors > bs->total_sectors) {
+-        ret = sd_truncate(bs, (sector_num + nb_sectors) * SECTOR_SIZE);
++        ret = sd_truncate(bs, (sector_num + nb_sectors) * BDRV_SECTOR_SIZE);
+         if (ret < 0) {
+             return ret;
+         }
+-- 
+1.7.9.5
+
+

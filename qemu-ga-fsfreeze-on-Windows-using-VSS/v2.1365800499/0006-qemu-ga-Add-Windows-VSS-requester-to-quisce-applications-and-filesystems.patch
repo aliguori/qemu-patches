@@ -1,0 +1,476 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Tomoki Sekiyama <tsekiyam@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: mdroth@linux.vnet.ibm.com, pbonzini@redhat.com, vrozenfe@redhat.com,
+ Tomoki Sekiyama <tomoki.sekiyama@hds.com>, lcapitulino@redhat.com
+Date: Fri, 12 Apr 2013 16:01:59 -0400
+Message-id: 20130412200159.20814.93.stgit@corona
+Subject: [PATCH 06/11] qemu-ga: Add Windows VSS requester to quisce
+ applications and filesystems
+
+This adds VSS requester functions for to qemu-ga.
+This provides facility to request VSS service in Windows guest to quisce
+applications and filesystems.
+This function is only supported in Windows 2003 or later. In older guests,
+this function does nothing.
+
+Signed-off-by: Tomoki Sekiyama <tomoki.sekiyama@hds.com>
+---
+ qga/Makefile.objs           |    3 
+ qga/vss-win32-requester.cpp |  393 +++++++++++++++++++++++++++++++++++++++++++
+ qga/vss-win32-requester.h   |   31 +++
+ 3 files changed, 426 insertions(+), 1 deletion(-)
+ create mode 100644 qga/vss-win32-requester.cpp
+ create mode 100644 qga/vss-win32-requester.h
+
+diff --git a/qga/Makefile.objs b/qga/Makefile.objs
+index 8d93866..f17a380 100644
+--- a/qga/Makefile.objs
++++ b/qga/Makefile.objs
+@@ -6,6 +6,7 @@ qga-obj-y += qapi-generated/qga-qmp-marshal.o
+ 
+ ifeq ($(CONFIG_QGA_VSS),y)
+ QEMU_CFLAGS += -DHAS_VSS_SDK
+-qga-obj-y += vss-win32-provider/
++qga-obj-y += vss-win32-provider/ vss-win32-requester.o
+ qga-prv-obj-y += vss-win32-provider/
++$(obj)/vss-win32-requester.o: QEMU_CXXFLAGS += -Wno-unknown-pragmas
+ endif
+diff --git a/qga/vss-win32-requester.cpp b/qga/vss-win32-requester.cpp
+new file mode 100644
+index 0000000..90ff026
+--- /dev/null
++++ b/qga/vss-win32-requester.cpp
+@@ -0,0 +1,393 @@
++/*
++ * QEMU Guest Agent win32 VSS Requester implementations
++ *
++ * Copyright Hitachi Data Systems Corp. 2013
++ *
++ * Authors:
++ *  Tomoki Sekiyama   <tomoki.sekiyama@hds.com>
++ *
++ * This work is licensed under the terms of the GNU GPL, version 2 or later.
++ * See the COPYING file in the top-level directory.
++ */
++
++#include <stdio.h>
++#include <assert.h>
++extern "C" {
++#include "guest-agent-core.h"
++}
++#include "vss-win32-requester.h"
++#include "vss-win32-provider.h"
++#include "vss-win32.h"
++#include "inc/win2003/vswriter.h"
++#include "inc/win2003/vsbackup.h"
++
++/* Functions in VSSAPI.DLL */
++typedef HRESULT (STDAPICALLTYPE* t_CreateVssBackupComponents)(OUT IVssBackupComponents **);
++typedef void (APIENTRY* t_VssFreeSnapshotProperties)(IN VSS_SNAPSHOT_PROP*);
++
++static t_CreateVssBackupComponents _CreateVssBackupComponents = NULL;
++static t_VssFreeSnapshotProperties _VssFreeSnapshotProperties = NULL;
++static IVssBackupComponents *pVssbc = NULL;
++static IVssAsync *pAsyncSnapshot = NULL;
++static HMODULE hLib = NULL;
++static HANDLE hEvent = INVALID_HANDLE_VALUE, hEvent2 = INVALID_HANDLE_VALUE;
++static int cFrozenVols = 0;
++
++GCC_FMT_ATTR(1, 2)
++static void errmsg(const char *fmt, ...)
++{
++    va_list ap;
++    va_start(ap, fmt);
++    char *msg = g_strdup_vprintf(fmt, ap);
++    va_end(ap);
++    MessageBox(NULL, msg, "Error in QEMU guest agent", MB_OK | MB_ICONWARNING);
++    g_free(msg);
++}
++
++static void error_set_win32(Error **errp, DWORD err,
++                            ErrorClass eclass, const char *text)
++{
++    char *msg = NULL, *nul = strchr(text, '(');
++    int len = nul ? nul - text : -1;
++
++    /* print error message in native encoding */
++    FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER |
++                  FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
++                  NULL, err, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
++                  (char *)&msg, 0, NULL);
++    printf("%.*s. (Error: %lx) %s\n", len, text, err, msg);
++    LocalFree(msg);
++
++    /* set error message in UTF-8 encoding */
++    msg = g_win32_error_message(err);
++    error_set(errp, eclass, "%.*s. (Error: %lx) %s", len, text, err, msg);
++    g_free(msg);
++}
++#define error_setg_win32(errp, err, text) \
++    error_set_win32(errp, err, ERROR_CLASS_GENERIC_ERROR, text)
++
++#define _chk(status, text, errp, err_label)	\
++    do {                                        \
++        HRESULT __hr = (status);                \
++        if (FAILED(__hr)) {                     \
++            error_setg_win32(errp, __hr, text); \
++            goto err_label;                     \
++        }                                       \
++    } while(0)
++
++#define chk(status) _chk(status, "Failed to " #status, err, out)
++
++
++HRESULT WaitForAsync(IVssAsync *pAsync)
++{
++    HRESULT ret, hr;
++
++    do {
++        hr = pAsync->Wait();
++        if (FAILED(hr)) {
++            ret = hr;
++            break;
++        }
++        hr = pAsync->QueryStatus(&ret, NULL);
++        if (FAILED(hr)) {
++            ret = hr;
++            break;
++        }
++    } while (ret == VSS_S_ASYNC_PENDING);
++
++    return ret;
++}
++
++HRESULT vss_init(void)
++{
++    HRESULT hr;
++
++    hr = VSSCheckOSVersion();
++    if (hr == S_FALSE) {
++        return hr;
++    }
++
++    hr = CoInitialize(NULL);
++    if (FAILED(hr)) {
++        errmsg("CoInitialize failed [%lx]", hr);
++        goto out;
++    };
++    hr = CoInitializeSecurity(
++        NULL, -1, NULL, NULL, RPC_C_AUTHN_LEVEL_PKT_PRIVACY,
++        RPC_C_IMP_LEVEL_IDENTIFY, NULL, EOAC_NONE, NULL);
++    if (FAILED(hr)) {
++        errmsg("CoInitializeSecurity failed [%lx]", hr);
++        goto out;
++    }
++
++    hLib = LoadLibraryA("VSSAPI.DLL");
++    if (!hLib) {
++        errmsg("LoadLibrary VSSAPI.DLL failed");
++        hr = E_FAIL;
++        goto out;
++    }
++
++    _CreateVssBackupComponents = (t_CreateVssBackupComponents)
++        GetProcAddress(hLib,
++#ifdef _WIN64 /* 64bit environment */
++        "?CreateVssBackupComponents@@YAJPEAPEAVIVssBackupComponents@@@Z"
++#else /* 32bit environment */
++        "?CreateVssBackupComponents@@YGJPAPAVIVssBackupComponents@@@Z"
++#endif
++        );
++    _VssFreeSnapshotProperties = (t_VssFreeSnapshotProperties)
++        GetProcAddress(hLib, "VssFreeSnapshotProperties");
++    if (!_CreateVssBackupComponents || !_VssFreeSnapshotProperties) {
++        errmsg("GetProcAddress failed");
++        hr = E_FAIL;
++        goto out;
++    }
++
++    return S_OK;
++out:
++    vss_deinit();
++    return hr;
++}
++
++static void vss_cleanup(void)
++{
++    if (hEvent != INVALID_HANDLE_VALUE) {
++        CloseHandle(hEvent);
++        hEvent = INVALID_HANDLE_VALUE;
++    }
++    if (hEvent2 != INVALID_HANDLE_VALUE) {
++        CloseHandle(hEvent2);
++        hEvent2 = INVALID_HANDLE_VALUE;
++    }
++    if (pVssbc) {
++        pVssbc->Release();
++        pVssbc = NULL;
++    }
++}
++
++void vss_deinit(void)
++{
++    if (VSSCheckOSVersion() == S_FALSE) {
++        return;
++    }
++
++    vss_cleanup();
++
++    CoUninitialize();
++
++    _CreateVssBackupComponents = NULL;
++    _VssFreeSnapshotProperties = NULL;
++    if (hLib) {
++        FreeLibrary(hLib);
++        hLib = NULL;
++    }
++}
++
++int vss_initialized(void)
++{
++    return hLib != NULL;
++}
++
++static void vss_add_components(Error **err)
++{
++    unsigned int cWriters, i;
++    VSS_ID id, idInstance, idWriter;
++    BSTR bstrWriterName;
++    VSS_USAGE_TYPE usage;
++    VSS_SOURCE_TYPE source;
++    unsigned int cComponents, c1, c2, j;
++    IVssExamineWriterMetadata *pMetadata;
++    IVssWMComponent *pComponent;
++    PVSSCOMPONENTINFO pInfo = NULL;
++
++    chk( pVssbc->GetWriterMetadataCount(&cWriters) );
++
++    for (i = 0; i < cWriters; i++) {
++        chk( pVssbc->GetWriterMetadata(i, &id, &pMetadata) );
++        chk( pMetadata->GetIdentity(&idInstance, &idWriter,
++                                    &bstrWriterName, &usage, &source) );
++        chk( pMetadata->GetFileCounts(&c1, &c2, &cComponents) );
++
++        for (j = 0; j < cComponents; j++) {
++            chk( pMetadata->GetComponent(j, &pComponent) );
++            chk( pComponent->GetComponentInfo(&pInfo) );
++            if (pInfo->bSelectable) {
++                chk( pVssbc->AddComponent(idInstance, idWriter, pInfo->type,
++                                          pInfo->bstrLogicalPath,
++                                          pInfo->bstrComponentName) );
++            }
++            pComponent->FreeComponentInfo(pInfo);
++            pInfo = NULL;
++            pComponent->Release();
++            pComponent = NULL;
++        }
++
++        pMetadata->Release();
++        pMetadata = NULL;
++    }
++out:
++    if (pComponent) {
++        if (pInfo) {
++            pComponent->FreeComponentInfo(pInfo);
++        }
++        pComponent->Release();
++    }
++    if (pMetadata) {
++        pMetadata->Release();
++    }
++}
++
++void qga_vss_fsfreeze_freeze(int *num_vols, Error **err)
++{
++    IVssAsync *pAsync;
++    HANDLE h;
++    GUID guidSnapshotSet = GUID_NULL;
++    SECURITY_DESCRIPTOR sd;
++    SECURITY_ATTRIBUTES sa;
++    WCHAR buf[64], *b = buf;
++    int n = 0;
++
++    if (pVssbc) { /* already frozen */
++        *num_vols = 0;
++        return;
++    }
++
++    assert(_CreateVssBackupComponents != NULL);
++    chk( _CreateVssBackupComponents(&pVssbc) );
++    chk( pVssbc->InitializeForBackup() );
++    chk( pVssbc->SetBackupState(true, true, VSS_BT_FULL, false) );
++    /*
++     * Currently writable snapshots are not supported.
++     * To prevent the final commit (which requires to write to snapshots),
++     * VSS_VOLSNAP_ATTR_NO_AUTORECOVERY (for Win2008 SP2 or later) and
++     * VSS_VOLSNAP_ATTR_TRANSPORTABLE (for ealier versions) are specified here.
++     */
++    chk( pVssbc->SetContext(VSS_CTX_APP_ROLLBACK |
++                            VSS_VOLSNAP_ATTR_NO_AUTORECOVERY |
++                            VSS_VOLSNAP_ATTR_TRANSPORTABLE |
++                            VSS_VOLSNAP_ATTR_TXF_RECOVERY) );
++
++    chk( pVssbc->GatherWriterMetadata(&pAsync) );
++    _chk( WaitForAsync(pAsync), "GatherWriterMetadata", err, out );
++    pAsync->Release();
++
++    vss_add_components(err);
++    if (error_is_set(err)) {
++        goto out;
++    }
++
++    chk( pVssbc->StartSnapshotSet(&guidSnapshotSet) );
++
++    h = FindFirstVolumeW(buf, sizeof(buf));
++    while (h != INVALID_HANDLE_VALUE) {
++        if (GetDriveTypeW(buf) == DRIVE_FIXED) {
++            VSS_ID pid;
++            HRESULT hr = pVssbc->AddToSnapshotSet(buf, g_gProviderId, &pid);
++            if (FAILED(hr)) {
++                WCHAR name[PATH_MAX];
++                char msg[PATH_MAX+32];
++                if (GetVolumePathNamesForVolumeNameW(
++                        buf, name, sizeof(name), NULL) && *name) {
++                    b = name;
++                }
++                snprintf(msg, sizeof(msg), "add %S to snapshot set", b);
++                error_setg_win32(err, hr, msg);
++                goto out;
++            }
++	    n++;
++        }
++        if (!FindNextVolumeW(h, buf, sizeof(buf))) {
++            FindVolumeClose(h);
++            break;
++        }
++    }
++
++    chk( pVssbc->PrepareForBackup(&pAsync) );
++    _chk( WaitForAsync(pAsync), "PrepareForBackup", err, out );
++    pAsync->Release();
++
++    chk( pVssbc->GatherWriterStatus(&pAsync) );
++    _chk( WaitForAsync(pAsync), "GatherWriterStatus", err, out );
++    pAsync->Release();
++
++    /* Allow unrestricted access to events */
++    InitializeSecurityDescriptor(&sd, SECURITY_DESCRIPTOR_REVISION);
++    SetSecurityDescriptorDacl(&sd, TRUE, NULL, FALSE);
++    sa.nLength = sizeof(sa);
++    sa.lpSecurityDescriptor = &sd;
++    sa.bInheritHandle = FALSE;
++
++    hEvent = CreateEvent(&sa, TRUE, FALSE, EVENT_NAME_FROZEN);
++    if (hEvent == INVALID_HANDLE_VALUE) {
++        error_setg_win32(err, GetLastError(), "CreateEvenet");
++        goto out;
++    }
++    hEvent2 = CreateEvent(&sa, TRUE, FALSE, EVENT_NAME_THAW);
++    if (hEvent2 == INVALID_HANDLE_VALUE) {
++        error_setg_win32(err, GetLastError(), "CreateEvenet");
++        goto out;
++    }
++
++    chk( pVssbc->DoSnapshotSet(&pAsyncSnapshot) );
++
++    /* Need to call QueryStatus several times to make VSS provider progress */
++    for (int i = 0; i < 1000; i++) {
++        HRESULT hr = S_OK;
++        chk( pAsyncSnapshot->QueryStatus(&hr, NULL) );
++        if (hr != VSS_S_ASYNC_PENDING) {
++            error_setg(err, "DoSnapshotSet exited without freeze event");
++            goto out;
++        }
++        DWORD ret = WaitForSingleObject(hEvent, 10);
++        if (ret == WAIT_OBJECT_0) {
++            break;
++        }
++    }
++
++    *num_vols = cFrozenVols = n;
++    return;
++
++out:
++    if (pVssbc) {
++        pVssbc->AbortBackup();
++    }
++    vss_cleanup();
++}
++
++
++void qga_vss_fsfreeze_thaw(int *num_vols, Error **err)
++{
++    IVssAsync *pAsync;
++
++    if (hEvent2 == INVALID_HANDLE_VALUE) {
++        /*
++         * In this case, DoSnapshotSet is aborted or not started,
++         * and no volumes must be frozen. We return without an error.
++         */
++        *num_vols = 0;
++        return;
++    }
++    SetEvent(hEvent2);
++
++    assert(pVssbc);
++    assert(pAsyncSnapshot);
++
++    _chk( WaitForAsync(pAsyncSnapshot), "DoSnapshotSet", err, out );
++    pAsyncSnapshot->Release();
++    pAsyncSnapshot = NULL;
++
++    chk( pVssbc->BackupComplete(&pAsync) );
++    _chk( WaitForAsync(pAsync), "BackupComplete", err, out );
++    pAsync->Release();
++
++    *num_vols = cFrozenVols;
++    cFrozenVols = 0;
++    goto done;
++
++out:
++    if (pVssbc) {
++        pVssbc->AbortBackup();
++    }
++done:
++    vss_cleanup();
++}
+diff --git a/qga/vss-win32-requester.h b/qga/vss-win32-requester.h
+new file mode 100644
+index 0000000..f180f56
+--- /dev/null
++++ b/qga/vss-win32-requester.h
+@@ -0,0 +1,31 @@
++/*
++ * QEMU Guest Agent VSS Requester declarations
++ *
++ * Copyright Hitachi Data Systems Corp. 2013
++ *
++ * Authors:
++ *  Tomoki Sekiyama   <tomoki.sekiyama@hds.com>
++ *
++ * This work is licensed under the terms of the GNU GPL, version 2 or later.
++ * See the COPYING file in the top-level directory.
++ */
++
++#ifndef VSS_WIN32_REQUESTER_H
++#define VSS_WIN32_REQUESTER_H
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++HRESULT vss_init(void);
++void vss_deinit(void);
++int vss_initialized(void);
++
++void qga_vss_fsfreeze_freeze(int *nr_volume, struct Error **err);
++void qga_vss_fsfreeze_thaw(int *nr_volume, struct Error **err);
++
++#ifdef __cplusplus
++}
++#endif
++
++#endif
+
+

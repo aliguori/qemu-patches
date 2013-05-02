@@ -1,0 +1,209 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Stefan Hajnoczi <stefanha@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Wenchao Xia <xiawenc@linux.vnet.ibm.com>, Fam Zheng <famz@redhat.com>,
+ Kevin Wolf <kwolf@redhat.com>, imain@redhat.com, pbonzini@redhat.com,
+ Stefan Hajnoczi <stefanha@redhat.com>, dietmar@proxmox.com
+Date: Mon, 29 Apr 2013 09:42:14 +0200
+Message-id: 1367221335-22777-3-git-send-email-stefanha@redhat.com
+Subject: [PATCH 2/3] block: add block-backup QMP command
+
+@block-backup
+
+Start a point-in-time copy of a block device to a new destination.  The
+status of ongoing block backup operations can be checked with
+query-block-jobs.  The operation can be stopped before it has completed using
+the block-job-cancel command.
+
+@device: the name of the device whose writes should be mirrored.
+
+@target: the target of the new image. If the file exists, or if it
+         is a device, the existing file/device will be used as the new
+         destination.  If it does not exist, a new file will be created.
+
+@format: #optional the format of the new destination, default is to
+         probe if @mode is 'existing', else the format of the source
+
+@mode: #optional whether and how QEMU should create a new image, default is
+       'absolute-paths'.
+
+@speed: #optional the maximum speed, in bytes per second
+
+Returns: nothing on success
+         If @device is not a valid block device, DeviceNotFound
+
+Since 1.6
+
+Signed-off-by: Stefan Hajnoczi <stefanha@redhat.com>
+---
+ blockdev.c       | 92 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ qapi-schema.json | 31 +++++++++++++++++++
+ qmp-commands.hx  |  6 ++++
+ 3 files changed, 129 insertions(+)
+
+diff --git a/blockdev.c b/blockdev.c
+index 6e293e9..afb9b4a 100644
+--- a/blockdev.c
++++ b/blockdev.c
+@@ -1279,6 +1279,98 @@ void qmp_block_commit(const char *device,
+     drive_get_ref(drive_get_by_blockdev(bs));
+ }
+ 
++void qmp_block_backup(const char *device, const char *target,
++                      bool has_format, const char *format,
++                      bool has_mode, enum NewImageMode mode,
++                      bool has_speed, int64_t speed,
++                      Error **errp)
++{
++    BlockDriverState *bs;
++    BlockDriverState *target_bs;
++    BlockDriver *proto_drv;
++    BlockDriver *drv = NULL;
++    Error *local_err = NULL;
++    int flags;
++    uint64_t size;
++    int ret;
++
++    if (!has_speed) {
++        speed = 0;
++    }
++    if (!has_mode) {
++        mode = NEW_IMAGE_MODE_ABSOLUTE_PATHS;
++    }
++
++    bs = bdrv_find(device);
++    if (!bs) {
++        error_set(errp, QERR_DEVICE_NOT_FOUND, device);
++        return;
++    }
++
++    if (!bdrv_is_inserted(bs)) {
++        error_set(errp, QERR_DEVICE_HAS_NO_MEDIUM, device);
++        return;
++    }
++
++    if (!has_format) {
++        format = mode == NEW_IMAGE_MODE_EXISTING ? NULL : bs->drv->format_name;
++    }
++    if (format) {
++        drv = bdrv_find_format(format);
++        if (!drv) {
++            error_set(errp, QERR_INVALID_BLOCK_FORMAT, format);
++            return;
++        }
++    }
++
++    if (bdrv_in_use(bs)) {
++        error_set(errp, QERR_DEVICE_IN_USE, device);
++        return;
++    }
++
++    flags = bs->open_flags | BDRV_O_RDWR;
++
++    proto_drv = bdrv_find_protocol(target);
++    if (!proto_drv) {
++        error_set(errp, QERR_INVALID_BLOCK_FORMAT, format);
++        return;
++    }
++
++    bdrv_get_geometry(bs, &size);
++    size *= 512;
++    if (mode != NEW_IMAGE_MODE_EXISTING) {
++        assert(format && drv);
++        bdrv_img_create(target, format,
++                        NULL, NULL, NULL, size, flags, &local_err, false);
++    }
++
++    if (error_is_set(&local_err)) {
++        error_propagate(errp, local_err);
++        return;
++    }
++
++    target_bs = bdrv_new("");
++    ret = bdrv_open(target_bs, target, NULL, flags, drv);
++
++    if (ret < 0) {
++        bdrv_delete(target_bs);
++        error_set(errp, QERR_OPEN_FILE_FAILED, target);
++        return;
++    }
++
++    backup_start(bs, target_bs, speed, block_job_cb, bs, &local_err);
++    if (local_err != NULL) {
++        bdrv_delete(target_bs);
++        error_propagate(errp, local_err);
++        return;
++    }
++
++    /* Grab a reference so hotplug does not delete the BlockDriverState from
++     * underneath us.
++     */
++    drive_get_ref(drive_get_by_blockdev(bs));
++}
++
+ #define DEFAULT_MIRROR_BUF_SIZE   (10 << 20)
+ 
+ void qmp_drive_mirror(const char *device, const char *target,
+diff --git a/qapi-schema.json b/qapi-schema.json
+index 5b0fb3b..550ccac 100644
+--- a/qapi-schema.json
++++ b/qapi-schema.json
+@@ -1715,6 +1715,37 @@
+             '*speed': 'int' } }
+ 
+ ##
++# @block-backup
++#
++# Start a point-in-time copy of a block device to a new destination.  The
++# status of ongoing block backup operations can be checked with
++# query-block-jobs.  The operation can be stopped before it has completed using
++# the block-job-cancel command.
++#
++# @device: the name of the device whose writes should be mirrored.
++#
++# @target: the target of the new image. If the file exists, or if it
++#          is a device, the existing file/device will be used as the new
++#          destination.  If it does not exist, a new file will be created.
++#
++# @format: #optional the format of the new destination, default is to
++#          probe if @mode is 'existing', else the format of the source
++#
++# @mode: #optional whether and how QEMU should create a new image, default is
++#        'absolute-paths'.
++#
++# @speed: #optional the maximum speed, in bytes per second
++#
++# Returns: nothing on success
++#          If @device is not a valid block device, DeviceNotFound
++#
++# Since 1.6
++##
++{ 'command': 'block-backup',
++  'data': { 'device': 'str', 'target': 'str', '*format': 'str',
++            '*mode': 'NewImageMode', '*speed': 'int' } }
++
++##
+ # @drive-mirror
+ #
+ # Start mirroring a block device's writes to a new destination.
+diff --git a/qmp-commands.hx b/qmp-commands.hx
+index 0e89132..f9fb926 100644
+--- a/qmp-commands.hx
++++ b/qmp-commands.hx
+@@ -889,6 +889,12 @@ EQMP
+     },
+ 
+     {
++        .name       = "block-backup",
++        .args_type  = "device:B,target:s,speed:i?,mode:s?,format:s?",
++        .mhandler.cmd_new = qmp_marshal_input_block_backup,
++    },
++
++    {
+         .name       = "block-job-set-speed",
+         .args_type  = "device:B,speed:o",
+         .mhandler.cmd_new = qmp_marshal_input_block_job_set_speed,
+-- 
+1.8.1.4
+
+

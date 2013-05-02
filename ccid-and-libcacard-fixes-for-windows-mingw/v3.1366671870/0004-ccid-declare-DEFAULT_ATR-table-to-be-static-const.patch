@@ -1,0 +1,32 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Alon Levy <alevy@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: mlureau@redhat.com
+Date: Mon, 22 Apr 2013 18:04:34 +0300
+Message-id: 1366643098-2566-5-git-send-email-alevy@redhat.com
+Subject: [PATCH 04/28] ccid: declare DEFAULT_ATR table to be "static const"
+
+From: Jim Meyering <meyering@redhat.com>
+
+Signed-off-by: Jim Meyering <meyering@redhat.com>
+---
+ hw/usb/ccid-card-passthru.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/hw/usb/ccid-card-passthru.c b/hw/usb/ccid-card-passthru.c
+index 71a45f6..275b887 100644
+--- a/hw/usb/ccid-card-passthru.c
++++ b/hw/usb/ccid-card-passthru.c
+@@ -27,7 +27,7 @@ do {                                                    \
+ #define D_VERBOSE 4
+ 
+ /* TODO: do we still need this? */
+-uint8_t DEFAULT_ATR[] = {
++static const uint8_t DEFAULT_ATR[] = {
+ /*
+  * From some example somewhere
+  * 0x3B, 0xB0, 0x18, 0x00, 0xD1, 0x81, 0x05, 0xB1, 0x40, 0x38, 0x1F, 0x03, 0x28
+-- 
+1.8.2
+
+

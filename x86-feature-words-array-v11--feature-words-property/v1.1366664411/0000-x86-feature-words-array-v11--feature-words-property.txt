@@ -1,0 +1,61 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Eduardo Habkost <ehabkost@redhat.com>
+To: Eduardo Habkost <ehabkost@redhat.com>,
+ Andreas =?iso-8859-1?Q?F=E4rber?= <afaerber@suse.de>, qemu-devel@nongnu.org,
+ =?UTF-8?q?Andreas=20F=C3=A4rber?= <afaerber@suse.de>
+Cc: Anthony Liguori <anthony@codemonkey.ws>, libvir-list@redhat.com,
+ Jiri Denemark <jdenemar@redhat.com>, qemu-devel@nongnu.org,
+ Luiz Capitulino <lcapitulino@redhat.com>, Igor Mammedov <imammedo@redhat.com>,
+ Markus Armbruster <armbru@redhat.com>, Erik Blake <eblake@redhat.com>
+Date: Mon, 22 Apr 2013 16:00:11 -0300
+Message-id: 1366657220-776-1-git-send-email-ehabkost@redhat.com
+Subject: [PATCH 0/9] x86: feature words array (v11) + "feature-words" property
+
+This series includes the previous "replace cpuid_*features fields with a feature
+word array" series.
+
+The first 4 patches already have a Reviewed-by from Igor, they correspond to v10
+plus a small indent fix requested by him.
+
+As the cpuid_*features series was holding my "feature-words"/"filtered-features"
+series (previously sent as RFC), I am now sending both as a single series, to
+try to get "feature-words"/"filtered-features" some attention and try to get it
+included in 1.5.
+
+The "feature-words"/"filtered-features" mechanism is very important for libvirt,
+to allow it to ensure the guest is getting the required set of CPU features, as
+configured by the user.
+
+
+Eduardo Habkost (9):
+  target-i386: cleanup: Group together level, xlevel, xlevel2 fields
+  target-i386/kvm.c: Code formatting changes
+  target-i386/cpu.c: Break lines so they don't get too long
+  target-i386: Replace cpuid_*features fields with a feature word array
+  target-i386: Add ECX information to FeatureWordInfo
+  target-i386: Add "feature-words" property
+  target-i386: Use FeatureWord loop on filter_features_for_kvm()
+  target-i386: Introduce X86CPU.filtered_features field
+  target-i386: Add "filtered-features" property to X86CPU
+
+ .gitignore                |   2 +
+ Makefile.objs             |   7 +-
+ bsd-user/elfload.c        |   2 +-
+ bsd-user/main.c           |   4 +-
+ hw/i386/kvm/clock.c       |   2 +-
+ linux-user/elfload.c      |   2 +-
+ linux-user/main.c         |   4 +-
+ qapi-schema.json          |  31 +++
+ target-i386/cpu-qom.h     |   3 +
+ target-i386/cpu.c         | 501 +++++++++++++++++++++++++++++-----------------
+ target-i386/cpu.h         |  15 +-
+ target-i386/helper.c      |   4 +-
+ target-i386/kvm.c         |   5 +-
+ target-i386/misc_helper.c |  14 +-
+ target-i386/translate.c   |  10 +-
+ 15 files changed, 385 insertions(+), 221 deletions(-)
+
+-- 
+1.8.1.4
+
+

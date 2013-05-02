@@ -1,0 +1,5 @@
+0000-m25p80-Fix-debug-printfery.txt
+0001-m25p80-Fix-debug-messages.patch
+0002-m25p80-Convert-guest-errors-to-LOG_GUEST_ERROR.patch
+0003-m25p80c-Multiple-debug-verbosity-levels.patch
+0004-m25p80-Add-debug-message-for-no-bdrv.patch

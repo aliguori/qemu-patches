@@ -1,0 +1,1 @@
+../sysemu-drop-register_devices-from-header/v1.1367343710/0001-sysemu-drop-register_devices-from-header.patch

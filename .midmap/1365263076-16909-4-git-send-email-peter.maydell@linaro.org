@@ -1,0 +1,1 @@
+../Fix-versatile_pci/v4.1365284665/0003-versatile_pci-Update-to-realize-and-instance-init-functions.patch

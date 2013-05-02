@@ -1,0 +1,65 @@
+From patches Mon Sep 17 00:00:00 2001
+From: "Michael S. Tsirkin" <mst@redhat.com>
+To: seabios@seabios.org
+Cc: qemu-devel@nongnu.org
+Date: Thu, 25 Apr 2013 12:02:37 +0300
+Message-id: a23eade1225e63a2b0eaaae841a21e9a5c5dd7b6.1366879705.git.mst@redhat.com
+Subject: [PATCH 3/3] acpi: add an option to disable builtin tables
+
+Serves to save a bit of memory, and is helpful
+for debugging (making sure tables come from qemu).
+
+Memory stats:
+Enabled:
+Total size: 128776  Fixed: 59100  Free: 2296 (used 98.2% of 128KiB rom)
+Disabled:
+Total size: 119836  Fixed: 58996  Free: 11236 (used 91.4% of 128KiB rom)
+
+Signed-off-by: Michael S. Tsirkin <mst@redhat.com>
+---
+ src/Kconfig | 12 +++++++++++-
+ src/acpi.c  |  2 +-
+ 2 files changed, 12 insertions(+), 2 deletions(-)
+
+diff --git a/src/Kconfig b/src/Kconfig
+index 3c80132..1b54b83 100644
+--- a/src/Kconfig
++++ b/src/Kconfig
+@@ -387,10 +387,20 @@ menu "BIOS Tables"
+         default y
+         help
+             Support generation of ACPI tables.
++    config ACPI_BUILTIN
++        bool "Include built-in ACPI tables"
++        default y
++        depends on ACPI
++        help
++            Include built-in ACPI tables in BIOS.
++            Required for QEMU 1.5 and older.
++            This option can be disabled for QEMU 1.6 and newer
++            to save some space in the ROM file.
++            If unsure, say Y.
+     config ACPI_DSDT
+         bool "Include default ACPI DSDT"
+         default y
+-        depends on ACPI
++        depends on ACPI && ACPI_BUILTIN
+         help
+             Include default DSDT ACPI table in BIOS.
+             Required for QEMU 1.3 and older.
+diff --git a/src/acpi.c b/src/acpi.c
+index 16ea9f4..b03b2ba 100644
+--- a/src/acpi.c
++++ b/src/acpi.c
+@@ -664,7 +664,7 @@ acpi_setup(void)
+ 
+     linker_link("/etc/linker-script");
+ 
+-    if (!acpi_generate) {
++    if (!CONFIG_ACPI_BUILTIN || !acpi_generate) {
+         return;
+     }
+ 
+-- 
+MST
+

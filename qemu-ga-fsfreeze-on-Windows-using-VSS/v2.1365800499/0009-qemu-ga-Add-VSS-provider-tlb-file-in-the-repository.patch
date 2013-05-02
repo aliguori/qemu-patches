@@ -1,0 +1,70 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Tomoki Sekiyama <tsekiyam@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: mdroth@linux.vnet.ibm.com, pbonzini@redhat.com, vrozenfe@redhat.com,
+ Tomoki Sekiyama <tomoki.sekiyama@hds.com>, lcapitulino@redhat.com
+Date: Fri, 12 Apr 2013 16:02:09 -0400
+Message-id: 20130412200209.20814.13880.stgit@corona
+Subject: [PATCH 09/11] qemu-ga: Add VSS provider .tlb file in the repository
+
+To build type library (.tlb) for qga-provider.dll from COM IDL (.idl),
+MIDL in VisualC++ and stdole2.tlb in Windows SDK are required.
+
+This patch adds pre-compiled .tlb file in the repository in order to
+enable cross-compile qemu-ga.exe for Windows with VSS support.
+
+Signed-off-by: Tomoki Sekiyama <tomoki.sekiyama@hds.com>
+---
+ Makefile                                |    2 +-
+ qga/vss-win32-provider/Makefile.objs    |    4 ++++
+ qga/vss-win32-provider/qga-provider.tlb |  Bin
+ 3 files changed, 5 insertions(+), 1 deletion(-)
+ create mode 100644 qga/vss-win32-provider/qga-provider.tlb
+
+diff --git a/Makefile b/Makefile
+index 8d4506f..c938aec 100644
+--- a/Makefile
++++ b/Makefile
+@@ -224,7 +224,7 @@ clean:
+ 	rm -f qemu-options.def
+ 	find . -name '*.[oda]' -type f -exec rm -f {} +
+ 	find . -name '*.l[oa]' -type f -exec rm -f {} +
+-	rm -f $(TOOLS) $(HELPERS-y) qemu-ga TAGS cscope.* *.pod *~ */*~
++	rm -f $(filter-out %.tlb,$(TOOLS)) $(HELPERS-y) qemu-ga TAGS cscope.* *.pod *~ */*~
+ 	rm -Rf .libs
+ 	rm -f qemu-img-cmds.h
+ 	@# May not be present in GENERATED_HEADERS
+diff --git a/qga/vss-win32-provider/Makefile.objs b/qga/vss-win32-provider/Makefile.objs
+index 73ef752..698359b 100644
+--- a/qga/vss-win32-provider/Makefile.objs
++++ b/qga/vss-win32-provider/Makefile.objs
+@@ -18,4 +18,8 @@ MIDL=midl
+ WINSDK="C:\\Program Files\\Microsoft SDKs\\Windows\\v7.1\\Include"
+ 
+ $(obj)/qga-provider.tlb: $(SRC_PATH)/$(obj)/qga-provider.idl
++ifeq ($(wildcard $(SRC_PATH)/$(obj)/qga-provider.tlb),)
+ 	$(call quiet-command,$(MIDL) -m64 -o $@ -I $(WINSDK) $<,"  MIDL  $(TARGET_DIR)$@")
++else
++	$(call quiet-command,cp $(dir $<)qga-provider.tlb $@, "  COPY  $(TARGET_DIR)$@")
++endif
+diff --git a/qga/vss-win32-provider/qga-provider.tlb b/qga/vss-win32-provider/qga-provider.tlb
+new file mode 100644
+index 0000000000000000000000000000000000000000..226452a1861371ffe0cad1019cf90fdfdcd5ef49
+GIT binary patch
+literal 1528
+zcmeYbb_-!*U}OLRP8Kl5;0UB3A_y8H!@$4<WGF*9|A9aP$W{R21|SCUVfs9Pj1;IC
+zKahR`)X0Ox{{ZC6An~sN`2tA%H9-9hNPHcj{0byK4>OPh6a(1_GM|T)fx!kz-UG<D
+zK;nbc0l9GX===tt`Vb`fD?q*q5+7YXI$u?Zf#C;G4-9~uhYKVCC4f!`hZ{(Z0*HVD
+zkhwswGqAt}ki;hd*$F@lQbP%-z+r|5P#hGW*vvKniaRx03p~wP?y>h_rLW<nKOg@=
+z6{hYgzgH7@QE<^MU>KC!yoBjb#vz`9Lwu4+R-SJ!kIOX4xLBUUGN9-NyTyP76j}@n
+z2f!qQ8-xepfXD+7rW+{SKz4&@7#qX~^1#sn3O|tFK>%ciE<<riN`6kNkzPqoQh0bc
+zNbM*XJ|Un0jALSb15^rEE6h+Y8tCpA798vm9#E8DmYI@T<dc~c4pSpwQKEn@FU<fE
+zfvHyrsVqoU0O~4AEUE;iEfI8i=bXgi;_z?|20Ng!&PAz-C8;S2NtFt|o-RHLWvNBQ
+znfZAN=6VJOdIqMZrV5EA3T{Q23NES13Py$shQ?OLW>&_Q3PuKoMqI)S5zj9Ngog_=
+gXfrXehlhjmFbIJB4$8MKU>*YlD1Z9^F{m5{03Vre%>V!Z
+
+literal 0
+HcmV?d00001
+
+
+

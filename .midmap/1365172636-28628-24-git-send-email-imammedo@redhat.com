@@ -1,0 +1,1 @@
+../target-i386-CPU-hot-add-with-cpu-add-QMP-command/v2.1365197812/0021-target-i386-expose-all-possible-CPUs-as--machine-icc-bridge-cpu0N-links.patch

@@ -1,0 +1,1 @@
+../SCSI-patches-for-2012-08-27/v1.1343426547/0025-scsi-disk-report-resized-disk-via-sense-codes.patch

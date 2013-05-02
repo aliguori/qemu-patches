@@ -1,0 +1,32 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Gerd Hoffmann <kraxel@redhat.com>
+To: Gerd Hoffmann <kraxel@redhat.com>, qemu-devel@nongnu.org
+Cc: Gerd Hoffmann <kraxel@redhat.com>
+Date: Wed, 24 Apr 2013 12:08:36 +0200
+Message-id: 1366798118-3248-1-git-send-email-kraxel@redhat.com
+Subject: [PATCH 0/2] input: kbd handler list
+
+  Hi,
+
+Tiny series which adds a list for keyboard handlers,
+simliar to the one we have for mice.  Lingering
+unmodified in a git branch for a while, just noticed
+it isn't in yet, so I'm resending it.
+
+please apply,
+  Gerd
+
+Gerd Hoffmann (2):
+  input: make QEMUPutLEDEntry + QEMUPutMouseEntry private
+  input: introduce keyboard handler list
+
+ hw/input/hid.c         |    4 ++--
+ include/hw/input/hid.h |    1 +
+ include/ui/console.h   |   27 ++++++------------------
+ ui/input.c             |   55 +++++++++++++++++++++++++++++++++++++-----------
+ 4 files changed, 53 insertions(+), 34 deletions(-)
+
+-- 
+1.7.9.7
+
+

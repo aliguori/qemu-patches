@@ -1,0 +1,56 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: peter.maydell@linaro.org, edgar.iglesias@gmail.com
+Date: Wed, 17 Apr 2013 16:26:43 +0200
+Message-id: 1366208807-4433-10-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 09/13] configure: move CONFIG_QEMU_LDST_OPTIMIZATION to
+ config-host.mak
+
+Reviewed-by: Peter Maydell <peter.maydell@linaro.org>
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ configure | 18 +++++++++---------
+ 1 file changed, 9 insertions(+), 9 deletions(-)
+
+diff --git a/configure b/configure
+index f4bfa14..1495214 100755
+--- a/configure
++++ b/configure
+@@ -3587,6 +3587,15 @@ echo "extra_ldflags=$EXTRA_LDFLAGS" >> $config_host_mak
+ echo "qemu_localedir=$qemu_localedir" >> $config_host_mak
+ 
+ echo "ARCH=$ARCH" >> $config_host_mak
++
++case "$cpu" in
++  i386|x86_64|ppc)
++    # The TCG interpreter currently does not support ld/st optimization.
++    if test "$tcg_interpreter" = "no" ; then
++        echo "CONFIG_QEMU_LDST_OPTIMIZATION=y" >> $config_host_mak
++    fi
++  ;;
++esac
+ if test "$debug_tcg" = "yes" ; then
+   echo "CONFIG_DEBUG_TCG=y" >> $config_host_mak
+ fi
+@@ -4250,15 +4259,6 @@ upper() {
+     echo "$@"| LC_ALL=C tr '[a-z]' '[A-Z]'
+ }
+ 
+-case "$cpu" in
+-  i386|x86_64|ppc)
+-    # The TCG interpreter currently does not support ld/st optimization.
+-    if test "$tcg_interpreter" = "no" ; then
+-        echo "CONFIG_QEMU_LDST_OPTIMIZATION=y" >> $config_target_mak
+-    fi
+-  ;;
+-esac
+-
+ echo "TARGET_ARCH=$TARGET_ARCH" >> $config_target_mak
+ target_arch_name="`upper $TARGET_ARCH`"
+ echo "TARGET_$target_arch_name=y" >> $config_target_mak
+-- 
+1.8.1.4
+
+
+

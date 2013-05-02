@@ -1,0 +1,84 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: peter.maydell@linaro.org, edgar.iglesias@gmail.com
+Date: Wed, 17 Apr 2013 16:26:45 +0200
+Message-id: 1366208807-4433-12-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 11/13] configure: eliminate target_libs_softmmu
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ configure                        | 4 +---
+ default-configs/lm32-softmmu.mak | 1 +
+ hw/display/Makefile.objs         | 5 +++--
+ 3 files changed, 5 insertions(+), 5 deletions(-)
+
+diff --git a/configure b/configure
+index 35f90e3..6e775aa 100755
+--- a/configure
++++ b/configure
+@@ -3869,6 +3869,7 @@ fi
+ 
+ if test "$glx" = "yes" ; then
+   echo "CONFIG_GLX=y" >> $config_host_mak
++  echo "GLX_LIBS=$glx_libs" >> $config_host_mak
+ fi
+ 
+ if test "$libiscsi" = "yes" ; then
+@@ -4142,7 +4143,6 @@ bflt="no"
+ target_nptl="no"
+ interp_prefix1=`echo "$interp_prefix" | sed "s/%M/$target_arch2/g"`
+ gdb_xml_files=""
+-target_libs_softmmu=
+ 
+ TARGET_ARCH="$target_arch2"
+ TARGET_BASE_ARCH=""
+@@ -4167,7 +4167,6 @@ case "$target_arch2" in
+     target_nptl="yes"
+   ;;
+   lm32)
+-    target_libs_softmmu="$glx_libs"
+   ;;
+   m68k)
+     bflt="yes"
+@@ -4311,7 +4310,6 @@ if test "$target_bigendian" = "yes" ; then
+ fi
+ if test "$target_softmmu" = "yes" ; then
+   echo "CONFIG_SOFTMMU=y" >> $config_target_mak
+-  echo "LIBS+=$target_libs_softmmu" >> $config_target_mak
+   case "$target_arch2" in
+     i386|x86_64)
+       echo "CONFIG_HAVE_CORE_DUMP=y" >> $config_target_mak
+diff --git a/default-configs/lm32-softmmu.mak b/default-configs/lm32-softmmu.mak
+index ef0f4ba..7df58c8 100644
+--- a/default-configs/lm32-softmmu.mak
++++ b/default-configs/lm32-softmmu.mak
+@@ -2,6 +2,7 @@
+ 
+ CONFIG_LM32=y
+ CONFIG_MILKYMIST=y
++CONFIG_MILKYMIST_TMU2=$(CONFIG_GLX)
+ CONFIG_FRAMEBUFFER=y
+ CONFIG_PTIMER=y
+ CONFIG_PFLASH_CFI01=y
+diff --git a/hw/display/Makefile.objs b/hw/display/Makefile.objs
+index 3f7027d..6e9fb3b 100644
+--- a/hw/display/Makefile.objs
++++ b/hw/display/Makefile.objs
+@@ -18,8 +18,9 @@ common-obj-$(CONFIG_FRAMEBUFFER) += framebuffer.o
+ common-obj-$(CONFIG_MILKYMIST) += milkymist-vgafb.o
+ common-obj-$(CONFIG_ZAURUS) += tc6393xb.o
+ 
+-ifeq ($(CONFIG_GLX),y)
+-common-obj-$(CONFIG_MILKYMIST) += milkymist-tmu2.o
++ifeq ($(CONFIG_MILKYMIST_TMU2),y)
++common-obj-y += milkymist-tmu2.o
++libs_softmmu += $(GLX_LIBS)
+ endif
+ 
+ obj-$(CONFIG_OMAP) += omap_dss.o
+-- 
+1.8.1.4
+
+
+

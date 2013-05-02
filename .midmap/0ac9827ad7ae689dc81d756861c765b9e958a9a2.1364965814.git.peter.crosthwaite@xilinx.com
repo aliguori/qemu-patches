@@ -1,0 +1,1 @@
+../Stream-Patches/v5.1365020220/0005-xilinx_axidma-typedef-XilinxAXIDMA-struct.patch

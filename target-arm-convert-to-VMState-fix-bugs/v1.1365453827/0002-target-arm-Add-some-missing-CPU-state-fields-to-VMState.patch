@@ -1,0 +1,55 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Peter Maydell <peter.maydell@linaro.org>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, Paolo Bonzini <pbonzini@redhat.com>,
+ Juan Quintela <quintela@redhat.com>, patches@linaro.org
+Date: Mon, 8 Apr 2013 15:43:49 +0100
+Message-id: 1365432230-20028-3-git-send-email-peter.maydell@linaro.org
+Subject: [PATCH 2/3] target-arm: Add some missing CPU state fields to VMState
+
+A number of CPU state fields were accidentally omitted from
+our migration state: some OMAP specific cp15 registers, and
+some related to state for load/store exclusive insns. Add them.
+
+Signed-off-by: Peter Maydell <peter.maydell@linaro.org>
+---
+ target-arm/machine.c |   13 ++++++++++---
+ 1 file changed, 10 insertions(+), 3 deletions(-)
+
+diff --git a/target-arm/machine.c b/target-arm/machine.c
+index 3c41f06..2dd48d7 100644
+--- a/target-arm/machine.c
++++ b/target-arm/machine.c
+@@ -116,9 +116,9 @@ static const VMStateInfo vmstate_cpsr = {
+ 
+ const VMStateDescription vmstate_arm_cpu = {
+     .name = "cpu",
+-    .version_id = 10,
+-    .minimum_version_id = 10,
+-    .minimum_version_id_old = 10,
++    .version_id = 11,
++    .minimum_version_id = 11,
++    .minimum_version_id_old = 11,
+     .fields = (VMStateField[]) {
+         VMSTATE_UINT32_ARRAY(env.regs, ARMCPU, 16),
+         {
+@@ -172,9 +172,16 @@ const VMStateDescription vmstate_arm_cpu = {
+         VMSTATE_UINT32(env.cp15.c13_tls2, ARMCPU),
+         VMSTATE_UINT32(env.cp15.c13_tls3, ARMCPU),
+         VMSTATE_UINT32(env.cp15.c15_cpar, ARMCPU),
++        VMSTATE_UINT32(env.cp15.c15_ticonfig, ARMCPU),
++        VMSTATE_UINT32(env.cp15.c15_i_max, ARMCPU),
++        VMSTATE_UINT32(env.cp15.c15_i_min, ARMCPU),
++        VMSTATE_UINT32(env.cp15.c15_threadid, ARMCPU),
+         VMSTATE_UINT32(env.cp15.c15_power_control, ARMCPU),
+         VMSTATE_UINT32(env.cp15.c15_diagnostic, ARMCPU),
+         VMSTATE_UINT32(env.cp15.c15_power_diagnostic, ARMCPU),
++        VMSTATE_UINT32(env.exclusive_addr, ARMCPU),
++        VMSTATE_UINT32(env.exclusive_val, ARMCPU),
++        VMSTATE_UINT32(env.exclusive_high, ARMCPU),
+         VMSTATE_UINT64(env.features, ARMCPU),
+         VMSTATE_END_OF_LIST()
+     },
+-- 
+1.7.9.5
+

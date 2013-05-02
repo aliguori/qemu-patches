@@ -1,0 +1,132 @@
+From patches Mon Sep 17 00:00:00 2001
+From: fred.konrad@greensocs.com
+To: Anthony Liguori <aliguori@us.ibm.com>, qemu-devel@nongnu.org
+Cc: peter.maydell@linaro.org, Alexander Graf <agraf@suse.de>,
+ mark.burton@greensocs.com, Richard Henderson <rth@twiddle.net>,
+ cornelia.huck@de.ibm.com, fred.konrad@greensocs.com
+Date: Wed, 24 Apr 2013 10:21:18 +0200
+Message-id: 1366791683-5350-3-git-send-email-fred.konrad@greensocs.com
+Subject: [PATCH 2/7] virtio-bus: make virtio_x_bus_new static.
+
+From: KONRAD Frederic <fred.konrad@greensocs.com>
+
+virtio_x_bus_new are only used in file scope.
+So this make them static.
+
+Signed-off-by: KONRAD Frederic <fred.konrad@greensocs.com>
+---
+ hw/s390x/s390-virtio-bus.c | 4 +++-
+ hw/s390x/s390-virtio-bus.h | 2 --
+ hw/s390x/virtio-ccw.c      | 4 +++-
+ hw/s390x/virtio-ccw.h      | 2 --
+ hw/virtio/virtio-pci.c     | 4 +++-
+ hw/virtio/virtio-pci.h     | 1 -
+ 6 files changed, 9 insertions(+), 8 deletions(-)
+
+diff --git a/hw/s390x/s390-virtio-bus.c b/hw/s390x/s390-virtio-bus.c
+index 95c9275..0cfbff6 100644
+--- a/hw/s390x/s390-virtio-bus.c
++++ b/hw/s390x/s390-virtio-bus.c
+@@ -47,6 +47,8 @@
+ 
+ #define VIRTIO_EXT_CODE   0x2603
+ 
++static void virtio_s390_bus_new(VirtioBusState *bus, VirtIOS390Device *dev);
++
+ static const TypeInfo s390_virtio_bus_info = {
+     .name = TYPE_S390_VIRTIO_BUS,
+     .parent = TYPE_BUS,
+@@ -664,7 +666,7 @@ static const TypeInfo s390_virtio_bridge_info = {
+ 
+ /* virtio-s390-bus */
+ 
+-void virtio_s390_bus_new(VirtioBusState *bus, VirtIOS390Device *dev)
++static void virtio_s390_bus_new(VirtioBusState *bus, VirtIOS390Device *dev)
+ {
+     DeviceState *qdev = DEVICE(dev);
+     BusState *qbus;
+diff --git a/hw/s390x/s390-virtio-bus.h b/hw/s390x/s390-virtio-bus.h
+index 991f9e2..ac81bd8 100644
+--- a/hw/s390x/s390-virtio-bus.h
++++ b/hw/s390x/s390-virtio-bus.h
+@@ -79,8 +79,6 @@ typedef struct VirtioBusClass VirtioS390BusClass;
+ 
+ typedef struct VirtIOS390Device VirtIOS390Device;
+ 
+-void virtio_s390_bus_new(VirtioBusState *bus, VirtIOS390Device *dev);
+-
+ typedef struct VirtIOS390DeviceClass {
+     DeviceClass qdev;
+     int (*init)(VirtIOS390Device *dev);
+diff --git a/hw/s390x/virtio-ccw.c b/hw/s390x/virtio-ccw.c
+index 930531b..0591dc2 100644
+--- a/hw/s390x/virtio-ccw.c
++++ b/hw/s390x/virtio-ccw.c
+@@ -27,6 +27,8 @@
+ #include "virtio-ccw.h"
+ #include "trace.h"
+ 
++static void virtio_ccw_bus_new(VirtioBusState *bus, VirtioCcwDevice *dev);
++
+ static int virtual_css_bus_reset(BusState *qbus)
+ {
+     /* This should actually be modelled via the generic css */
+@@ -1060,7 +1062,7 @@ static const TypeInfo virtual_css_bridge_info = {
+ 
+ /* virtio-ccw-bus */
+ 
+-void virtio_ccw_bus_new(VirtioBusState *bus, VirtioCcwDevice *dev)
++static void virtio_ccw_bus_new(VirtioBusState *bus, VirtioCcwDevice *dev)
+ {
+     DeviceState *qdev = DEVICE(dev);
+     BusState *qbus;
+diff --git a/hw/s390x/virtio-ccw.h b/hw/s390x/virtio-ccw.h
+index 8599248..04ba1b9 100644
+--- a/hw/s390x/virtio-ccw.h
++++ b/hw/s390x/virtio-ccw.h
+@@ -60,8 +60,6 @@ typedef struct VirtioBusClass VirtioCcwBusClass;
+ 
+ typedef struct VirtioCcwDevice VirtioCcwDevice;
+ 
+-void virtio_ccw_bus_new(VirtioBusState *bus, VirtioCcwDevice *dev);
+-
+ typedef struct VirtIOCCWDeviceClass {
+     DeviceClass parent_class;
+     int (*init)(VirtioCcwDevice *dev);
+diff --git a/hw/virtio/virtio-pci.c b/hw/virtio/virtio-pci.c
+index 1269a22..6278427 100644
+--- a/hw/virtio/virtio-pci.c
++++ b/hw/virtio/virtio-pci.c
+@@ -98,6 +98,8 @@
+ /* HACK for virtio to determine if it's running a big endian guest */
+ bool virtio_is_big_endian(void);
+ 
++static void virtio_pci_bus_new(VirtioBusState *bus, VirtIOPCIProxy *dev);
++
+ /* virtio device */
+ /* DeviceState to VirtIOPCIProxy. For use off data-path. TODO: use QOM. */
+ static inline VirtIOPCIProxy *to_virtio_pci_proxy(DeviceState *d)
+@@ -1524,7 +1526,7 @@ static const TypeInfo virtio_rng_pci_info = {
+ 
+ /* virtio-pci-bus */
+ 
+-void virtio_pci_bus_new(VirtioBusState *bus, VirtIOPCIProxy *dev)
++static void virtio_pci_bus_new(VirtioBusState *bus, VirtIOPCIProxy *dev)
+ {
+     DeviceState *qdev = DEVICE(dev);
+     BusState *qbus;
+diff --git a/hw/virtio/virtio-pci.h b/hw/virtio/virtio-pci.h
+index ac71824..35ae6ac 100644
+--- a/hw/virtio/virtio-pci.h
++++ b/hw/virtio/virtio-pci.h
+@@ -201,7 +201,6 @@ struct VirtIORngPCI {
+ };
+ 
+ void virtio_init_pci(VirtIOPCIProxy *proxy, VirtIODevice *vdev);
+-void virtio_pci_bus_new(VirtioBusState *bus, VirtIOPCIProxy *dev);
+ 
+ /* Virtio ABI version, if we increment this, we break the guest driver. */
+ #define VIRTIO_PCI_ABI_VERSION          0
+-- 
+1.7.11.7
+

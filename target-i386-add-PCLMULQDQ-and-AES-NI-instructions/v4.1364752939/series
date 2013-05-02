@@ -1,0 +1,8 @@
+0000-target-i386-add-PCLMULQDQ-and-AES-NI-instructions.txt
+0001-disas-i386c-disassemble-pclmulqdq-instruction.patch
+0002-target-i386-add-pclmulqdq-instruction.patch
+0003-target-i386-enable-PCLMULQDQ-on-Westmere-CPU.patch
+0004-disas-i386c-disassemble-aes-ni-instructions.patch
+0005-aes-move-aesh-from-include-block-to-include-qemu.patch
+0006-aes-make-Td0-5-and-Te0-5-tables-non-static.patch
+0007-target-i386-add-AES-NI-instructions.patch

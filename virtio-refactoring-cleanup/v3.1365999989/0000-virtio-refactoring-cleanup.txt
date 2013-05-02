@@ -1,0 +1,68 @@
+From patches Mon Sep 17 00:00:00 2001
+From: fred.konrad@greensocs.com
+To: Anthony Liguori <aliguori@us.ibm.com>, qemu-devel@nongnu.org
+Cc: cornelia.huck@de.ibm.com, peter.maydell@linaro.org,
+ mark.burton@greensocs.com, fred.konrad@greensocs.com
+Date: Sun, 14 Apr 2013 23:26:29 +0200
+Message-id: 1365974797-13217-1-git-send-email-fred.konrad@greensocs.com
+Subject: [PATCH 0/8] virtio-refactoring cleanup.
+
+From: KONRAD Frederic <fred.konrad@greensocs.com>
+
+This is the last part of the refactoring.
+
+It may require some changes, especially for virtio-ccw part (step 5).
+
+The step 6 replaces the function pointers contained in VirtIODevice structure by
+the function pointers contained in VirtioDeviceClass.
+
+The step 7 removes virtiobindings.
+
+I tested the changes on i386 only with virtio-blk on linux guest.
+
+You can test here (it's on top of virtio-rng-v3 I sent earlier):
+git://project.greensocs.com/qemu-virtio.git virtio-cleanup
+
+Changes v2 -> v3:
+    * Fix PCI hot-unplug.
+    * Add CCW devices.
+    * A lot of rebasing.
+
+Thanks,
+Fred
+
+KONRAD Frederic (8):
+  virtio-bus: add new functions.
+  virtio-bus: make virtio_x_bus_new static.
+  virtio-pci: cleanup.
+  s390-virtio-bus: cleanup.
+  virtio-ccw: cleanup.
+  virtio: remove the function pointer.
+  virtio: remove virtiobindings.
+  virtio: cleanup: init and exit function.
+
+ hw/9pfs/virtio-9p-device.c      |   2 -
+ hw/block/dataplane/virtio-blk.c |  15 +++---
+ hw/block/virtio-blk.c           |   9 +---
+ hw/char/virtio-serial-bus.c     |   8 +--
+ hw/net/vhost_net.c              |  17 +++---
+ hw/net/virtio-net.c             |  11 +---
+ hw/s390x/s390-virtio-bus.c      |  51 +++++++-----------
+ hw/s390x/s390-virtio-bus.h      |   2 -
+ hw/s390x/virtio-ccw.c           |  55 +++++++------------
+ hw/s390x/virtio-ccw.h           |   2 -
+ hw/scsi/virtio-scsi.c           |   8 +--
+ hw/virtio/vhost.c               |  31 ++++++-----
+ hw/virtio/virtio-balloon.c      |   8 +--
+ hw/virtio/virtio-bus.c          |  40 ++++++++------
+ hw/virtio/virtio-pci.c          | 112 ++++++++++-----------------------------
+ hw/virtio/virtio-pci.h          |   3 --
+ hw/virtio/virtio-rng.c          |   4 +-
+ hw/virtio/virtio.c              | 114 +++++++++++++++++++++-------------------
+ include/hw/virtio/virtio-bus.h  |   9 ++--
+ include/hw/virtio/virtio.h      |  49 +----------------
+ 20 files changed, 203 insertions(+), 347 deletions(-)
+
+-- 
+1.7.11.7
+

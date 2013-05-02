@@ -1,0 +1,1 @@
+../ccid-and-libcacard-fixes-for-windows-mingw/v3.1366671870/0007-build-sys-must-link-with--fstack-protector.patch

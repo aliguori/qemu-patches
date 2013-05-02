@@ -1,0 +1,1 @@
+../QEMUFile-improvements-and-simplifications/v1.1365445793/0002-migration-use-a-single-I-O-operation-when-writev_buffer-is-not-defined.patch

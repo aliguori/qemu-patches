@@ -1,0 +1,33 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Dominik Dingel <dingel@linux.vnet.ibm.com>
+To: Dominik Dingel <dingel@linux.vnet.ibm.com>, qemu-devel@nongnu.org
+Cc: Christian Borntraeger <borntraeger@de.ibm.com>,
+ Alexander Graf <agraf@suse.de>, qemu-devel@nongnu.org,
+ Dominik Dingel <dingel@linux.vnet.ibm.com>
+Date: Mon, 29 Apr 2013 16:52:05 +0200
+Message-id: 1367247128-22409-3-git-send-email-dingel@linux.vnet.ibm.com
+Subject: [PATCH 2/5] S390: BIOS check for file
+
+Add a check if the BIOS blob exists before trying to load.
+
+Signed-off-by: Dominik Dingel <dingel@linux.vnet.ibm.com>
+
+diff --git a/hw/s390x/ipl.c b/hw/s390x/ipl.c
+index bcbba7c..f7a570e 100644
+--- a/hw/s390x/ipl.c
++++ b/hw/s390x/ipl.c
+@@ -93,6 +93,10 @@ static int s390_ipl_init(SysBusDevice *dev)
+         }
+ 
+         bios_filename = qemu_find_file(QEMU_FILE_TYPE_BIOS, bios_name);
++        if (bios_filename == NULL) {
++            hw_error("could not find stage1 bootloader\n");
++        }
++
+         bios_size = load_elf(bios_filename, NULL, NULL, &ipl->start_addr, NULL,
+                              NULL, 1, ELF_MACHINE, 0);
+         if (bios_size == -1UL) {
+-- 
+1.7.9.5
+
+

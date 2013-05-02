@@ -1,0 +1,81 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Cornelia Huck <cornelia.huck@de.ibm.com>
+To: Alexander Graf <agraf@suse.de>
+Cc: Christian Borntraeger <borntraeger@de.ibm.com>,
+ Cornelia Huck <cornelia.huck@de.ibm.com>, qemu-devel@nongnu.org,
+ Dominik Dingel <dingel@linux.vnet.ibm.com>
+Date: Tue, 23 Apr 2013 14:37:13 +0200
+Message-id: 1366720634-13184-4-git-send-email-cornelia.huck@de.ibm.com
+Subject: [PATCH 3/4] s390-ccw.img: Rudimentary error checking.
+
+Try to handle at least some of the errors that may happen.
+
+Signed-off-by: Cornelia Huck <cornelia.huck@de.ibm.com>
+---
+ pc-bios/s390-ccw/virtio.c | 21 +++++++++++++++------
+ 1 file changed, 15 insertions(+), 6 deletions(-)
+
+diff --git a/pc-bios/s390-ccw/virtio.c b/pc-bios/s390-ccw/virtio.c
+index 2a132f8..8e37dce 100644
+--- a/pc-bios/s390-ccw/virtio.c
++++ b/pc-bios/s390-ccw/virtio.c
+@@ -90,7 +90,9 @@ static int run_ccw(struct subchannel_id schid, int cmd, void *ptr, int len)
+      *     assume that a simple tsch will have finished the CCW processing,
+      *     but the architecture allows for asynchronous operation
+      */
+-    drain_irqs(schid);
++    if (!r) {
++        r = drain_irqs(schid);
++    }
+     return r;
+ }
+ 
+@@ -98,7 +100,9 @@ static void virtio_set_status(struct subchannel_id schid,
+                               unsigned long dev_addr)
+ {
+     unsigned char status = dev_addr;
+-    run_ccw(schid, CCW_CMD_WRITE_STATUS, &status, sizeof(status));
++    if (run_ccw(schid, CCW_CMD_WRITE_STATUS, &status, sizeof(status))) {
++        virtio_panic("Could not write status to host!\n");
++    }
+ }
+ 
+ static void virtio_reset(struct subchannel_id schid)
+@@ -197,6 +201,7 @@ static int virtio_read_many(ulong sector, void *load_addr, int sec_num)
+ {
+     struct virtio_blk_outhdr out_hdr;
+     u8 status;
++    int r;
+ 
+     /* Tell the host we want to read */
+     out_hdr.type = VIRTIO_BLK_T_IN;
+@@ -217,8 +222,11 @@ static int virtio_read_many(ulong sector, void *load_addr, int sec_num)
+     /* Now we can tell the host to read */
+     vring_wait_reply(&block, 0);
+ 
+-    drain_irqs(block.schid);
+-
++    r = drain_irqs(block.schid);
++    if (r) {
++        /* Well, whatever status is supposed to contain... */
++        status = 1;
++    }
+     return status;
+ }
+ 
+@@ -266,8 +274,9 @@ void virtio_setup_block(struct subchannel_id schid)
+     info.num = 128;
+     block.schid = schid;
+ 
+-    run_ccw(schid, CCW_CMD_SET_VQ, &info, sizeof(info));
+-    virtio_set_status(schid, VIRTIO_CONFIG_S_DRIVER_OK);
++    if (!run_ccw(schid, CCW_CMD_SET_VQ, &info, sizeof(info))) {
++        virtio_set_status(schid, VIRTIO_CONFIG_S_DRIVER_OK);
++    }
+ }
+ 
+ bool virtio_is_blk(struct subchannel_id schid)
+-- 
+1.7.12.4
+
+

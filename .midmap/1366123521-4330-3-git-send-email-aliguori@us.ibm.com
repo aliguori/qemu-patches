@@ -1,0 +1,1 @@
+../qtest-add-libqos/v1.1366123514/0002-qtest-add-libqos-including-PCI-support.patch

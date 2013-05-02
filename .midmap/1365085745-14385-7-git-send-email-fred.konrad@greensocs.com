@@ -1,0 +1,1 @@
+../virtio-serial-refactoring/v5.1365110938/0006-virtio-serial-cleanup-use-QOM-casts.patch

@@ -1,0 +1,171 @@
+From patches Mon Sep 17 00:00:00 2001
+From: "Stefan Hajnoczi" <stefanha@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>,
+ Stefan Hajnoczi <stefanha@redhat.com>, Kevin Wolf <kwolf@redhat.com>
+Date: Fri, 26 Apr 2013 13:44:29 +0200
+Message-id: 1366976682-10251-10-git-send-email-stefanha@redhat.com
+Subject: [PATCH 05/11] block: Disable driver-specific options for 1.5
+
+From: Kevin Wolf <kwolf@redhat.com>
+
+We don't want to commit to the API yet before everything is worked out.
+Disable it for the 1.5 release. This commit is meant to be reverted
+after the 1.5 release.
+
+The disabling of the driver-specific options is achieved by applying the
+old checks while parsing the command line.
+
+Signed-off-by: Kevin Wolf <kwolf@redhat.com>
+Reviewed-by: Eric Blake <eblake@redhat.com>
+Signed-off-by: Stefan Hajnoczi <stefanha@redhat.com>
+---
+ blockdev.c               | 118 +++++++++++++++++++++++++++++++++++++++++++++--
+ tests/qemu-iotests/group |   2 +-
+ 2 files changed, 115 insertions(+), 5 deletions(-)
+
+diff --git a/blockdev.c b/blockdev.c
+index 8a1652b..6e293e9 100644
+--- a/blockdev.c
++++ b/blockdev.c
+@@ -1656,10 +1656,120 @@ QemuOptsList qemu_drive_opts = {
+     .name = "drive",
+     .head = QTAILQ_HEAD_INITIALIZER(qemu_drive_opts.head),
+     .desc = {
+-        /*
+-         * no elements => accept any params
+-         * validation will happen later
+-         */
++        {
++            .name = "bus",
++            .type = QEMU_OPT_NUMBER,
++            .help = "bus number",
++        },{
++            .name = "unit",
++            .type = QEMU_OPT_NUMBER,
++            .help = "unit number (i.e. lun for scsi)",
++        },{
++            .name = "if",
++            .type = QEMU_OPT_STRING,
++            .help = "interface (ide, scsi, sd, mtd, floppy, pflash, virtio)",
++        },{
++            .name = "index",
++            .type = QEMU_OPT_NUMBER,
++            .help = "index number",
++        },{
++            .name = "cyls",
++            .type = QEMU_OPT_NUMBER,
++            .help = "number of cylinders (ide disk geometry)",
++        },{
++            .name = "heads",
++            .type = QEMU_OPT_NUMBER,
++            .help = "number of heads (ide disk geometry)",
++        },{
++            .name = "secs",
++            .type = QEMU_OPT_NUMBER,
++            .help = "number of sectors (ide disk geometry)",
++        },{
++            .name = "trans",
++            .type = QEMU_OPT_STRING,
++            .help = "chs translation (auto, lba. none)",
++        },{
++            .name = "media",
++            .type = QEMU_OPT_STRING,
++            .help = "media type (disk, cdrom)",
++        },{
++            .name = "snapshot",
++            .type = QEMU_OPT_BOOL,
++            .help = "enable/disable snapshot mode",
++        },{
++            .name = "file",
++            .type = QEMU_OPT_STRING,
++            .help = "disk image",
++        },{
++            .name = "discard",
++            .type = QEMU_OPT_STRING,
++            .help = "discard operation (ignore/off, unmap/on)",
++        },{
++            .name = "cache",
++            .type = QEMU_OPT_STRING,
++            .help = "host cache usage (none, writeback, writethrough, "
++                    "directsync, unsafe)",
++        },{
++            .name = "aio",
++            .type = QEMU_OPT_STRING,
++            .help = "host AIO implementation (threads, native)",
++        },{
++            .name = "format",
++            .type = QEMU_OPT_STRING,
++            .help = "disk format (raw, qcow2, ...)",
++        },{
++            .name = "serial",
++            .type = QEMU_OPT_STRING,
++            .help = "disk serial number",
++        },{
++            .name = "rerror",
++            .type = QEMU_OPT_STRING,
++            .help = "read error action",
++        },{
++            .name = "werror",
++            .type = QEMU_OPT_STRING,
++            .help = "write error action",
++        },{
++            .name = "addr",
++            .type = QEMU_OPT_STRING,
++            .help = "pci address (virtio only)",
++        },{
++            .name = "readonly",
++            .type = QEMU_OPT_BOOL,
++            .help = "open drive file as read-only",
++        },{
++            .name = "iops",
++            .type = QEMU_OPT_NUMBER,
++            .help = "limit total I/O operations per second",
++        },{
++            .name = "iops_rd",
++            .type = QEMU_OPT_NUMBER,
++            .help = "limit read operations per second",
++        },{
++            .name = "iops_wr",
++            .type = QEMU_OPT_NUMBER,
++            .help = "limit write operations per second",
++        },{
++            .name = "bps",
++            .type = QEMU_OPT_NUMBER,
++            .help = "limit total bytes per second",
++        },{
++            .name = "bps_rd",
++            .type = QEMU_OPT_NUMBER,
++            .help = "limit read bytes per second",
++        },{
++            .name = "bps_wr",
++            .type = QEMU_OPT_NUMBER,
++            .help = "limit write bytes per second",
++        },{
++            .name = "copy-on-read",
++            .type = QEMU_OPT_BOOL,
++            .help = "copy read data from backing file into image file",
++        },{
++            .name = "boot",
++            .type = QEMU_OPT_BOOL,
++            .help = "(deprecated, ignored)",
++        },
+         { /* end of list */ }
+     },
+ };
+diff --git a/tests/qemu-iotests/group b/tests/qemu-iotests/group
+index 68eabda..bf944d9 100644
+--- a/tests/qemu-iotests/group
++++ b/tests/qemu-iotests/group
+@@ -57,6 +57,6 @@
+ 048 img auto quick
+ 049 rw auto
+ 050 rw auto backing quick
+-051 rw auto
++#051 rw auto
+ 052 rw auto backing
+ 053 rw auto
+-- 
+1.8.1.4
+
+

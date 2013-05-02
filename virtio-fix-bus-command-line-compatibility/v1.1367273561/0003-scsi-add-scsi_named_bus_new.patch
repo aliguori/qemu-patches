@@ -1,0 +1,67 @@
+From patches Mon Sep 17 00:00:00 2001
+From: fred.konrad@greensocs.com
+To: Anthony Liguori <aliguori@us.ibm.com>, Paolo Bonzini <pbonzini@redhat.com>,
+ qemu-devel@nongnu.org, fred.konrad@greensocs.com
+Cc: Anthony Liguori <aliguori@us.ibm.com>, peter.maydell@linaro.org,
+ mark.burton@greensocs.com, agraf@suse.de, qemu-devel@nongnu.org,
+ amit.shah@redhat.com, cornelia.huck@de.ibm.com, pbonzini@redhat.com,
+ afaerber@suse.de, fred.konrad@greensocs.com
+Date: Mon, 29 Apr 2013 17:12:44 +0200
+Message-id: 1367248365-27260-4-git-send-email-fred.konrad@greensocs.com
+Subject: [PATCH 3/4] scsi: add scsi_named_bus_new().
+
+From: KONRAD Frederic <fred.konrad@greensocs.com>
+
+This add the possibility to create a scsi-bus with a specified name.
+
+Signed-off-by: KONRAD Frederic <fred.konrad@greensocs.com>
+---
+ hw/scsi/scsi-bus.c     | 12 +++++++++---
+ include/hw/scsi/scsi.h |  2 ++
+ 2 files changed, 11 insertions(+), 3 deletions(-)
+
+diff --git a/hw/scsi/scsi-bus.c b/hw/scsi/scsi-bus.c
+index 6239ee1..0364749 100644
+--- a/hw/scsi/scsi-bus.c
++++ b/hw/scsi/scsi-bus.c
+@@ -71,15 +71,21 @@ static void scsi_device_unit_attention_reported(SCSIDevice *s)
+     }
+ }
+ 
+-/* Create a scsi bus, and attach devices to it.  */
+-void scsi_bus_new(SCSIBus *bus, DeviceState *host, const SCSIBusInfo *info)
++void scsi_named_bus_new(SCSIBus *bus, DeviceState *host,
++                        const SCSIBusInfo *info, const char *bus_name)
+ {
+-    qbus_create_inplace(&bus->qbus, TYPE_SCSI_BUS, host, NULL);
++    qbus_create_inplace(&bus->qbus, TYPE_SCSI_BUS, host, bus_name);
+     bus->busnr = next_scsi_bus++;
+     bus->info = info;
+     bus->qbus.allow_hotplug = 1;
+ }
+ 
++/* Create a scsi bus, and attach devices to it.  */
++void scsi_bus_new(SCSIBus *bus, DeviceState *host, const SCSIBusInfo *info)
++{
++    scsi_named_bus_new(bus, host, info, NULL);
++}
++
+ static void scsi_dma_restart_bh(void *opaque)
+ {
+     SCSIDevice *s = opaque;
+diff --git a/include/hw/scsi/scsi.h b/include/hw/scsi/scsi.h
+index 3bda1c4..ddcb07c 100644
+--- a/include/hw/scsi/scsi.h
++++ b/include/hw/scsi/scsi.h
+@@ -153,6 +153,8 @@ struct SCSIBus {
+ };
+ 
+ void scsi_bus_new(SCSIBus *bus, DeviceState *host, const SCSIBusInfo *info);
++void scsi_named_bus_new(SCSIBus *bus, DeviceState *host,
++                        const SCSIBusInfo *info, const char *bus_name);
+ 
+ static inline SCSIBus *scsi_bus_from_device(SCSIDevice *d)
+ {
+-- 
+1.8.1.4
+

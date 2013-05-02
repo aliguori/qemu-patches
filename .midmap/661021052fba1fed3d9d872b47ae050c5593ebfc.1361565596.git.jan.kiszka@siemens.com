@@ -1,0 +1,1 @@
+../i2c-Add-AT24Cxx-EEPROM-model/v2.1361590797/0002-Add-AT24Cxx-I2C-EEPROM-device-model.patch

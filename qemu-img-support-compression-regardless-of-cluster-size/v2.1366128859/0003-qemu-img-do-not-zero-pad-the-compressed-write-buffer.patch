@@ -1,0 +1,44 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Stefan Hajnoczi <stefanha@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Fam Zheng <famz@redhat.com>, Stefan Hajnoczi <stefanha@redhat.com>,
+ Kevin Wolf <kwolf@redhat.com>, ilkka.tengvall@cybercom.com
+Date: Tue, 16 Apr 2013 11:14:22 +0200
+Message-id: 1366103663-11574-4-git-send-email-stefanha@redhat.com
+Subject: [PATCH 3/4] qemu-img: do not zero-pad the compressed write buffer
+
+bdrv_write_compressed() does not allow requests that span the end of the
+device.  Therefore it is useless to zero-pad the last cluster and
+thereby exceed the end of the device.
+
+Let image formats handle zero-padding the final compressed cluster, if
+necessary.
+
+Signed-off-by: Stefan Hajnoczi <stefanha@redhat.com>
+---
+ qemu-img.c | 8 ++------
+ 1 file changed, 2 insertions(+), 6 deletions(-)
+
+diff --git a/qemu-img.c b/qemu-img.c
+index 31627b0..cd096a1 100644
+--- a/qemu-img.c
++++ b/qemu-img.c
+@@ -1425,12 +1425,8 @@ static int img_convert(int argc, char **argv)
+             }
+             assert (remainder == 0);
+ 
+-            if (n < cluster_sectors) {
+-                memset(buf + n * 512, 0, cluster_size - n * 512);
+-            }
+-            if (!buffer_is_zero(buf, cluster_size)) {
+-                ret = bdrv_write_compressed(out_bs, sector_num, buf,
+-                                            cluster_sectors);
++            if (!buffer_is_zero(buf, n * BDRV_SECTOR_SIZE)) {
++                ret = bdrv_write_compressed(out_bs, sector_num, buf, n);
+                 if (ret != 0) {
+                     error_report("error while compressing sector %" PRId64
+                                  ": %s", sector_num, strerror(-ret));
+-- 
+1.8.1.4
+
+

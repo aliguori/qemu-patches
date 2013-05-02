@@ -1,0 +1,1 @@
+../TARGET__ALIGNMENT-cleanup-and-config-targetmak-trimming/v3.1366233994/0009-configure-move-CONFIG_QEMU_LDST_OPTIMIZATION-to-config-hostmak.patch

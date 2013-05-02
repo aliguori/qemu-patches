@@ -1,0 +1,33 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: sw@weilnetz.de
+Date: Wed, 24 Apr 2013 22:59:54 +0200
+Message-id: 1366837194-28601-4-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 3/3] win32: generate console executable again
+
+The -mwindows option is not anymore in LIBS at this point of the Makefile,
+it is only in libs_softmmu.  Check the right variable.
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ Makefile.target | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/Makefile.target b/Makefile.target
+index 2636103..3e8670c 100644
+--- a/Makefile.target
++++ b/Makefile.target
+@@ -18,7 +18,7 @@ ifdef CONFIG_USER_ONLY
+ QEMU_PROG=qemu-$(TARGET_ARCH2)
+ else
+ # system emulator name
+-ifneq (,$(findstring -mwindows,$(LIBS)))
++ifneq (,$(findstring -mwindows,$(libs_softmmu)))
+ # Terminate program name with a 'w' because the linker builds a windows executable.
+ QEMU_PROGW=qemu-system-$(TARGET_ARCH2)w$(EXESUF)
+ endif # windows executable
+-- 
+1.8.2
+
+

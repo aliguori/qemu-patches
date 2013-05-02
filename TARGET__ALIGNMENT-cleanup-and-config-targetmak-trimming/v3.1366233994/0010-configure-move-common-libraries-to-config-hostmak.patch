@@ -1,0 +1,87 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: peter.maydell@linaro.org, edgar.iglesias@gmail.com
+Date: Wed, 17 Apr 2013 16:26:44 +0200
+Message-id: 1366208807-4433-11-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 10/13] configure: move common libraries to config-host.mak
+
+Move -lm to the end of the line, so that it can be picked up as a
+dependency by pixman in the static build case.
+
+Reviewed-by: Peter Maydell <peter.maydell@redhat.com>
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ Makefile.target | 10 +++++-----
+ configure       |  4 +++-
+ 2 files changed, 8 insertions(+), 6 deletions(-)
+
+diff --git a/Makefile.target b/Makefile.target
+index 2bd6d14..2636103 100644
+--- a/Makefile.target
++++ b/Makefile.target
+@@ -31,10 +31,6 @@ PROGS+=$(QEMU_PROGW)
+ endif
+ STPFILES=
+ 
+-ifndef CONFIG_HAIKU
+-LIBS+=-lm
+-endif
+-
+ config-target.h: config-target.h-timestamp
+ config-target.h-timestamp: config-target.mak
+ 
+@@ -119,7 +115,7 @@ obj-$(CONFIG_HAVE_GET_MEMORY_MAPPING) += memory_mapping.o
+ obj-$(CONFIG_HAVE_CORE_DUMP) += dump.o
+ obj-$(CONFIG_NO_GET_MEMORY_MAPPING) += memory_mapping-stub.o
+ obj-$(CONFIG_NO_CORE_DUMP) += dump-stub.o
+-LIBS+=-lz
++LIBS+=$(libs_softmmu)
+ 
+ # xen support
+ obj-$(CONFIG_XEN) += xen-all.o xen-mapcache.o
+@@ -149,6 +145,10 @@ include $(SRC_PATH)/Makefile.objs
+ all-obj-y = $(obj-y)
+ all-obj-y += $(addprefix ../, $(common-obj-y))
+ 
++ifndef CONFIG_HAIKU
++LIBS+=-lm
++endif
++
+ ifdef QEMU_PROGW
+ # The linker builds a windows executable. Make also a console executable.
+ $(QEMU_PROGW): $(all-obj-y) ../libqemuutil.a ../libqemustub.a
+diff --git a/configure b/configure
+index 1495214..35f90e3 100755
+--- a/configure
++++ b/configure
+@@ -1464,6 +1464,7 @@ EOF
+             "Make sure to have the zlib libs and headers installed."
+     fi
+ fi
++libs_softmmu="$libs_softmmu -lz"
+ 
+ ##########################################
+ # libseccomp check
+@@ -3585,6 +3586,7 @@ echo "qemu_helperdir=$libexecdir" >> $config_host_mak
+ echo "extra_cflags=$EXTRA_CFLAGS" >> $config_host_mak
+ echo "extra_ldflags=$EXTRA_LDFLAGS" >> $config_host_mak
+ echo "qemu_localedir=$qemu_localedir" >> $config_host_mak
++echo "libs_softmmu=$libs_softmmu" >> $config_host_mak
+ 
+ echo "ARCH=$ARCH" >> $config_host_mak
+ 
+@@ -4309,7 +4311,7 @@ if test "$target_bigendian" = "yes" ; then
+ fi
+ if test "$target_softmmu" = "yes" ; then
+   echo "CONFIG_SOFTMMU=y" >> $config_target_mak
+-  echo "LIBS+=$libs_softmmu $target_libs_softmmu" >> $config_target_mak
++  echo "LIBS+=$target_libs_softmmu" >> $config_target_mak
+   case "$target_arch2" in
+     i386|x86_64)
+       echo "CONFIG_HAVE_CORE_DUMP=y" >> $config_target_mak
+-- 
+1.8.1.4
+
+
+

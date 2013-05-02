@@ -1,0 +1,1 @@
+../usb-patch-queue/v1.1365007410/0003-xhci-fix-numintrs-sanity-checks.patch

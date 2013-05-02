@@ -1,0 +1,42 @@
+From patches Mon Sep 17 00:00:00 2001
+From: "Igor Mammedov" <imammedo@redhat.com>
+To: Igor Mammedov <imammedo@redhat.com>, qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, peter.maydell@linaro.org,
+ aliguori@us.ibm.com, ehabkost@redhat.com, stefano.stabellini@eu.citrix.com,
+ quintela@redhat.com, qemu-devel@nongnu.org, mst@redhat.com,
+ anthony.perard@citrix.com, pbonzini@redhat.com, afaerber@suse.de
+Date: Thu, 25 Apr 2013 16:05:30 +0200
+Message-id: 1366898737-6201-9-git-send-email-imammedo@redhat.com
+Subject: [PATCH 08/15] target-i386: kvmvapic: make expilict dependency on
+ sysbus.h
+
+Allows kvmvapic to compile if sysbus.h is removed from apic_internal.h,
+from which it is indirectly included.
+sysbus.h will be removed from apic_internal.h after converting
+APICs to ICCDevice.
+
+Signed-off-by: Igor Mammedov <imammedo@redhat.com>
+---
+Note:
+  split it in separate patch from "move APIC to ICC bus" patch to
+  simplify review. Feel free to squash it back.
+---
+ hw/i386/kvmvapic.c |    1 +
+ 1 files changed, 1 insertions(+), 0 deletions(-)
+
+diff --git a/hw/i386/kvmvapic.c b/hw/i386/kvmvapic.c
+index 3a10c07..5b558aa 100644
+--- a/hw/i386/kvmvapic.c
++++ b/hw/i386/kvmvapic.c
+@@ -12,6 +12,7 @@
+ #include "sysemu/cpus.h"
+ #include "sysemu/kvm.h"
+ #include "hw/i386/apic_internal.h"
++#include "hw/sysbus.h"
+ 
+ #define VAPIC_IO_PORT           0x7e
+ 
+-- 
+1.7.1
+
+

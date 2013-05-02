@@ -1,0 +1,530 @@
+From patches Mon Sep 17 00:00:00 2001
+From: liguang <lig.fnst@cn.fujitsu.com>
+To: qemu-devel@nongnu.org
+Cc: peter.maydell@linaro.org, ehabkost@redhat.com,
+ liguang <lig.fnst@cn.fujitsu.com>, blauwirbel@gmail.com, avi@redhat.com,
+ pbonzini@redhat.com, imammedo@redhat.com, afaerber@suse.de, rth@twiddle.net
+Date: Mon, 22 Apr 2013 11:33:19 +0800
+Message-id: 1366601610-15429-2-git-send-email-lig.fnst@cn.fujitsu.com
+Subject: [PATCH 01/12] target-i386/helper: remove EAX macro
+
+Signed-off-by: liguang <lig.fnst@cn.fujitsu.com>
+---
+ target-i386/cpu.h         |    2 -
+ target-i386/int_helper.c  |   62 ++++++++++++++++++++++----------------------
+ target-i386/mem_helper.c  |    8 +++---
+ target-i386/misc_helper.c |   10 +++---
+ target-i386/seg_helper.c  |    8 +++---
+ target-i386/smm_helper.c  |    8 +++---
+ target-i386/svm_helper.c  |   24 ++++++++--------
+ 7 files changed, 60 insertions(+), 62 deletions(-)
+
+diff --git a/target-i386/cpu.h b/target-i386/cpu.h
+index 2b4e319..b75146a 100644
+--- a/target-i386/cpu.h
++++ b/target-i386/cpu.h
+@@ -1107,8 +1107,6 @@ static inline int cpu_mmu_index (CPUX86State *env)
+         ? MMU_KSMAP_IDX : MMU_KERNEL_IDX;
+ }
+ 
+-#undef EAX
+-#define EAX (env->regs[R_EAX])
+ #undef ECX
+ #define ECX (env->regs[R_ECX])
+ #undef EDX
+diff --git a/target-i386/int_helper.c b/target-i386/int_helper.c
+index 74c7c36..16d1ed5 100644
+--- a/target-i386/int_helper.c
++++ b/target-i386/int_helper.c
+@@ -45,7 +45,7 @@ void helper_divb_AL(CPUX86State *env, target_ulong t0)
+ {
+     unsigned int num, den, q, r;
+ 
+-    num = (EAX & 0xffff);
++    num = (env->regs[R_EAX] & 0xffff);
+     den = (t0 & 0xff);
+     if (den == 0) {
+         raise_exception(env, EXCP00_DIVZ);
+@@ -56,14 +56,14 @@ void helper_divb_AL(CPUX86State *env, target_ulong t0)
+     }
+     q &= 0xff;
+     r = (num % den) & 0xff;
+-    EAX = (EAX & ~0xffff) | (r << 8) | q;
++    env->regs[R_EAX] = (env->regs[R_EAX] & ~0xffff) | (r << 8) | q;
+ }
+ 
+ void helper_idivb_AL(CPUX86State *env, target_ulong t0)
+ {
+     int num, den, q, r;
+ 
+-    num = (int16_t)EAX;
++    num = (int16_t)env->regs[R_EAX];
+     den = (int8_t)t0;
+     if (den == 0) {
+         raise_exception(env, EXCP00_DIVZ);
+@@ -74,14 +74,14 @@ void helper_idivb_AL(CPUX86State *env, target_ulong t0)
+     }
+     q &= 0xff;
+     r = (num % den) & 0xff;
+-    EAX = (EAX & ~0xffff) | (r << 8) | q;
++    env->regs[R_EAX] = (env->regs[R_EAX] & ~0xffff) | (r << 8) | q;
+ }
+ 
+ void helper_divw_AX(CPUX86State *env, target_ulong t0)
+ {
+     unsigned int num, den, q, r;
+ 
+-    num = (EAX & 0xffff) | ((EDX & 0xffff) << 16);
++    num = (env->regs[R_EAX] & 0xffff) | ((EDX & 0xffff) << 16);
+     den = (t0 & 0xffff);
+     if (den == 0) {
+         raise_exception(env, EXCP00_DIVZ);
+@@ -92,7 +92,7 @@ void helper_divw_AX(CPUX86State *env, target_ulong t0)
+     }
+     q &= 0xffff;
+     r = (num % den) & 0xffff;
+-    EAX = (EAX & ~0xffff) | q;
++    env->regs[R_EAX] = (env->regs[R_EAX] & ~0xffff) | q;
+     EDX = (EDX & ~0xffff) | r;
+ }
+ 
+@@ -100,7 +100,7 @@ void helper_idivw_AX(CPUX86State *env, target_ulong t0)
+ {
+     int num, den, q, r;
+ 
+-    num = (EAX & 0xffff) | ((EDX & 0xffff) << 16);
++    num = (env->regs[R_EAX] & 0xffff) | ((EDX & 0xffff) << 16);
+     den = (int16_t)t0;
+     if (den == 0) {
+         raise_exception(env, EXCP00_DIVZ);
+@@ -111,7 +111,7 @@ void helper_idivw_AX(CPUX86State *env, target_ulong t0)
+     }
+     q &= 0xffff;
+     r = (num % den) & 0xffff;
+-    EAX = (EAX & ~0xffff) | q;
++    env->regs[R_EAX] = (env->regs[R_EAX] & ~0xffff) | q;
+     EDX = (EDX & ~0xffff) | r;
+ }
+ 
+@@ -120,7 +120,7 @@ void helper_divl_EAX(CPUX86State *env, target_ulong t0)
+     unsigned int den, r;
+     uint64_t num, q;
+ 
+-    num = ((uint32_t)EAX) | ((uint64_t)((uint32_t)EDX) << 32);
++    num = ((uint32_t)env->regs[R_EAX]) | ((uint64_t)((uint32_t)EDX) << 32);
+     den = t0;
+     if (den == 0) {
+         raise_exception(env, EXCP00_DIVZ);
+@@ -130,7 +130,7 @@ void helper_divl_EAX(CPUX86State *env, target_ulong t0)
+     if (q > 0xffffffff) {
+         raise_exception(env, EXCP00_DIVZ);
+     }
+-    EAX = (uint32_t)q;
++    env->regs[R_EAX] = (uint32_t)q;
+     EDX = (uint32_t)r;
+ }
+ 
+@@ -139,7 +139,7 @@ void helper_idivl_EAX(CPUX86State *env, target_ulong t0)
+     int den, r;
+     int64_t num, q;
+ 
+-    num = ((uint32_t)EAX) | ((uint64_t)((uint32_t)EDX) << 32);
++    num = ((uint32_t)env->regs[R_EAX]) | ((uint64_t)((uint32_t)EDX) << 32);
+     den = t0;
+     if (den == 0) {
+         raise_exception(env, EXCP00_DIVZ);
+@@ -149,7 +149,7 @@ void helper_idivl_EAX(CPUX86State *env, target_ulong t0)
+     if (q != (int32_t)q) {
+         raise_exception(env, EXCP00_DIVZ);
+     }
+-    EAX = (uint32_t)q;
++    env->regs[R_EAX] = (uint32_t)q;
+     EDX = (uint32_t)r;
+ }
+ 
+@@ -160,10 +160,10 @@ void helper_aam(CPUX86State *env, int base)
+ {
+     int al, ah;
+ 
+-    al = EAX & 0xff;
++    al = env->regs[R_EAX] & 0xff;
+     ah = al / base;
+     al = al % base;
+-    EAX = (EAX & ~0xffff) | al | (ah << 8);
++    env->regs[R_EAX] = (env->regs[R_EAX] & ~0xffff) | al | (ah << 8);
+     CC_DST = al;
+ }
+ 
+@@ -171,10 +171,10 @@ void helper_aad(CPUX86State *env, int base)
+ {
+     int al, ah;
+ 
+-    al = EAX & 0xff;
+-    ah = (EAX >> 8) & 0xff;
++    al = env->regs[R_EAX] & 0xff;
++    ah = (env->regs[R_EAX] >> 8) & 0xff;
+     al = ((ah * base) + al) & 0xff;
+-    EAX = (EAX & ~0xffff) | al;
++    env->regs[R_EAX] = (env->regs[R_EAX] & ~0xffff) | al;
+     CC_DST = al;
+ }
+ 
+@@ -186,8 +186,8 @@ void helper_aaa(CPUX86State *env)
+ 
+     eflags = cpu_cc_compute_all(env, CC_OP);
+     af = eflags & CC_A;
+-    al = EAX & 0xff;
+-    ah = (EAX >> 8) & 0xff;
++    al = env->regs[R_EAX] & 0xff;
++    ah = (env->regs[R_EAX] >> 8) & 0xff;
+ 
+     icarry = (al > 0xf9);
+     if (((al & 0x0f) > 9) || af) {
+@@ -198,7 +198,7 @@ void helper_aaa(CPUX86State *env)
+         eflags &= ~(CC_C | CC_A);
+         al &= 0x0f;
+     }
+-    EAX = (EAX & ~0xffff) | al | (ah << 8);
++    env->regs[R_EAX] = (env->regs[R_EAX] & ~0xffff) | al | (ah << 8);
+     CC_SRC = eflags;
+ }
+ 
+@@ -210,8 +210,8 @@ void helper_aas(CPUX86State *env)
+ 
+     eflags = cpu_cc_compute_all(env, CC_OP);
+     af = eflags & CC_A;
+-    al = EAX & 0xff;
+-    ah = (EAX >> 8) & 0xff;
++    al = env->regs[R_EAX] & 0xff;
++    ah = (env->regs[R_EAX] >> 8) & 0xff;
+ 
+     icarry = (al < 6);
+     if (((al & 0x0f) > 9) || af) {
+@@ -222,7 +222,7 @@ void helper_aas(CPUX86State *env)
+         eflags &= ~(CC_C | CC_A);
+         al &= 0x0f;
+     }
+-    EAX = (EAX & ~0xffff) | al | (ah << 8);
++    env->regs[R_EAX] = (env->regs[R_EAX] & ~0xffff) | al | (ah << 8);
+     CC_SRC = eflags;
+ }
+ 
+@@ -234,7 +234,7 @@ void helper_daa(CPUX86State *env)
+     eflags = cpu_cc_compute_all(env, CC_OP);
+     cf = eflags & CC_C;
+     af = eflags & CC_A;
+-    old_al = al = EAX & 0xff;
++    old_al = al = env->regs[R_EAX] & 0xff;
+ 
+     eflags = 0;
+     if (((al & 0x0f) > 9) || af) {
+@@ -245,7 +245,7 @@ void helper_daa(CPUX86State *env)
+         al = (al + 0x60) & 0xff;
+         eflags |= CC_C;
+     }
+-    EAX = (EAX & ~0xff) | al;
++    env->regs[R_EAX] = (env->regs[R_EAX] & ~0xff) | al;
+     /* well, speed is not an issue here, so we compute the flags by hand */
+     eflags |= (al == 0) << 6; /* zf */
+     eflags |= parity_table[al]; /* pf */
+@@ -261,7 +261,7 @@ void helper_das(CPUX86State *env)
+     eflags = cpu_cc_compute_all(env, CC_OP);
+     cf = eflags & CC_C;
+     af = eflags & CC_A;
+-    al = EAX & 0xff;
++    al = env->regs[R_EAX] & 0xff;
+ 
+     eflags = 0;
+     al1 = al;
+@@ -276,7 +276,7 @@ void helper_das(CPUX86State *env)
+         al = (al - 0x60) & 0xff;
+         eflags |= CC_C;
+     }
+-    EAX = (EAX & ~0xff) | al;
++    env->regs[R_EAX] = (env->regs[R_EAX] & ~0xff) | al;
+     /* well, speed is not an issue here, so we compute the flags by hand */
+     eflags |= (al == 0) << 6; /* zf */
+     eflags |= parity_table[al]; /* pf */
+@@ -381,12 +381,12 @@ void helper_divq_EAX(CPUX86State *env, target_ulong t0)
+     if (t0 == 0) {
+         raise_exception(env, EXCP00_DIVZ);
+     }
+-    r0 = EAX;
++    r0 = env->regs[R_EAX];
+     r1 = EDX;
+     if (div64(&r0, &r1, t0)) {
+         raise_exception(env, EXCP00_DIVZ);
+     }
+-    EAX = r0;
++    env->regs[R_EAX] = r0;
+     EDX = r1;
+ }
+ 
+@@ -397,12 +397,12 @@ void helper_idivq_EAX(CPUX86State *env, target_ulong t0)
+     if (t0 == 0) {
+         raise_exception(env, EXCP00_DIVZ);
+     }
+-    r0 = EAX;
++    r0 = env->regs[R_EAX];
+     r1 = EDX;
+     if (idiv64(&r0, &r1, t0)) {
+         raise_exception(env, EXCP00_DIVZ);
+     }
+-    EAX = r0;
++    env->regs[R_EAX] = r0;
+     EDX = r1;
+ }
+ #endif
+diff --git a/target-i386/mem_helper.c b/target-i386/mem_helper.c
+index 6cf9ba0..f0f5aec 100644
+--- a/target-i386/mem_helper.c
++++ b/target-i386/mem_helper.c
+@@ -45,14 +45,14 @@ void helper_cmpxchg8b(CPUX86State *env, target_ulong a0)
+ 
+     eflags = cpu_cc_compute_all(env, CC_OP);
+     d = cpu_ldq_data(env, a0);
+-    if (d == (((uint64_t)EDX << 32) | (uint32_t)EAX)) {
++    if (d == (((uint64_t)EDX << 32) | (uint32_t)env->regs[R_EAX])) {
+         cpu_stq_data(env, a0, ((uint64_t)ECX << 32) | (uint32_t)EBX);
+         eflags |= CC_Z;
+     } else {
+         /* always do the store */
+         cpu_stq_data(env, a0, d);
+         EDX = (uint32_t)(d >> 32);
+-        EAX = (uint32_t)d;
++        env->regs[R_EAX] = (uint32_t)d;
+         eflags &= ~CC_Z;
+     }
+     CC_SRC = eflags;
+@@ -70,7 +70,7 @@ void helper_cmpxchg16b(CPUX86State *env, target_ulong a0)
+     eflags = cpu_cc_compute_all(env, CC_OP);
+     d0 = cpu_ldq_data(env, a0);
+     d1 = cpu_ldq_data(env, a0 + 8);
+-    if (d0 == EAX && d1 == EDX) {
++    if (d0 == env->regs[R_EAX] && d1 == EDX) {
+         cpu_stq_data(env, a0, EBX);
+         cpu_stq_data(env, a0 + 8, ECX);
+         eflags |= CC_Z;
+@@ -79,7 +79,7 @@ void helper_cmpxchg16b(CPUX86State *env, target_ulong a0)
+         cpu_stq_data(env, a0, d0);
+         cpu_stq_data(env, a0 + 8, d1);
+         EDX = d1;
+-        EAX = d0;
++        env->regs[R_EAX] = d0;
+         eflags &= ~CC_Z;
+     }
+     CC_SRC = eflags;
+diff --git a/target-i386/misc_helper.c b/target-i386/misc_helper.c
+index dfbc07b..189b2fa 100644
+--- a/target-i386/misc_helper.c
++++ b/target-i386/misc_helper.c
+@@ -122,8 +122,8 @@ void helper_cpuid(CPUX86State *env)
+ 
+     cpu_svm_check_intercept_param(env, SVM_EXIT_CPUID, 0);
+ 
+-    cpu_x86_cpuid(env, (uint32_t)EAX, (uint32_t)ECX, &eax, &ebx, &ecx, &edx);
+-    EAX = eax;
++    cpu_x86_cpuid(env, (uint32_t)env->regs[R_EAX], (uint32_t)ECX, &eax, &ebx, &ecx, &edx);
++    env->regs[R_EAX] = eax;
+     EBX = ebx;
+     ECX = ecx;
+     EDX = edx;
+@@ -234,7 +234,7 @@ void helper_rdtsc(CPUX86State *env)
+     cpu_svm_check_intercept_param(env, SVM_EXIT_RDTSC, 0);
+ 
+     val = cpu_get_tsc(env) + env->tsc_offset;
+-    EAX = (uint32_t)(val);
++    env->regs[R_EAX] = (uint32_t)(val);
+     EDX = (uint32_t)(val >> 32);
+ }
+ 
+@@ -271,7 +271,7 @@ void helper_wrmsr(CPUX86State *env)
+ 
+     cpu_svm_check_intercept_param(env, SVM_EXIT_MSR, 1);
+ 
+-    val = ((uint32_t)EAX) | ((uint64_t)((uint32_t)EDX) << 32);
++    val = ((uint32_t)env->regs[R_EAX]) | ((uint64_t)((uint32_t)EDX) << 32);
+ 
+     switch ((uint32_t)ECX) {
+     case MSR_IA32_SYSENTER_CS:
+@@ -548,7 +548,7 @@ void helper_rdmsr(CPUX86State *env)
+         val = 0;
+         break;
+     }
+-    EAX = (uint32_t)(val);
++    env->regs[R_EAX] = (uint32_t)(val);
+     EDX = (uint32_t)(val >> 32);
+ }
+ #endif
+diff --git a/target-i386/seg_helper.c b/target-i386/seg_helper.c
+index 906e4f3..719b7bb 100644
+--- a/target-i386/seg_helper.c
++++ b/target-i386/seg_helper.c
+@@ -324,7 +324,7 @@ static void switch_tss(CPUX86State *env, int tss_selector,
+         /* 32 bit */
+         cpu_stl_kernel(env, env->tr.base + 0x20, next_eip);
+         cpu_stl_kernel(env, env->tr.base + 0x24, old_eflags);
+-        cpu_stl_kernel(env, env->tr.base + (0x28 + 0 * 4), EAX);
++        cpu_stl_kernel(env, env->tr.base + (0x28 + 0 * 4), env->regs[R_EAX]);
+         cpu_stl_kernel(env, env->tr.base + (0x28 + 1 * 4), ECX);
+         cpu_stl_kernel(env, env->tr.base + (0x28 + 2 * 4), EDX);
+         cpu_stl_kernel(env, env->tr.base + (0x28 + 3 * 4), EBX);
+@@ -340,7 +340,7 @@ static void switch_tss(CPUX86State *env, int tss_selector,
+         /* 16 bit */
+         cpu_stw_kernel(env, env->tr.base + 0x0e, next_eip);
+         cpu_stw_kernel(env, env->tr.base + 0x10, old_eflags);
+-        cpu_stw_kernel(env, env->tr.base + (0x12 + 0 * 2), EAX);
++        cpu_stw_kernel(env, env->tr.base + (0x12 + 0 * 2), env->regs[R_EAX]);
+         cpu_stw_kernel(env, env->tr.base + (0x12 + 1 * 2), ECX);
+         cpu_stw_kernel(env, env->tr.base + (0x12 + 2 * 2), EDX);
+         cpu_stw_kernel(env, env->tr.base + (0x12 + 3 * 2), EBX);
+@@ -396,7 +396,7 @@ static void switch_tss(CPUX86State *env, int tss_selector,
+     }
+     cpu_load_eflags(env, new_eflags, eflags_mask);
+     /* XXX: what to do in 16 bit case? */
+-    EAX = new_regs[0];
++    env->regs[R_EAX] = new_regs[0];
+     ECX = new_regs[1];
+     EDX = new_regs[2];
+     EBX = new_regs[3];
+@@ -1175,7 +1175,7 @@ static void do_interrupt_all(CPUX86State *env, int intno, int is_int,
+             if (intno == 0x0e) {
+                 qemu_log(" CR2=" TARGET_FMT_lx, env->cr[2]);
+             } else {
+-                qemu_log(" EAX=" TARGET_FMT_lx, EAX);
++                qemu_log(" env->regs[R_EAX]=" TARGET_FMT_lx, env->regs[R_EAX]);
+             }
+             qemu_log("\n");
+             log_cpu_state(env, CPU_DUMP_CCOP);
+diff --git a/target-i386/smm_helper.c b/target-i386/smm_helper.c
+index eea2fe9..1ea6107 100644
+--- a/target-i386/smm_helper.c
++++ b/target-i386/smm_helper.c
+@@ -82,7 +82,7 @@ void do_smm_enter(CPUX86State *env)
+ 
+     stq_phys(sm_state + 0x7ed0, env->efer);
+ 
+-    stq_phys(sm_state + 0x7ff8, EAX);
++    stq_phys(sm_state + 0x7ff8, env->regs[R_EAX]);
+     stq_phys(sm_state + 0x7ff0, ECX);
+     stq_phys(sm_state + 0x7fe8, EDX);
+     stq_phys(sm_state + 0x7fe0, EBX);
+@@ -116,7 +116,7 @@ void do_smm_enter(CPUX86State *env)
+     stl_phys(sm_state + 0x7fdc, EBX);
+     stl_phys(sm_state + 0x7fd8, EDX);
+     stl_phys(sm_state + 0x7fd4, ECX);
+-    stl_phys(sm_state + 0x7fd0, EAX);
++    stl_phys(sm_state + 0x7fd0, env->regs[R_EAX]);
+     stl_phys(sm_state + 0x7fcc, env->dr[6]);
+     stl_phys(sm_state + 0x7fc8, env->dr[7]);
+ 
+@@ -213,7 +213,7 @@ void helper_rsm(CPUX86State *env)
+     env->tr.limit = ldl_phys(sm_state + 0x7e94);
+     env->tr.flags = (lduw_phys(sm_state + 0x7e92) & 0xf0ff) << 8;
+ 
+-    EAX = ldq_phys(sm_state + 0x7ff8);
++    env->regs[R_EAX] = ldq_phys(sm_state + 0x7ff8);
+     ECX = ldq_phys(sm_state + 0x7ff0);
+     EDX = ldq_phys(sm_state + 0x7fe8);
+     EBX = ldq_phys(sm_state + 0x7fe0);
+@@ -251,7 +251,7 @@ void helper_rsm(CPUX86State *env)
+     EBX = ldl_phys(sm_state + 0x7fdc);
+     EDX = ldl_phys(sm_state + 0x7fd8);
+     ECX = ldl_phys(sm_state + 0x7fd4);
+-    EAX = ldl_phys(sm_state + 0x7fd0);
++    env->regs[R_EAX] = ldl_phys(sm_state + 0x7fd0);
+     env->dr[6] = ldl_phys(sm_state + 0x7fcc);
+     env->dr[7] = ldl_phys(sm_state + 0x7fc8);
+ 
+diff --git a/target-i386/svm_helper.c b/target-i386/svm_helper.c
+index c46a213..1243207 100644
+--- a/target-i386/svm_helper.c
++++ b/target-i386/svm_helper.c
+@@ -129,9 +129,9 @@ void helper_vmrun(CPUX86State *env, int aflag, int next_eip_addend)
+     cpu_svm_check_intercept_param(env, SVM_EXIT_VMRUN, 0);
+ 
+     if (aflag == 2) {
+-        addr = EAX;
++        addr = env->regs[R_EAX];
+     } else {
+-        addr = (uint32_t)EAX;
++        addr = (uint32_t)env->regs[R_EAX];
+     }
+ 
+     qemu_log_mask(CPU_LOG_TB_IN_ASM, "vmrun! " TARGET_FMT_lx "\n", addr);
+@@ -172,7 +172,7 @@ void helper_vmrun(CPUX86State *env, int aflag, int next_eip_addend)
+     stq_phys(env->vm_hsave + offsetof(struct vmcb, save.rip),
+              EIP + next_eip_addend);
+     stq_phys(env->vm_hsave + offsetof(struct vmcb, save.rsp), ESP);
+-    stq_phys(env->vm_hsave + offsetof(struct vmcb, save.rax), EAX);
++    stq_phys(env->vm_hsave + offsetof(struct vmcb, save.rax), env->regs[R_EAX]);
+ 
+     /* load the interception bitmaps so we do not need to access the
+        vmcb in svm mode */
+@@ -251,7 +251,7 @@ void helper_vmrun(CPUX86State *env, int aflag, int next_eip_addend)
+     EIP = ldq_phys(env->vm_vmcb + offsetof(struct vmcb, save.rip));
+     env->eip = EIP;
+     ESP = ldq_phys(env->vm_vmcb + offsetof(struct vmcb, save.rsp));
+-    EAX = ldq_phys(env->vm_vmcb + offsetof(struct vmcb, save.rax));
++    env->regs[R_EAX] = ldq_phys(env->vm_vmcb + offsetof(struct vmcb, save.rax));
+     env->dr[7] = ldq_phys(env->vm_vmcb + offsetof(struct vmcb, save.dr7));
+     env->dr[6] = ldq_phys(env->vm_vmcb + offsetof(struct vmcb, save.dr6));
+     cpu_x86_set_cpl(env, ldub_phys(env->vm_vmcb + offsetof(struct vmcb,
+@@ -341,9 +341,9 @@ void helper_vmload(CPUX86State *env, int aflag)
+     cpu_svm_check_intercept_param(env, SVM_EXIT_VMLOAD, 0);
+ 
+     if (aflag == 2) {
+-        addr = EAX;
++        addr = env->regs[R_EAX];
+     } else {
+-        addr = (uint32_t)EAX;
++        addr = (uint32_t)env->regs[R_EAX];
+     }
+ 
+     qemu_log_mask(CPU_LOG_TB_IN_ASM, "vmload! " TARGET_FMT_lx
+@@ -379,9 +379,9 @@ void helper_vmsave(CPUX86State *env, int aflag)
+     cpu_svm_check_intercept_param(env, SVM_EXIT_VMSAVE, 0);
+ 
+     if (aflag == 2) {
+-        addr = EAX;
++        addr = env->regs[R_EAX];
+     } else {
+-        addr = (uint32_t)EAX;
++        addr = (uint32_t)env->regs[R_EAX];
+     }
+ 
+     qemu_log_mask(CPU_LOG_TB_IN_ASM, "vmsave! " TARGET_FMT_lx
+@@ -439,9 +439,9 @@ void helper_invlpga(CPUX86State *env, int aflag)
+     cpu_svm_check_intercept_param(env, SVM_EXIT_INVLPGA, 0);
+ 
+     if (aflag == 2) {
+-        addr = EAX;
++        addr = env->regs[R_EAX];
+     } else {
+-        addr = (uint32_t)EAX;
++        addr = (uint32_t)env->regs[R_EAX];
+     }
+ 
+     /* XXX: could use the ASID to see if it is needed to do the
+@@ -607,7 +607,7 @@ void helper_vmexit(CPUX86State *env, uint32_t exit_code, uint64_t exit_info_1)
+     stq_phys(env->vm_vmcb + offsetof(struct vmcb, save.rip),
+              env->eip);
+     stq_phys(env->vm_vmcb + offsetof(struct vmcb, save.rsp), ESP);
+-    stq_phys(env->vm_vmcb + offsetof(struct vmcb, save.rax), EAX);
++    stq_phys(env->vm_vmcb + offsetof(struct vmcb, save.rax), env->regs[R_EAX]);
+     stq_phys(env->vm_vmcb + offsetof(struct vmcb, save.dr7), env->dr[7]);
+     stq_phys(env->vm_vmcb + offsetof(struct vmcb, save.dr6), env->dr[6]);
+     stb_phys(env->vm_vmcb + offsetof(struct vmcb, save.cpl),
+@@ -659,7 +659,7 @@ void helper_vmexit(CPUX86State *env, uint32_t exit_code, uint64_t exit_info_1)
+ 
+     EIP = ldq_phys(env->vm_hsave + offsetof(struct vmcb, save.rip));
+     ESP = ldq_phys(env->vm_hsave + offsetof(struct vmcb, save.rsp));
+-    EAX = ldq_phys(env->vm_hsave + offsetof(struct vmcb, save.rax));
++    env->regs[R_EAX] = ldq_phys(env->vm_hsave + offsetof(struct vmcb, save.rax));
+ 
+     env->dr[6] = ldq_phys(env->vm_hsave + offsetof(struct vmcb, save.dr6));
+     env->dr[7] = ldq_phys(env->vm_hsave + offsetof(struct vmcb, save.dr7));
+-- 
+1.7.2.5
+
+

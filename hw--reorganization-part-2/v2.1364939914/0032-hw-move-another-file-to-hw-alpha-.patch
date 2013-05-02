@@ -1,0 +1,37 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: 
+Date: Tue,  2 Apr 2013 16:59:06 +0200
+Message-id: 1364914749-11141-33-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 32/35] hw: move another file to hw/alpha/
+
+It references AlphaCPU.
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ hw/alpha/Makefile.objs                  | 6 +-----
+ hw/{alpha_typhoon.c => alpha/typhoon.c} | 0
+ 2 files changed, 1 insertion(+), 5 deletions(-)
+ rename hw/{alpha_typhoon.c => alpha/typhoon.c} (100%)
+
+diff --git a/hw/alpha/Makefile.objs b/hw/alpha/Makefile.objs
+index 5dfea7a..5c74275 100644
+--- a/hw/alpha/Makefile.objs
++++ b/hw/alpha/Makefile.objs
+@@ -1,5 +1 @@
+-obj-y += alpha_typhoon.o
+-
+-obj-y := $(addprefix ../,$(obj-y))
+-
+-obj-y += dp264.o pci.o
++obj-y += dp264.o pci.o typhoon.o
+diff --git a/hw/alpha_typhoon.c b/hw/alpha/typhoon.c
+similarity index 100%
+rename from hw/alpha_typhoon.c
+rename to hw/alpha/typhoon.c
+-- 
+1.8.1.4
+
+
+

@@ -1,0 +1,37 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Jordan Justen <jordan.l.justen@intel.com>
+To: qemu-devel@nongnu.org
+Cc: Jordan Justen <jordan.l.justen@intel.com>
+Date: Tue, 30 Apr 2013 23:56:27 -0700
+Message-id: 1367391393-6830-1-git-send-email-jordan.l.justen@intel.com
+Subject: [PATCH 0/6] KVM flash memory support
+
+git://github.com/jljusten/qemu.git kvm-flash-v2
+
+Utilize KVM_CAP_READONLY_MEM to support PC system flash emulation
+with KVM.
+
+v2:
+ * Remove rom_only from PC_COMPAT_1_4
+ * Only enable flash when a pflash drive is created.
+
+Jordan Justen (6):
+  kvm: add kvm_readonly_mem_enabled
+  kvm: support using KVM_MEM_READONLY flag for readonly regions
+  kvm: workaround a possible KVM bug when using KVM_MEM_READONLY
+  pflash_cfi01: memory region should be set to enable readonly mode
+  pc_sysfw: allow flash (-pflash) memory to be used with KVM
+  pc_sysfw: change rom_only default to 0
+
+ hw/block/pc_sysfw.c     |   52 +++++++++++++++++++++++++++++------------------
+ hw/block/pflash_cfi01.c |    2 ++
+ include/hw/i386/pc.h    |    4 ----
+ include/sysemu/kvm.h    |   10 +++++++++
+ kvm-all.c               |   41 +++++++++++++++++++++++++++++--------
+ kvm-stub.c              |    1 +
+ 6 files changed, 78 insertions(+), 32 deletions(-)
+
+-- 
+1.7.10.4
+
+

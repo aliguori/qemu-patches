@@ -1,0 +1,500 @@
+From patches Mon Sep 17 00:00:00 2001
+From: minyard@acm.org
+To: qemu-devel@nongnu.org
+Cc: Corey Minyard <cminyard@mvista.com>
+Date: Tue, 18 Sep 2012 15:00:35 -0500
+Message-id: 1347998443-20599-9-git-send-email-minyard@acm.org
+Subject: [PATCH 08/16] Add a base IPMI interface
+
+From: Corey Minyard <cminyard@mvista.com>
+
+Add the basic IPMI types and infrastructure to QEMU.  Low-level
+interfaces and simulation interfaces will register with this; it's
+kind of the go-between to tie them together.
+
+Signed-off-by: Corey Minyard <cminyard@mvista.com>
+---
+ default-configs/i386-softmmu.mak   |    1 +
+ default-configs/x86_64-softmmu.mak |    1 +
+ hw/Makefile.objs                   |    2 +
+ hw/ipmi.c                          |  167 +++++++++++++++++++++++++
+ hw/ipmi.h                          |  241 ++++++++++++++++++++++++++++++++++++
+ qemu-doc.texi                      |    2 +
+ 6 files changed, 414 insertions(+), 0 deletions(-)
+ create mode 100644 hw/ipmi.c
+ create mode 100644 hw/ipmi.h
+
+diff --git a/default-configs/i386-softmmu.mak b/default-configs/i386-softmmu.mak
+index 2c78175..eb17afc 100644
+--- a/default-configs/i386-softmmu.mak
++++ b/default-configs/i386-softmmu.mak
+@@ -7,6 +7,7 @@ CONFIG_VGA_ISA=y
+ CONFIG_VGA_CIRRUS=y
+ CONFIG_VMWARE_VGA=y
+ CONFIG_VMMOUSE=y
++CONFIG_IPMI=y
+ CONFIG_SERIAL=y
+ CONFIG_PARALLEL=y
+ CONFIG_I8254=y
+diff --git a/default-configs/x86_64-softmmu.mak b/default-configs/x86_64-softmmu.mak
+index 233a856..e4e3e4f 100644
+--- a/default-configs/x86_64-softmmu.mak
++++ b/default-configs/x86_64-softmmu.mak
+@@ -7,6 +7,7 @@ CONFIG_VGA_ISA=y
+ CONFIG_VGA_CIRRUS=y
+ CONFIG_VMWARE_VGA=y
+ CONFIG_VMMOUSE=y
++CONFIG_IPMI=y
+ CONFIG_SERIAL=y
+ CONFIG_PARALLEL=y
+ CONFIG_I8254=y
+diff --git a/hw/Makefile.objs b/hw/Makefile.objs
+index 6dfebd2..4df7119 100644
+--- a/hw/Makefile.objs
++++ b/hw/Makefile.objs
+@@ -20,6 +20,8 @@ hw-obj-$(CONFIG_M48T59) += m48t59.o
+ hw-obj-$(CONFIG_ESCC) += escc.o
+ hw-obj-$(CONFIG_EMPTY_SLOT) += empty_slot.o
+ 
++hw-obj-$(CONFIG_IPMI) += ipmi.o
++
+ hw-obj-$(CONFIG_SERIAL) += serial.o
+ hw-obj-$(CONFIG_PARALLEL) += parallel.o
+ hw-obj-$(CONFIG_I8254) += i8254_common.o i8254.o
+diff --git a/hw/ipmi.c b/hw/ipmi.c
+new file mode 100644
+index 0000000..252eab0
+--- /dev/null
++++ b/hw/ipmi.c
+@@ -0,0 +1,167 @@
++/*
++ * QEMU IPMI emulation
++ *
++ * Copyright (c) 2012 Corey Minyard, MontaVista Software, LLC
++ *
++ * Permission is hereby granted, free of charge, to any person obtaining a copy
++ * of this software and associated documentation files (the "Software"), to deal
++ * in the Software without restriction, including without limitation the rights
++ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
++ * copies of the Software, and to permit persons to whom the Software is
++ * furnished to do so, subject to the following conditions:
++ *
++ * The above copyright notice and this permission notice shall be included in
++ * all copies or substantial portions of the Software.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
++ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
++ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
++ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
++ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
++ * THE SOFTWARE.
++ */
++
++#include "hw.h"
++#include "ipmi.h"
++#include "sysemu.h"
++#include "qmp-commands.h"
++
++#ifdef DO_IPMI_THREAD
++static void *ipmi_thread(void *opaque)
++{
++    IPMIInterface *s = opaque;
++    int64_t wait_until;
++
++    ipmi_lock(s);
++    for (;;) {
++        qemu_cond_wait(&s->waker, &s->lock);
++        wait_until = 0;
++        while (s->do_wake) {
++            s->do_wake = 0;
++            s->handle_if_event(s);
++        }
++    }
++    ipmi_unlock(s);
++    return NULL;
++}
++#endif
++
++static int ipmi_do_hw_op(IPMIInterface *s, enum ipmi_op op, int checkonly)
++{
++    switch (op) {
++    case IPMI_RESET_CHASSIS:
++        if (checkonly) {
++            return 0;
++        }
++        qemu_system_reset_request();
++        return 0;
++
++    case IPMI_POWEROFF_CHASSIS:
++        if (checkonly) {
++            return 0;
++        }
++        qemu_system_powerdown_request();
++        return 0;
++
++    case IPMI_SEND_NMI:
++        if (checkonly) {
++            return 0;
++        }
++        qemu_mutex_lock_iothread();
++        qmp_inject_nmi(NULL);
++        qemu_mutex_unlock_iothread();
++        return 0;
++
++    case IPMI_POWERCYCLE_CHASSIS:
++    case IPMI_PULSE_DIAG_IRQ:
++    case IPMI_SHUTDOWN_VIA_ACPI_OVERTEMP:
++    case IPMI_POWERON_CHASSIS:
++    default:
++        return IPMI_CC_COMMAND_NOT_SUPPORTED;
++    }
++}
++
++static void ipmi_set_irq_enable(IPMIInterface *s, int val)
++{
++    s->irqs_enabled = val;
++}
++
++void ipmi_interface_reset(IPMIInterface *s)
++{
++    IPMIBmcClass *bk = IPMI_BMC_GET_CLASS(s->bmc);
++
++    if (bk->handle_reset) {
++        bk->handle_reset(s->bmc);
++    }
++}
++
++int ipmi_interface_init(IPMIInterface *s)
++{
++    IPMIInterfaceClass *k = IPMI_INTERFACE_GET_CLASS(s);
++
++    if (k->init) {
++        int rc = k->init(s);
++        if (rc) {
++            return rc;
++        }
++    }
++
++    if (!s->slave_addr) {
++        s->slave_addr = 0x20;
++    }
++
++#ifdef DO_IPMI_THREAD
++    qemu_mutex_init(&s->lock);
++    qemu_cond_init(&s->waker);
++    qemu_thread_create(&s->thread, ipmi_thread, s, 0);
++#endif
++
++    return 0;
++}
++
++static void ipmi_interface_class_init(ObjectClass *class, void *data)
++{
++    IPMIInterfaceClass *ik = IPMI_INTERFACE_CLASS(class);
++
++    ik->do_hw_op = ipmi_do_hw_op;
++    ik->set_irq_enable = ipmi_set_irq_enable;
++}
++
++static TypeInfo ipmi_interface_type_info = {
++    .name = TYPE_IPMI_INTERFACE,
++    .parent = TYPE_OBJECT,
++    .instance_size = sizeof(IPMIInterface),
++    .abstract = true,
++    .class_size = sizeof(IPMIInterfaceClass),
++    .class_init = ipmi_interface_class_init,
++};
++
++int ipmi_bmc_init(IPMIBmc *s)
++{
++    IPMIBmcClass *k = IPMI_BMC_GET_CLASS(s);
++
++    if (k->init) {
++        int rc = k->init(s);
++        if (rc) {
++            return rc;
++        }
++    }
++    return 0;
++}
++
++static TypeInfo ipmi_bmc_type_info = {
++    .name = TYPE_IPMI_BMC,
++    .parent = TYPE_OBJECT,
++    .instance_size = sizeof(IPMIBmc),
++    .abstract = true,
++    .class_size = sizeof(IPMIBmcClass),
++};
++
++static void ipmi_register_types(void)
++{
++    type_register_static(&ipmi_interface_type_info);
++    type_register_static(&ipmi_bmc_type_info);
++}
++
++type_init(ipmi_register_types)
+diff --git a/hw/ipmi.h b/hw/ipmi.h
+new file mode 100644
+index 0000000..13f0562
+--- /dev/null
++++ b/hw/ipmi.h
+@@ -0,0 +1,241 @@
++/*
++ * IPMI base class
++ *
++ * Copyright (c) 2012 Corey Minyard, MontaVista Software, LLC
++ *
++ * Permission is hereby granted, free of charge, to any person obtaining a copy
++ * of this software and associated documentation files (the "Software"), to deal
++ * in the Software without restriction, including without limitation the rights
++ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
++ * copies of the Software, and to permit persons to whom the Software is
++ * furnished to do so, subject to the following conditions:
++ *
++ * The above copyright notice and this permission notice shall be included in
++ * all copies or substantial portions of the Software.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
++ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
++ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
++ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
++ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
++ * THE SOFTWARE.
++ */
++
++#ifndef HW_IPMI_H
++#define HW_IPMI_H
++
++#include "memory.h"
++#include "qemu-common.h"
++#include "qdev.h"
++
++/*
++ * Create a separate thread for the IPMI interface itself.  This is a
++ * better simulation and lets the IPMI interface do things asynchronously
++ * if necessary.
++ */
++/* #define DO_IPMI_THREAD */
++
++#ifdef DO_IPMI_THREAD
++#include "qemu-thread.h"
++
++#define ipmi_lock(s) qemu_mutex_lock(&(s)->lock)
++#define ipmi_unlock(s) qemu_mutex_unlock(&(s)->lock)
++#define ipmi_signal(s) \
++do {                                                                          \
++    (s)->do_wake = 1;                                                         \
++    qemu_cond_signal(&(s)->waker);                                            \
++} while (0)
++
++#else
++#define ipmi_lock(s) ((s)->lockcount++)
++#define ipmi_unlock(s) ((s)->lockcount--)
++#define ipmi_signal(s)                                                       \
++do {                                                                         \
++    (s)->do_wake = 1;                                                        \
++    while ((s)->do_wake) {                                                   \
++        (s)->do_wake = 0;                                                    \
++        (IPMI_INTERFACE_GET_CLASS(s))->handle_if_event(s);                   \
++    }                                                                        \
++} while (0)
++#endif
++
++#define MAX_IPMI_MSG_SIZE 300
++
++enum ipmi_op {
++    IPMI_RESET_CHASSIS,
++    IPMI_POWEROFF_CHASSIS,
++    IPMI_POWERON_CHASSIS,
++    IPMI_POWERCYCLE_CHASSIS,
++    IPMI_PULSE_DIAG_IRQ,
++    IPMI_SHUTDOWN_VIA_ACPI_OVERTEMP,
++    IPMI_SEND_NMI
++};
++
++#define IPMI_CC_INVALID_CMD                              0xc1
++#define IPMI_CC_COMMAND_INVALID_FOR_LUN                  0xc2
++#define IPMI_CC_TIMEOUT                                  0xc3
++#define IPMI_CC_OUT_OF_SPACE                             0xc4
++#define IPMI_CC_INVALID_RESERVATION                      0xc5
++#define IPMI_CC_REQUEST_DATA_TRUNCATED                   0xc6
++#define IPMI_CC_REQUEST_DATA_LENGTH_INVALID              0xc7
++#define IPMI_CC_PARM_OUT_OF_RANGE                        0xc9
++#define IPMI_CC_CANNOT_RETURN_REQ_NUM_BYTES              0xca
++#define IPMI_CC_REQ_ENTRY_NOT_PRESENT                    0xcb
++#define IPMI_CC_INVALID_DATA_FIELD                       0xcc
++#define IPMI_CC_BMC_INIT_IN_PROGRESS                     0xd2
++#define IPMI_CC_COMMAND_NOT_SUPPORTED                    0xd5
++
++#define IPMI_NETFN_APP                0x06
++
++#define IPMI_DEBUG 1
++
++/* Specified in the SMBIOS spec. */
++#define IPMI_SMBIOS_KCS         0x01
++#define IPMI_SMBIOS_SMIC        0x02
++#define IPMI_SMBIOS_BT          0x03
++#define IPMI_SMBIOS_SSIF        0x04
++
++/* IPMI Interface types (KCS, SMIC, BT) are prefixed with this */
++#define TYPE_IPMI_INTERFACE_PREFIX "ipmi-interface-"
++
++typedef struct IPMIBmc IPMIBmc;
++
++/*
++ * An IPMI Interface, the interface for talking between the target
++ * and the BMC.
++ */
++#define TYPE_IPMI_INTERFACE "ipmi-interface"
++#define IPMI_INTERFACE(obj) \
++     OBJECT_CHECK(IPMIInterface, (obj), TYPE_IPMI_INTERFACE)
++#define IPMI_INTERFACE_CLASS(klass) \
++     OBJECT_CLASS_CHECK(IPMIInterfaceClass, (klass), TYPE_IPMI_INTERFACE)
++#define IPMI_INTERFACE_GET_CLASS(obj) \
++     OBJECT_GET_CLASS(IPMIInterfaceClass, (obj), TYPE_IPMI_INTERFACE)
++
++typedef struct IPMIInterface {
++    Object parent_obj;
++
++    IPMIBmc *bmc;
++
++#ifdef DO_IPMI_THREAD
++    QemuThread thread;
++    QemuCond waker;
++    QemuMutex lock;
++#else
++    int lockcount;
++#endif
++    bool do_wake;
++
++    qemu_irq irq;
++
++    unsigned long io_base;
++    unsigned long io_length;
++    MemoryRegion io;
++
++    unsigned char slave_addr;
++
++    bool obf_irq_set;
++    bool atn_irq_set;
++    bool use_irq;
++    bool irqs_enabled;
++
++    uint8_t outmsg[MAX_IPMI_MSG_SIZE];
++    uint32_t outpos;
++    uint32_t outlen;
++
++    uint8_t inmsg[MAX_IPMI_MSG_SIZE];
++    uint32_t inlen;
++    bool write_end;
++} IPMIInterface;
++
++typedef struct IPMIInterfaceClass {
++    ObjectClass parent_class;
++
++    unsigned int smbios_type;
++
++    int (*init)(struct IPMIInterface *s);
++
++    /*
++     * Perform various operations on the hardware.  If checkonly is
++     * true, it will return if the operation can be performed, but it
++     * will not do the operation.
++     */
++    int (*do_hw_op)(struct IPMIInterface *s, enum ipmi_op op, int checkonly);
++
++    /*
++     * Enable/disable irqs on the interface when the BMC requests this.
++     */
++    void (*set_irq_enable)(struct IPMIInterface *s, int val);
++
++    /*
++     * Handle an event that occurred on the interface, generally the.
++     * target writing to a register.
++     */
++    void (*handle_if_event)(struct IPMIInterface *s);
++
++    /*
++     * The interfaces use this to perform certain ops
++     */
++    void (*set_atn)(struct IPMIInterface *s, int val, int irq);
++
++    /*
++     * Handle a response from the bmc.  Must be called with ipmi_lock
++     * held.
++     */
++    void (*handle_rsp)(struct IPMIInterface *s, uint8_t msg_id,
++                       unsigned char *rsp, unsigned int rsp_len);
++} IPMIInterfaceClass;
++
++int ipmi_interface_init(IPMIInterface *s);
++void ipmi_interface_reset(IPMIInterface *s);
++
++/*
++ * Define a BMC simulator (or perhaps a connection to a real BMC)
++ */
++#define TYPE_IPMI_BMC "ipmi-bmc"
++#define IPMI_BMC(obj) \
++     OBJECT_CHECK(IPMIBmc, (obj), TYPE_IPMI_BMC)
++#define IPMI_BMC_CLASS(klass) \
++     OBJECT_CLASS_CHECK(IPMIBmcClass, (klass), TYPE_IPMI_BMC)
++#define IPMI_BMC_GET_CLASS(obj) \
++     OBJECT_GET_CLASS(IPMIBmcClass, (obj), TYPE_IPMI_BMC)
++
++#define TYPE_IPMI_BMC_EXTERN    "ipmi-bmc-extern"
++#define TYPE_IPMI_BMC_SIMULATOR "ipmi-bmc-sim"
++
++struct IPMIBmc {
++    Object parent_obj;
++
++    IPMIInterface *intf;
++    CharDriverState *chr;
++};
++
++typedef struct IPMIBmcClass {
++    ObjectClass parent_class;
++
++    int (*init)(IPMIBmc *s);
++
++    /* Called when the system resets to report to the bmc. */
++    void (*handle_reset)(struct IPMIBmc *s);
++
++    /*
++     * Handle a command to the bmc.  Must be called with ipmi_lock
++     * held.
++     */
++    void (*handle_command)(struct IPMIBmc *s,
++                           uint8_t *cmd, unsigned int cmd_len,
++                           unsigned int max_cmd_len,
++                           uint8_t msg_id);
++} IPMIBmcClass;
++
++int ipmi_bmc_init(IPMIBmc *s);
++
++#ifdef IPMI_DEBUG
++#define ipmi_debug(fs, ...) \
++    fprintf(stderr, "IPMI (%s): " fs, __func__, ##__VA_ARGS__)
++#else
++#define ipmi_debug(fs, ...)
++#endif
++
++#endif
+diff --git a/qemu-doc.texi b/qemu-doc.texi
+index 35cabbc..7e3f175 100644
+--- a/qemu-doc.texi
++++ b/qemu-doc.texi
+@@ -195,6 +195,8 @@ PCI and ISA network adapters
+ @item
+ Serial ports
+ @item
++IPMI BMC, either and internal or external one
++@item
+ Creative SoundBlaster 16 sound card
+ @item
+ ENSONIQ AudioPCI ES1370 sound card
+-- 
+1.7.4.1
+
+

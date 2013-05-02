@@ -1,0 +1,37 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: 
+Date: Fri, 27 Jul 2012 17:02:48 +0200
+Message-id: 1343401379-19495-22-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 21/32] scsi-disk: removable hard disks support load/eject
+
+Support for the LOEJ bit of the START/STOP UNIT command right now is
+limited to CD-ROMs.  This is wrong, since removable hard disks (in the
+real world: SD card readers) also support it in pretty much the same way.
+
+Without the LOEJ bit, START/STOP UNIT does nothing for all devices.
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ hw/scsi-disk.c |    2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/hw/scsi-disk.c b/hw/scsi-disk.c
+index fb0540a..b52e304 100644
+--- a/hw/scsi-disk.c
++++ b/hw/scsi-disk.c
+@@ -1248,7 +1248,7 @@ static int scsi_disk_emulate_start_stop(SCSIDiskReq *r)
+     bool start = req->cmd.buf[4] & 1;
+     bool loej = req->cmd.buf[4] & 2; /* load on start, eject on !start */
+ 
+-    if (s->qdev.type == TYPE_ROM && loej) {
++    if ((s->features & (1 << SCSI_DISK_F_REMOVABLE)) && loej) {
+         if (!start && !s->tray_open && s->tray_locked) {
+             scsi_check_condition(r,
+                                  bdrv_is_inserted(s->qdev.conf.bs)
+-- 
+1.7.10.4
+
+
+

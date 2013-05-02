@@ -1,0 +1,132 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Jason Wang <jasowang@redhat.com>
+To: aliguori@us.ibm.com, shajnocz@redhat.com, qemu-devel@nongnu.org,
+ mst@redhat.com
+Cc: krkumar2@in.ibm.com, kvm@vger.kernel.org, mprivozn@redhat.com,
+ rusty@rustcorp.com.au, Jason Wang <jasowang@redhat.com>,
+ gaowanlong@cn.fujitsu.com, jwhan@filewood.snu.ac.kr, shiyer@redhat.com
+Date: Fri, 25 Jan 2013 18:35:35 +0800
+Message-id: 1359110143-42984-13-git-send-email-jasowang@redhat.com
+Subject: [PATCH 12/20] tap: introduce a helper to get the name of an interface
+
+This patch introduces a helper tap_get_ifname() to get the device name of tap
+device. This is needed when ifname is unspecified in the command line and qemu
+were asked to create tap device by itself. In this situation, the name were
+allocated by kernel, so if multiqueue is asked, we need to fetch its name after
+creating the first queue.
+
+Only linux has this support since it's the only platform that supports
+multiqueue tap.
+
+Signed-off-by: Jason Wang <jasowang@redhat.com>
+---
+ include/net/tap.h |    1 +
+ net/tap-aix.c     |    6 ++++++
+ net/tap-bsd.c     |    4 ++++
+ net/tap-haiku.c   |    4 ++++
+ net/tap-linux.c   |   13 +++++++++++++
+ net/tap-solaris.c |    4 ++++
+ net/tap_int.h     |    1 +
+ 7 files changed, 33 insertions(+), 0 deletions(-)
+
+diff --git a/include/net/tap.h b/include/net/tap.h
+index 0caf8c4..c523ff0 100644
+--- a/include/net/tap.h
++++ b/include/net/tap.h
+@@ -37,6 +37,7 @@ void tap_set_offload(NetClientState *nc, int csum, int tso4, int tso6, int ecn,
+ void tap_set_vnet_hdr_len(NetClientState *nc, int len);
+ int tap_enable(NetClientState *nc);
+ int tap_disable(NetClientState *nc);
++int tap_get_ifname(NetClientState *nc, char *ifname);
+ 
+ int tap_get_fd(NetClientState *nc);
+ 
+diff --git a/net/tap-aix.c b/net/tap-aix.c
+index 66e0574..e760e9a 100644
+--- a/net/tap-aix.c
++++ b/net/tap-aix.c
+@@ -69,3 +69,9 @@ int tap_fd_disable(int fd)
+ {
+     return -1;
+ }
++
++int tap_fd_get_ifname(int fd, char *ifname)
++{
++    return -1;
++}
++
+diff --git a/net/tap-bsd.c b/net/tap-bsd.c
+index cfc7a28..4f22109 100644
+--- a/net/tap-bsd.c
++++ b/net/tap-bsd.c
+@@ -156,3 +156,7 @@ int tap_fd_disable(int fd)
+     return -1;
+ }
+ 
++int tap_fd_get_ifname(int fd, char *ifname)
++{
++    return -1;
++}
+diff --git a/net/tap-haiku.c b/net/tap-haiku.c
+index 664d40f..b3b5fbb 100644
+--- a/net/tap-haiku.c
++++ b/net/tap-haiku.c
+@@ -70,3 +70,7 @@ int tap_fd_disable(int fd)
+     return -1;
+ }
+ 
++int tap_fd_get_ifname(int fd, char *ifname)
++{
++    return -1;
++}
+diff --git a/net/tap-linux.c b/net/tap-linux.c
+index 60ea8d0..6827c2a 100644
+--- a/net/tap-linux.c
++++ b/net/tap-linux.c
+@@ -261,3 +261,16 @@ int tap_fd_disable(int fd)
+     return ret;
+ }
+ 
++int tap_fd_get_ifname(int fd, char *ifname)
++{
++    struct ifreq ifr;
++
++    if (ioctl(fd, TUNGETIFF, &ifr) != 0) {
++        error_report("TUNGETIFF ioctl() failed: %s",
++                     strerror(errno));
++        return -1;
++    }
++
++    pstrcpy(ifname, sizeof(ifr.ifr_name), ifr.ifr_name);
++    return 0;
++}
+diff --git a/net/tap-solaris.c b/net/tap-solaris.c
+index 12cc392..214d95e 100644
+--- a/net/tap-solaris.c
++++ b/net/tap-solaris.c
+@@ -236,3 +236,7 @@ int tap_fd_disable(int fd)
+     return -1;
+ }
+ 
++int tap_fd_get_ifname(int fd, char *ifname)
++{
++    return -1;
++}
+diff --git a/net/tap_int.h b/net/tap_int.h
+index ca1c21b..125f83d 100644
+--- a/net/tap_int.h
++++ b/net/tap_int.h
+@@ -44,5 +44,6 @@ void tap_fd_set_offload(int fd, int csum, int tso4, int tso6, int ecn, int ufo);
+ void tap_fd_set_vnet_hdr_len(int fd, int len);
+ int tap_fd_enable(int fd);
+ int tap_fd_disable(int fd);
++int tap_fd_get_ifname(int fd, char *ifname);
+ 
+ #endif /* QEMU_TAP_H */
+-- 
+1.7.1
+
+--
+To unsubscribe from this list: send the line "unsubscribe kvm" in
+the body of a message to majordomo@vger.kernel.org
+More majordomo info at  http://vger.kernel.org/majordomo-info.html

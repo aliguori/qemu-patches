@@ -1,0 +1,54 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Anthony Liguori <aliguori@us.ibm.com>
+To: Anthony Liguori <aliguori@us.ibm.com>, Stefan Hajnoczi <stefanha@gmail.com>,
+ Kevin Wolf <kwolf@redhat.com>, qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, Paolo Bonzini <pbonzini@redhat.com>,
+ Mike Roth <mdroth@linux.vnet.ibm.com>, Kevin Wolf <kwolf@redhat.com>,
+ qemu-devel@nongnu.org
+Date: Thu, 28 Mar 2013 16:52:29 -0500
+Message-id: 1364507550-25093-3-git-send-email-aliguori@us.ibm.com
+Subject: [PATCH 2/3] sheepdog: pass NULL for io_flush
+
+Signed-off-by: Anthony Liguori <aliguori@us.ibm.com>
+---
+ block/sheepdog.c | 11 ++---------
+ 1 file changed, 2 insertions(+), 9 deletions(-)
+
+diff --git a/block/sheepdog.c b/block/sheepdog.c
+index bb67c4c..2bccd9b 100644
+--- a/block/sheepdog.c
++++ b/block/sheepdog.c
+@@ -503,13 +503,6 @@ static void restart_co_req(void *opaque)
+     qemu_coroutine_enter(co, NULL);
+ }
+ 
+-static int have_co_req(void *opaque)
+-{
+-    /* this handler is set only when there is a pending request, so
+-     * always returns 1. */
+-    return 1;
+-}
+-
+ typedef struct SheepdogReqCo {
+     int sockfd;
+     SheepdogReq *hdr;
+@@ -532,14 +525,14 @@ static coroutine_fn void do_co_req(void *opaque)
+     unsigned int *rlen = srco->rlen;
+ 
+     co = qemu_coroutine_self();
+-    qemu_aio_set_fd_handler(sockfd, NULL, restart_co_req, have_co_req, co);
++    qemu_aio_set_fd_handler(sockfd, NULL, restart_co_req, NULL, co);
+ 
+     ret = send_co_req(sockfd, hdr, data, wlen);
+     if (ret < 0) {
+         goto out;
+     }
+ 
+-    qemu_aio_set_fd_handler(sockfd, restart_co_req, NULL, have_co_req, co);
++    qemu_aio_set_fd_handler(sockfd, restart_co_req, NULL, NULL, co);
+ 
+     ret = qemu_co_recv(sockfd, hdr, sizeof(*hdr));
+     if (ret < sizeof(*hdr)) {
+-- 
+1.8.0
+

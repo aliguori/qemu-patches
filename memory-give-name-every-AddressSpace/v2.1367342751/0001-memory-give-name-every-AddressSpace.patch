@@ -1,0 +1,156 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Alexey Kardashevskiy <aik@ozlabs.ru>
+To: David Gibson <david@gibson.dropbear.id.au>,
+ Paolo Bonzini <pbonzini@redhat.com>, Alexey Kardashevskiy <aik@ozlabs.ru>
+Cc: qemu-trivial@nongnu.org, David Gibson <david@gibson.dropbear.id.au>,
+ Alexey Kardashevskiy <aik@ozlabs.ru>, qemu-devel@nongnu.org
+Date: Tue, 30 Apr 2013 12:25:51 +1000
+Message-id: 1367288751-25163-1-git-send-email-aik@ozlabs.ru
+Subject: [PATCH 1/1] memory: give name every AddressSpace
+
+The "info mtree" command in QEMU console prints only "memory" and "I/O"
+address spaces while there are actually a lot more other AddressSpace
+structs created by PCI and VIO devices. Those devices do not normally
+have names and therefore not present in "info qtree" output.
+
+The patch fixes this.
+
+Signed-off-by: Alexey Kardashevskiy <aik@ozlabs.ru>
+---
+
+v2:
+* removed "const" from AddressSpace::name
+* removed redundand check for name!=NULL from mtree_info
+
+---
+ exec.c                |    6 ++----
+ hw/pci/pci.c          |    3 ++-
+ hw/ppc/spapr_vio.c    |    2 +-
+ include/exec/memory.h |    5 +++--
+ memory.c              |   10 ++++------
+ 5 files changed, 12 insertions(+), 14 deletions(-)
+
+diff --git a/exec.c b/exec.c
+index 180a345..0091272 100644
+--- a/exec.c
++++ b/exec.c
+@@ -1839,13 +1839,11 @@ static void memory_map_init(void)
+ {
+     system_memory = g_malloc(sizeof(*system_memory));
+     memory_region_init(system_memory, "system", INT64_MAX);
+-    address_space_init(&address_space_memory, system_memory);
+-    address_space_memory.name = "memory";
++    address_space_init(&address_space_memory, system_memory, "memory");
+ 
+     system_io = g_malloc(sizeof(*system_io));
+     memory_region_init(system_io, "io", 65536);
+-    address_space_init(&address_space_io, system_io);
+-    address_space_io.name = "I/O";
++    address_space_init(&address_space_io, system_io, "I/O");
+ 
+     memory_listener_register(&core_memory_listener, &address_space_memory);
+     memory_listener_register(&io_memory_listener, &address_space_io);
+diff --git a/hw/pci/pci.c b/hw/pci/pci.c
+index fe146dc..0a1acd6 100644
+--- a/hw/pci/pci.c
++++ b/hw/pci/pci.c
+@@ -823,7 +823,8 @@ static PCIDevice *do_pci_register_device(PCIDevice *pci_dev, PCIBus *bus,
+     memory_region_init_alias(&pci_dev->bus_master_enable_region, "bus master",
+                              pci_dev->iommu, 0, memory_region_size(pci_dev->iommu));
+     memory_region_set_enabled(&pci_dev->bus_master_enable_region, false);
+-    address_space_init(&pci_dev->bus_master_as, &pci_dev->bus_master_enable_region);
++    address_space_init(&pci_dev->bus_master_as, &pci_dev->bus_master_enable_region,
++                       name);
+ 
+     pci_dev->devfn = devfn;
+     pstrcpy(pci_dev->name, sizeof(pci_dev->name), name);
+diff --git a/hw/ppc/spapr_vio.c b/hw/ppc/spapr_vio.c
+index fbcbd6f..fadde20 100644
+--- a/hw/ppc/spapr_vio.c
++++ b/hw/ppc/spapr_vio.c
+@@ -449,7 +449,7 @@ static int spapr_vio_busdev_init(DeviceState *qdev)
+     if (pc->rtce_window_size) {
+         uint32_t liobn = SPAPR_VIO_BASE_LIOBN | dev->reg;
+         dev->tcet = spapr_tce_new_table(liobn, pc->rtce_window_size);
+-        address_space_init(&dev->as, spapr_tce_get_iommu(dev->tcet));
++        address_space_init(&dev->as, spapr_tce_get_iommu(dev->tcet), qdev->id);
+     }
+ 
+     return pc->init(dev);
+diff --git a/include/exec/memory.h b/include/exec/memory.h
+index 99d51b7..907118e 100644
+--- a/include/exec/memory.h
++++ b/include/exec/memory.h
+@@ -177,7 +177,7 @@ struct MemoryRegionPortio {
+  */
+ struct AddressSpace {
+     /* All fields are private. */
+-    const char *name;
++    char *name;
+     MemoryRegion *root;
+     struct FlatView *current_map;
+     int ioeventfd_nb;
+@@ -839,8 +839,9 @@ void mtree_info(fprintf_function mon_printf, void *f);
+  *
+  * @as: an uninitialized #AddressSpace
+  * @root: a #MemoryRegion that routes addesses for the address space
++ * @name: an address space name
+  */
+-void address_space_init(AddressSpace *as, MemoryRegion *root);
++void address_space_init(AddressSpace *as, MemoryRegion *root, const char *name);
+ 
+ 
+ /**
+diff --git a/memory.c b/memory.c
+index cee3e59..b4117a8 100644
+--- a/memory.c
++++ b/memory.c
+@@ -1002,7 +1002,7 @@ void memory_region_init_iommu(MemoryRegion *mr,
+     mr->terminates = true;  /* then re-forwards */
+     mr->destructor = memory_region_destructor_iommu;
+     mr->iommu_target_as = g_new(AddressSpace, 1);
+-    address_space_init(mr->iommu_target_as, target);
++    address_space_init(mr->iommu_target_as, target, name);
+ }
+ 
+ static uint64_t invalid_read(void *opaque, hwaddr addr,
+@@ -1599,7 +1599,7 @@ void memory_listener_unregister(MemoryListener *listener)
+     QTAILQ_REMOVE(&memory_listeners, listener, link);
+ }
+ 
+-void address_space_init(AddressSpace *as, MemoryRegion *root)
++void address_space_init(AddressSpace *as, MemoryRegion *root, const char *name)
+ {
+     memory_region_transaction_begin();
+     as->root = root;
+@@ -1608,7 +1608,7 @@ void address_space_init(AddressSpace *as, MemoryRegion *root)
+     as->ioeventfd_nb = 0;
+     as->ioeventfds = NULL;
+     QTAILQ_INSERT_TAIL(&address_spaces, as, address_spaces_link);
+-    as->name = NULL;
++    as->name = g_strdup(name?name:"anonymous");
+     address_space_init_dispatch(as);
+     memory_region_update_pending |= root->enabled;
+     memory_region_transaction_commit();
+@@ -1623,6 +1623,7 @@ void address_space_destroy(AddressSpace *as)
+     QTAILQ_REMOVE(&address_spaces, as, address_spaces_link);
+     address_space_destroy_dispatch(as);
+     flatview_destroy(as->current_map);
++    g_free(as->name);
+     g_free(as->current_map);
+     g_free(as->ioeventfds);
+ }
+@@ -1749,9 +1750,6 @@ void mtree_info(fprintf_function mon_printf, void *f)
+     QTAILQ_INIT(&ml_head);
+ 
+     QTAILQ_FOREACH(as, &address_spaces, address_spaces_link) {
+-        if (!as->name) {
+-            continue;
+-        }
+         mon_printf(f, "%s\n", as->name);
+         mtree_print_mr(mon_printf, f, as->root, 0, 0, &ml_head);
+     }
+-- 
+1.7.10.4
+
+

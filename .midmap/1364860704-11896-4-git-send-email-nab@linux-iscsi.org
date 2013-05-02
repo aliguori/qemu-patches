@@ -1,0 +1,1 @@
+../virtio-vhost-Add-checks-for-uninitialized-VQs/v1.1364878701/0003-vhost-Skip-uninitialized-VQs-in-vhost_virtqueue_startstop.patch

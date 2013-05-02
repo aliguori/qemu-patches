@@ -1,0 +1,50 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Eduardo Habkost <ehabkost@redhat.com>
+To: Eduardo Habkost <ehabkost@redhat.com>, qemu-devel@nongnu.org,
+ =?UTF-8?q?Andreas=20F=C3=A4rber?= <afaerber@suse.de>
+Cc: Igor Mammedov <imammedo@redhat.com>,
+ Andreas =?ISO-8859-1?B?RuRyYmVy?= <afaerber@suse.de>, qemu-devel@nongnu.org
+Date: Mon, 15 Apr 2013 16:25:34 -0300
+Message-id: 1366053940-9401-2-git-send-email-ehabkost@redhat.com
+Subject: [PATCH 1/7] target-i386: Move cpuid_xlevel,
+ cpuid_xlevel2 fields in X86CPU
+
+As the cpuid_*_features fields will be replaced by an array, put the
+level/xlevel/xlevel2 fields together in the struct, as they won't be
+close to the corresponding cpuid_*_features fields anymore.
+
+Signed-off-by: Eduardo Habkost <ehabkost@redhat.com>
+---
+ target-i386/cpu.h | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/target-i386/cpu.h b/target-i386/cpu.h
+index cf1b05c..500fe93 100644
+--- a/target-i386/cpu.h
++++ b/target-i386/cpu.h
+@@ -835,19 +835,19 @@ typedef struct CPUX86State {
+ 
+     /* processor features (e.g. for CPUID insn) */
+     uint32_t cpuid_level;
++    uint32_t cpuid_xlevel;
++    uint32_t cpuid_xlevel2;
+     uint32_t cpuid_vendor1;
+     uint32_t cpuid_vendor2;
+     uint32_t cpuid_vendor3;
+     uint32_t cpuid_version;
+     uint32_t cpuid_features;
+     uint32_t cpuid_ext_features;
+-    uint32_t cpuid_xlevel;
+     uint32_t cpuid_model[12];
+     uint32_t cpuid_ext2_features;
+     uint32_t cpuid_ext3_features;
+     uint32_t cpuid_apic_id;
+     /* Store the results of Centaur's CPUID instructions */
+-    uint32_t cpuid_xlevel2;
+     uint32_t cpuid_ext4_features;
+     /* Flags from CPUID[EAX=7,ECX=0].EBX */
+     uint32_t cpuid_7_0_ebx_features;
+-- 
+1.8.1.4
+
+

@@ -1,0 +1,1 @@
+../ppc-prep-add-IBM-RS-6000-43p-machine/v1.1367550537/0005-m48t59-add-a-Nvram-interface.patch

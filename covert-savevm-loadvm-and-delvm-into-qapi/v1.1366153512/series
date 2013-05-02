@@ -1,0 +1,12 @@
+0000-covert-savevm-loadvm-and-delvm-into-qapi.txt
+0001-qemu-img-introduce-qemu_img_handle_error.patch
+0002-block-update-error-reporting-for-bdrv_snapshot_delete-and-related-functions.patch
+0003-savevm-update-bdrv_snapshot_find-to-find-snapshot-by-id-or-name.patch
+0004-qapi-Convert-delvm.patch
+0005-block-update-error-reporting-for-bdrv_snapshot_goto-and-related-functions.patch
+0006-savevm-update-error-reporting-for-qemu_loadvm_state.patch
+0007-qapi-Convert-loadvm.patch
+0008-block-update-error-reporting-for-bdrv_snapshot_create-and-related-functions.patch
+0009-savevm-update-error-reporting-off-qemu_savevm_state-and-related-functions.patch
+0010-qapi-Convert-savevm.patch
+0011-savevm-remove-backward-compatibility-from-bdrv_snapshot_find.patch

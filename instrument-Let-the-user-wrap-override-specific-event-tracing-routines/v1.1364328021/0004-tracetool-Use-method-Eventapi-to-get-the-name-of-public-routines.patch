@@ -1,0 +1,147 @@
+From patches Mon Sep 17 00:00:00 2001
+From: =?utf-8?q?Llu=C3=ADs_Vilanova_=3Cvilanova=40ac=2Eupc=2Eedu=3E?=
+To: qemu-devel@nongnu.org
+Cc: 
+Date: Tue, 26 Mar 2013 15:00:44 +0100
+Message-id: 20130326140043.4471.72654.stgit@fimbulvetr.bsc.es
+Subject: [PATCH 04/22] tracetool: Use method 'Event.api' to get the name of
+ public routines
+
+This ensures proper naming across tracing backends, even when someone overrides
+the value without backends knowing it.
+
+Signed-off-by: Lluís Vilanova <vilanova@ac.upc.edu>
+---
+ scripts/tracetool/__init__.py       |    8 ++++++++
+ scripts/tracetool/backend/dtrace.py |    4 ++--
+ scripts/tracetool/backend/simple.py |    8 ++++----
+ scripts/tracetool/backend/stderr.py |    3 ++-
+ scripts/tracetool/backend/ust.py    |    6 ++++--
+ scripts/tracetool/format/h.py       |    4 ++--
+ 6 files changed, 22 insertions(+), 11 deletions(-)
+
+diff --git a/scripts/tracetool/__init__.py b/scripts/tracetool/__init__.py
+index 175df08..a0579a8 100644
+--- a/scripts/tracetool/__init__.py
++++ b/scripts/tracetool/__init__.py
+@@ -173,6 +173,14 @@ class Event(object):
+                                           self.args,
+                                           self.fmt)
+ 
++
++    QEMU_TRACE              = "trace_%(name)s"
++
++    def api(self, fmt = None):
++        if fmt is None:
++            fmt = Event.QEMU_TRACE
++        return fmt % { "name" : self.name }
++
+ def _read_events(fobj):
+     res = []
+     for line in fobj:
+diff --git a/scripts/tracetool/backend/dtrace.py b/scripts/tracetool/backend/dtrace.py
+index e31bc79..5fad33e 100644
+--- a/scripts/tracetool/backend/dtrace.py
++++ b/scripts/tracetool/backend/dtrace.py
+@@ -44,10 +44,10 @@ def h(events):
+         '')
+ 
+     for e in events:
+-        out('static inline void trace_%(name)s(%(args)s) {',
++        out('static inline void %(api)s(%(args)s) {',
+             '    QEMU_%(uppername)s(%(argnames)s);',
+             '}',
+-            name = e.name,
++            api = e.api(),
+             args = e.args,
+             uppername = e.name.upper(),
+             argnames = ", ".join(e.args.names()),
+diff --git a/scripts/tracetool/backend/simple.py b/scripts/tracetool/backend/simple.py
+index 30faac9..279551a 100644
+--- a/scripts/tracetool/backend/simple.py
++++ b/scripts/tracetool/backend/simple.py
+@@ -34,10 +34,10 @@ def c(events):
+         )
+ 
+     for num, event in enumerate(events):
+-        out('void trace_%(name)s(%(args)s)',
++        out('void %(api)s(%(args)s)',
+             '{',
+             '    TraceBufferRecord rec;',
+-            name = event.name,
++            api = event.api(),
+             args = event.args,
+             )
+         sizes = []
+@@ -94,7 +94,7 @@ def c(events):
+ 
+ def h(events):
+     for event in events:
+-        out('void trace_%(name)s(%(args)s);',
+-            name = event.name,
++        out('void %(api)s(%(args)s);',
++            api = event.api(),
+             args = event.args,
+             )
+diff --git a/scripts/tracetool/backend/stderr.py b/scripts/tracetool/backend/stderr.py
+index 6f93dbd..70cb27d 100644
+--- a/scripts/tracetool/backend/stderr.py
++++ b/scripts/tracetool/backend/stderr.py
+@@ -33,13 +33,14 @@ def h(events):
+         if len(e.args) > 0:
+             argnames = ", " + argnames
+ 
+-        out('static inline void trace_%(name)s(%(args)s)',
++        out('static inline void %(api)s(%(args)s)',
+             '{',
+             '    bool _state = trace_event_get_state(%(event_id)s);',
+             '    if (_state) {',
+             '        fprintf(stderr, "%(name)s " %(fmt)s "\\n" %(argnames)s);',
+             '    }',
+             '}',
++            api = e.api(),
+             name = e.name,
+             args = e.args,
+             event_id = "TRACE_" + e.name.upper(),
+diff --git a/scripts/tracetool/backend/ust.py b/scripts/tracetool/backend/ust.py
+index ea36995..e9a49b4 100644
+--- a/scripts/tracetool/backend/ust.py
++++ b/scripts/tracetool/backend/ust.py
+@@ -78,7 +78,8 @@ def h(events):
+     for e in events:
+         if len(e.args) > 0:
+             out('DECLARE_TRACE(ust_%(name)s, TP_PROTO(%(args)s), TP_ARGS(%(argnames)s));',
+-                '#define trace_%(name)s trace_ust_%(name)s',
++                '#define %(api)s trace_ust_%(name)s',
++                api = e.api(),
+                 name = e.name,
+                 args = e.args,
+                 argnames = ", ".join(e.args.names()),
+@@ -86,7 +87,8 @@ def h(events):
+ 
+         else:
+             out('_DECLARE_TRACEPOINT_NOARGS(ust_%(name)s);',
+-                '#define trace_%(name)s trace_ust_%(name)s',
++                '#define %(api)s trace_ust_%(name)s',
++                api = e.api(),
+                 name = e.name,
+                 )
+ 
+diff --git a/scripts/tracetool/format/h.py b/scripts/tracetool/format/h.py
+index 93132fc..575d2f1 100644
+--- a/scripts/tracetool/format/h.py
++++ b/scripts/tracetool/format/h.py
+@@ -30,9 +30,9 @@ def end(events):
+ def nop(events):
+     for e in events:
+         out('',
+-            'static inline void trace_%(name)s(%(args)s)',
++            'static inline void %(api)s(%(args)s)',
+             '{',
+             '}',
+-            name = e.name,
++            api = e.api(),
+             args = e.args,
+             )
+
+

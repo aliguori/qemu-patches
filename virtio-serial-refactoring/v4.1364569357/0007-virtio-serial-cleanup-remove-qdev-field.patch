@@ -1,0 +1,49 @@
+From patches Mon Sep 17 00:00:00 2001
+From: fred.konrad@greensocs.com
+To: Anthony Liguori <aliguori@us.ibm.com>, qemu-devel@nongnu.org
+Cc: cornelia.huck@de.ibm.com, peter.maydell@linaro.org,
+ Amit Shah <amit.shah@redhat.com>, mark.burton@greensocs.com,
+ fred.konrad@greensocs.com
+Date: Fri, 29 Mar 2013 10:02:44 +0100
+Message-id: 1364547764-6627-8-git-send-email-fred.konrad@greensocs.com
+Subject: [PATCH 7/7] virtio-serial: cleanup: remove qdev field.
+
+From: KONRAD Frederic <fred.konrad@greensocs.com>
+
+The qdev field is no longer needed, just drop it.
+
+Signed-off-by: KONRAD Frederic <fred.konrad@greensocs.com>
+---
+ hw/virtio-serial-bus.c | 2 --
+ hw/virtio-serial.h     | 2 --
+ 2 files changed, 4 deletions(-)
+
+diff --git a/hw/virtio-serial-bus.c b/hw/virtio-serial-bus.c
+index 05bbb47..fbb38d1 100644
+--- a/hw/virtio-serial-bus.c
++++ b/hw/virtio-serial-bus.c
+@@ -960,8 +960,6 @@ static int virtio_serial_device_init(VirtIODevice *vdev)
+     vdev->set_status = set_status;
+     vdev->reset = vser_reset;
+ 
+-    vser->qdev = qdev;
+-
+     vser->post_load = NULL;
+ 
+     /*
+diff --git a/hw/virtio-serial.h b/hw/virtio-serial.h
+index 6a01e8b..4037cba 100644
+--- a/hw/virtio-serial.h
++++ b/hw/virtio-serial.h
+@@ -200,8 +200,6 @@ struct VirtIOSerial {
+ 
+     VirtIOSerialBus bus;
+ 
+-    DeviceState *qdev;
+-
+     QTAILQ_HEAD(, VirtIOSerialPort) ports;
+ 
+     /* bitmap for identifying active ports */
+-- 
+1.7.11.7
+

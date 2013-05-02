@@ -1,0 +1,1 @@
+../replace-QEMUOptionParameter-with-QemuOpts-parser/v13.1365621905/0002-avoid-duplication-of-default-value-in-QemuOpts.patch

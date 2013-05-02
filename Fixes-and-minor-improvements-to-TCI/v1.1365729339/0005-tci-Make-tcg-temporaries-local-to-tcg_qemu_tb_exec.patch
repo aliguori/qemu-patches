@@ -1,0 +1,126 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Stefan Weil <sw@weilnetz.de>
+To: Anthony Liguori <aliguori@us.ibm.com>
+Cc: qemu-devel@nongnu.org, Richard Henderson <rth@twiddle.net>
+Date: Thu, 11 Apr 2013 20:15:44 +0200
+Message-id: 1365704144-8852-6-git-send-email-sw@weilnetz.de
+Subject: [PATCH 5/5] tci: Make tcg temporaries local to tcg_qemu_tb_exec
+
+From: Richard Henderson <rth@twiddle.net>
+
+We're moving away from the temporaries stored in env.  Make sure we can
+differentiate between temp stores and possibly bogus stores for extra
+call arguments.  Move TCG_AREG0 and TCG_REG_CALL_STACK out of the way
+of the parameter passing registers.
+
+Signed-off-by: Richard Henderson <rth@twiddle.net>
+Signed-off by: Stefan Weil <sw@weilnetz.de>
+---
+ tcg/tci/tcg-target.c |   12 ++++++------
+ tcg/tci/tcg-target.h |    8 +++++++-
+ tci.c                |    6 ++++++
+ 3 files changed, 19 insertions(+), 7 deletions(-)
+
+diff --git a/tcg/tci/tcg-target.c b/tcg/tci/tcg-target.c
+index b096a84..d1241b5 100644
+--- a/tcg/tci/tcg-target.c
++++ b/tcg/tci/tcg-target.c
+@@ -40,11 +40,6 @@
+ /* Bitfield n...m (in 32 bit value). */
+ #define BITS(n, m) (((0xffffffffU << (31 - n)) >> (31 - n + m)) << m)
+ 
+-/* Used for function call generation. */
+-#define TCG_REG_CALL_STACK              TCG_REG_R4
+-#define TCG_TARGET_STACK_ALIGN          16
+-#define TCG_TARGET_CALL_STACK_OFFSET    0
+-
+ /* Macros used in tcg_target_op_defs. */
+ #define R       "r"
+ #define RI      "ri"
+@@ -901,10 +896,15 @@ static void tcg_target_init(TCGContext *s)
+     /* TODO: Which registers should be set here? */
+     tcg_regset_set32(tcg_target_call_clobber_regs, 0,
+                      BIT(TCG_TARGET_NB_REGS) - 1);
++
+     tcg_regset_clear(s->reserved_regs);
+     tcg_regset_set_reg(s->reserved_regs, TCG_REG_CALL_STACK);
+     tcg_add_target_add_op_defs(tcg_target_op_defs);
+-    tcg_set_frame(s, TCG_AREG0, offsetof(CPUArchState, temp_buf),
++
++    /* We use negative offsets from "sp" so that we can distinguish
++       stores that might pretend to be call arguments.  */
++    tcg_set_frame(s, TCG_REG_CALL_STACK,
++                  -CPU_TEMP_BUF_NLONGS * sizeof(long),
+                   CPU_TEMP_BUF_NLONGS * sizeof(long));
+ }
+ 
+diff --git a/tcg/tci/tcg-target.h b/tcg/tci/tcg-target.h
+index 1f17576..0395bbb 100644
+--- a/tcg/tci/tcg-target.h
++++ b/tcg/tci/tcg-target.h
+@@ -127,7 +127,6 @@ typedef enum {
+     TCG_REG_R5,
+     TCG_REG_R6,
+     TCG_REG_R7,
+-    TCG_AREG0 = TCG_REG_R7,
+ #if TCG_TARGET_NB_REGS >= 16
+     TCG_REG_R8,
+     TCG_REG_R9,
+@@ -160,6 +159,13 @@ typedef enum {
+     TCG_CONST = UINT8_MAX
+ } TCGReg;
+ 
++#define TCG_AREG0                       (TCG_TARGET_NB_REGS - 2)
++
++/* Used for function call generation. */
++#define TCG_REG_CALL_STACK              (TCG_TARGET_NB_REGS - 1)
++#define TCG_TARGET_CALL_STACK_OFFSET    0
++#define TCG_TARGET_STACK_ALIGN          16
++
+ void tci_disas(uint8_t opc);
+ 
+ tcg_target_ulong tcg_qemu_tb_exec(CPUArchState *env, uint8_t *tb_ptr);
+diff --git a/tci.c b/tci.c
+index 70f8308..c742c8d 100644
+--- a/tci.c
++++ b/tci.c
+@@ -112,6 +112,7 @@ static void tci_write_reg(TCGReg index, tcg_target_ulong value)
+ {
+     assert(index < ARRAY_SIZE(tci_reg));
+     assert(index != TCG_AREG0);
++    assert(index != TCG_REG_CALL_STACK);
+     tci_reg[index] = value;
+ }
+ 
+@@ -435,9 +436,12 @@ static bool tci_compare64(uint64_t u0, uint64_t u1, TCGCond condition)
+ /* Interpret pseudo code in tb. */
+ tcg_target_ulong tcg_qemu_tb_exec(CPUArchState *env, uint8_t *tb_ptr)
+ {
++    long tcg_temps[CPU_TEMP_BUF_NLONGS];
++    uintptr_t sp_value = (uintptr_t)(tcg_temps + CPU_TEMP_BUF_NLONGS);
+     tcg_target_ulong next_tb = 0;
+ 
+     tci_reg[TCG_AREG0] = (tcg_target_ulong)env;
++    tci_reg[TCG_REG_CALL_STACK] = sp_value;
+     assert(tb_ptr);
+ 
+     for (;;) {
+@@ -585,6 +589,7 @@ tcg_target_ulong tcg_qemu_tb_exec(CPUArchState *env, uint8_t *tb_ptr)
+             t0 = tci_read_r32(&tb_ptr);
+             t1 = tci_read_r(&tb_ptr);
+             t2 = tci_read_s32(&tb_ptr);
++            assert(t1 != sp_value || (int32_t)t2 < 0);
+             *(uint32_t *)(t1 + t2) = t0;
+             break;
+ 
+@@ -869,6 +874,7 @@ tcg_target_ulong tcg_qemu_tb_exec(CPUArchState *env, uint8_t *tb_ptr)
+             t0 = tci_read_r64(&tb_ptr);
+             t1 = tci_read_r(&tb_ptr);
+             t2 = tci_read_s32(&tb_ptr);
++            assert(t1 != sp_value || (int32_t)t2 < 0);
+             *(uint64_t *)(t1 + t2) = t0;
+             break;
+ 
+-- 
+1.7.10.4
+

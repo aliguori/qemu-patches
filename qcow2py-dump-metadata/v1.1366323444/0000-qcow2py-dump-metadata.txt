@@ -1,0 +1,36 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: Paolo Bonzini <pbonzini@redhat.com>, qemu-devel@nongnu.org
+Cc: kwolf@redhat.com, qemu-devel@nongnu.org, stefanha@redhat.com
+Date: Thu, 18 Apr 2013 17:17:24 +0200
+Message-id: 1366298249-11739-1-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 0/5] qcow2.py: dump metadata
+
+This series includes several improvements to qcow2.py, mostly
+the ability to dump the L1 and L2 tables for a full backing
+chain.
+
+Doing this completely would require support for all image formats,
+not just qcow2.  To cover the common cases, I included support
+for raw backing files.
+
+The right thing to do perhaps would be to add the read-metadata
+patches from the in-place QED conversion summer of code project,
+but I wanted to throw out these anyway if anyone has comments.
+
+Paolo
+
+Paolo Bonzini (5):
+  qcow2.py: rename class to Qcow
+  qcow2.py: add ImageFile superclass
+  qcow2.py: add load_image() method
+  qcow2.py: add method to load backing image
+  qcow2.py: add dump-map command
+
+ tests/qemu-iotests/qcow2.py | 258 +++++++++++++++++++++++++++++++++++++-------
+ 1 file changed, 217 insertions(+), 41 deletions(-)
+
+-- 
+1.8.2
+
+

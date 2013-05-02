@@ -1,0 +1,99 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: "Michael S. Tsirkin" <mst@redhat.com>
+Date: Mon, 15 Apr 2013 15:19:26 +0200
+Message-id: 1366031973-7718-6-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 05/12] acpi: move declarations from pc.h to acpi.h
+
+From: "Michael S. Tsirkin" <mst@redhat.com>
+
+Functions defined in acpi/ should be declared in
+acpi.h
+
+Signed-off-by: Michael S. Tsirkin <mst@redhat.com>
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ arch_init.c            | 1 +
+ hw/i386/pc.c           | 1 +
+ hw/i386/pc_piix.c      | 1 +
+ include/hw/acpi/acpi.h | 7 +++++++
+ include/hw/i386/pc.h   | 8 --------
+ 5 files changed, 10 insertions(+), 8 deletions(-)
+
+diff --git a/arch_init.c b/arch_init.c
+index 769ce77..fba0889 100644
+--- a/arch_init.c
++++ b/arch_init.c
+@@ -49,6 +49,7 @@
+ #include "qmp-commands.h"
+ #include "trace.h"
+ #include "exec/cpu-all.h"
++#include "hw/acpi/acpi.h"
+ 
+ #ifdef DEBUG_ARCH_INIT
+ #define DPRINTF(fmt, ...) \
+diff --git a/hw/i386/pc.c b/hw/i386/pc.c
+index 8d75b34..0d6e72b 100644
+--- a/hw/i386/pc.c
++++ b/hw/i386/pc.c
+@@ -52,6 +52,7 @@
+ #include "sysemu/arch_init.h"
+ #include "qemu/bitmap.h"
+ #include "qemu/config-file.h"
++#include "hw/acpi/acpi.h"
+ 
+ /* debug PC/ISA interrupts */
+ //#define DEBUG_IRQ
+diff --git a/hw/i386/pc_piix.c b/hw/i386/pc_piix.c
+index cff8013..943758a 100644
+--- a/hw/i386/pc_piix.c
++++ b/hw/i386/pc_piix.c
+@@ -43,6 +43,7 @@
+ #include "hw/xen/xen.h"
+ #include "exec/memory.h"
+ #include "exec/address-spaces.h"
++#include "hw/acpi/acpi.h"
+ #include "cpu.h"
+ #ifdef CONFIG_XEN
+ #  include <xen/hvm/hvm_info_table.h>
+diff --git a/include/hw/acpi/acpi.h b/include/hw/acpi/acpi.h
+index e18ef28..4cd52c1 100644
+--- a/include/hw/acpi/acpi.h
++++ b/include/hw/acpi/acpi.h
+@@ -154,4 +154,11 @@ void acpi_gpe_reset(ACPIREGS *ar);
+ void acpi_gpe_ioport_writeb(ACPIREGS *ar, uint32_t addr, uint32_t val);
+ uint32_t acpi_gpe_ioport_readb(ACPIREGS *ar, uint32_t addr);
+ 
++/* acpi.c */
++extern int acpi_enabled;
++extern char unsigned *acpi_tables;
++extern size_t acpi_tables_len;
++
++void acpi_table_add(const QemuOpts *opts, Error **errp);
++
+ #endif /* !QEMU_HW_ACPI_H */
+diff --git a/include/hw/i386/pc.h b/include/hw/i386/pc.h
+index 5d40914..9bcc819 100644
+--- a/include/hw/i386/pc.h
++++ b/include/hw/i386/pc.h
+@@ -107,14 +107,6 @@ void cpu_smm_register(cpu_set_smm_t callback, void *arg);
+ 
+ void ioapic_init_gsi(GSIState *gsi_state, const char *parent_name);
+ 
+-/* acpi.c */
+-extern int acpi_enabled;
+-extern char unsigned *acpi_tables;
+-extern size_t acpi_tables_len;
+-
+-void acpi_bios_init(void);
+-void acpi_table_add(const QemuOpts *opts, Error **errp);
+-
+ /* acpi_piix.c */
+ 
+ i2c_bus *piix4_pm_init(PCIBus *bus, int devfn, uint32_t smb_io_base,
+-- 
+1.8.1.4
+
+
+

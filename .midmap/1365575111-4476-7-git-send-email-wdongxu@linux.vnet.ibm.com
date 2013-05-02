@@ -1,0 +1,1 @@
+../replace-QEMUOptionParameter-with-QemuOpts-parser/v13.1365621905/0006-remove-QEMUOptionParameter-related-functions-and-struct.patch

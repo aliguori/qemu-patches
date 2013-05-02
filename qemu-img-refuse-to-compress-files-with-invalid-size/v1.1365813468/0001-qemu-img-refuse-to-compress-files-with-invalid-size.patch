@@ -1,0 +1,49 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Stefan Hajnoczi <stefanha@redhat.com>
+To: Eric Blake <eblake@redhat.com>, Stefan Hajnoczi <stefanha@redhat.com>,
+ qemu-devel@nongnu.org
+Cc: Stefan Hajnoczi <stefanha@redhat.com>,
+ =?iso-8859-1?Q?Beno=EEt?= Canet <benoit.canet@irqsave.net>,
+ Kevin Wolf <kwolf@redhat.com>, qemu-devel@nongnu.org
+Date: Fri, 12 Apr 2013 19:37:48 +0200
+Message-id: 1365788268-24787-1-git-send-email-stefanha@redhat.com
+Subject: [PATCH 1/1] qemu-img: refuse to compress files with invalid size
+
+Image file compression works at cluster granularity.  It is not possible
+to compress less than a cluster of data at a time.
+
+Print an error when attempting qemu-img convert -c with an input file
+that is not a multiple of the cluster size.
+
+I considered automatically adjusting the output file size but think it's
+better to be explicit.  This avoids confusion when users notice that
+image file size changed after conversion.
+
+Signed-off-by: Stefan Hajnoczi <stefanha@redhat.com>
+Reviewed-by: Benoit Canet <benoit@irqsave.net>
+---
+ qemu-img.c | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/qemu-img.c b/qemu-img.c
+index 31627b0..2273851 100644
+--- a/qemu-img.c
++++ b/qemu-img.c
+@@ -1370,6 +1370,13 @@ static int img_convert(int argc, char **argv)
+             goto out;
+         }
+         cluster_sectors = cluster_size >> 9;
++        if (total_sectors % cluster_sectors) {
++            error_report("compression requires that input file size is a "
++                         "multiple of %d bytes",
++                         cluster_size);
++            ret = -1;
++            goto out;
++        }
+         sector_num = 0;
+ 
+         nb_sectors = total_sectors;
+-- 
+1.8.1.4
+
+

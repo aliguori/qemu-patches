@@ -1,0 +1,79 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+To: Anthony Liguori <aliguori@us.ibm.com>, Paolo Bonzini <pbonzini@redhat.com>,
+ qemu-devel@nongnu.org, Peter Lieven <lieven-lists@dlhnet.de>,
+ Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+Cc: Anthony Liguori <aliguori@us.ibm.com>, pbonzini@redhat.com,
+ qemu-devel@nongnu.org, Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+Date: Sun, 7 Apr 2013 15:18:00 +1000
+Message-id: 1365311880-11800-1-git-send-email-peter.crosthwaite@xilinx.com
+Subject: [PATCH 1/1] mainloop.c: Keep unlocking BQL during busy-wait spin-out
+
+Modify Anthony's starvation detection logic to keep the BQL unlocked
+until the starvation condition goes away. Otherwise the counter has to
+count up to 1000 for each needed iteration until the busy-wait is
+lifted.
+
+Reset the counter back to zero once glib_pollfds_fill returns with a
+non-zero timout, (indicating a return to normality). The 1000 iteration
+wait now only happens once on the transition from normal operation to
+busy-wait starvation.
+
+Anthony's original patch fixed the serial paste bug, but this patch is
+also needed to restore performance.
+
+Signed-off-by: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+---
+ main-loop.c |   20 ++++++++++----------
+ 1 files changed, 10 insertions(+), 10 deletions(-)
+
+diff --git a/main-loop.c b/main-loop.c
+index f46aece..93d2917 100644
+--- a/main-loop.c
++++ b/main-loop.c
+@@ -200,10 +200,13 @@ static int os_host_main_loop_wait(uint32_t timeout)
+     /* If the I/O thread is very busy or we are incorrectly busy waiting in
+      * the I/O thread, this can lead to starvation of the BQL such that the
+      * VCPU threads never run.  To make sure we can detect the later case,
+-     * print a message to the screen.  If we run into this condition, create
+-     * a fake timeout in order to give the VCPU threads a chance to run.
++     * print a message to the screen.  If we run into this condition, unlock
++     * the BQL until a non-zero timout is given (indicating the starvation
++     * issue has gome away).
+      */
+-    if (spin_counter > MAX_MAIN_LOOP_SPIN) {
++    if (timeout > 0) {
++        spin_counter = 0;
++    } else if (spin_counter > MAX_MAIN_LOOP_SPIN) {
+         static bool notified;
+ 
+         if (!notified) {
+@@ -212,21 +215,18 @@ static int os_host_main_loop_wait(uint32_t timeout)
+                     MAX_MAIN_LOOP_SPIN);
+             notified = true;
+         }
+-
+-        timeout = 1;
+     }
+ 
+-    if (timeout > 0) {
+-        spin_counter = 0;
++    if (timeout > 0 || spin_counter > MAX_MAIN_LOOP_SPIN) {
+         qemu_mutex_unlock_iothread();
+-    } else {
+-        spin_counter++;
+     }
+ 
+     ret = g_poll((GPollFD *)gpollfds->data, gpollfds->len, timeout);
+ 
+-    if (timeout > 0) {
++    if (timeout > 0 || spin_counter > MAX_MAIN_LOOP_SPIN) {
+         qemu_mutex_lock_iothread();
++    } else {
++        spin_counter++;
+     }
+ 
+     glib_pollfds_poll();
+-- 
+1.7.0.4
+

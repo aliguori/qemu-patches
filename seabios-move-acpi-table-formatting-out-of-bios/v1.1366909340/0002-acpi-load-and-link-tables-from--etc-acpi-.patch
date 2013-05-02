@@ -1,0 +1,116 @@
+From patches Mon Sep 17 00:00:00 2001
+From: "Michael S. Tsirkin" <mst@redhat.com>
+To: Laszlo Ersek <lersek@redhat.com>, seabios@seabios.org,
+ "Michael S. Tsirkin" <mst@redhat.com>
+Cc: seabios@seabios.org, qemu-devel@nongnu.org
+Date: Thu, 25 Apr 2013 12:02:32 +0300
+Message-id: 4fd91502526b9977807a8dff28dcba4db670af7c.1366879705.git.mst@redhat.com
+Subject: [PATCH 2/3] acpi: load and link tables from /etc/acpi/
+
+Load files in /etc/acpi/ and use for acpi tables.
+Any files in this directory completely disable
+generating and loading legacy acpi tables.
+
+Signed-off-by: Michael S. Tsirkin <mst@redhat.com>
+---
+ src/acpi.c | 67 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++-
+ 1 file changed, 66 insertions(+), 1 deletion(-)
+
+diff --git a/src/acpi.c b/src/acpi.c
+index 58cd6d7..16ea9f4 100644
+--- a/src/acpi.c
++++ b/src/acpi.c
+@@ -27,6 +27,7 @@
+ #include "config.h" // CONFIG_*
+ #include "paravirt.h" // RamSize
+ #include "dev-q35.h"
++#include "linker.h"
+ 
+ #include "acpi-dsdt.hex"
+ 
+@@ -603,8 +604,72 @@ acpi_setup(void)
+     if (! CONFIG_ACPI)
+         return;
+ 
++    int acpi_generate = 1;
++
+     dprintf(3, "init ACPI tables\n");
+ 
++    struct romfile_s *file = NULL;
++    for (;;) {
++        file = romfile_findprefix("/etc/acpi/", file);
++        if (!file)
++            break;
++
++        /*
++         * Disable ACPI table generation. All ACPI tables must come from
++         * etc/acpi/ romfile entries.
++         */
++        acpi_generate = 0;
++
++        if (!file->size)
++            continue;
++
++        void *data = malloc_high(file->size);
++        if (!data) {
++            warn_noalloc();
++            break;
++        }
++        int ret = file->copy(file, data, file->size);
++        if (ret < file->size) {
++            free(data);
++            continue;
++        }
++        /* Handle RSDP and FACS quirks */
++        if (file->size >= 8) {
++            struct rsdp_descriptor *rsdp = data;
++            struct acpi_table_header *hdr = data;
++            /* RSDP is in FSEG memory. */
++            if (rsdp->signature == cpu_to_le64(RSDP_SIGNATURE)) {
++                data = malloc_fseg(file->size);
++                if (!data) {
++                    warn_noalloc();
++                    break;
++                }
++                memcpy(data, rsdp, file->size);
++                free(rsdp);
++                /* Store Rsdp pointer for use by find_fadt. */
++                RsdpAddr = data;
++            } else if (hdr->signature == FACS_SIGNATURE) {
++                /* FACS is aligned to a 64 bit boundary. */
++                data = memalign_high(64, file->size);
++                if (!data) {
++                    warn_noalloc();
++                    break;
++                }
++                memcpy(data, hdr, file->size);
++                free(hdr);
++            }
++        }
++        file->data = data;
++    }
++
++    linker_link("/etc/linker-script");
++
++    if (!acpi_generate) {
++        return;
++    }
++
++    dprintf(3, "generate ACPI tables\n");
++
+     // This code is hardcoded for PIIX4 Power Management device.
+     struct pci_device *pci = pci_find_init_device(acpi_find_tbl, NULL);
+     if (!pci)
+@@ -630,7 +695,7 @@ acpi_setup(void)
+     if (pci->device == PCI_DEVICE_ID_INTEL_ICH9_LPC)
+         ACPI_INIT_TABLE(build_mcfg_q35());
+ 
+-    struct romfile_s *file = NULL;
++    file = NULL;
+     for (;;) {
+         file = romfile_findprefix("acpi/", file);
+         if (!file)
+-- 
+MST
+
+

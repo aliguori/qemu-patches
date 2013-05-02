@@ -1,0 +1,1 @@
+../More-translation-improvements/v1.1364920103/0001-po-Makefile-Fix-dependency-for-mo.patch

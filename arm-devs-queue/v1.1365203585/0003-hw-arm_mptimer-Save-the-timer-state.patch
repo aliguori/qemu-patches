@@ -1,0 +1,45 @@
+From patches Mon Sep 17 00:00:00 2001
+From: "Peter Maydell" <peter.maydell@linaro.org>
+To: Anthony Liguori <aliguori@us.ibm.com>, Blue Swirl <blauwirbel@gmail.com>
+Cc: Paul Brook <paul@codesourcery.com>, qemu-devel@nongnu.org
+Date: Fri,  5 Apr 2013 18:13:08 +0100
+Message-id: 1365181999-15387-4-git-send-email-peter.maydell@linaro.org
+Subject: [PATCH 03/14] hw/arm_mptimer: Save the timer state
+
+Add a missing VMSTATE_TIMER() entry to the arm_mptimer vmstate
+description; this omission meant that we would probably hang on reload
+when the timer failed to fire.
+
+Signed-off-by: Peter Maydell <peter.maydell@linaro.org>
+Reviewed-by: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+Message-id: 1363967348-3044-1-git-send-email-peter.maydell@linaro.org
+---
+ hw/arm_mptimer.c |    5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/hw/arm_mptimer.c b/hw/arm_mptimer.c
+index f59a9f1..317f5e4 100644
+--- a/hw/arm_mptimer.c
++++ b/hw/arm_mptimer.c
+@@ -253,14 +253,15 @@ static int arm_mptimer_init(SysBusDevice *dev)
+ 
+ static const VMStateDescription vmstate_timerblock = {
+     .name = "arm_mptimer_timerblock",
+-    .version_id = 1,
+-    .minimum_version_id = 1,
++    .version_id = 2,
++    .minimum_version_id = 2,
+     .fields = (VMStateField[]) {
+         VMSTATE_UINT32(count, TimerBlock),
+         VMSTATE_UINT32(load, TimerBlock),
+         VMSTATE_UINT32(control, TimerBlock),
+         VMSTATE_UINT32(status, TimerBlock),
+         VMSTATE_INT64(tick, TimerBlock),
++        VMSTATE_TIMER(timer, TimerBlock),
+         VMSTATE_END_OF_LIST()
+     }
+ };
+-- 
+1.7.9.5
+
+

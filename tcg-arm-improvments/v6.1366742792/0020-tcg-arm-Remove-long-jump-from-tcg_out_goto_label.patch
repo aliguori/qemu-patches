@@ -1,0 +1,40 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Richard Henderson <rth@twiddle.net>
+To: qemu-devel@nongnu.org, Richard Henderson <rth@twiddle.net>
+Cc: qemu-devel@nongnu.org, aurelien@aurel32.net
+Date: Tue, 23 Apr 2013 13:46:52 -0700
+Message-id: 1366750012-25015-21-git-send-email-rth@twiddle.net
+Subject: [PATCH 20/20] tcg-arm: Remove long jump from tcg_out_goto_label
+
+Branches within a TB will always be within 16MB.
+
+Signed-off-by: Richard Henderson <rth@twiddle.net>
+Reviewed-by: Aurelien Jarno <aurelien@aurel32.net>
+---
+ tcg/arm/tcg-target.c | 7 +------
+ 1 file changed, 1 insertion(+), 6 deletions(-)
+
+diff --git a/tcg/arm/tcg-target.c b/tcg/arm/tcg-target.c
+index d6afa2f..7216f7a 100644
+--- a/tcg/arm/tcg-target.c
++++ b/tcg/arm/tcg-target.c
+@@ -1055,14 +1055,9 @@ static inline void tcg_out_goto_label(TCGContext *s, int cond, int label_index)
+ {
+     TCGLabel *l = &s->labels[label_index];
+ 
+-    if (l->has_value)
++    if (l->has_value) {
+         tcg_out_goto(s, cond, l->u.value);
+-    else if (cond == COND_AL) {
+-        tcg_out_ld32_12(s, COND_AL, TCG_REG_PC, TCG_REG_PC, -4);
+-        tcg_out_reloc(s, s->code_ptr, R_ARM_ABS32, label_index, 31337);
+-        s->code_ptr += 4;
+     } else {
+-        /* Probably this should be preferred even for COND_AL... */
+         tcg_out_reloc(s, s->code_ptr, R_ARM_PC24, label_index, 31337);
+         tcg_out_b_noaddr(s, cond);
+     }
+-- 
+1.8.1.4
+
+

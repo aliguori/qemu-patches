@@ -1,0 +1,33 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Alon Levy <alevy@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: mlureau@redhat.com
+Date: Mon, 22 Apr 2013 18:04:57 +0300
+Message-id: 1366643098-2566-28-git-send-email-alevy@redhat.com
+Subject: [PATCH 27/28] dev-smartcard-reader: empty implementation for
+ Mechanical (fail correctly)
+
+Signed-off-by: Alon Levy <alevy@redhat.com>
+---
+ hw/usb/dev-smartcard-reader.c | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/hw/usb/dev-smartcard-reader.c b/hw/usb/dev-smartcard-reader.c
+index 78ef504..125cc2c 100644
+--- a/hw/usb/dev-smartcard-reader.c
++++ b/hw/usb/dev-smartcard-reader.c
+@@ -1051,6 +1051,10 @@ static void ccid_handle_bulk_out(USBCCIDState *s, USBPacket *p)
+             ccid_reset_error_status(s);
+             ccid_write_parameters(s, ccid_header);
+             break;
++        case CCID_MESSAGE_TYPE_PC_to_RDR_Mechanical:
++            ccid_report_error_failed(s, 0);
++            ccid_write_slot_status(s, ccid_header);
++            break;
+         default:
+             DPRINTF(s, 1,
+                 "handle_data: ERROR: unhandled message type %Xh\n",
+-- 
+1.8.2
+
+

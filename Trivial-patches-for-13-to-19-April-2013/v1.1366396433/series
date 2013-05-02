@@ -1,0 +1,9 @@
+0000-Trivial-patches-for-13-to-19-April-2013.txt
+0001-bswap-fix-compiler-warning.patch
+0002-virtioh-drop-unused-function-prototypes.patch
+0003-Remove-unneeded-type-casts.patch
+0004-w64-Fix-compiler-warnings-wrong-format-specifier.patch
+0005-linux-user-change-do_semop-to-return-target-errno-when-unsuccessful.patch
+0006-block-ssh-Add-missing-gcc-format-attributes.patch
+0007-ssh-Remove-unnecessary-use-of-strlen-function.patch
+0008-m25p80-Remove-bogus-include-of-devicesh.patch

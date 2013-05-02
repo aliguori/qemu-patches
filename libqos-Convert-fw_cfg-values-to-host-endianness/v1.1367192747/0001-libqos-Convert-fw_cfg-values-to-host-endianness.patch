@@ -1,0 +1,58 @@
+From patches Mon Sep 17 00:00:00 2001
+From: =?utf-8?q?Andreas_F=C3=A4rber_=3Cafaerber=40suse=2Ede=3E?=
+To: None <afaerber@suse.de>, qemu-devel@nongnu.org
+Cc: blauwirbel@gmail.com, None <afaerber@suse.de>, qemu-ppc@nongnu.org,
+ =?UTF-8?q?Andreas=20F=C3=A4rber?= <afaerber@suse.de>, anthony@codemonkey.ws
+Date: Sun, 28 Apr 2013 18:45:47 +0200
+Message-id: 1367167547-19931-1-git-send-email-afaerber@suse.de
+Subject: [PATCH 1/1] libqos: Convert fw_cfg values to host endianness
+
+The fw_cfg ABI is Little Endian, so byte-swap the generically read
+byte array to host endianness.
+
+This unbreaks the fw_cfg tests on ppc.
+
+Signed-off-by: Andreas Färber <afaerber@suse.de>
+---
+ tests/libqos/fw_cfg.c | 7 ++++---
+ 1 file changed, 4 insertions(+), 3 deletions(-)
+
+diff --git a/tests/libqos/fw_cfg.c b/tests/libqos/fw_cfg.c
+index 799139e..e386ff7 100644
+--- a/tests/libqos/fw_cfg.c
++++ b/tests/libqos/fw_cfg.c
+@@ -11,6 +11,7 @@
+  */
+ 
+ #include "libqos/fw_cfg.h"
++#include "qemu/bswap.h"
+ 
+ void qfw_cfg_select(QFWCFG *fw_cfg, uint16_t key)
+ {
+@@ -32,20 +33,20 @@ uint16_t qfw_cfg_get_u16(QFWCFG *fw_cfg, uint16_t key)
+ {
+     uint16_t value;
+     qfw_cfg_get(fw_cfg, key, &value, sizeof(value));
+-    return value;
++    return le16_to_cpu(value);
+ }
+ 
+ uint32_t qfw_cfg_get_u32(QFWCFG *fw_cfg, uint16_t key)
+ {
+     uint32_t value;
+     qfw_cfg_get(fw_cfg, key, &value, sizeof(value));
+-    return value;
++    return le32_to_cpu(value);
+ }
+ 
+ uint64_t qfw_cfg_get_u64(QFWCFG *fw_cfg, uint16_t key)
+ {
+     uint64_t value;
+     qfw_cfg_get(fw_cfg, key, &value, sizeof(value));
+-    return value;
++    return le64_to_cpu(value);
+ }
+ 
+-- 
+1.8.1.4
+

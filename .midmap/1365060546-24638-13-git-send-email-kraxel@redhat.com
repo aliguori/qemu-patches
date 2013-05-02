@@ -1,0 +1,1 @@
+../console-console-overhaul-continued/v3.1365085722/0012-console-rename-vga_hw_-add-QemuConsole-param.patch

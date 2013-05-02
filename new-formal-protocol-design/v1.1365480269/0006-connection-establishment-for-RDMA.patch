@@ -1,0 +1,149 @@
+From patches Mon Sep 17 00:00:00 2001
+From: mrhines@linux.vnet.ibm.com
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, mst@redhat.com,
+ Michael R Hines <mrhines@us.ibm.com>, Bulent Abali <abali@us.ibm.com>,
+ owasserm@redhat.com, pbonzini@redhat.com, Gokul B Kandiraju <gokul@us.ibm.com>
+Date: Mon, 8 Apr 2013 23:04:35 -0400
+Message-id: 1365476681-31593-7-git-send-email-mrhines@linux.vnet.ibm.com
+Subject: [PATCH 06/12] connection-establishment for RDMA
+
+From: "Michael R. Hines" <mrhines@us.ibm.com>
+
+
+Signed-off-by: Michael R. Hines <mrhines@us.ibm.com>
+---
+ migration-rdma.c |  121 ++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 121 insertions(+)
+ create mode 100644 migration-rdma.c
+
+diff --git a/migration-rdma.c b/migration-rdma.c
+new file mode 100644
+index 0000000..2a0becd
+--- /dev/null
++++ b/migration-rdma.c
+@@ -0,0 +1,121 @@
++/*
++ *  Copyright (C) 2013 Michael R. Hines <mrhines@us.ibm.com>
++ *  Copyright (C) 2010 Jiuxing Liu <jl@us.ibm.com>
++ *
++ *  This program is free software; you can redistribute it and/or modify
++ *  it under the terms of the GNU General Public License as published by
++ *  the Free Software Foundation; under version 2 of the License.
++ *
++ *  This program is distributed in the hope that it will be useful,
++ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
++ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ *  GNU General Public License for more details.
++ *
++ *  You should have received a copy of the GNU General Public License
++ *  along with this program; if not, see <http://www.gnu.org/licenses/>.
++ */
++#include "migration/rdma.h"
++#include "qemu-common.h"
++#include "migration/migration.h"
++#include "migration/qemu-file.h"
++#include <stdio.h>
++#include <sys/types.h>
++#include <sys/socket.h>
++#include <netdb.h>
++#include <arpa/inet.h>
++#include <string.h>
++
++//#define DEBUG_MIGRATION_RDMA
++
++#ifdef DEBUG_MIGRATION_RDMA
++#define DPRINTF(fmt, ...) \
++    do { printf("migration-rdma: " fmt, ## __VA_ARGS__); } while (0)
++#else
++#define DPRINTF(fmt, ...) \
++    do { } while (0)
++#endif
++
++static void rdma_accept_incoming_migration(void *opaque)
++{
++    int ret;
++    QEMUFile *f;
++
++    DPRINTF("Accepting rdma connection...\n");
++
++    if ((ret = qemu_rdma_accept(opaque))) {
++        fprintf(stderr, "RDMA Migration initialization failed!\n");
++        goto err;
++    }
++
++    DPRINTF("Accepted migration\n");
++
++    f = qemu_fopen_rdma(opaque, "rb");
++    if (f == NULL) {
++        fprintf(stderr, "could not qemu_fopen_rdma!\n");
++        goto err;
++    }
++
++    process_incoming_migration(f);
++    return;
++
++err:
++    qemu_rdma_cleanup(opaque);
++}
++
++void rdma_start_incoming_migration(const char * host_port, Error **errp)
++{
++    int ret;
++    void *opaque;
++
++    DPRINTF("Starting RDMA-based incoming migration\n");
++
++    if ((opaque = qemu_rdma_data_init(host_port, errp)) == NULL) {
++        return;
++    }
++
++    ret = qemu_rdma_server_init(opaque, NULL);
++
++    if (!ret) {
++        DPRINTF("qemu_rdma_server_init success\n");
++        ret = qemu_rdma_server_prepare(opaque, NULL);
++
++        if (!ret) {
++            DPRINTF("qemu_rdma_server_prepare success\n");
++
++            qemu_set_fd_handler2(qemu_rdma_get_fd(opaque), NULL, 
++                                 rdma_accept_incoming_migration, NULL,
++                                    (void *)(intptr_t) opaque);
++            return;
++        }
++    }
++
++    g_free(opaque);
++}
++
++void rdma_start_outgoing_migration(void *opaque, const char *host_port, Error **errp)
++{
++    MigrationState *s = opaque;
++    void *rdma_opaque = NULL;
++    int ret;
++
++    if ((rdma_opaque = qemu_rdma_data_init(host_port, errp)) == NULL)
++        return; 
++
++    ret = qemu_rdma_client_init(rdma_opaque, NULL,
++        s->enabled_capabilities[MIGRATION_CAPABILITY_CHUNK_REGISTER_DESTINATION]);
++
++    if(!ret) {
++        DPRINTF("qemu_rdma_client_init success\n");
++        ret = qemu_rdma_connect(rdma_opaque, NULL);
++
++        if(!ret) {
++            s->file = qemu_fopen_rdma(rdma_opaque, "wb");
++            DPRINTF("qemu_rdma_client_connect success\n");
++            migrate_fd_connect(s);
++            return;
++        }
++    }
++
++    g_free(rdma_opaque);
++    migrate_fd_error(s);
++}
+-- 
+1.7.10.4
+

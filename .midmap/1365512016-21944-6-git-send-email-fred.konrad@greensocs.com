@@ -1,0 +1,1 @@
+../virtio-serial-refactoring/v6.1365537209/0005-virtio-serial-cleanup-init-and-exit-functions.patch

@@ -1,0 +1,38 @@
+From patches Mon Sep 17 00:00:00 2001
+From: "Lei Li" <lilei@linux.vnet.ibm.com>
+To: Lei Li <lilei@linux.vnet.ibm.com>, qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, Lei Li <lilei@linux.vnet.ibm.com>,
+ qemu-devel@nongnu.org, lcapitulino@redhat.com
+Date: Wed, 17 Apr 2013 16:46:54 +0800
+Message-id: 1366188414-24214-1-git-send-email-lilei@linux.vnet.ibm.com
+Subject: [PATCH 1/1] chardev: remove the headers of Memory chardev driver
+
+Memory chardev driver is no longer used, and Commit: 
+4bf0bb8014ac2ac61b1004f5d92b2a4594d48017 has droped 
+it but the headers, so clean it up.
+
+Signed-off-by: Lei Li <lilei@linux.vnet.ibm.com>
+---
+ include/sysemu/char.h |    6 ------
+ 1 files changed, 0 insertions(+), 6 deletions(-)
+
+diff --git a/include/sysemu/char.h b/include/sysemu/char.h
+index 9d1ea46..5e42c90 100644
+--- a/include/sysemu/char.h
++++ b/include/sysemu/char.h
+@@ -289,12 +289,6 @@ CharDriverState *qemu_chr_open_eventfd(int eventfd);
+ 
+ extern int term_escape_char;
+ 
+-/* memory chardev */
+-void qemu_chr_init_mem(CharDriverState *chr);
+-void qemu_chr_close_mem(CharDriverState *chr);
+-QString *qemu_chr_mem_to_qs(CharDriverState *chr);
+-size_t qemu_chr_mem_osize(const CharDriverState *chr);
+-
+ CharDriverState *qemu_char_get_next_serial(void);
+ 
+ /* msmouse */
+-- 
+1.7.7.6
+

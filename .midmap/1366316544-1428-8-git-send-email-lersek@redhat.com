@@ -1,0 +1,1 @@
+../publish-etc-acpi-APIC-in-fw_cfg/v4.1366341737/0007-hw-i386-build-ACPI-MADT-APIC-for-fw_cfg-clients.patch

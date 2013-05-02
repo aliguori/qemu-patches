@@ -1,0 +1,1 @@
+../arm-devs-queue/v1.1365203585/0005-hw-sdc-fix-migration-of-dynamically-allocated-buffer-buf.patch

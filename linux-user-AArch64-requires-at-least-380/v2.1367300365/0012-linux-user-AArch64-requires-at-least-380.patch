@@ -1,0 +1,50 @@
+From patches Mon Sep 17 00:00:00 2001
+From: John Rigby <john.rigby@linaro.org>
+To: qemu-devel <qemu-devel@nongnu.org>
+Cc: Riku Voipio <riku.voipio@iki.org>, Peter Maydell <peter.maydell@linaro.org>,
+ John Rigby <john.rigby@linaro.org>, Alexander Graf <agraf@suse.de>
+Date: Tue, 30 Apr 2013 00:39:25 -0600
+Message-id: 1367303965-9914-1-git-send-email-john.rigby@linaro.org
+Subject: [PATCH 12/12] linux-user: AArch64 requires at least 3.8.0
+
+From: Alexander Graf <agraf@suse.de>
+
+Glibc 1.17 checks for the host kernel version on startup. Unfortunately,
+it also checks whether the host kernel version is recent enough for the
+target to run at all.
+
+Since AArch64 support only got introduced in 3.8.0, that means that glibc
+refuses to run on any older kernel version than that.
+
+To allow for execution of linux-user guests even on older host kernels,
+let's always fake the kernel version to 3.8.0 on AArch64 guests.
+
+Do this by forcing CONFIG_UNAME_RELEASE=3.8.0 in config_target_mak
+for aarch64.
+
+Signed-off-by: Alexander Graf <agraf@suse.de>
+Signed-off-by: John Rigby <john.rigby@linaro.org>
+---
+Changes in v2:
+- Moved from 7/12 to 12/12 because it now changes configure which only
+  gets aarch64 added in 11/12
+
+ configure |    1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/configure b/configure
+index 87ed42d..8aa9526 100755
+--- a/configure
++++ b/configure
+@@ -4192,6 +4192,7 @@ case "$target_arch2" in
+     target_nptl="yes"
+     gdb_xml_files="aarch64-core.xml aarch64-fpu.xml"
+     target_long_alignment=8
++    echo "CONFIG_UNAME_RELEASE=\"3.8.0\"" >> $config_target_mak
+   ;;
+   cris)
+     target_nptl="yes"
+-- 
+1.7.9.5
+
+

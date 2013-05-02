@@ -1,0 +1,856 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Dong Xu Wang <wdongxu@linux.vnet.ibm.com>
+To: Stefan Hajnoczi <stefanha@gmail.com>, qemu-devel@nongnu.org,
+ Dong Xu Wang <wdongxu@linux.vnet.ibm.com>
+Cc: kwol@redhat.com, wdongxu@cn.ibm.com,
+ Dong Xu Wang <wdongxu@linux.vnet.ibm.com>, stefanha@redhat.com,
+ qemu-devel@nongnu.org
+Date: Wed, 10 Apr 2013 16:11:52 +0800
+Message-id: 1365581513-3475-6-git-send-email-wdongxu@linux.vnet.ibm.com
+Subject: [PATCH 5/6] add-cow file format core code.
+
+add-cow file format core code. It use block-cache.c as cache code.
+It lacks of snapshot_blkdev support.
+
+Signed-off-by: Dong Xu Wang <wdongxu@linux.vnet.ibm.com>
+---
+v17-v18:
+1) use error_report, not fprintf.
+2) remove version field from header.
+3) header_size is MAX(cluster_size, 4096).
+4) introduce s->cluster_sectors.
+5) use BLKDBG_L2_LOAD/UPDATE.
+
+v16->v17:
+1) Use stringify.
+
+v15->v16:
+1) Judge if opts is null in add_cow_create function.
+ block/Makefile.objs       |   1 +
+ block/add-cow.c           | 741 ++++++++++++++++++++++++++++++++++++++++++++++
+ block/block-cache.c       |   4 +-
+ block/qcow2.h             |   6 +-
+ include/block/block_int.h |   2 +
+ 5 files changed, 749 insertions(+), 5 deletions(-)
+ create mode 100644 block/add-cow.c
+
+diff --git a/block/Makefile.objs b/block/Makefile.objs
+index 4fe81dc..69cbb09 100644
+--- a/block/Makefile.objs
++++ b/block/Makefile.objs
+@@ -1,6 +1,7 @@
+ block-obj-y += raw.o cow.o qcow.o vdi.o vmdk.o cloop.o dmg.o bochs.o vpc.o vvfat.o
+ block-obj-y += qcow2.o qcow2-refcount.o qcow2-cluster.o qcow2-snapshot.o
+ block-obj-y += block-cache.o
++block-obj-y += add-cow.o
+ block-obj-y += qed.o qed-gencb.o qed-l2-cache.o qed-table.o qed-cluster.o
+ block-obj-y += qed-check.o
+ block-obj-y += parallels.o blkdebug.o blkverify.o
+diff --git a/block/add-cow.c b/block/add-cow.c
+new file mode 100644
+index 0000000..904b008
+--- /dev/null
++++ b/block/add-cow.c
+@@ -0,0 +1,741 @@
++/*
++ * QEMU ADD-COW Disk Format
++ *
++ * Copyright IBM, Corp. 2012
++ *
++ * Authors:
++ *  Dong Xu Wang <wdongxu@linux.vnet.ibm.com>
++ *
++ * This work is licensed under the terms of the GNU LGPL, version 2 or later.
++ * See the COPYING.LIB file in the top-level directory.
++ *
++ */
++
++#include "qemu-common.h"
++#include "block/block_int.h"
++#include "qemu/module.h"
++#include "block/block-cache.h"
++
++#define ACOW_CLUSTER_SIZE 65536
++enum {
++    /* compat_features bit */
++    ACOW_F_ALL_ALLOCATED    = 0X01,
++
++    /* none feature bit used now */
++    ACOW_FEATURE_MASK       = 0,
++
++    ACOW_MAGIC              = 'A' | 'C' << 8 | 'O' << 16 | 'W' << 24,
++    ACOW_CACHE_SIZE         = 16,
++    DEFAULT_HEADER_SIZE    = 4096,
++    MIN_CLUSTER_BITS            = 9,
++    MAX_CLUSTER_BITS            = 21,
++};
++
++typedef struct AddCowHeader {
++    uint32_t    magic;
++
++    uint32_t    backing_offset;
++    uint32_t    backing_size;
++    uint32_t    image_offset;
++    uint32_t    image_size;
++
++    uint32_t    cluster_bits;
++    uint64_t    features;
++    uint64_t    compat_features;
++    uint32_t    header_size;
++
++    char        backing_fmt[16];
++    char        image_fmt[16];
++} QEMU_PACKED AddCowHeader;
++
++typedef struct BDRVAddCowState {
++    BlockDriverState    *image_hd;
++    CoMutex             lock;
++    int                 cluster_size;
++    int                 cluster_sectors;
++    BlockCache          *bitmap_cache;
++    uint64_t            bitmap_size;
++    AddCowHeader        header;
++    char                backing_fmt[16];
++    char                image_fmt[16];
++} BDRVAddCowState;
++
++/* Convert sector_num to offset in bitmap */
++static inline int64_t offset_in_bitmap(int64_t sector_num,
++                                       int64_t cluster_sectors)
++{
++    int64_t cluster_num = sector_num / cluster_sectors;
++    return cluster_num / 8;
++}
++
++static inline bool is_cluster_head(int64_t sector_num,
++                                   int64_t cluster_sectors)
++{
++    return sector_num % cluster_sectors == 0;
++}
++
++static inline bool is_cluster_tail(int64_t sector_num,
++                                   int64_t cluster_sectors)
++{
++    return (sector_num + 1) % cluster_sectors == 0;
++}
++
++static void add_cow_header_le_to_cpu(const AddCowHeader *le, AddCowHeader *cpu)
++{
++    cpu->magic              = le32_to_cpu(le->magic);
++
++    cpu->backing_offset     = le32_to_cpu(le->backing_offset);
++    cpu->backing_size       = le32_to_cpu(le->backing_size);
++    cpu->image_offset       = le32_to_cpu(le->image_offset);
++    cpu->image_size         = le32_to_cpu(le->image_size);
++
++    cpu->cluster_bits       = le32_to_cpu(le->cluster_bits);
++    cpu->features           = le64_to_cpu(le->features);
++    cpu->compat_features    = le64_to_cpu(le->compat_features);
++    cpu->header_size        = le32_to_cpu(le->header_size);
++
++    memcpy(cpu->backing_fmt, le->backing_fmt, sizeof(cpu->backing_fmt));
++    memcpy(cpu->image_fmt, le->image_fmt, sizeof(cpu->image_fmt));
++}
++
++static void add_cow_header_cpu_to_le(const AddCowHeader *cpu, AddCowHeader *le)
++{
++    le->magic               = cpu_to_le32(cpu->magic);
++
++    le->backing_offset      = cpu_to_le32(cpu->backing_offset);
++    le->backing_size        = cpu_to_le32(cpu->backing_size);
++    le->image_offset        = cpu_to_le32(cpu->image_offset);
++    le->image_size          = cpu_to_le32(cpu->image_size);
++
++    le->cluster_bits        = cpu_to_le32(cpu->cluster_bits);
++    le->features            = cpu_to_le64(cpu->features);
++    le->compat_features     = cpu_to_le64(cpu->compat_features);
++    le->header_size         = cpu_to_le32(cpu->header_size);
++    memcpy(le->backing_fmt, cpu->backing_fmt, sizeof(le->backing_fmt));
++    memcpy(le->image_fmt, cpu->image_fmt, sizeof(le->image_fmt));
++}
++
++static int add_cow_probe(const uint8_t *buf, int buf_size, const char *filename)
++{
++    const AddCowHeader *header = (const AddCowHeader *)buf;
++
++    if (buf_size < sizeof(*header)) {
++        return 0;
++    }
++    if (le32_to_cpu(header->magic) == ACOW_MAGIC) {
++        return 100;
++    }
++    return 0;
++}
++
++static int add_cow_create(const char *filename, QemuOpts *opts)
++{
++    AddCowHeader header = {
++        .magic      = ACOW_MAGIC,
++        .features   = 0,
++        .compat_features = 0,
++    };
++    AddCowHeader le_header;
++    int64_t image_len = 0;
++    const char *backing_filename = NULL, *backing_fmt = NULL;
++    const char *image_filename = NULL, *image_format = NULL;
++    size_t cluster_size = ACOW_CLUSTER_SIZE;
++    BlockDriverState *bs, *backing_bs;
++    BlockDriver *drv = bdrv_find_format("add-cow");
++    int ret;
++
++    image_len = qemu_opt_get_size(opts, BLOCK_OPT_SIZE, 0);
++    backing_filename = qemu_opt_get(opts, BLOCK_OPT_BACKING_FILE);
++    backing_fmt = qemu_opt_get(opts, BLOCK_OPT_BACKING_FMT);
++    image_filename = qemu_opt_get(opts, BLOCK_OPT_IMAGE_FILE);
++    image_format = qemu_opt_get(opts, BLOCK_OPT_IMAGE_FMT);
++    cluster_size = qemu_opt_get_size(opts, BLOCK_OPT_CLUSTER_SIZE,
++                                     ACOW_CLUSTER_SIZE);
++
++    header.cluster_bits = ffs(cluster_size) - 1;
++    if (header.cluster_bits < MIN_CLUSTER_BITS ||
++        header.cluster_bits > MAX_CLUSTER_BITS ||
++        (1 << header.cluster_bits) != cluster_size) {
++        error_report(
++            "Cluster size must be a power of two between %d and %dk",
++            1 << MIN_CLUSTER_BITS, 1 << (MAX_CLUSTER_BITS - 10));
++        return -EINVAL;
++    }
++
++   header.header_size = MAX(cluster_size, DEFAULT_HEADER_SIZE);
++    if (backing_filename) {
++        header.backing_offset = sizeof(header);
++        header.backing_size = strlen(backing_filename);
++
++        if (!backing_fmt) {
++            backing_bs = bdrv_new("image");
++            ret = bdrv_open(backing_bs, backing_filename, NULL,
++                            BDRV_O_RDWR | BDRV_O_CACHE_WB, NULL);
++            if (ret < 0) {
++                return ret;
++            }
++            backing_fmt = bdrv_get_format_name(backing_bs);
++            bdrv_delete(backing_bs);
++        }
++    } else {
++        header.compat_features |= ACOW_F_ALL_ALLOCATED;
++    }
++
++    if (image_filename) {
++        header.image_offset = sizeof(header) + header.backing_size;
++        header.image_size = strlen(image_filename);
++    } else {
++        error_report("Error: image_file should be given.");
++        return -EINVAL;
++    }
++
++    if (backing_filename && !strcmp(backing_filename, image_filename)) {
++        error_report("Error: Trying to create an image with the "
++                     "same backing file name as the image file name");
++        return -EINVAL;
++    }
++
++    if (!strcmp(filename, image_filename)) {
++        error_report("Error: Trying to create an image with the "
++                     "same filename as the image file name");
++        return -EINVAL;
++    }
++
++    if (header.image_offset + header.image_size > header.header_size) {
++        error_report("image_file name or backing_file name too long.");
++        return -ENOSPC;
++    }
++
++    ret = bdrv_file_open(&bs, image_filename, NULL, 0);
++    if (ret < 0) {
++        return ret;
++    }
++    bdrv_close(bs);
++
++    ret = bdrv_create_file(filename, NULL);
++    if (ret < 0) {
++        return ret;
++    }
++
++    ret = bdrv_file_open(&bs, filename, NULL, BDRV_O_RDWR);
++    if (ret < 0) {
++        return ret;
++    }
++    snprintf(header.backing_fmt, sizeof(header.backing_fmt), "%s",
++             backing_fmt ? backing_fmt : "");
++    snprintf(header.image_fmt, sizeof(header.image_fmt), "%s",
++             image_format ? image_format : "raw");
++    add_cow_header_cpu_to_le(&header, &le_header);
++    ret = bdrv_pwrite(bs, 0, &le_header, sizeof(le_header));
++    if (ret < 0) {
++        bdrv_delete(bs);
++        return ret;
++    }
++
++    ret = bdrv_pwrite(bs, header.image_offset, image_filename,
++                      header.image_size);
++    if (ret < 0) {
++        bdrv_delete(bs);
++        return ret;
++    }
++
++    if (backing_filename) {
++        ret = bdrv_pwrite(bs, header.backing_offset, backing_filename,
++                          header.backing_size);
++        if (ret < 0) {
++            bdrv_delete(bs);
++            return ret;
++        }
++    }
++    bdrv_close(bs);
++
++    ret = bdrv_open(bs, filename, NULL, BDRV_O_RDWR | BDRV_O_NO_FLUSH, drv);
++    if (ret < 0) {
++        bdrv_delete(bs);
++        return ret;
++    }
++
++    ret = bdrv_truncate(bs, image_len);
++    bdrv_delete(bs);
++    return ret;
++}
++
++static int add_cow_open(BlockDriverState *bs, QDict *options, int flags)
++{
++    char                image_filename[PATH_MAX];
++    char                tmp_name[PATH_MAX];
++    int                 ret;
++    int                 sector_per_byte;
++    BDRVAddCowState     *s = bs->opaque;
++    AddCowHeader        le_header;
++    char backing_filename[PATH_MAX];
++
++    ret = bdrv_pread(bs->file, 0, &le_header, sizeof(le_header));
++    if (ret < 0) {
++        goto fail;
++    }
++
++    add_cow_header_le_to_cpu(&le_header, &s->header);
++
++    if (s->header.magic != ACOW_MAGIC) {
++        ret = -EINVAL;
++        goto fail;
++    }
++
++    if (s->header.features & ~ACOW_FEATURE_MASK) {
++        char buf[64];
++        snprintf(buf, sizeof(buf), "Feature Flags: %" PRIx64,
++                 s->header.features & ~ACOW_FEATURE_MASK);
++        qerror_report(QERR_UNKNOWN_BLOCK_FORMAT_FEATURE,
++                      bs->device_name, "add-cow", buf);
++        return -ENOTSUP;
++    }
++
++    if ((s->header.compat_features & ACOW_F_ALL_ALLOCATED) == 0) {
++        snprintf(bs->backing_format, sizeof(bs->backing_format),
++                 "%s", s->header.backing_fmt);
++    }
++
++    if (s->header.cluster_bits < MIN_CLUSTER_BITS ||
++        s->header.cluster_bits > MAX_CLUSTER_BITS) {
++        ret = -EINVAL;
++        goto fail;
++    }
++
++    s->cluster_size = 1 << s->header.cluster_bits;
++    if (s->header.header_size != MAX(s->cluster_size, DEFAULT_HEADER_SIZE)) {
++        char buf[64];
++        snprintf(buf, sizeof(buf), "Header size: %d",
++                 s->header.header_size);
++        qerror_report(QERR_UNKNOWN_BLOCK_FORMAT_FEATURE,
++                      bs->device_name, "add-cow", buf);
++        return -ENOTSUP;
++    }
++
++    if ((s->header.compat_features & ACOW_F_ALL_ALLOCATED) == 0) {
++        ret = bdrv_read_string(bs->file, s->header.backing_offset,
++                               s->header.backing_size,
++                               bs->backing_file,
++                               sizeof(bs->backing_file));
++        if (ret < 0) {
++            goto fail;
++        }
++    }
++
++    ret = bdrv_read_string(bs->file, s->header.image_offset,
++                           s->header.image_size, tmp_name,
++                           sizeof(tmp_name));
++    if (ret < 0) {
++        goto fail;
++    }
++
++    if (path_has_protocol(tmp_name)) {
++        pstrcpy(image_filename, sizeof(image_filename), tmp_name);
++    } else {
++        path_combine(image_filename, sizeof(image_filename),
++                     bs->filename, tmp_name);
++    }
++    bdrv_get_full_backing_filename(bs, backing_filename,
++                                   sizeof(backing_filename));
++    if (!strcmp(backing_filename, image_filename)) {
++        error_report("Error: backing file and image file are same: %s\n",
++                     backing_filename);
++        ret = EINVAL;
++        goto fail;
++    }
++    s->image_hd = bdrv_new("");
++    ret = bdrv_open(s->image_hd, image_filename, NULL, flags,
++                    bdrv_find_format(s->header.image_fmt));
++    if (ret < 0) {
++        bdrv_delete(s->image_hd);
++        goto fail;
++    }
++
++    bs->total_sectors = bdrv_getlength(s->image_hd) / BDRV_SECTOR_SIZE;
++    s->cluster_sectors = s->cluster_size / BDRV_SECTOR_SIZE;
++    sector_per_byte = s->cluster_sectors * 8;
++    s->bitmap_size =
++        (bs->total_sectors + sector_per_byte - 1) / sector_per_byte;
++    s->bitmap_cache =  block_cache_create(bs, ACOW_CACHE_SIZE,
++                                          s->cluster_size,
++                                          BLOCK_TABLE_BITMAP);
++    qemu_co_mutex_init(&s->lock);
++    return 0;
++fail:
++    return ret;
++}
++
++static void add_cow_close(BlockDriverState *bs)
++{
++    BDRVAddCowState *s = bs->opaque;
++    if (s->bitmap_cache) {
++        block_cache_destroy(bs, s->bitmap_cache);
++    }
++    bdrv_delete(s->image_hd);
++}
++
++static bool is_allocated(BlockDriverState *bs, int64_t sector_num)
++{
++    BDRVAddCowState *s  = bs->opaque;
++    int64_t cluster_num = sector_num / s->cluster_sectors;
++    uint8_t *table      = NULL;
++    bool val = false;
++    int ret;
++
++    uint64_t offset = s->header.header_size +
++        (offset_in_bitmap(sector_num, s->cluster_sectors)
++            & (~(s->cluster_size - 1)));
++    ret = block_cache_get(bs, s->bitmap_cache, offset, (void **)&table);
++    if (ret < 0) {
++        return ret;
++    }
++
++    val = table[cluster_num / 8 % s->cluster_size] & (1 << (cluster_num % 8));
++    ret = block_cache_put(bs, s->bitmap_cache, (void **)&table);
++    if (ret < 0) {
++        return ret;
++    }
++    return val;
++}
++
++static coroutine_fn int add_cow_is_allocated(BlockDriverState *bs,
++        int64_t sector_num, int nb_sectors, int *num_same)
++{
++    BDRVAddCowState *s = bs->opaque;
++    int changed;
++
++    if (nb_sectors == 0) {
++        *num_same = 0;
++        return 0;
++    }
++
++    if (s->header.compat_features & ACOW_F_ALL_ALLOCATED) {
++        *num_same = nb_sectors;
++        return 1;
++    }
++    changed = is_allocated(bs, sector_num);
++
++    for (*num_same = 1; *num_same < nb_sectors; (*num_same)++) {
++        if (is_allocated(bs, sector_num + *num_same) != changed) {
++            break;
++        }
++    }
++    return changed;
++}
++
++static int add_cow_backing_read(BlockDriverState *bs, QEMUIOVector *qiov,
++                                int64_t sector_num, int nb_sectors)
++{
++    int n1;
++    if ((sector_num + nb_sectors) <= bs->total_sectors) {
++        return nb_sectors;
++    }
++    if (sector_num >= bs->total_sectors) {
++        n1 = 0;
++    } else {
++        n1 = bs->total_sectors - sector_num;
++    }
++
++    qemu_iovec_memset(qiov, BDRV_SECTOR_SIZE * n1,
++                      0, BDRV_SECTOR_SIZE * (nb_sectors - n1));
++
++    return n1;
++}
++
++static coroutine_fn int add_cow_co_readv(BlockDriverState *bs,
++                                         int64_t sector_num,
++                                         int remaining_sectors,
++                                         QEMUIOVector *qiov)
++{
++    BDRVAddCowState *s  = bs->opaque;
++    int cur_nr_sectors;
++    uint64_t bytes_done = 0;
++    QEMUIOVector hd_qiov;
++    int n1, ret = 0;
++
++    qemu_iovec_init(&hd_qiov, qiov->niov);
++    qemu_co_mutex_lock(&s->lock);
++    while (remaining_sectors != 0) {
++        cur_nr_sectors = remaining_sectors;
++        if (add_cow_is_allocated(bs, sector_num, cur_nr_sectors,
++                                 &cur_nr_sectors)) {
++            qemu_iovec_reset(&hd_qiov);
++            qemu_iovec_concat(&hd_qiov, qiov, bytes_done,
++                              cur_nr_sectors * BDRV_SECTOR_SIZE);
++            qemu_co_mutex_unlock(&s->lock);
++            ret = bdrv_co_readv(s->image_hd, sector_num,
++                                cur_nr_sectors, &hd_qiov);
++            qemu_co_mutex_lock(&s->lock);
++            if (ret < 0) {
++                goto fail;
++            }
++        } else {
++            if (bs->backing_hd) {
++                qemu_iovec_reset(&hd_qiov);
++                qemu_iovec_concat(&hd_qiov, qiov, bytes_done,
++                                  cur_nr_sectors * BDRV_SECTOR_SIZE);
++                n1 = add_cow_backing_read(bs->backing_hd, &hd_qiov,
++                                          sector_num, cur_nr_sectors);
++                if (n1 > 0) {
++                    qemu_co_mutex_unlock(&s->lock);
++                    ret = bdrv_co_readv(bs->backing_hd, sector_num,
++                                        cur_nr_sectors, &hd_qiov);
++                    qemu_co_mutex_lock(&s->lock);
++                    if (ret < 0) {
++                        goto fail;
++                    }
++                }
++            } else {
++                qemu_iovec_memset(&hd_qiov, 0, 0,
++                                  BDRV_SECTOR_SIZE * cur_nr_sectors);
++            }
++        }
++        remaining_sectors -= cur_nr_sectors;
++        sector_num += cur_nr_sectors;
++        bytes_done += cur_nr_sectors * BDRV_SECTOR_SIZE;
++    }
++fail:
++    qemu_co_mutex_unlock(&s->lock);
++    qemu_iovec_destroy(&hd_qiov);
++    return ret;
++}
++
++static int coroutine_fn copy_sectors(BlockDriverState *bs,
++                                     int n_start, int n_end)
++{
++    BDRVAddCowState *s = bs->opaque;
++    QEMUIOVector qiov;
++    struct iovec iov;
++    int n, ret;
++
++    n = n_end - n_start;
++    if (n <= 0) {
++        return 0;
++    }
++
++    iov.iov_len = n * BDRV_SECTOR_SIZE;
++    iov.iov_base = qemu_blockalign(bs, iov.iov_len);
++
++    qemu_iovec_init_external(&qiov, &iov, 1);
++
++    ret = bdrv_co_readv(bs->backing_hd, n_start, n, &qiov);
++    if (ret < 0) {
++        goto out;
++    }
++    ret = bdrv_co_writev(s->image_hd, n_start, n, &qiov);
++    if (ret < 0) {
++        goto out;
++    }
++
++    ret = 0;
++out:
++    qemu_vfree(iov.iov_base);
++    return ret;
++}
++
++static coroutine_fn int add_cow_co_writev(BlockDriverState *bs,
++                                          int64_t sector_num,
++                                          int remaining_sectors,
++                                          QEMUIOVector *qiov)
++{
++    BDRVAddCowState *s = bs->opaque;
++    int ret = 0, i;
++    QEMUIOVector hd_qiov;
++    uint8_t *table;
++    uint64_t offset;
++    int mask = s->cluster_sectors - 1;
++    int cluster_mask = s->cluster_size - 1;
++
++    qemu_co_mutex_lock(&s->lock);
++    qemu_iovec_init(&hd_qiov, qiov->niov);
++    ret = bdrv_co_writev(s->image_hd, sector_num,
++                         remaining_sectors, qiov);
++
++    if (ret < 0) {
++        goto fail;
++    }
++    if ((s->header.compat_features & ACOW_F_ALL_ALLOCATED) == 0) {
++        /* Copy content of unmodified sectors */
++        if (!is_cluster_head(sector_num, s->cluster_sectors)
++            && !is_allocated(bs, sector_num)) {
++            ret = copy_sectors(bs, sector_num & ~mask, sector_num);
++            if (ret < 0) {
++                goto fail;
++            }
++        }
++
++        if (!is_cluster_tail(sector_num + remaining_sectors - 1,
++                             s->cluster_sectors)
++            && !is_allocated(bs, sector_num + remaining_sectors - 1)) {
++            ret = copy_sectors(bs, sector_num + remaining_sectors,
++                               ((sector_num + remaining_sectors) | mask) + 1);
++            if (ret < 0) {
++                goto fail;
++            }
++        }
++
++        for (i = sector_num / s->cluster_sectors;
++            i <= (sector_num + remaining_sectors - 1) / s->cluster_sectors;
++            i++) {
++            offset = s->header.header_size
++                + (offset_in_bitmap(i * s->cluster_sectors,
++                s->cluster_sectors) & (~cluster_mask));
++            ret = block_cache_get(bs, s->bitmap_cache, offset, (void **)&table);
++            if (ret < 0) {
++                goto fail;
++            }
++            if ((table[i / 8] & (1 << (i % 8))) == 0) {
++                table[i / 8] |= (1 << (i % 8));
++                block_cache_entry_mark_dirty(s->bitmap_cache, table);
++            }
++
++            ret = block_cache_put(bs, s->bitmap_cache, (void **) &table);
++            if (ret < 0) {
++                goto fail;
++            }
++        }
++    }
++    ret = 0;
++fail:
++    qemu_co_mutex_unlock(&s->lock);
++    qemu_iovec_destroy(&hd_qiov);
++    return ret;
++}
++
++static int bdrv_add_cow_truncate(BlockDriverState *bs, int64_t size)
++{
++    BDRVAddCowState *s = bs->opaque;
++    int sector_per_byte = s->cluster_sectors * 8;
++    int ret;
++    int64_t bitmap_size =
++        (size / BDRV_SECTOR_SIZE + sector_per_byte - 1) / sector_per_byte;
++    bitmap_size = (bitmap_size + s->cluster_size - 1)
++        & (~(s->cluster_size - 1));
++
++    ret = bdrv_truncate(bs->file, s->header.header_size + bitmap_size);
++    if (ret < 0) {
++        return ret;
++    }
++
++    ret = bdrv_truncate(s->image_hd, size);
++    if (ret < 0) {
++        return ret;
++    }
++    return 0;
++}
++
++static int add_cow_reopen_prepare(BDRVReopenState *state,
++                                  BlockReopenQueue *queue, Error **errp)
++{
++    BDRVAddCowState *s;
++    int ret = -1;
++
++    assert(state != NULL);
++    assert(state->bs != NULL);
++
++    if (queue == NULL) {
++        error_set(errp, ERROR_CLASS_GENERIC_ERROR,
++                  "No reopen queue for add-cow");
++        goto exit;
++    }
++
++    s = state->bs->opaque;
++
++    assert(s != NULL);
++
++
++    bdrv_reopen_queue(queue, s->image_hd, state->flags);
++    ret = 0;
++
++exit:
++    return ret;
++}
++
++
++static coroutine_fn int add_cow_co_flush(BlockDriverState *bs)
++{
++    BDRVAddCowState *s = bs->opaque;
++    int ret;
++
++    qemu_co_mutex_lock(&s->lock);
++    if (s->bitmap_cache) {
++        ret = block_cache_flush(bs, s->bitmap_cache);
++        if (ret < 0) {
++            return ret;
++        }
++    }
++    ret = bdrv_flush(s->image_hd);
++    qemu_co_mutex_unlock(&s->lock);
++    return ret;
++}
++
++static int add_cow_get_info(BlockDriverState *bs, BlockDriverInfo *bdi)
++{
++    BDRVAddCowState *s = bs->opaque;
++    bdi->cluster_size = s->cluster_size;
++    return 0;
++}
++
++static QemuOptsList add_cow_create_opts = {
++    .name = "add-cow-create-opts",
++    .head = QTAILQ_HEAD_INITIALIZER(add_cow_create_opts.head),
++    .desc = {
++        {
++            .name = BLOCK_OPT_SIZE,
++            .type = QEMU_OPT_SIZE,
++            .help = "Virtual disk size"
++        },
++        {
++            .name = BLOCK_OPT_BACKING_FILE,
++            .type = QEMU_OPT_STRING,
++            .help = "File name of a base image"
++        },
++        {
++            .name = BLOCK_OPT_BACKING_FMT,
++            .type = QEMU_OPT_STRING,
++            .help = "Image format of the base image"
++        },
++        {
++            .name = BLOCK_OPT_IMAGE_FILE,
++            .type = QEMU_OPT_STRING,
++            .help = "File name of a image file"
++        },
++        {
++            .name = BLOCK_OPT_IMAGE_FMT,
++            .type = QEMU_OPT_STRING,
++            .help = "Image format of the image file"
++        },
++        {
++            .name = BLOCK_OPT_CLUSTER_SIZE,
++            .type = QEMU_OPT_SIZE,
++            .help = "add-cow cluster size",
++            .def_value_str = stringify(ACOW_CLUSTER_SIZE)
++        },
++        { /* end of list */ }
++    }
++};
++
++static BlockDriver bdrv_add_cow = {
++    .format_name                = "add-cow",
++    .instance_size              = sizeof(BDRVAddCowState),
++    .bdrv_probe                 = add_cow_probe,
++    .bdrv_open                  = add_cow_open,
++    .bdrv_close                 = add_cow_close,
++    .bdrv_create                = add_cow_create,
++    .bdrv_co_readv              = add_cow_co_readv,
++    .bdrv_co_writev             = add_cow_co_writev,
++    .bdrv_truncate              = bdrv_add_cow_truncate,
++    .bdrv_co_is_allocated       = add_cow_is_allocated,
++    .bdrv_reopen_prepare        = add_cow_reopen_prepare,
++    .bdrv_get_info              = add_cow_get_info,
++
++    .bdrv_create_opts           = &add_cow_create_opts,
++    .bdrv_co_flush_to_os        = add_cow_co_flush,
++};
++
++static void bdrv_add_cow_init(void)
++{
++    bdrv_register(&bdrv_add_cow);
++}
++
++block_init(bdrv_add_cow_init);
+diff --git a/block/block-cache.c b/block/block-cache.c
+index 3544691..4824632 100644
+--- a/block/block-cache.c
++++ b/block/block-cache.c
+@@ -130,7 +130,7 @@ static int block_cache_entry_flush(BlockDriverState *bs, BlockCache *c, int i)
+     } else if (c->table_type == BLOCK_TABLE_L2) {
+         BLKDBG_EVENT(bs->file, BLKDBG_L2_UPDATE);
+     } else if (c->table_type == BLOCK_TABLE_BITMAP) {
+-        BLKDBG_EVENT(bs->file, BLKDBG_COW_WRITE);
++        BLKDBG_EVENT(bs->file, BLKDBG_L2_LOAD);
+     }
+ 
+     ret = bdrv_pwrite(bs->file, c->entries[i].offset,
+@@ -265,7 +265,7 @@ static int block_cache_do_get(BlockDriverState *bs, BlockCache *c,
+         if (c->table_type == BLOCK_TABLE_L2) {
+             BLKDBG_EVENT(bs->file, BLKDBG_L2_LOAD);
+         } else if (c->table_type == BLOCK_TABLE_BITMAP) {
+-            BLKDBG_EVENT(bs->file, BLKDBG_COW_READ);
++            BLKDBG_EVENT(bs->file, BLKDBG_L2_LOAD);
+         }
+ 
+         ret = bdrv_pread(bs->file, offset, c->entries[i].table,
+diff --git a/block/qcow2.h b/block/qcow2.h
+index e7f6aec..a4e514b 100644
+--- a/block/qcow2.h
++++ b/block/qcow2.h
+@@ -98,6 +98,9 @@ typedef struct QCowSnapshot {
+     uint64_t vm_clock_nsec;
+ } QCowSnapshot;
+ 
++struct BlockCache;
++typedef struct BlockCache BlockCache;
++
+ typedef struct Qcow2UnknownHeaderExtension {
+     uint32_t magic;
+     uint32_t len;
+@@ -389,7 +392,4 @@ int qcow2_snapshot_load_tmp(BlockDriverState *bs, const char *snapshot_name);
+ void qcow2_free_snapshots(BlockDriverState *bs);
+ int qcow2_read_snapshots(BlockDriverState *bs);
+ 
+-/* qcow2-cache.c functions */
+-
+-
+ #endif
+diff --git a/include/block/block_int.h b/include/block/block_int.h
+index a44a9ac..b9eb9b8 100644
+--- a/include/block/block_int.h
++++ b/include/block/block_int.h
+@@ -57,6 +57,8 @@
+ #define BLOCK_OPT_COMPAT_LEVEL      "compat"
+ #define BLOCK_OPT_LAZY_REFCOUNTS    "lazy_refcounts"
+ #define BLOCK_OPT_ADAPTER_TYPE      "adapter_type"
++#define BLOCK_OPT_IMAGE_FILE        "image_file"
++#define BLOCK_OPT_IMAGE_FMT         "image_fmt"
+ 
+ typedef struct BdrvTrackedRequest BdrvTrackedRequest;
+ 
+-- 
+1.7.11.7
+
+

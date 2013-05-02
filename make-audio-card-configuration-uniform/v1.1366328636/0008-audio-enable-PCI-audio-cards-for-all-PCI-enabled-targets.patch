@@ -1,0 +1,132 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: av1474@comtv.ru
+Date: Thu, 18 Apr 2013 18:44:04 +0200
+Message-id: 1366303444-24620-9-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 8/8] audio: enable PCI audio cards for all PCI-enabled targets
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+	RFC->v1: move audio_init() to vl.c
+
+ default-configs/pci.mak   | 3 +++
+ default-configs/sound.mak | 3 ---
+ hw/i386/pc_piix.c         | 2 --
+ hw/i386/pc_q35.c          | 1 -
+ hw/mips/mips_jazz.c       | 2 --
+ hw/mips/mips_malta.c      | 3 ---
+ hw/ppc/prep.c             | 3 ---
+ vl.c                      | 2 ++
+ 8 files changed, 5 insertions(+), 14 deletions(-)
+
+diff --git a/default-configs/pci.mak b/default-configs/pci.mak
+index f5f100e..9506dbd 100644
+--- a/default-configs/pci.mak
++++ b/default-configs/pci.mak
+@@ -9,6 +9,9 @@ CONFIG_NE2000_PCI=y
+ CONFIG_EEPRO100_PCI=y
+ CONFIG_PCNET_PCI=y
+ CONFIG_PCNET_COMMON=y
++CONFIG_AC97=y
++CONFIG_HDA=y
++CONFIG_ES1370=y
+ CONFIG_LSI_SCSI_PCI=y
+ CONFIG_MEGASAS_SCSI_PCI=y
+ CONFIG_RTL8139_PCI=y
+diff --git a/default-configs/sound.mak b/default-configs/sound.mak
+index ed20388..ff69c4d 100644
+--- a/default-configs/sound.mak
++++ b/default-configs/sound.mak
+@@ -1,7 +1,4 @@
+ CONFIG_SB16=y
+-CONFIG_AC97=y
+-CONFIG_HDA=y
+-CONFIG_ES1370=y
+ #CONFIG_ADLIB=y
+ #CONFIG_GUS=y
+ #CONFIG_CS4231A=y
+diff --git a/hw/i386/pc_piix.c b/hw/i386/pc_piix.c
+index 1953d8c..8c1e05c 100644
+--- a/hw/i386/pc_piix.c
++++ b/hw/i386/pc_piix.c
+@@ -194,8 +194,6 @@ static void pc_init1(MemoryRegion *system_memory,
+         }
+     }
+ 
+-    audio_init();
+-
+     pc_cmos_init(below_4g_mem_size, above_4g_mem_size, boot_device,
+                  floppy, idebus[0], idebus[1], rtc_state);
+ 
+diff --git a/hw/i386/pc_q35.c b/hw/i386/pc_q35.c
+index 76c378b..73ba8ce 100644
+--- a/hw/i386/pc_q35.c
++++ b/hw/i386/pc_q35.c
+@@ -202,7 +202,6 @@ static void pc_q35_init(QEMUMachineInitArgs *args)
+ 
+     /* the rest devices to which pci devfn is automatically assigned */
+     pc_vga_init(isa_bus, host_bus);
+-    audio_init();
+     pc_nic_init(isa_bus, host_bus);
+     if (pci_enabled) {
+         pc_pci_device_init(host_bus);
+diff --git a/hw/mips/mips_jazz.c b/hw/mips/mips_jazz.c
+index 822d300..94d9570 100644
+--- a/hw/mips/mips_jazz.c
++++ b/hw/mips/mips_jazz.c
+@@ -288,9 +288,7 @@ static void mips_jazz_init(MemoryRegion *address_space,
+         parallel_mm_init(address_space, 0x80008000, 0, rc4030[0],
+                          parallel_hds[0]);
+ 
+-    /* Sound card */
+     /* FIXME: missing Jazz sound at 0x8000c000, rc4030[2] */
+-    audio_init();
+ 
+     /* NVRAM */
+     dev = qdev_create(NULL, "ds1225y");
+diff --git a/hw/mips/mips_malta.c b/hw/mips/mips_malta.c
+index a2d01e1..9d521cc 100644
+--- a/hw/mips/mips_malta.c
++++ b/hw/mips/mips_malta.c
+@@ -985,9 +985,6 @@ void mips_malta_init(QEMUMachineInitArgs *args)
+     }
+     fdctrl_init_isa(isa_bus, fd);
+ 
+-    /* Sound card */
+-    audio_init();
+-
+     /* Network card */
+     network_init();
+ 
+diff --git a/hw/ppc/prep.c b/hw/ppc/prep.c
+index 82bd27e..59c7da3 100644
+--- a/hw/ppc/prep.c
++++ b/hw/ppc/prep.c
+@@ -658,9 +658,6 @@ static void ppc_prep_init(QEMUMachineInitArgs *args)
+ 
+     /* Special port to get debug messages from Open-Firmware */
+     register_ioport_write(0x0F00, 4, 1, &PPC_debug_write, NULL);
+-
+-    /* Initialize audio subsystem */
+-    audio_init();
+ }
+ 
+ static QEMUMachine prep_machine = {
+diff --git a/vl.c b/vl.c
+index 9e56d77..6add2d8 100644
+--- a/vl.c
++++ b/vl.c
+@@ -4256,6 +4256,8 @@ int main(int argc, char **argv, char **envp)
+                                  .cpu_model = cpu_model };
+     machine->init(&args);
+ 
++    audio_init();
++
+     cpu_synchronize_all_post_init();
+ 
+     set_numa_modes();
+-- 
+1.8.1.4
+
+

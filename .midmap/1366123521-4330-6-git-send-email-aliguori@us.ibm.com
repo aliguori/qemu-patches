@@ -1,0 +1,1 @@
+../qtest-add-libqos/v1.1366123514/0005-i440fx-test-add-test-to-compare-default-register-values.patch

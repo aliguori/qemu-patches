@@ -1,0 +1,1 @@
+../acpi-more-infrastructure-cleanups/v1.1366047457/0002-acpi-add-acpi_table_add_hdr.patch

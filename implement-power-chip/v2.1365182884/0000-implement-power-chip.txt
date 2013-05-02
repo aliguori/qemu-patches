@@ -1,0 +1,58 @@
+From patches Mon Sep 17 00:00:00 2001
+From: liguang <lig.fnst@cn.fujitsu.com>
+To: Anthony Liguori <aliguori@us.ibm.com>, peter.maydell@linaro.org,
+ stefanha@gmail.com, qemu-devel@nongnu.org, pbonzini@redhat.com,
+ afaerber@suse.de
+Cc: liguang <lig.fnst@cn.fujitsu.com>
+Date: Fri, 5 Apr 2013 12:28:04 +0800
+Message-id: 1365136091-26148-1-git-send-email-lig.fnst@cn.fujitsu.com
+Subject: [PATCH 0/7] implement power chip
+
+By now, all devices of QEMU do not have much more
+power management consideration, for example, if
+system do suspend, it will call all registered notifiers,
+this was loosely required, and the code to do power management
+state transition seems just do 'ugly emulation', rather than be
+conscious with whole system devices, same condition with reset.
+shutdown, in real world, commonly all devices' power are controlled
+by a power chip, then all power sequence can be done just
+issue commands or raise signals connected to this chip.
+so, I come across an idea to implement qdev'ed power device, and
+make all qdev struct of devices aware of self power management(connect
+power signal with power chip, then respond to power state change), this will
+bring tidy power management, and the emulation will more like what
+happened in real world.
+
+Of course, it's only a patch-set for RFC, I'd like to ask all 
+developers to help correct this idea, if it's worth to implement, 
+I'll go head to refactor more.
+
+v2: change from functions calling to signal connecting between
+	power chip and devices.
+
+Li Guang (7)
+	 hw/irq: move struct IRQState to irq.h
+	 hw/power: add main power chip implementation
+	 vl: create power chip device
+	 sysemu: remove PowerReason in sysemu.h
+	 qdev: add power_signal_in for DeviceState
+	 ich9: refactor wakeup/reset function
+	 vl: run power_management
+
+hw/acpi.c               |   20 +++++++++-----------
+hw/acpi.h               |   3 ++-
+hw/acpi_ich9.c          |   2 +-
+hw/Makefile.objs        |   1 +
+hw/ich9.h               |   2 ++
+hw/irq.c                |   6 ------
+hw/irq.h                |   6 ++++++
+hw/lpc_ich9.c           |  30 +++++++++++++++++++++++++++++-
+hw/power.c              | 178 ++++++++++++++++++++++++++++++++++++++++++++++++++++++
+hw/power.h              |  50 +++++++++++++++
+hw/qdev-core.h          |   1 +
+include/sysemu/sysemu.h |   7 +------
+vl.c                    |   5 ++++
+13 files changed, 285 insertions(+), 26 deletions(-)
+ create mode 100644 hw/power.c
+ create mode 100644 hw/power.h
+

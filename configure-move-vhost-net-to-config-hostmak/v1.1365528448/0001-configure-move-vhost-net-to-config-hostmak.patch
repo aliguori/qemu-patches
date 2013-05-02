@@ -1,0 +1,60 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: Paolo Bonzini <pbonzini@redhat.com>, qemu-devel@nongnu.org,
+ "Michael S. Tsirkin" <mst@redhat.com>
+Cc: qemu-devel@nongnu.org, mst@redhat.com
+Date: Tue,  9 Apr 2013 12:27:28 +0200
+Message-id: 1365503248-21275-1-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 1/1] configure: move vhost-net to config-host.mak
+
+There is no reason why vhost-net should not work with TCG.
+Hence, put the limitation in hw/vhost-net.c, not straight in
+the config-*.mak files.
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ configure          | 6 +++---
+ hw/net/vhost_net.c | 2 +-
+ 2 files changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/configure b/configure
+index d5f2918..4b4b19e 100755
+--- a/configure
++++ b/configure
+@@ -3686,6 +3686,9 @@ fi
+ if test "$virtfs" = "yes" ; then
+   echo "CONFIG_VIRTFS=y" >> $config_host_mak
+ fi
++if test "$vhost_net" = "yes" ; then
++  echo "CONFIG_VHOST_NET=y" >> $config_host_mak
++fi
+ if test "$blobs" = "yes" ; then
+   echo "INSTALL_BLOBS=yes" >> $config_host_mak
+ fi
+@@ -4152,9 +4155,6 @@ case "$target_arch2" in
+       \( "$target_arch2" = "x86_64" -a "$cpu" = "i386"   \) -o \
+       \( "$target_arch2" = "i386"   -a "$cpu" = "x86_64" \) \) ; then
+       echo "CONFIG_KVM=y" >> $config_target_mak
+-      if test "$vhost_net" = "yes" ; then
+-        echo "CONFIG_VHOST_NET=y" >> $config_target_mak
+-      fi
+     fi
+ esac
+ case "$target_arch2" in
+diff --git a/hw/net/vhost_net.c b/hw/net/vhost_net.c
+index 8c5384c..0956843 100644
+--- a/hw/net/vhost_net.c
++++ b/hw/net/vhost_net.c
+@@ -22,7 +22,7 @@
+ 
+ #include "config.h"
+ 
+-#ifdef CONFIG_VHOST_NET
++#if defined CONFIG_LINUX && defined CONFIG_VHOST_NET && defined CONFIG_KVM
+ #include <linux/vhost.h>
+ #include <sys/socket.h>
+ #include <linux/kvm.h>
+-- 
+1.8.1.4
+
+

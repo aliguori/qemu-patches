@@ -1,0 +1,185 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Liu Ping Fan <qemulist@gmail.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <anthony@codemonkey.ws>,
+ Paolo Bonzini <pbonzini@redhat.com>, Jan Kiszka <jan.kiszka@siemens.com>,
+ Stefan Hajnoczi <stefanha@redhat.com>, mdroth <mdroth@linux.vnet.ibm.com>
+Date: Wed, 17 Apr 2013 16:39:17 +0800
+Message-id: 1366187964-14265-9-git-send-email-qemulist@gmail.com
+Subject: [PATCH 08/15] net: hub use lock to protect ports list
+
+From: Liu Ping Fan <pingfank@linux.vnet.ibm.com>
+
+Hub ports will run on multi-threads, so use lock to protect them.
+
+Signed-off-by: Liu Ping Fan <pingfank@linux.vnet.ibm.com>
+---
+ net/hub.c |   25 ++++++++++++++++++++++++-
+ 1 files changed, 24 insertions(+), 1 deletions(-)
+
+diff --git a/net/hub.c b/net/hub.c
+index df32074..812a6dc 100644
+--- a/net/hub.c
++++ b/net/hub.c
+@@ -37,6 +37,7 @@ struct NetHub {
+     int id;
+     QLIST_ENTRY(NetHub) next;
+     int num_ports;
++    QemuMutex ports_lock;
+     QLIST_HEAD(, NetHubPort) ports;
+ };
+ 
+@@ -47,6 +48,7 @@ static ssize_t net_hub_receive(NetHub *hub, NetHubPort *source_port,
+ {
+     NetHubPort *port;
+ 
++    qemu_mutex_lock(&hub->ports_lock);
+     QLIST_FOREACH(port, &hub->ports, next) {
+         if (port == source_port) {
+             continue;
+@@ -54,6 +56,7 @@ static ssize_t net_hub_receive(NetHub *hub, NetHubPort *source_port,
+ 
+         qemu_send_packet(&port->nc, buf, len);
+     }
++    qemu_mutex_unlock(&hub->ports_lock);
+     return len;
+ }
+ 
+@@ -63,6 +66,7 @@ static ssize_t net_hub_receive_iov(NetHub *hub, NetHubPort *source_port,
+     NetHubPort *port;
+     ssize_t len = iov_size(iov, iovcnt);
+ 
++    qemu_mutex_lock(&hub->ports_lock);
+     QLIST_FOREACH(port, &hub->ports, next) {
+         if (port == source_port) {
+             continue;
+@@ -70,6 +74,7 @@ static ssize_t net_hub_receive_iov(NetHub *hub, NetHubPort *source_port,
+ 
+         qemu_sendv_packet(&port->nc, iov, iovcnt);
+     }
++    qemu_mutex_unlock(&hub->ports_lock);
+     return len;
+ }
+ 
+@@ -80,6 +85,7 @@ static NetHub *net_hub_new(int id)
+     hub = g_malloc(sizeof(*hub));
+     hub->id = id;
+     hub->num_ports = 0;
++    qemu_mutex_init(&hub->ports_lock);
+     QLIST_INIT(&hub->ports);
+ 
+     QLIST_INSERT_HEAD(&hubs, hub, next);
+@@ -93,16 +99,19 @@ static int net_hub_port_can_receive(NetClientState *nc)
+     NetHubPort *src_port = DO_UPCAST(NetHubPort, nc, nc);
+     NetHub *hub = src_port->hub;
+ 
++    qemu_mutex_lock(&hub->ports_lock);
+     QLIST_FOREACH(port, &hub->ports, next) {
+         if (port == src_port) {
+             continue;
+         }
+ 
+         if (qemu_can_send_packet(&port->nc)) {
++            qemu_mutex_unlock(&hub->ports_lock);
+             return 1;
+         }
+     }
+ 
++    qemu_mutex_unlock(&hub->ports_lock);
+     return 0;
+ }
+ 
+@@ -155,8 +164,9 @@ static NetHubPort *net_hub_port_new(NetHub *hub, const char *name)
+     port = DO_UPCAST(NetHubPort, nc, nc);
+     port->id = id;
+     port->hub = hub;
+-
++    qemu_mutex_lock(&hub->ports_lock);
+     QLIST_INSERT_HEAD(&hub->ports, port, next);
++    qemu_mutex_unlock(&hub->ports_lock);
+ 
+     return port;
+ }
+@@ -197,13 +207,16 @@ NetClientState *net_hub_find_client_by_name(int hub_id, const char *name)
+ 
+     QLIST_FOREACH(hub, &hubs, next) {
+         if (hub->id == hub_id) {
++            qemu_mutex_lock(&hub->ports_lock);
+             QLIST_FOREACH(port, &hub->ports, next) {
+                 peer = port->nc.peer;
+ 
+                 if (peer && strcmp(peer->name, name) == 0) {
++                    qemu_mutex_unlock(&hub->ports_lock);
+                     return peer;
+                 }
+             }
++            qemu_mutex_unlock(&hub->ports_lock);
+         }
+     }
+     return NULL;
+@@ -220,12 +233,15 @@ NetClientState *net_hub_port_find(int hub_id)
+ 
+     QLIST_FOREACH(hub, &hubs, next) {
+         if (hub->id == hub_id) {
++            qemu_mutex_lock(&hub->ports_lock);
+             QLIST_FOREACH(port, &hub->ports, next) {
+                 nc = port->nc.peer;
+                 if (!nc) {
++                    qemu_mutex_unlock(&hub->ports_lock);
+                     return &(port->nc);
+                 }
+             }
++            qemu_mutex_unlock(&hub->ports_lock);
+             break;
+         }
+     }
+@@ -244,12 +260,14 @@ void net_hub_info(Monitor *mon)
+ 
+     QLIST_FOREACH(hub, &hubs, next) {
+         monitor_printf(mon, "hub %d\n", hub->id);
++        qemu_mutex_lock(&hub->ports_lock);
+         QLIST_FOREACH(port, &hub->ports, next) {
+             if (port->nc.peer) {
+                 monitor_printf(mon, " \\ ");
+                 print_net_client(mon, port->nc.peer);
+             }
+         }
++        qemu_mutex_unlock(&hub->ports_lock);
+     }
+ }
+ 
+@@ -306,6 +324,7 @@ void net_hub_check_clients(void)
+     QLIST_FOREACH(hub, &hubs, next) {
+         int has_nic = 0, has_host_dev = 0;
+ 
++        qemu_mutex_lock(&hub->ports_lock);
+         QLIST_FOREACH(port, &hub->ports, next) {
+             peer = port->nc.peer;
+             if (!peer) {
+@@ -328,6 +347,7 @@ void net_hub_check_clients(void)
+                 break;
+             }
+         }
++        qemu_mutex_unlock(&hub->ports_lock);
+         if (has_host_dev && !has_nic) {
+             fprintf(stderr, "Warning: vlan %d with no nics\n", hub->id);
+         }
+@@ -343,12 +363,15 @@ bool net_hub_flush(NetClientState *nc)
+ {
+     NetHubPort *port;
+     NetHubPort *source_port = DO_UPCAST(NetHubPort, nc, nc);
++    NetHub *hub = source_port->hub;
+     int ret = 0;
+ 
++    qemu_mutex_lock(&hub->ports_lock);
+     QLIST_FOREACH(port, &source_port->hub->ports, next) {
+         if (port != source_port) {
+             ret += qemu_net_queue_flush(port->nc.send_queue);
+         }
+     }
++    qemu_mutex_unlock(&hub->ports_lock);
+     return ret ? true : false;
+ }
+-- 
+1.7.4.4
+

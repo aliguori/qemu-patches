@@ -1,0 +1,62 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Richard Henderson <rth@twiddle.net>
+To: Aurelien Jarno <aurelien@aurel32.net>, Alexander Graf <agraf@suse.de>,
+ qemu-devel@nongnu.org, Richard Henderson <rth@twiddle.net>
+Cc: Richard Henderson <rth@twiddle.net>, av1474@comtv.ru, agraf@suse.de,
+ aurelien@aurel32.net, qemu-devel@nongnu.org
+Date: Mon,  1 Apr 2013 21:23:03 -0700
+Message-id: 1364876610-3933-1-git-send-email-rth@twiddle.net
+Subject: [PATCH 00/27] Modernize tcg/ppc64
+
+Changes v2-v3:
+  * Incorporated feedback from Aurelien's review.
+
+Tree updated at
+
+  git://github.com/rth7680/qemu.git tcg-ppc64
+
+r~
+
+
+
+Richard Henderson (27):
+  disas: Disassemble all ppc insns for the host
+  tcg-ppc64: Use TCGReg everywhere
+  tcg-ppc64: Introduce and use tcg_out_rlw
+  tcg-ppc64: Introduce and use tcg_out_ext32u
+  tcg-ppc64: Introduce and use tcg_out_shli64
+  tcg-ppc64: Introduce and use tcg_out_shri64
+  tcg-ppc64: Cleanup tcg_out_movi
+  tcg-ppc64: Introduce and use TAI and SAI
+  tcg-ppc64: Rearrange integer constant constraints
+  tcg-ppc64: Improve constant add and sub ops.
+  tcg-ppc64: Tidy or and xor patterns.
+  tcg-ppc64: Improve and_i32 with constant
+  tcg-ppc64: Improve and_i64 with constant
+  tcg-ppc64: Streamline qemu_ld/st insn selection
+  tcg-ppc64: Implement rotates
+  tcg-ppc64: Implement bswap16 and bswap32
+  tcg-ppc64: Implement bswap64
+  tcg-ppc64: Implement compound logicals
+  tcg-ppc64: Handle constant inputs for some compound logicals
+  tcg-ppc64: Implement deposit
+  tcg-ppc64: Use I constraint for mul
+  tcg-ppc64: Use TCGType throughout compares
+  tcg-ppc64: Rewrite setcond
+  tcg-ppc64: Implement movcond
+  tcg-ppc64: Use getauxval for ISA detection
+  tcg-ppc64: Implement add2/sub2_i64
+  tcg-ppc64: Implement mulu2/muls2_i64
+
+ configure              |   18 +
+ disas.c                |    1 +
+ tcg/ppc64/tcg-target.c | 1395 +++++++++++++++++++++++++++++++++---------------
+ tcg/ppc64/tcg-target.h |   60 ++-
+ 4 files changed, 1000 insertions(+), 474 deletions(-)
+
+Tested-by: Aurelien Jarno <aurelien@aurel32.net>
+Tested-by: Alexander Graf <agraf@suse.de>
+-- 
+1.8.1.4
+
+

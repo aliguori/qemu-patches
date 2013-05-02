@@ -1,0 +1,58 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Jason Wang <jasowang@redhat.com>
+To: Anthony Liguori <aliguori@us.ibm.com>, aliguori@us.ibm.com,
+ Jason Wang <jasowang@redhat.com>, armbru@redhat.com, qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, armbru@redhat.com,
+ qemu-devel@nongnu.org, qemu-stable@nongnu.org,
+ Jason Wang <jasowang@redhat.com>
+Date: Fri, 22 Feb 2013 22:57:52 +0800
+Message-id: 1361545072-30426-1-git-send-email-jasowang@redhat.com
+Subject: [PATCH 1/1] help: add docs for missing 'queues' option of tap
+
+Cc: Markus Armbruster <armbru@redhat.com>
+Cc: qemu-stable@nongnu.org
+Signed-off-by: Jason Wang <jasowang@redhat.com>
+Reviewed-by: Stefan Hajnoczi <stefanha@redhat.com>
+Reviewed-by: Michael Roth <mdroth@linux.vnet.ibm.com>
+---
+ qapi-schema.json |    2 ++
+ qemu-options.hx  |    3 ++-
+ 2 files changed, 4 insertions(+), 1 deletions(-)
+
+diff --git a/qapi-schema.json b/qapi-schema.json
+index cd7ea25..b3844e6 100644
+--- a/qapi-schema.json
++++ b/qapi-schema.json
+@@ -2526,6 +2526,8 @@
+ #
+ # @vhostforce: #optional vhost on for non-MSIX virtio guests
+ #
++# @queues: #optional number of queues to be created for multiqueue capable tap
++#
+ # Since 1.2
+ ##
+ { 'type': 'NetdevTapOptions',
+diff --git a/qemu-options.hx b/qemu-options.hx
+index 2832d82..3928620 100644
+--- a/qemu-options.hx
++++ b/qemu-options.hx
+@@ -1354,7 +1354,7 @@ DEF("net", HAS_ARG, QEMU_OPTION_net,
+     "-net tap[,vlan=n][,name=str],ifname=name\n"
+     "                connect the host TAP network interface to VLAN 'n'\n"
+ #else
+-    "-net tap[,vlan=n][,name=str][,fd=h][,fds=x:y:...:z][,ifname=name][,script=file][,downscript=dfile][,helper=helper][,sndbuf=nbytes][,vnet_hdr=on|off][,vhost=on|off][,vhostfd=h][,vhostfds=x:y:...:z][,vhostforce=on|off]\n"
++    "-net tap[,vlan=n][,name=str][,fd=h][,fds=x:y:...:z][,ifname=name][,script=file][,downscript=dfile][,helper=helper][,sndbuf=nbytes][,vnet_hdr=on|off][,vhost=on|off][,vhostfd=h][,vhostfds=x:y:...:z][,vhostforce=on|off][,queues=n]\n"
+     "                connect the host TAP network interface to VLAN 'n'\n"
+     "                use network scripts 'file' (default=" DEFAULT_NETWORK_SCRIPT ")\n"
+     "                to configure it and 'dfile' (default=" DEFAULT_NETWORK_DOWN_SCRIPT ")\n"
+@@ -1373,6 +1373,7 @@ DEF("net", HAS_ARG, QEMU_OPTION_net,
+     "                use vhostforce=on to force vhost on for non-MSIX virtio guests\n"
+     "                use 'vhostfd=h' to connect to an already opened vhost net device\n"
+     "                use 'vhostfds=x:y:...:z to connect to multiple already opened vhost net devices\n"
++    "                use 'queues=n' to specify the number of queues to be created for multiqueue TAP\n"
+     "-net bridge[,vlan=n][,name=str][,br=bridge][,helper=helper]\n"
+     "                connects a host TAP network interface to a host bridge device 'br'\n"
+     "                (default=" DEFAULT_BRIDGE_INTERFACE ") using the program 'helper'\n"
+-- 
+1.7.1
+

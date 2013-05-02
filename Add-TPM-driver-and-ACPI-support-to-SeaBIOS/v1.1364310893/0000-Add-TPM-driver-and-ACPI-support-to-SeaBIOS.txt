@@ -1,0 +1,43 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Corey Bryant <coreyb@linux.vnet.ibm.com>
+To: seabios@seabios.org
+Cc: Corey Bryant <coreyb@linux.vnet.ibm.com>, qemu-devel@nongnu.org,
+ stefanb@linux.vnet.ibm.com
+Date: Tue, 26 Mar 2013 10:14:53 -0400
+Message-id: 1364307295-518-1-git-send-email-coreyb@linux.vnet.ibm.com
+Subject: [PATCH 0/2] Add TPM driver and ACPI support to SeaBIOS
+
+The following set of patches is being resubmitted to add TPM support to
+SeaBIOS.  This series only includes a subset of the total seabios TPM
+support that is planned.  The patches included in this series provide
+initial foundational support that make sense to include at this point
+now that a passthrough vTPM is available in QEMU.
+
+In particular, these patches add:
+- a TPM driver for QEMU's TPM TIS emulation
+- ACPI support for the TPM device (SSDT table)
+- ACPI support for measurement logging (TCPA table)
+
+Corey Bryant (2):
+  Add an implementation of a TPM TIS driver
+  Provide ACPI SSDT table for TPM device
+
+ Makefile              |    9 ++-
+ src/acpi-tpm-ssdt.dsl |   24 +++++
+ src/acpi-tpm-ssdt.hex |   27 +++++
+ src/acpi.c            |   41 ++++++++
+ src/acpi.h            |   20 ++++
+ src/config.h          |    2 +-
+ src/tcgbios.c         |   70 +++++++++++++
+ src/tcgbios.h         |   57 +++++++++++
+ src/tpm_drivers.c     |  258 +++++++++++++++++++++++++++++++++++++++++++++++++
+ src/tpm_drivers.h     |   90 +++++++++++++++++
+ 10 files changed, 596 insertions(+), 2 deletions(-)
+ create mode 100644 src/acpi-tpm-ssdt.dsl
+ create mode 100644 src/acpi-tpm-ssdt.hex
+ create mode 100644 src/tcgbios.c
+ create mode 100644 src/tcgbios.h
+ create mode 100644 src/tpm_drivers.c
+ create mode 100644 src/tpm_drivers.h
+
+

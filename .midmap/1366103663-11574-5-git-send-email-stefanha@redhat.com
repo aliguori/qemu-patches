@@ -1,0 +1,1 @@
+../qemu-img-support-compression-regardless-of-cluster-size/v2.1366128859/0004-qemu-iotests-add-053-unaligned-compressed-image-size-test.patch

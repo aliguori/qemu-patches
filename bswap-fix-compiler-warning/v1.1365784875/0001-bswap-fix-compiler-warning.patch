@@ -1,0 +1,57 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Alexey Kardashevskiy <aik@ozlabs.ru>
+To: Stefan Hajnoczi <stefanha@redhat.com>, Alexey Kardashevskiy <aik@ozlabs.ru>,
+ qemu-devel@nongnu.org, =?UTF-8?B?QW5kcmVhcyBGw6RyYmVy?= <afaerber@suse.de>,
+ Stefan Weil <sw@weilnetz.de>
+Cc: Blue Swirl <blauwirbel@gmail.com>, Anthony Liguori <aliguori@us.ibm.com>,
+ Paolo Bonzini <pbonzini@redhat.com>, David Gibson <dwg@au1.ibm.com>,
+ =?utf-8?b?IkFuZHJlYXMgRsOkcmJlciI=?= <afaerber@suse.de>,
+ Stefan Hajnoczi <stefanha@gmail.com>, Stefan Weil <sw@weilnetz.de>,
+ Alexey Kardashevskiy <aik@ozlabs.ru>, qemu-devel@nongnu.org,
+ Richard Henderson <rth@twiddle.net>,
+ David Gibson <david@gibson.dropbear.id.au>, qemu-trivial@nongnu.org,
+ qemu-ppc@nongnu.org, qemu-trivial <qemu-trivial@nongnu.org>,
+ Stefan Hajnoczi <stefanha@redhat.com>
+Date: Fri, 12 Apr 2013 11:41:15 +1000
+Message-id: 1365730875-22854-1-git-send-email-aik@ozlabs.ru
+Subject: [PATCH 1/1] bswap: fix compiler warning
+
+The bswap functions use memcpy but the bswap.h header itself does not seem to
+include it in some configuration such as cross compiling for powerpc64
+on x86_64 machine (gcc 4.6.3 from ftp.kernel.org, headers/libs from FC18/ppc64),
+the example warning is below.
+
+The patch explicitly includes string.h.
+
+  CC    ppc64-softmmu/hw/virtio/virtio.o
+In file included from /home/alexey/qemu/include/libfdt_env.h:22:0,
+                 from /home/alexey/qemu/../lib4qemu/usr/include/libfdt.h:54,
+                 from /home/alexey/qemu/hw/nvram/spapr_nvram.c:25:
+/home/alexey/qemu/include/qemu/bswap.h: In function 'lduw_p':
+/home/alexey/qemu/include/qemu/bswap.h:244:5: warning: implicit declaration of function 'memcpy' [-Wimplicit-function-declaration]
+/home/alexey/qemu/include/qemu/bswap.h:244:5: warning: incompatible implicit declaration of built-in function 'memcpy' [enabled by default]
+
+Signed-off-by: Alexey Kardashevskiy <aik@ozlabs.ru>
+Reviewed-by: David Gibson <david@gibson.dropbear.id.au>
+Reviewed-by: Andreas Färber <afaerber@suse.de>
+Reviewed-by: Stefan Hajnoczi <stefanha@redhat.com>
+---
+ include/qemu/bswap.h |    2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/include/qemu/bswap.h b/include/qemu/bswap.h
+index d3af35d..d50de0d 100644
+--- a/include/qemu/bswap.h
++++ b/include/qemu/bswap.h
+@@ -1,6 +1,8 @@
+ #ifndef BSWAP_H
+ #define BSWAP_H
+ 
++#include <string.h>
++
+ #include "config-host.h"
+ #include <inttypes.h>
+ #include <limits.h>
+-- 
+1.7.10.4
+

@@ -1,0 +1,41 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: "Michael S. Tsirkin" <mst@redhat.com>
+Date: Mon, 15 Apr 2013 15:19:27 +0200
+Message-id: 1366031973-7718-7-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 06/12] acpi.h: make it self contained
+
+From: "Michael S. Tsirkin" <mst@redhat.com>
+
+Headers shouldn't assume another header is included,
+pull in everything necessary.
+
+Signed-off-by: Michael S. Tsirkin <mst@redhat.com>
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ include/hw/acpi/acpi.h | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/include/hw/acpi/acpi.h b/include/hw/acpi/acpi.h
+index 4cd52c1..635be7b 100644
+--- a/include/hw/acpi/acpi.h
++++ b/include/hw/acpi/acpi.h
+@@ -19,6 +19,12 @@
+  * <http://www.gnu.org/licenses/>.
+  */
+ 
++#include "qapi/error.h"
++#include "qemu/typedefs.h"
++#include "qemu/notify.h"
++#include "qemu/option.h"
++#include "exec/memory.h"
++
+ /* from linux include/acpi/actype.h */
+ /* Default ACPI register widths */
+ 
+-- 
+1.8.1.4
+
+
+

@@ -1,0 +1,51 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Richard Henderson <rth@twiddle.net>
+To: qemu-devel@nongnu.org, Richard Henderson <rth@twiddle.net>
+Cc: qemu-devel@nongnu.org, Stefan Weil <sw@weilnetz.de>
+Date: Thu, 28 Mar 2013 08:37:52 -0700
+Message-id: 1364485075-17899-3-git-send-email-rth@twiddle.net
+Subject: [PATCH 2/5] tci: Use a local variable for env
+
+Since we have total conversion away from global AREG0, we do not
+need a global variable named "env".  Retain that name as the
+function parameter inside the interpreter.
+
+Signed-off-by: Richard Henderson <rth@twiddle.net>
+Reviewed-by: Stefan Weil <sw@weilnetz.de>
+---
+ tci.c | 8 +-------
+ 1 file changed, 1 insertion(+), 7 deletions(-)
+
+diff --git a/tci.c b/tci.c
+index 9ce0be3..77e0980 100644
+--- a/tci.c
++++ b/tci.c
+@@ -51,11 +51,6 @@ typedef uint64_t (*helper_function)(tcg_target_ulong, tcg_target_ulong,
+                                     tcg_target_ulong);
+ #endif
+ 
+-/* TCI can optionally use a global register variable for env. */
+-#if !defined(AREG0)
+-CPUArchState *env;
+-#endif
+-
+ /* Targets which don't use GETPC also don't need tci_tb_ptr
+    which makes them a little faster. */
+ #if defined(GETPC)
+@@ -438,11 +433,10 @@ static bool tci_compare64(uint64_t u0, uint64_t u1, TCGCond condition)
+ }
+ 
+ /* Interpret pseudo code in tb. */
+-tcg_target_ulong tcg_qemu_tb_exec(CPUArchState *cpustate, uint8_t *tb_ptr)
++tcg_target_ulong tcg_qemu_tb_exec(CPUArchState *env, uint8_t *tb_ptr)
+ {
+     tcg_target_ulong next_tb = 0;
+ 
+-    env = cpustate;
+     tci_reg[TCG_AREG0] = (tcg_target_ulong)env;
+     assert(tb_ptr);
+ 
+-- 
+1.8.1.4
+
+

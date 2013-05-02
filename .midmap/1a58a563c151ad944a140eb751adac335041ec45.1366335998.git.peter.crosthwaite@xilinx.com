@@ -1,0 +1,1 @@
+../Xilinx-SPIPS-fixes-round-2/v2.1366390969/0014-xilinx_spips-lqspi-Push-more-data-to-tx-fifo.patch

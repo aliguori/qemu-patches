@@ -1,0 +1,1 @@
+../qemu-iotests-Test-subformats-for-vmdk/v1.1366250338/0001-qemu-iotests-Test-subformats-for-vmdk.patch

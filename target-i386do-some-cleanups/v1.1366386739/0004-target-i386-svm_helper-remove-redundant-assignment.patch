@@ -1,0 +1,30 @@
+From patches Mon Sep 17 00:00:00 2001
+From: liguang <lig.fnst@cn.fujitsu.com>
+To: peter.maydell@linaro.org, qemu-devel@nongnu.org
+Cc: blauwirbel@gmail.com, pbonzini@redhat.com,
+ liguang <lig.fnst@cn.fujitsu.com>, afaerber@suse.de,
+ Anthony Liguori <aliguori@us.ibm.com>
+Date: Fri, 19 Apr 2013 10:52:23 +0800
+Message-id: 1366339945-17151-5-git-send-email-lig.fnst@cn.fujitsu.com
+Subject: [PATCH 4/6] target-i386/svm_helper: remove redundant assignment
+
+Signed-off-by: liguang <lig.fnst@cn.fujitsu.com>
+---
+ target-i386/svm_helper.c |    1 -
+ 1 files changed, 0 insertions(+), 1 deletions(-)
+
+diff --git a/target-i386/svm_helper.c b/target-i386/svm_helper.c
+index f9ffd18..393b126 100644
+--- a/target-i386/svm_helper.c
++++ b/target-i386/svm_helper.c
+@@ -249,7 +249,6 @@ void helper_vmrun(CPUX86State *env, int aflag, int next_eip_addend)
+                        R_DS);
+ 
+     EIP = ldq_phys(env->vm_vmcb + offsetof(struct vmcb, save.rip));
+-    EIP = EIP;
+     ESP = ldq_phys(env->vm_vmcb + offsetof(struct vmcb, save.rsp));
+     EAX = ldq_phys(env->vm_vmcb + offsetof(struct vmcb, save.rax));
+     env->dr[7] = ldq_phys(env->vm_vmcb + offsetof(struct vmcb, save.dr7));
+-- 
+1.7.2.5
+

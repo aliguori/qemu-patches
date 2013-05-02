@@ -1,0 +1,222 @@
+From patches Mon Sep 17 00:00:00 2001
+From: =?utf-8?q?Llu=C3=ADs_Vilanova_=3Cvilanova=40ac=2Eupc=2Eedu=3E?=
+To: qemu-devel@nongnu.org
+Cc: 
+Date: Sun, 21 Apr 2013 21:12:59 +0200
+Message-id: 20130421191259.8947.79140.stgit@fimbulvetr.bsc.es
+Subject: [PATCH 16/24] instrument: [hmp] Add control interface
+
+Add HMP commands to control (un)loading of dynamic instrumentation library.
+
+Signed-off-by: Lluís Vilanova <vilanova@ac.upc.edu>
+---
+ Makefile.objs            |    1 +
+ hmp-commands.hx          |   42 ++++++++++++++++++++++++
+ instrument/Makefile.objs |    1 +
+ instrument/hmp.c         |   79 ++++++++++++++++++++++++++++++++++++++++++++++
+ instrument/hmp.h         |   21 ++++++++++++
+ monitor.c                |    1 +
+ 6 files changed, 145 insertions(+)
+ create mode 100644 instrument/hmp.c
+ create mode 100644 instrument/hmp.h
+
+diff --git a/Makefile.objs b/Makefile.objs
+index 4fb565b..151183d 100644
+--- a/Makefile.objs
++++ b/Makefile.objs
+@@ -95,6 +95,7 @@ common-obj-y += disas/
+ 
+ tools-obj-y += instrument/
+ target-obj-y += instrument/
++common-obj-y += instrument/
+ 
+ ######################################################################
+ # guest agent
+diff --git a/hmp-commands.hx b/hmp-commands.hx
+index 3d98604..2e88e4b 100644
+--- a/hmp-commands.hx
++++ b/hmp-commands.hx
+@@ -1653,6 +1653,48 @@ STEXI
+ show available trace events and their state
+ ETEXI
+ 
++    {
++        .name       = "instr-query",
++        .args_type  = "",
++        .params     = "",
++        .help       = "instrumentation state",
++        .mhandler.cmd = hmp_instr_query,
++    },
++
++STEXI
++@item instr-dynamic
++@findex instr-dynamic
++Whether dynamic trace instrumentation is available.
++ETEXI
++
++    {
++        .name       = "instr-load",
++        .args_type  = "path:F,args:s?",
++        .params     = "path [args]",
++        .help       = "load an instrumentation library",
++        .mhandler.cmd = hmp_instr_load,
++    },
++
++STEXI
++@item instr-load @var{path} [name=value[,...]]
++@findex instr-load
++Load an instrumentation library.
++ETEXI
++
++    {
++        .name       = "instr-unload",
++        .args_type  = "handle:i",
++        .params     = "",
++        .help       = "unload an instrumentation library",
++        .mhandler.cmd = hmp_instr_unload,
++    },
++
++STEXI
++@item instr-unload
++@findex instr-unload
++Unload an instrumentation library.
++ETEXI
++
+ STEXI
+ @end table
+ ETEXI
+diff --git a/instrument/Makefile.objs b/instrument/Makefile.objs
+index af1c96b..2122272 100644
+--- a/instrument/Makefile.objs
++++ b/instrument/Makefile.objs
+@@ -68,3 +68,4 @@ endif
+ target-obj-y += control.o
+ 
+ common-obj-$(CONFIG_SOFTMMU) += qmp.o
++common-obj-$(CONFIG_SOFTMMU) += hmp.o
+diff --git a/instrument/hmp.c b/instrument/hmp.c
+new file mode 100644
+index 0000000..81b334c
+--- /dev/null
++++ b/instrument/hmp.c
+@@ -0,0 +1,79 @@
++/*
++ * HMP interface for dynamic trace instrumentation control commands.
++ *
++ * Copyright (C) 2012-2013 Lluís Vilanova <vilanova@ac.upc.edu>
++ *
++ * This work is licensed under the terms of the GNU GPL, version 2 or later.
++ * See the COPYING file in the top-level directory.
++ */
++
++#include "instrument/hmp.h"
++
++#include <dlfcn.h>
++
++#include "monitor/monitor.h"
++#include "qmp-commands.h"
++#include "instrument/control.h"
++
++
++void hmp_instr_query(Monitor *mon, const QDict *qdict)
++{
++    InstrState *state = qmp_instr_query(NULL);
++    monitor_printf(mon, "Type: %s\n", InstrType_lookup[state->type]);
++    monitor_printf(mon, "Active: %s\n", state->active ? "true" : "false");
++}
++
++void hmp_instr_load(Monitor *mon, const QDict *qdict)
++{
++    const char *path = qdict_get_str(qdict, "path");
++    String str;
++    str.str = (char *)qdict_get_try_str(qdict, "args");
++    StringList args;
++    args.value = str.str == NULL ? NULL : &str;
++    args.next = NULL;
++    InstrLoadResult *res = qmp_instr_load(path, args.value != NULL,
++                                          args.value != NULL ? &args : NULL,
++                                          NULL);
++    switch (res->code) {
++    case INSTR_LOAD_CODE_OK:
++        monitor_printf(mon, "Handle: %"PRId64"\n", res->handle);
++        monitor_printf(mon, "OK\n");
++        break;
++    case INSTR_LOAD_CODE_UNAVAILABLE:
++        monitor_printf(mon, "Not available\n");
++        break;
++    case INSTR_LOAD_CODE_ERROR:
++        monitor_printf(mon, "Error loading library: %s\n", res->msg);
++        break;
++    default:
++        fprintf(stderr, "Unknown instrumentation load code: %d", res->code);
++        exit(1);
++        break;
++    }
++    qapi_free_InstrLoadResult(res);
++}
++
++void hmp_instr_unload(Monitor *mon, const QDict *qdict)
++{
++    int64_t handle = qdict_get_int(qdict, "handle");
++    InstrUnloadResult *res = qmp_instr_unload(handle, NULL);
++    switch (res->code) {
++    case INSTR_UNLOAD_CODE_OK:
++        monitor_printf(mon, "OK\n");
++        break;
++    case INSTR_UNLOAD_CODE_UNAVAILABLE:
++        monitor_printf(mon, "Not available\n");
++        break;
++    case INSTR_UNLOAD_CODE_INVALID:
++        monitor_printf(mon, "Invalid handle\n");
++        break;
++    case INSTR_UNLOAD_CODE_ERROR:
++        monitor_printf(mon, "Error unloading library: %s\n", res->msg);
++        break;
++    default:
++        fprintf(stderr, "Unknown instrumentation unload code: %d", res->code);
++        exit(1);
++        break;
++    }
++    qapi_free_InstrUnloadResult(res);
++}
+diff --git a/instrument/hmp.h b/instrument/hmp.h
+new file mode 100644
+index 0000000..f54ec0b
+--- /dev/null
++++ b/instrument/hmp.h
+@@ -0,0 +1,21 @@
++/*
++ * HMP interface for dynamic trace instrumentation control commands.
++ *
++ * Copyright (C) 2012-2013 Lluís Vilanova <vilanova@ac.upc.edu>
++ *
++ * This work is licensed under the terms of the GNU GPL, version 2 or later.
++ * See the COPYING file in the top-level directory.
++ */
++
++#ifndef INSTRUMENT__HMP_H
++#define INSTRUMENT__HMP_H
++
++#include "qemu-common.h"
++#include "qapi/qmp/qdict.h"
++
++
++void hmp_instr_query(Monitor *mon, const QDict *qdict);
++void hmp_instr_load(Monitor *mon, const QDict *qdict);
++void hmp_instr_unload(Monitor *mon, const QDict *qdict);
++
++#endif  /* INSTRUMENT__HMP_H */
+diff --git a/monitor.c b/monitor.c
+index a8f49d9..22284cb 100644
+--- a/monitor.c
++++ b/monitor.c
+@@ -69,6 +69,7 @@
+ #include "exec/memory.h"
+ #include "qmp-commands.h"
+ #include "hmp.h"
++#include "instrument/hmp.h"
+ #include "qemu/thread.h"
+ 
+ /* for pic/irq_info */
+
+

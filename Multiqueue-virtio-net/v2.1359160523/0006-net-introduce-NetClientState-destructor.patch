@@ -1,0 +1,101 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Jason Wang <jasowang@redhat.com>
+To: aliguori@us.ibm.com, shajnocz@redhat.com, qemu-devel@nongnu.org,
+ mst@redhat.com
+Cc: krkumar2@in.ibm.com, kvm@vger.kernel.org, mprivozn@redhat.com,
+ rusty@rustcorp.com.au, Jason Wang <jasowang@redhat.com>,
+ gaowanlong@cn.fujitsu.com, jwhan@filewood.snu.ac.kr, shiyer@redhat.com
+Date: Fri, 25 Jan 2013 18:35:29 +0800
+Message-id: 1359110143-42984-7-git-send-email-jasowang@redhat.com
+Subject: [PATCH 06/20] net: introduce NetClientState destructor
+
+To allow allocating an array of NetClientState and free it once, this patch
+introduces destructor of NetClientState. Which could do type specific free,
+which could be used by multiqueue to free the array once.
+
+Signed-off-by: Jason Wang <jasowang@redhat.com>
+---
+ include/net/net.h |    2 ++
+ net/net.c         |   17 +++++++++++++----
+ 2 files changed, 15 insertions(+), 4 deletions(-)
+
+diff --git a/include/net/net.h b/include/net/net.h
+index 995df5c..22adc99 100644
+--- a/include/net/net.h
++++ b/include/net/net.h
+@@ -35,6 +35,7 @@ typedef ssize_t (NetReceive)(NetClientState *, const uint8_t *, size_t);
+ typedef ssize_t (NetReceiveIOV)(NetClientState *, const struct iovec *, int);
+ typedef void (NetCleanup) (NetClientState *);
+ typedef void (LinkStatusChanged)(NetClientState *);
++typedef void (NetClientDestructor)(NetClientState *);
+ 
+ typedef struct NetClientInfo {
+     NetClientOptionsKind type;
+@@ -58,6 +59,7 @@ struct NetClientState {
+     char *name;
+     char info_str[256];
+     unsigned receive_disabled : 1;
++    NetClientDestructor *destructor;
+ };
+ 
+ typedef struct NICState {
+diff --git a/net/net.c b/net/net.c
+index 4e84d54..6368896 100644
+--- a/net/net.c
++++ b/net/net.c
+@@ -182,11 +182,17 @@ static char *assign_name(NetClientState *nc1, const char *model)
+     return g_strdup(buf);
+ }
+ 
++static void qemu_net_client_destructor(NetClientState *nc)
++{
++    g_free(nc);
++}
++
+ static void qemu_net_client_setup(NetClientState *nc,
+                                   NetClientInfo *info,
+                                   NetClientState *peer,
+                                   const char *model,
+-                                  const char *name)
++                                  const char *name,
++                                  NetClientDestructor *destructor)
+ {
+     nc->info = info;
+     nc->model = g_strdup(model);
+@@ -204,7 +210,7 @@ static void qemu_net_client_setup(NetClientState *nc,
+     QTAILQ_INSERT_TAIL(&net_clients, nc, next);
+ 
+     nc->send_queue = qemu_new_net_queue(nc);
+-
++    nc->destructor = destructor;
+ }
+ 
+ NetClientState *qemu_new_net_client(NetClientInfo *info,
+@@ -217,7 +223,8 @@ NetClientState *qemu_new_net_client(NetClientInfo *info,
+     assert(info->size >= sizeof(NetClientState));
+ 
+     nc = g_malloc0(info->size);
+-    qemu_net_client_setup(nc, info, peer, model, name);
++    qemu_net_client_setup(nc, info, peer, model, name,
++                          qemu_net_client_destructor);
+ 
+     return nc;
+ }
+@@ -279,7 +286,9 @@ static void qemu_free_net_client(NetClientState *nc)
+     }
+     g_free(nc->name);
+     g_free(nc->model);
+-    g_free(nc);
++    if (nc->destructor) {
++        nc->destructor(nc);
++    }
+ }
+ 
+ void qemu_del_net_client(NetClientState *nc)
+-- 
+1.7.1
+
+--
+To unsubscribe from this list: send the line "unsubscribe kvm" in
+the body of a message to majordomo@vger.kernel.org
+More majordomo info at  http://vger.kernel.org/majordomo-info.html

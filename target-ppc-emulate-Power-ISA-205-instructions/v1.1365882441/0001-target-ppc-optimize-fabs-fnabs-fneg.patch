@@ -1,0 +1,156 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Aurelien Jarno <aurelien@aurel32.net>
+To: Peter Maydell <peter.maydell@linaro.org>,
+ Aurelien Jarno <aurelien@aurel32.net>, qemu-devel@nongnu.org
+Cc: Alexander Graf <agraf@suse.de>, Aurelien Jarno <aurelien@aurel32.net>,
+ qemu-ppc@nongnu.org, qemu-devel@nongnu.org
+Date: Sat, 13 Apr 2013 14:47:22 +0200
+Message-id: 1365857251-28173-2-git-send-email-aurelien@aurel32.net
+Subject: [PATCH 01/10] target-ppc: optimize fabs, fnabs, fneg
+
+fabs, fnabs and fneg are just flipping the bit sign of an FP register,
+this can be implemented in TCG instead of using softfloat.
+
+Cc: Alexander Graf <agraf@suse.de>
+Signed-off-by: Aurelien Jarno <aurelien@aurel32.net>
+---
+ target-ppc/fpu_helper.c |   31 -------------------------------
+ target-ppc/helper.h     |    3 ---
+ target-ppc/translate.c  |   40 ++++++++++++++++++++++++++++++++++------
+ 3 files changed, 34 insertions(+), 40 deletions(-)
+
+diff --git a/target-ppc/fpu_helper.c b/target-ppc/fpu_helper.c
+index 9e779ea..2f0db4e 100644
+--- a/target-ppc/fpu_helper.c
++++ b/target-ppc/fpu_helper.c
+@@ -595,37 +595,6 @@ uint64_t helper_fdiv(CPUPPCState *env, uint64_t arg1, uint64_t arg2)
+     return farg1.ll;
+ }
+ 
+-/* fabs */
+-uint64_t helper_fabs(CPUPPCState *env, uint64_t arg)
+-{
+-    CPU_DoubleU farg;
+-
+-    farg.ll = arg;
+-    farg.d = float64_abs(farg.d);
+-    return farg.ll;
+-}
+-
+-/* fnabs */
+-uint64_t helper_fnabs(CPUPPCState *env, uint64_t arg)
+-{
+-    CPU_DoubleU farg;
+-
+-    farg.ll = arg;
+-    farg.d = float64_abs(farg.d);
+-    farg.d = float64_chs(farg.d);
+-    return farg.ll;
+-}
+-
+-/* fneg */
+-uint64_t helper_fneg(CPUPPCState *env, uint64_t arg)
+-{
+-    CPU_DoubleU farg;
+-
+-    farg.ll = arg;
+-    farg.d = float64_chs(farg.d);
+-    return farg.ll;
+-}
+-
+ /* fctiw - fctiw. */
+ uint64_t helper_fctiw(CPUPPCState *env, uint64_t arg)
+ {
+diff --git a/target-ppc/helper.h b/target-ppc/helper.h
+index d33ee66..07397b2 100644
+--- a/target-ppc/helper.h
++++ b/target-ppc/helper.h
+@@ -80,9 +80,6 @@ DEF_HELPER_4(fmadd, i64, env, i64, i64, i64)
+ DEF_HELPER_4(fmsub, i64, env, i64, i64, i64)
+ DEF_HELPER_4(fnmadd, i64, env, i64, i64, i64)
+ DEF_HELPER_4(fnmsub, i64, env, i64, i64, i64)
+-DEF_HELPER_2(fabs, i64, env, i64)
+-DEF_HELPER_2(fnabs, i64, env, i64)
+-DEF_HELPER_2(fneg, i64, env, i64)
+ DEF_HELPER_2(fsqrt, i64, env, i64)
+ DEF_HELPER_2(fre, i64, env, i64)
+ DEF_HELPER_2(fres, i64, env, i64)
+diff --git a/target-ppc/translate.c b/target-ppc/translate.c
+index 5e741d1..68cd1c5 100644
+--- a/target-ppc/translate.c
++++ b/target-ppc/translate.c
+@@ -2161,7 +2161,16 @@ static void gen_fcmpu(DisasContext *ctx)
+ /***                         Floating-point move                           ***/
+ /* fabs */
+ /* XXX: beware that fabs never checks for NaNs nor update FPSCR */
+-GEN_FLOAT_B(abs, 0x08, 0x08, 0, PPC_FLOAT);
++static void gen_fabs(DisasContext *ctx)
++{
++    if (unlikely(!ctx->fpu_enabled)) {
++        gen_exception(ctx, POWERPC_EXCP_FPU);
++        return;
++    }
++    tcg_gen_andi_i64(cpu_fpr[rD(ctx->opcode)], cpu_fpr[rB(ctx->opcode)],
++                     ~(1LL << 63));
++    gen_compute_fprf(cpu_fpr[rD(ctx->opcode)], 0, Rc(ctx->opcode) != 0);
++}
+ 
+ /* fmr  - fmr. */
+ /* XXX: beware that fmr never checks for NaNs nor update FPSCR */
+@@ -2177,10 +2186,29 @@ static void gen_fmr(DisasContext *ctx)
+ 
+ /* fnabs */
+ /* XXX: beware that fnabs never checks for NaNs nor update FPSCR */
+-GEN_FLOAT_B(nabs, 0x08, 0x04, 0, PPC_FLOAT);
++static void gen_fnabs(DisasContext *ctx)
++{
++    if (unlikely(!ctx->fpu_enabled)) {
++        gen_exception(ctx, POWERPC_EXCP_FPU);
++        return;
++    }
++    tcg_gen_ori_i64(cpu_fpr[rD(ctx->opcode)], cpu_fpr[rB(ctx->opcode)],
++                    1LL << 63);
++    gen_compute_fprf(cpu_fpr[rD(ctx->opcode)], 0, Rc(ctx->opcode) != 0);
++}
++
+ /* fneg */
+ /* XXX: beware that fneg never checks for NaNs nor update FPSCR */
+-GEN_FLOAT_B(neg, 0x08, 0x01, 0, PPC_FLOAT);
++static void gen_fneg(DisasContext *ctx)
++{
++    if (unlikely(!ctx->fpu_enabled)) {
++        gen_exception(ctx, POWERPC_EXCP_FPU);
++        return;
++    }
++    tcg_gen_xori_i64(cpu_fpr[rD(ctx->opcode)], cpu_fpr[rB(ctx->opcode)],
++                     1LL << 63);
++    gen_compute_fprf(cpu_fpr[rD(ctx->opcode)], 0, Rc(ctx->opcode) != 0);
++}
+ 
+ /***                  Floating-Point status & ctrl register                ***/
+ 
+@@ -8476,7 +8504,10 @@ GEN_HANDLER(fsqrt, 0x3F, 0x16, 0xFF, 0x001F07C0, PPC_FLOAT_FSQRT),
+ GEN_HANDLER(fsqrts, 0x3B, 0x16, 0xFF, 0x001F07C0, PPC_FLOAT_FSQRT),
+ GEN_HANDLER(fcmpo, 0x3F, 0x00, 0x01, 0x00600001, PPC_FLOAT),
+ GEN_HANDLER(fcmpu, 0x3F, 0x00, 0x00, 0x00600001, PPC_FLOAT),
++GEN_HANDLER(fabs, 0x3F, 0x08, 0x08, 0x001F0000, PPC_FLOAT),
+ GEN_HANDLER(fmr, 0x3F, 0x08, 0x02, 0x001F0000, PPC_FLOAT),
++GEN_HANDLER(fnabs, 0x3F, 0x08, 0x04, 0x001F0000, PPC_FLOAT),
++GEN_HANDLER(fneg, 0x3F, 0x08, 0x01, 0x001F0000, PPC_FLOAT),
+ GEN_HANDLER(mcrfs, 0x3F, 0x00, 0x02, 0x0063F801, PPC_FLOAT),
+ GEN_HANDLER(mffs, 0x3F, 0x07, 0x12, 0x001FF800, PPC_FLOAT),
+ GEN_HANDLER(mtfsb0, 0x3F, 0x06, 0x02, 0x001FF800, PPC_FLOAT),
+@@ -8833,9 +8864,6 @@ GEN_FLOAT_B(rin, 0x08, 0x0C, 1, PPC_FLOAT_EXT),
+ GEN_FLOAT_B(riz, 0x08, 0x0D, 1, PPC_FLOAT_EXT),
+ GEN_FLOAT_B(rip, 0x08, 0x0E, 1, PPC_FLOAT_EXT),
+ GEN_FLOAT_B(rim, 0x08, 0x0F, 1, PPC_FLOAT_EXT),
+-GEN_FLOAT_B(abs, 0x08, 0x08, 0, PPC_FLOAT),
+-GEN_FLOAT_B(nabs, 0x08, 0x04, 0, PPC_FLOAT),
+-GEN_FLOAT_B(neg, 0x08, 0x01, 0, PPC_FLOAT),
+ 
+ #undef GEN_LD
+ #undef GEN_LDU
+-- 
+1.7.10.4
+
+

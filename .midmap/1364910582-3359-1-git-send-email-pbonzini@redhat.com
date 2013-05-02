@@ -1,0 +1,1 @@
+../configure-QEMU_INCLUDES-are-the-same-for-all-subtargets/v1.1364935782/0001-configure-QEMU_INCLUDES-are-the-same-for-all-subtargets.patch

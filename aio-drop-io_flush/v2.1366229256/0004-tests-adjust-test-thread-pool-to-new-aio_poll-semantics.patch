@@ -1,0 +1,85 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Stefan Hajnoczi <stefanha@redhat.com>
+To: Stefan Hajnoczi <stefanha@redhat.com>, qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, Paolo Bonzini <pbonzini@redhat.com>,
+ pingfank@linux.vnet.ibm.com, Kevin Wolf <kwolf@redhat.com>,
+ qemu-devel@nongnu.org, Stefan Hajnoczi <stefanha@redhat.com>
+Date: Wed, 17 Apr 2013 15:07:40 +0200
+Message-id: 1366204073-8468-5-git-send-email-stefanha@redhat.com
+Subject: [PATCH 04/17] tests: adjust test-thread-pool to new aio_poll()
+ semantics
+
+aio_poll(ctx, true) will soon block when fd handlers have been set.
+Previously aio_poll() would return early if all .io_flush() returned
+false.  This means we need to check the equivalent of the .io_flush()
+condition *before* calling aio_poll(ctx, true) to avoid deadlock.
+
+Signed-off-by: Stefan Hajnoczi <stefanha@redhat.com>
+Reviewed-by: Polo Bonzini <pbonzini@redhat.com>
+---
+ tests/test-thread-pool.c | 24 ++++++++++++------------
+ 1 file changed, 12 insertions(+), 12 deletions(-)
+
+diff --git a/tests/test-thread-pool.c b/tests/test-thread-pool.c
+index 22915aa..f0b2ef1 100644
+--- a/tests/test-thread-pool.c
++++ b/tests/test-thread-pool.c
+@@ -40,19 +40,13 @@ static void done_cb(void *opaque, int ret)
+     active--;
+ }
+ 
+-/* Wait until all aio and bh activity has finished */
+-static void qemu_aio_wait_all(void)
+-{
+-    while (aio_poll(ctx, true)) {
+-        /* Do nothing */
+-    }
+-}
+-
+ static void test_submit(void)
+ {
+     WorkerTestData data = { .n = 0 };
+     thread_pool_submit(pool, worker_cb, &data);
+-    qemu_aio_wait_all();
++    while (data.n == 0) {
++        aio_poll(ctx, true);
++    }
+     g_assert_cmpint(data.n, ==, 1);
+ }
+ 
+@@ -65,7 +59,9 @@ static void test_submit_aio(void)
+     /* The callbacks are not called until after the first wait.  */
+     active = 1;
+     g_assert_cmpint(data.ret, ==, -EINPROGRESS);
+-    qemu_aio_wait_all();
++    while (data.ret == -EINPROGRESS) {
++        aio_poll(ctx, true);
++    }
+     g_assert_cmpint(active, ==, 0);
+     g_assert_cmpint(data.n, ==, 1);
+     g_assert_cmpint(data.ret, ==, 0);
+@@ -103,7 +99,9 @@ static void test_submit_co(void)
+ 
+     /* qemu_aio_wait_all will execute the rest of the coroutine.  */
+ 
+-    qemu_aio_wait_all();
++    while (data.ret == -EINPROGRESS) {
++        aio_poll(ctx, true);
++    }
+ 
+     /* Back here after the coroutine has finished.  */
+ 
+@@ -187,7 +185,9 @@ static void test_cancel(void)
+     }
+ 
+     /* Finish execution and execute any remaining callbacks.  */
+-    qemu_aio_wait_all();
++    while (active > 0) {
++        aio_poll(ctx, true);
++    }
+     g_assert_cmpint(active, ==, 0);
+     for (i = 0; i < 100; i++) {
+         if (data[i].n == 3) {
+-- 
+1.8.1.4
+

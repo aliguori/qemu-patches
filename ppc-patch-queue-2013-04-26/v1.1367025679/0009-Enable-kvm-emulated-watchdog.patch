@@ -1,0 +1,284 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Alexander Graf <agraf@suse.de>
+To: qemu-ppc@nongnu.org
+Cc: Blue Swirl <blauwirbel@gmail.com>,
+ Bharat Bhushan <bharat.bhushan@freescale.com>,
+ Bharat Bhushan <r65777@freescale.com>, Aurelien Jarno <aurelien@aurel32.net>,
+ qemu-devel@nongnu.org
+Date: Fri, 26 Apr 2013 20:21:28 +0200
+Message-id: 1367000509-8833-10-git-send-email-agraf@suse.de
+Subject: [PATCH 09/30] Enable kvm emulated watchdog
+
+From: Bharat Bhushan <r65777@freescale.com>
+
+Enable the KVM emulated watchdog if KVM supports (use the
+capability enablement in watchdog handler). Also watchdog exit
+(KVM_EXIT_WATCHDOG) handling is added.
+Watchdog state machine is cleared whenever VM state changes to running.
+This is to handle the cases like return from debug halt etc.
+
+Signed-off-by: Bharat Bhushan <bharat.bhushan@freescale.com>
+[agraf: rebase to current code base, fix non-kvm cases]
+Signed-off-by: Alexander Graf <agraf@suse.de>
+---
+ hw/ppc/ppc_booke.c   |   45 +++++++++++++++++++++++++++---
+ target-ppc/kvm.c     |   74 ++++++++++++++++++++++++++++++++++++++++++++++++++
+ target-ppc/kvm_ppc.h |   24 ++++++++++++++++
+ 3 files changed, 139 insertions(+), 4 deletions(-)
+
+diff --git a/hw/ppc/ppc_booke.c b/hw/ppc/ppc_booke.c
+index 585f53b..e41b036 100644
+--- a/hw/ppc/ppc_booke.c
++++ b/hw/ppc/ppc_booke.c
+@@ -28,6 +28,7 @@
+ #include "hw/timer/m48t59.h"
+ #include "qemu/log.h"
+ #include "hw/loader.h"
++#include "kvm_ppc.h"
+ 
+ 
+ /* Timer Control Register */
+@@ -211,6 +212,7 @@ void store_booke_tsr(CPUPPCState *env, target_ulong val)
+     PowerPCCPU *cpu = ppc_env_get_cpu(env);
+ 
+     env->spr[SPR_BOOKE_TSR] &= ~val;
++    kvmppc_clear_tsr_bits(cpu, val);
+     booke_update_irq(cpu);
+ }
+ 
+@@ -222,6 +224,7 @@ void store_booke_tcr(CPUPPCState *env, target_ulong val)
+ 
+     tb_env = env->tb_env;
+     env->spr[SPR_BOOKE_TCR] = val;
++    kvmppc_set_tcr(cpu);
+ 
+     booke_update_irq(cpu);
+ 
+@@ -234,7 +237,6 @@ void store_booke_tcr(CPUPPCState *env, target_ulong val)
+                              booke_get_wdt_target(env, tb_env),
+                              &booke_timer->wdt_next,
+                              booke_timer->wdt_timer);
+-
+ }
+ 
+ static void ppc_booke_timer_reset_handle(void *opaque)
+@@ -242,16 +244,39 @@ static void ppc_booke_timer_reset_handle(void *opaque)
+     PowerPCCPU *cpu = opaque;
+     CPUPPCState *env = &cpu->env;
+ 
+-    env->spr[SPR_BOOKE_TSR] = 0;
+-    env->spr[SPR_BOOKE_TCR] = 0;
++    store_booke_tcr(env, 0);
++    store_booke_tsr(env, -1);
++}
+ 
+-    booke_update_irq(cpu);
++/*
++ * This function will be called whenever the CPU state changes.
++ * CPU states are defined "typedef enum RunState".
++ * Regarding timer, When CPU state changes to running after debug halt
++ * or similar cases which takes time then in between final watchdog
++ * expiry happenes. This will cause exit to QEMU and configured watchdog
++ * action will be taken. To avoid this we always clear the watchdog state when
++ * state changes to running.
++ */
++static void cpu_state_change_handler(void *opaque, int running, RunState state)
++{
++    PowerPCCPU *cpu = opaque;
++    CPUPPCState *env = &cpu->env;
++
++    if (!running) {
++        return;
++    }
++
++    /*
++     * Clear watchdog interrupt condition by clearing TSR.
++     */
++    store_booke_tsr(env, TSR_ENW | TSR_WIS | TSR_WRS_MASK);
+ }
+ 
+ void ppc_booke_timers_init(PowerPCCPU *cpu, uint32_t freq, uint32_t flags)
+ {
+     ppc_tb_t *tb_env;
+     booke_timer_t *booke_timer;
++    int ret = 0;
+ 
+     tb_env      = g_malloc0(sizeof(ppc_tb_t));
+     booke_timer = g_malloc0(sizeof(booke_timer_t));
+@@ -269,5 +294,17 @@ void ppc_booke_timers_init(PowerPCCPU *cpu, uint32_t freq, uint32_t flags)
+     booke_timer->wdt_timer =
+         qemu_new_timer_ns(vm_clock, &booke_wdt_cb, cpu);
+ 
++    ret = kvmppc_booke_watchdog_enable(cpu);
++
++    if (ret) {
++        /* TODO: Start the QEMU emulated watchdog if not running on KVM.
++         * Also start the QEMU emulated watchdog if KVM does not support
++         * emulated watchdog or somehow it is not enabled (supported but
++         * not enabled is though some bug and requires debugging :)).
++         */
++    }
++
++    qemu_add_vm_change_state_handler(cpu_state_change_handler, cpu);
++
+     qemu_register_reset(ppc_booke_timer_reset_handle, cpu);
+ }
+diff --git a/target-ppc/kvm.c b/target-ppc/kvm.c
+index f2658bb..759983d 100644
+--- a/target-ppc/kvm.c
++++ b/target-ppc/kvm.c
+@@ -37,6 +37,7 @@
+ #include "hw/sysbus.h"
+ #include "hw/ppc/spapr.h"
+ #include "hw/ppc/spapr_vio.h"
++#include "sysemu/watchdog.h"
+ 
+ //#define DEBUG_KVM
+ 
+@@ -64,6 +65,7 @@ static int cap_spapr_tce;
+ static int cap_hior;
+ static int cap_one_reg;
+ static int cap_epr;
++static int cap_ppc_watchdog;
+ 
+ /* XXX We have a race condition where we actually have a level triggered
+  *     interrupt, but the infrastructure can't expose that yet, so the guest
+@@ -97,6 +99,7 @@ int kvm_arch_init(KVMState *s)
+     cap_one_reg = kvm_check_extension(s, KVM_CAP_ONE_REG);
+     cap_hior = kvm_check_extension(s, KVM_CAP_PPC_HIOR);
+     cap_epr = kvm_check_extension(s, KVM_CAP_PPC_EPR);
++    cap_ppc_watchdog = kvm_check_extension(s, KVM_CAP_PPC_BOOKE_WATCHDOG);
+ 
+     if (!cap_interrupt_level) {
+         fprintf(stderr, "KVM: Couldn't find level irq capability. Expect the "
+@@ -1094,6 +1097,12 @@ int kvm_arch_handle_exit(CPUState *cs, struct kvm_run *run)
+         run->epr.epr = ldl_phys(env->mpic_iack);
+         ret = 0;
+         break;
++    case KVM_EXIT_WATCHDOG:
++        dprintf("handle watchdog expiry\n");
++        watchdog_perform_action();
++        ret = 0;
++        break;
++
+     default:
+         fprintf(stderr, "KVM: unknown exit reason %d\n", run->exit_reason);
+         ret = -1;
+@@ -1103,6 +1112,71 @@ int kvm_arch_handle_exit(CPUState *cs, struct kvm_run *run)
+     return ret;
+ }
+ 
++int kvmppc_or_tsr_bits(PowerPCCPU *cpu, uint32_t tsr_bits)
++{
++    CPUState *cs = CPU(cpu);
++    uint32_t bits = tsr_bits;
++    struct kvm_one_reg reg = {
++        .id = KVM_REG_PPC_OR_TSR,
++        .addr = (uintptr_t) &bits,
++    };
++
++    return kvm_vcpu_ioctl(cs, KVM_SET_ONE_REG, &reg);
++}
++
++int kvmppc_clear_tsr_bits(PowerPCCPU *cpu, uint32_t tsr_bits)
++{
++
++    CPUState *cs = CPU(cpu);
++    uint32_t bits = tsr_bits;
++    struct kvm_one_reg reg = {
++        .id = KVM_REG_PPC_CLEAR_TSR,
++        .addr = (uintptr_t) &bits,
++    };
++
++    return kvm_vcpu_ioctl(cs, KVM_SET_ONE_REG, &reg);
++}
++
++int kvmppc_set_tcr(PowerPCCPU *cpu)
++{
++    CPUState *cs = CPU(cpu);
++    CPUPPCState *env = &cpu->env;
++    uint32_t tcr = env->spr[SPR_BOOKE_TCR];
++
++    struct kvm_one_reg reg = {
++        .id = KVM_REG_PPC_TCR,
++        .addr = (uintptr_t) &tcr,
++    };
++
++    return kvm_vcpu_ioctl(cs, KVM_SET_ONE_REG, &reg);
++}
++
++int kvmppc_booke_watchdog_enable(PowerPCCPU *cpu)
++{
++    CPUState *cs = CPU(cpu);
++    struct kvm_enable_cap encap = {};
++    int ret;
++
++    if (!kvm_enabled()) {
++        return -1;
++    }
++
++    if (!cap_ppc_watchdog) {
++        printf("warning: KVM does not support watchdog");
++        return -1;
++    }
++
++    encap.cap = KVM_CAP_PPC_BOOKE_WATCHDOG;
++    ret = kvm_vcpu_ioctl(cs, KVM_ENABLE_CAP, &encap);
++    if (ret < 0) {
++        fprintf(stderr, "%s: couldn't enable KVM_CAP_PPC_BOOKE_WATCHDOG: %s\n",
++                __func__, strerror(-ret));
++        return ret;
++    }
++
++    return ret;
++}
++
+ static int read_cpuinfo(const char *field, char *value, int len)
+ {
+     FILE *f;
+diff --git a/target-ppc/kvm_ppc.h b/target-ppc/kvm_ppc.h
+index 600d632..771cfbe 100644
+--- a/target-ppc/kvm_ppc.h
++++ b/target-ppc/kvm_ppc.h
+@@ -25,6 +25,10 @@ int kvmppc_set_interrupt(PowerPCCPU *cpu, int irq, int level);
+ void kvmppc_set_papr(PowerPCCPU *cpu);
+ void kvmppc_set_mpic_proxy(PowerPCCPU *cpu, int mpic_proxy);
+ int kvmppc_smt_threads(void);
++int kvmppc_clear_tsr_bits(PowerPCCPU *cpu, uint32_t tsr_bits);
++int kvmppc_or_tsr_bits(PowerPCCPU *cpu, uint32_t tsr_bits);
++int kvmppc_set_tcr(PowerPCCPU *cpu);
++int kvmppc_booke_watchdog_enable(PowerPCCPU *cpu);
+ #ifndef CONFIG_USER_ONLY
+ off_t kvmppc_alloc_rma(const char *name, MemoryRegion *sysmem);
+ void *kvmppc_create_spapr_tce(uint32_t liobn, uint32_t window_size, int *pfd);
+@@ -90,6 +94,26 @@ static inline int kvmppc_smt_threads(void)
+     return 1;
+ }
+ 
++static inline int kvmppc_or_tsr_bits(PowerPCCPU *cpu, uint32_t tsr_bits)
++{
++    return 0;
++}
++
++static inline int kvmppc_clear_tsr_bits(PowerPCCPU *cpu, uint32_t tsr_bits)
++{
++    return 0;
++}
++
++static inline int kvmppc_set_tcr(PowerPCCPU *cpu)
++{
++    return 0;
++}
++
++static inline int kvmppc_booke_watchdog_enable(PowerPCCPU *cpu)
++{
++    return -1;
++}
++
+ #ifndef CONFIG_USER_ONLY
+ static inline off_t kvmppc_alloc_rma(const char *name, MemoryRegion *sysmem)
+ {
+-- 
+1.6.0.2
+
+

@@ -1,0 +1,1 @@
+../directory-reorganization-fixes-and-final-part/v1.1366057161/0004-hw-Add-lost-ARM-core-again.patch

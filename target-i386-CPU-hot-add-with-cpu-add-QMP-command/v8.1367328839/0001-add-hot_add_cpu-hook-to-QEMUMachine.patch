@@ -1,0 +1,35 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Igor Mammedov <imammedo@redhat.com>
+To: Anthony Liguori <aliguori@us.ibm.com>, qemu-devel@nongnu.org
+Cc: ehabkost@redhat.com, mst@redhat.com, jfrei@linux.vnet.ibm.com,
+ pbonzini@redhat.com, afaerber@suse.de, lig.fnst@cn.fujitsu.com
+Date: Tue, 30 Apr 2013 08:34:00 +0200
+Message-id: 1367303643-16036-2-git-send-email-imammedo@redhat.com
+Subject: [PATCH 1/4] add hot_add_cpu hook to QEMUMachine
+
+hot_add_cpu hook should be overriden by target that implements
+cpu hot-add via cpu-add QMP command.
+
+Signed-off-by: Igor Mammedov <imammedo@redhat.com>
+---
+Note:
+  hook will be used in next patch for target-i386 cp-add implementation.
+---
+ include/hw/boards.h | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/include/hw/boards.h b/include/hw/boards.h
+index 425bdc7..75cd127 100644
+--- a/include/hw/boards.h
++++ b/include/hw/boards.h
+@@ -43,6 +43,7 @@ typedef struct QEMUMachine {
+     GlobalProperty *compat_props;
+     struct QEMUMachine *next;
+     const char *hw_version;
++    void (*hot_add_cpu)(const int64_t id, Error **errp);
+ } QEMUMachine;
+ 
+ int qemu_register_machine(QEMUMachine *m);
+-- 
+1.8.2.1
+

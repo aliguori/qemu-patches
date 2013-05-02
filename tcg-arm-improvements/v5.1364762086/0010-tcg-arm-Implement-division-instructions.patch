@@ -1,0 +1,123 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Richard Henderson <rth@twiddle.net>
+To: qemu-devel@nongnu.org, Richard Henderson <rth@twiddle.net>
+Cc: Aurelien Jarno <aurelien@aurel32.net>, qemu-devel@nongnu.org
+Date: Sun, 31 Mar 2013 15:34:56 -0700
+Message-id: 1364769305-3687-11-git-send-email-rth@twiddle.net
+Subject: [PATCH 10/19] tcg-arm: Implement division instructions
+
+An armv7 extension implements division, present on Cortex A15.
+
+Signed-off-by: Richard Henderson <rth@twiddle.net>
+Reviewed-by: Aurelien Jarno <aurelien@aurel32.net>
+---
+ disas/arm.c          |  4 ++++
+ tcg/arm/tcg-target.c | 36 ++++++++++++++++++++++++++++++++++++
+ tcg/arm/tcg-target.h |  7 ++++++-
+ 3 files changed, 46 insertions(+), 1 deletion(-)
+
+diff --git a/disas/arm.c b/disas/arm.c
+index 4927d8a..76e97a8 100644
+--- a/disas/arm.c
++++ b/disas/arm.c
+@@ -819,6 +819,10 @@ static const struct opcode32 arm_opcodes[] =
+   {ARM_EXT_V3M, 0x00800090, 0x0fa000f0, "%22?sumull%20's%c\t%12-15r, %16-19r, %0-3r, %8-11r"},
+   {ARM_EXT_V3M, 0x00a00090, 0x0fa000f0, "%22?sumlal%20's%c\t%12-15r, %16-19r, %0-3r, %8-11r"},
+ 
++  /* IDIV instructions.  */
++  {ARM_EXT_DIV, 0x0710f010, 0x0ff0f0f0, "sdiv%c\t%16-19r, %0-3r, %8-11r"},
++  {ARM_EXT_DIV, 0x0730f010, 0x0ff0f0f0, "udiv%c\t%16-19r, %0-3r, %8-11r"},
++
+   /* V7 instructions.  */
+   {ARM_EXT_V7, 0xf450f000, 0xfd70f000, "pli\t%P"},
+   {ARM_EXT_V7, 0x0320f0f0, 0x0ffffff0, "dbg%c\t#%0-3d"},
+diff --git a/tcg/arm/tcg-target.c b/tcg/arm/tcg-target.c
+index 1044c68..e3d2cfa 100644
+--- a/tcg/arm/tcg-target.c
++++ b/tcg/arm/tcg-target.c
+@@ -591,6 +591,16 @@ static inline void tcg_out_smull32(TCGContext *s,
+     }
+ }
+ 
++static inline void tcg_out_sdiv(TCGContext *s, int cond, int rd, int rn, int rm)
++{
++    tcg_out32(s, 0x0710f010 | (cond << 28) | (rd << 16) | rn | (rm << 8));
++}
++
++static inline void tcg_out_udiv(TCGContext *s, int cond, int rd, int rn, int rm)
++{
++    tcg_out32(s, 0x0730f010 | (cond << 28) | (rd << 16) | rn | (rm << 8));
++}
++
+ static inline void tcg_out_ext8s(TCGContext *s, int cond,
+                                  int rd, int rn)
+ {
+@@ -1869,6 +1879,25 @@ static inline void tcg_out_op(TCGContext *s, TCGOpcode opc,
+                         args[3], args[4], const_args[2]);
+         break;
+ 
++    case INDEX_op_div_i32:
++        tcg_out_sdiv(s, COND_AL, args[0], args[1], args[2]);
++        break;
++    case INDEX_op_divu_i32:
++        tcg_out_udiv(s, COND_AL, args[0], args[1], args[2]);
++        break;
++    case INDEX_op_rem_i32:
++        tcg_out_sdiv(s, COND_AL, TCG_REG_R8, args[1], args[2]);
++        tcg_out_mul32(s, COND_AL, TCG_REG_R8, TCG_REG_R8, args[2]);
++        tcg_out_dat_reg(s, COND_AL, ARITH_SUB, args[0], args[1], TCG_REG_R8,
++                        SHIFT_IMM_LSL(0));
++        break;
++    case INDEX_op_remu_i32:
++        tcg_out_udiv(s, COND_AL, TCG_REG_R8, args[1], args[2]);
++        tcg_out_mul32(s, COND_AL, TCG_REG_R8, TCG_REG_R8, args[2]);
++        tcg_out_dat_reg(s, COND_AL, ARITH_SUB, args[0], args[1], TCG_REG_R8,
++                        SHIFT_IMM_LSL(0));
++        break;
++
+     default:
+         tcg_abort();
+     }
+@@ -1955,6 +1984,13 @@ static const TCGTargetOpDef arm_op_defs[] = {
+ 
+     { INDEX_op_deposit_i32, { "r", "0", "ri" } },
+ 
++#if TCG_TARGET_HAS_div_i32
++    { INDEX_op_div_i32, { "r", "r", "r" } },
++    { INDEX_op_rem_i32, { "r", "r", "r" } },
++    { INDEX_op_divu_i32, { "r", "r", "r" } },
++    { INDEX_op_remu_i32, { "r", "r", "r" } },
++#endif
++
+     { -1 },
+ };
+ 
+diff --git a/tcg/arm/tcg-target.h b/tcg/arm/tcg-target.h
+index 209f585..3be41cc 100644
+--- a/tcg/arm/tcg-target.h
++++ b/tcg/arm/tcg-target.h
+@@ -56,7 +56,6 @@ typedef enum {
+ #define TCG_TARGET_CALL_STACK_OFFSET	0
+ 
+ /* optional instructions */
+-#define TCG_TARGET_HAS_div_i32          0
+ #define TCG_TARGET_HAS_ext8s_i32        1
+ #define TCG_TARGET_HAS_ext16s_i32       1
+ #define TCG_TARGET_HAS_ext8u_i32        0 /* and r0, r1, #0xff */
+@@ -75,6 +74,12 @@ typedef enum {
+ #define TCG_TARGET_HAS_movcond_i32      1
+ #define TCG_TARGET_HAS_muls2_i32        1
+ 
++#ifdef __ARM_ARCH_EXT_IDIV__
++#define TCG_TARGET_HAS_div_i32          1
++#else
++#define TCG_TARGET_HAS_div_i32          0
++#endif
++
+ extern bool tcg_target_deposit_valid(int ofs, int len);
+ #define TCG_TARGET_deposit_i32_valid  tcg_target_deposit_valid
+ 
+-- 
+1.8.1.4
+
+

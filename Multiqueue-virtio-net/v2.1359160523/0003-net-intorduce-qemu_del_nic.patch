@@ -1,0 +1,185 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Jason Wang <jasowang@redhat.com>
+To: aliguori@us.ibm.com, shajnocz@redhat.com, qemu-devel@nongnu.org,
+ mst@redhat.com
+Cc: krkumar2@in.ibm.com, kvm@vger.kernel.org, mprivozn@redhat.com,
+ rusty@rustcorp.com.au, Jason Wang <jasowang@redhat.com>,
+ gaowanlong@cn.fujitsu.com, jwhan@filewood.snu.ac.kr, shiyer@redhat.com
+Date: Fri, 25 Jan 2013 18:35:26 +0800
+Message-id: 1359110143-42984-4-git-send-email-jasowang@redhat.com
+Subject: [PATCH 03/20] net: intorduce qemu_del_nic()
+
+To support multiqueue nic, this patch separate the nic destructor from
+qemu_del_net_client() to a new helper qemu_del_nic() since the mapping bettween
+NiCState and NetClientState were not 1:1 in multiqueue. The following patches
+would refactor this function to support multiqueue nic.
+
+Signed-off-by: Jason Wang <jasowang@redhat.com>
+---
+ hw/e1000.c           |    2 +-
+ hw/eepro100.c        |    2 +-
+ hw/ne2000.c          |    2 +-
+ hw/pcnet-pci.c       |    2 +-
+ hw/rtl8139.c         |    2 +-
+ hw/usb/dev-network.c |    2 +-
+ hw/virtio-net.c      |    2 +-
+ hw/xen_nic.c         |    2 +-
+ include/net/net.h    |    1 +
+ net/net.c            |   15 ++++++++++++++-
+ 10 files changed, 23 insertions(+), 9 deletions(-)
+
+diff --git a/hw/e1000.c b/hw/e1000.c
+index 36f4051..f3590a9 100644
+--- a/hw/e1000.c
++++ b/hw/e1000.c
+@@ -1244,7 +1244,7 @@ pci_e1000_uninit(PCIDevice *dev)
+     qemu_free_timer(d->autoneg_timer);
+     memory_region_destroy(&d->mmio);
+     memory_region_destroy(&d->io);
+-    qemu_del_net_client(qemu_get_queue(d->nic));
++    qemu_del_nic(d->nic);
+ }
+ 
+ static NetClientInfo net_e1000_info = {
+diff --git a/hw/eepro100.c b/hw/eepro100.c
+index f9856ae..5d23796 100644
+--- a/hw/eepro100.c
++++ b/hw/eepro100.c
+@@ -1849,7 +1849,7 @@ static void pci_nic_uninit(PCIDevice *pci_dev)
+     memory_region_destroy(&s->flash_bar);
+     vmstate_unregister(&pci_dev->qdev, s->vmstate, s);
+     eeprom93xx_free(&pci_dev->qdev, s->eeprom);
+-    qemu_del_net_client(qemu_get_queue(s->nic));
++    qemu_del_nic(s->nic);
+ }
+ 
+ static NetClientInfo net_eepro100_info = {
+diff --git a/hw/ne2000.c b/hw/ne2000.c
+index c989190..3dd1c84 100644
+--- a/hw/ne2000.c
++++ b/hw/ne2000.c
+@@ -751,7 +751,7 @@ static void pci_ne2000_exit(PCIDevice *pci_dev)
+     NE2000State *s = &d->ne2000;
+ 
+     memory_region_destroy(&s->io);
+-    qemu_del_net_client(qemu_get_queue(s->nic));
++    qemu_del_nic(s->nic);
+ }
+ 
+ static Property ne2000_properties[] = {
+diff --git a/hw/pcnet-pci.c b/hw/pcnet-pci.c
+index 26c90bf..df63b22 100644
+--- a/hw/pcnet-pci.c
++++ b/hw/pcnet-pci.c
+@@ -279,7 +279,7 @@ static void pci_pcnet_uninit(PCIDevice *dev)
+     memory_region_destroy(&d->io_bar);
+     qemu_del_timer(d->state.poll_timer);
+     qemu_free_timer(d->state.poll_timer);
+-    qemu_del_net_client(qemu_get_queue(d->state.nic));
++    qemu_del_nic(d->state.nic);
+ }
+ 
+ static NetClientInfo net_pci_pcnet_info = {
+diff --git a/hw/rtl8139.c b/hw/rtl8139.c
+index b825e83..d7716be 100644
+--- a/hw/rtl8139.c
++++ b/hw/rtl8139.c
+@@ -3446,7 +3446,7 @@ static void pci_rtl8139_uninit(PCIDevice *dev)
+     }
+     qemu_del_timer(s->timer);
+     qemu_free_timer(s->timer);
+-    qemu_del_net_client(qemu_get_queue(s->nic));
++    qemu_del_nic(s->nic);
+ }
+ 
+ static void rtl8139_set_link_status(NetClientState *nc)
+diff --git a/hw/usb/dev-network.c b/hw/usb/dev-network.c
+index abc6eac..a01a5e7 100644
+--- a/hw/usb/dev-network.c
++++ b/hw/usb/dev-network.c
+@@ -1330,7 +1330,7 @@ static void usb_net_handle_destroy(USBDevice *dev)
+ 
+     /* TODO: remove the nd_table[] entry */
+     rndis_clear_responsequeue(s);
+-    qemu_del_net_client(qemu_get_queue(s->nic));
++    qemu_del_nic(s->nic);
+ }
+ 
+ static NetClientInfo net_usbnet_info = {
+diff --git a/hw/virtio-net.c b/hw/virtio-net.c
+index 0b43add..47f4ab4 100644
+--- a/hw/virtio-net.c
++++ b/hw/virtio-net.c
+@@ -1124,6 +1124,6 @@ void virtio_net_exit(VirtIODevice *vdev)
+         qemu_bh_delete(n->tx_bh);
+     }
+ 
+-    qemu_del_net_client(qemu_get_queue(n->nic));
++    qemu_del_nic(n->nic);
+     virtio_cleanup(&n->vdev);
+ }
+diff --git a/hw/xen_nic.c b/hw/xen_nic.c
+index 55b7960..4be077d 100644
+--- a/hw/xen_nic.c
++++ b/hw/xen_nic.c
+@@ -408,7 +408,7 @@ static void net_disconnect(struct XenDevice *xendev)
+         netdev->rxs = NULL;
+     }
+     if (netdev->nic) {
+-        qemu_del_net_client(qemu_get_queue(netdev->nic));
++        qemu_del_nic(netdev->nic);
+         netdev->nic = NULL;
+     }
+ }
+diff --git a/include/net/net.h b/include/net/net.h
+index 96e05c4..f0d1aa2 100644
+--- a/include/net/net.h
++++ b/include/net/net.h
+@@ -77,6 +77,7 @@ NICState *qemu_new_nic(NetClientInfo *info,
+                        const char *model,
+                        const char *name,
+                        void *opaque);
++void qemu_del_nic(NICState *nic);
+ NetClientState *qemu_get_queue(NICState *nic);
+ NICState *qemu_get_nic(NetClientState *nc);
+ void *qemu_get_nic_opaque(NetClientState *nc);
+diff --git a/net/net.c b/net/net.c
+index 41dc12c..8999f8d 100644
+--- a/net/net.c
++++ b/net/net.c
+@@ -291,6 +291,15 @@ void qemu_del_net_client(NetClientState *nc)
+         return;
+     }
+ 
++    assert(nc->info->type != NET_CLIENT_OPTIONS_KIND_NIC);
++
++    qemu_cleanup_net_client(nc);
++    qemu_free_net_client(nc);
++}
++
++void qemu_del_nic(NICState *nic)
++{
++    NetClientState *nc = qemu_get_queue(nic);
+     /* If this is a peer NIC and peer has already been deleted, free it now. */
+     if (nc->peer && nc->info->type == NET_CLIENT_OPTIONS_KIND_NIC) {
+         NICState *nic = qemu_get_nic(nc);
+@@ -933,7 +942,11 @@ void net_cleanup(void)
+     NetClientState *nc, *next_vc;
+ 
+     QTAILQ_FOREACH_SAFE(nc, &net_clients, next, next_vc) {
+-        qemu_del_net_client(nc);
++        if (nc->info->type == NET_CLIENT_OPTIONS_KIND_NIC) {
++            qemu_del_nic(qemu_get_nic(nc));
++        } else {
++            qemu_del_net_client(nc);
++        }
+     }
+ }
+ 
+-- 
+1.7.1
+
+--
+To unsubscribe from this list: send the line "unsubscribe kvm" in
+the body of a message to majordomo@vger.kernel.org
+More majordomo info at  http://vger.kernel.org/majordomo-info.html

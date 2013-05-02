@@ -1,0 +1,1 @@
+../sparc64-Fix-NVRAM-access-mode/v1.1367071936/0002-sparc64-Use-the-correct-type-of-the-Mostek-NVRAM-chip.patch

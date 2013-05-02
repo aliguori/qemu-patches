@@ -1,0 +1,35 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Jordan Justen <jordan.l.justen@intel.com>
+To: Paolo Bonzini <pbonzini@redhat.com>, qemu-devel@nongnu.org,
+ Jordan Justen <jordan.l.justen@intel.com>, Jordan Justen <jljusten@gmail.com>
+Cc: qemu-devel@nongnu.org, Jordan Justen <jordan.l.justen@intel.com>,
+ qemu-devel <qemu-devel@nongnu.org>
+Date: Sun, 28 Apr 2013 01:32:21 -0700
+Message-id: 1367137941-4310-7-git-send-email-jordan.l.justen@intel.com
+Subject: [PATCH 6/6] pc_sysfw: change rom_only default to 0
+
+Now KVM can support a flash memory. This feature depends on
+KVM_CAP_READONLY_MEM, which was introduced in Linux 3.7.
+
+Signed-off-by: Jordan Justen <jordan.l.justen@intel.com>
+---
+ hw/block/pc_sysfw.c |    2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/hw/block/pc_sysfw.c b/hw/block/pc_sysfw.c
+index e88d67e..c5067c1 100644
+--- a/hw/block/pc_sysfw.c
++++ b/hw/block/pc_sysfw.c
+@@ -258,7 +258,7 @@ void pc_system_firmware_init(MemoryRegion *rom_memory)
+ }
+ 
+ static Property pcsysfw_properties[] = {
+-    DEFINE_PROP_UINT8("rom_only", PcSysFwDevice, rom_only, 1),
++    DEFINE_PROP_UINT8("rom_only", PcSysFwDevice, rom_only, 0),
+     DEFINE_PROP_END_OF_LIST(),
+ };
+ 
+-- 
+1.7.10.4
+
+

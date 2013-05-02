@@ -1,0 +1,31 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Aurelien Jarno <aurelien@aurel32.net>
+To: qemu-devel@nongnu.org
+Cc: Alexander Graf <agraf@suse.de>, Aurelien Jarno <aurelien@aurel32.net>,
+ qemu-ppc@nongnu.org
+Date: Sat, 20 Apr 2013 20:56:14 +0200
+Message-id: 1366484182-29187-3-git-send-email-aurelien@aurel32.net
+Subject: [PATCH 02/10] disas: Disassemble all ppc insns for the guest
+
+Reviewed-by: Richard Henderson <rth@twiddle.net>
+Signed-off-by: Aurelien Jarno <aurelien@aurel32.net>
+---
+ disas.c |    1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/disas.c b/disas.c
+index 67103e0..e51127e 100644
+--- a/disas.c
++++ b/disas.c
+@@ -227,6 +227,7 @@ void target_disas(FILE *out, CPUArchState *env, target_ulong code,
+         s.info.mach = bfd_mach_ppc;
+ #endif
+     }
++    s.info.disassembler_options = (char *)"any";
+     print_insn = print_insn_ppc;
+ #elif defined(TARGET_M68K)
+     print_insn = print_insn_m68k;
+-- 
+1.7.10.4
+
+

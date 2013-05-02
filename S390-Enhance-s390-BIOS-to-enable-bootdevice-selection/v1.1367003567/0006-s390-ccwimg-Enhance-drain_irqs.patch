@@ -1,0 +1,48 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Dominik Dingel <dingel@linux.vnet.ibm.com>
+To: qemu-devel@nongnu.org
+Cc: Christian Borntraeger <borntraeger@de.ibm.com>,
+ Alexander Graf <agraf@suse.de>, Cornelia Huck <cornelia.huck@de.ibm.com>
+Date: Fri, 26 Apr 2013 14:12:53 +0200
+Message-id: 1366978377-16823-7-git-send-email-dingel@linux.vnet.ibm.com
+Subject: [PATCH 06/10] s390-ccw.img: Enhance drain_irqs().
+
+From: Cornelia Huck <cornelia.huck@de.ibm.com>
+
+- Use tpi + tsch to get interrupts.
+- Return an error if the irb indicates problems.
+
+Signed-off-by: Cornelia Huck <cornelia.huck@de.ibm.com>
+
+diff --git a/pc-bios/s390-ccw/virtio.c b/pc-bios/s390-ccw/virtio.c
+index 1968fc6..1bd17d4 100644
+--- a/pc-bios/s390-ccw/virtio.c
++++ b/pc-bios/s390-ccw/virtio.c
+@@ -38,12 +38,21 @@ static void virtio_notify(struct subchannel_id schid)
+  *             Virtio functions                *
+  ***********************************************/
+ 
+-static void drain_irqs(struct subchannel_id schid)
++static int drain_irqs(struct subchannel_id schid)
+ {
+     struct irb irb = {};
++    int r = 0;
++
+     while (1) {
++        /* FIXME: make use of TPI, for that enable subchannel and isc */
+         if (tsch(schid, &irb)) {
+-            return;
++            /* Might want to differentiate error codes later on. */
++            if (irb.scsw.cstat) {
++                r = -EIO;
++            } else if (irb.scsw.dstat != 0xc) {
++                r = -EIO;
++            }
++            return r;
+         }
+     }
+ }
+-- 
+1.7.9.5
+
+

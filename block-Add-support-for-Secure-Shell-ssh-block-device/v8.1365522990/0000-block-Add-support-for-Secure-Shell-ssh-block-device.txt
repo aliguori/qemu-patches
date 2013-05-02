@@ -1,0 +1,27 @@
+From patches Mon Sep 17 00:00:00 2001
+From: "Richard W.M. Jones" <rjones@redhat.com>
+To: qemu-devel@nongnu.org, "Richard W.M. Jones" <rjones@redhat.com>
+Cc: qemu-devel@nongnu.org
+Date: Tue,  9 Apr 2013 10:56:30 +0100
+Message-id: 1365501393-5010-1-git-send-email-rjones@redhat.com
+Subject: [PATCH 0/3] block: Add support for Secure Shell (ssh) block device.
+
+Changes since v7:
+
+- fsync (ie. bdrv_co_flush_to_disk) is now supported, *if* you have
+the following patches to libssh2 and OpenSSH:
+
+https://bugzilla.mindrot.org/show_bug.cgi?id=1798
+(OpenSSH: accepted, but not upstream)
+
+http://www.libssh2.org/mail/libssh2-devel-archive-2013-04/0006.shtml
+(libssh2: posted)
+
+I tested 3 combinations (without libssh2 patch; with libssh2 patch and
+without OpenSSH support; with libssh2 patch and with OpenSSH support),
+and all work.
+
+Rich.
+
+
+

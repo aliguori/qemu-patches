@@ -1,0 +1,70 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Stefan Hajnoczi <stefanha@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>
+Date: Mon, 15 Apr 2013 10:22:33 +0200
+Message-id: 1366014164-17557-1-git-send-email-stefanha@redhat.com
+Subject: [PATCH 00/11] Block patches
+
+The following changes since commit e2ec3f976803b360c70d9ae2ba13852fa5d11665:
+
+  qjson: to_json() case QTYPE_QSTRING is buggy, rewrite (2013-04-13 19:40:25 +0000)
+
+are available in the git repository at:
+
+  git://github.com/stefanha/qemu.git block
+
+for you to fetch changes up to dc7588c1eb3008bda53dde1d6b890cd299758155:
+
+  rbd: add an asynchronous flush (2013-04-15 10:18:05 +0200)
+
+----------------------------------------------------------------
+Josh Durgin (1):
+      rbd: add an asynchronous flush
+
+Kevin Wolf (5):
+      block: Introduce bdrv_writev_vmstate
+      savevm: Implement block_writev_buffer()
+      block: Introduce bdrv_pwritev() for qcow2_save_vmstate
+      qemu-iotests: A few more bdrv_pread/pwrite tests
+      qemu-iotests: Add test for -drive options
+
+Richard W.M. Jones (3):
+      block: Add support for Secure Shell (ssh) block device.
+      block: ssh: Use libssh2_sftp_fsync (if supported by libssh2) to flush to disk.
+      iotests: Add 'check -ssh' option to test Secure Shell block device.
+
+Stefan Hajnoczi (2):
+      qemu-iotests: filter QEMU_PROG in 051.out
+      ide: refuse WIN_READ_NATIVE_MAX on empty device
+
+ block.c                          |  105 +++-
+ block/Makefile.objs              |    1 +
+ block/qcow2.c                    |    6 +-
+ block/rbd.c                      |   37 +-
+ block/sheepdog.c                 |   13 +-
+ block/ssh.c                      | 1063 ++++++++++++++++++++++++++++++++++++++
+ configure                        |   73 +++
+ hw/ide/core.c                    |    4 +
+ include/block/block.h            |    3 +
+ include/block/block_int.h        |    4 +-
+ include/migration/qemu-file.h    |    2 +-
+ qemu-doc.texi                    |   54 ++
+ qemu-options.hx                  |   12 +
+ savevm.c                         |   25 +-
+ tests/qemu-iotests/002           |   13 +
+ tests/qemu-iotests/002.out       |   26 +
+ tests/qemu-iotests/051           |  148 ++++++
+ tests/qemu-iotests/051.out       |  162 ++++++
+ tests/qemu-iotests/common        |    5 +
+ tests/qemu-iotests/common.filter |    6 +
+ tests/qemu-iotests/common.rc     |    3 +
+ tests/qemu-iotests/group         |    1 +
+ 22 files changed, 1722 insertions(+), 44 deletions(-)
+ create mode 100644 block/ssh.c
+ create mode 100755 tests/qemu-iotests/051
+ create mode 100644 tests/qemu-iotests/051.out
+
+-- 
+1.8.1.4
+

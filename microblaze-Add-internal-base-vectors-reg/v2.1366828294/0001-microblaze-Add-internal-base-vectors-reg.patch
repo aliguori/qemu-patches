@@ -1,0 +1,120 @@
+From patches Mon Sep 17 00:00:00 2001
+From: edgar.iglesias@gmail.com
+To: edgar.iglesias@gmail.com, qemu-devel@nongnu.org,
+ Andreas =?iso-8859-1?Q?F=E4rber?= <afaerber@suse.de>
+Cc: Igor Mammedov <imammedo@redhat.com>, peter.crosthwaite@xilinx.com,
+ afaerber@suse.de, Eduardo Habkost <ehabkost@redhat.com>, qemu-devel@nongnu.org
+Date: Wed, 24 Apr 2013 13:31:34 +0200
+Message-id: 1366803094-11619-1-git-send-email-edgar.iglesias@gmail.com
+Subject: [PATCH 1/1] microblaze: Add internal base vectors reg
+
+From: "Edgar E. Iglesias" <edgar.iglesias@gmail.com>
+
+Configurable at CPU synthesis/instantiation.
+
+Signed-off-by: Edgar E. Iglesias <edgar.iglesias@gmail.com>
+Reviewed-by: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+---
+
+Peter Crosthwaite commented off-list that it would be a good idea
+to make this a device property. I agree but am a bit unsure of
+how it should look. Any comments on this attempt?
+
+v2:
+Make base_vectors a CPU/device property.
+
+
+ target-microblaze/cpu-qom.h |    1 +
+ target-microblaze/cpu.c     |    8 ++++++++
+ target-microblaze/helper.c  |    8 ++++----
+ 3 files changed, 13 insertions(+), 4 deletions(-)
+
+diff --git a/target-microblaze/cpu-qom.h b/target-microblaze/cpu-qom.h
+index aa51cf6..ce92a4e 100644
+--- a/target-microblaze/cpu-qom.h
++++ b/target-microblaze/cpu-qom.h
+@@ -56,6 +56,7 @@ typedef struct MicroBlazeCPUClass {
+ typedef struct MicroBlazeCPU {
+     /*< private >*/
+     CPUState parent_obj;
++    uint32_t base_vectors;
+     /*< public >*/
+ 
+     CPUMBState env;
+diff --git a/target-microblaze/cpu.c b/target-microblaze/cpu.c
+index 0f4293d..404f82c 100644
+--- a/target-microblaze/cpu.c
++++ b/target-microblaze/cpu.c
+@@ -22,6 +22,7 @@
+ 
+ #include "cpu.h"
+ #include "qemu-common.h"
++#include "hw/qdev-properties.h"
+ #include "migration/vmstate.h"
+ 
+ 
+@@ -119,6 +120,11 @@ static const VMStateDescription vmstate_mb_cpu = {
+     .unmigratable = 1,
+ };
+ 
++static Property mb_properties[] = {
++    DEFINE_PROP_UINT32("xlnx.base-vectors", MicroBlazeCPU, base_vectors, 0),
++    DEFINE_PROP_END_OF_LIST(),
++};
++
+ static void mb_cpu_class_init(ObjectClass *oc, void *data)
+ {
+     DeviceClass *dc = DEVICE_CLASS(oc);
+@@ -133,6 +139,8 @@ static void mb_cpu_class_init(ObjectClass *oc, void *data)
+ 
+     cc->do_interrupt = mb_cpu_do_interrupt;
+     dc->vmsd = &vmstate_mb_cpu;
++
++    dc->props = mb_properties;
+ }
+ 
+ static const TypeInfo mb_cpu_type_info = {
+diff --git a/target-microblaze/helper.c b/target-microblaze/helper.c
+index a0416d0..0dd669d 100644
+--- a/target-microblaze/helper.c
++++ b/target-microblaze/helper.c
+@@ -152,7 +152,7 @@ void mb_cpu_do_interrupt(CPUState *cs)
+                           env->sregs[SR_ESR], env->iflags);
+             log_cpu_state_mask(CPU_LOG_INT, env, 0);
+             env->iflags &= ~(IMM_FLAG | D_FLAG);
+-            env->sregs[SR_PC] = 0x20;
++            env->sregs[SR_PC] = cpu->base_vectors + 0x20;
+             break;
+ 
+         case EXCP_MMU:
+@@ -192,7 +192,7 @@ void mb_cpu_do_interrupt(CPUState *cs)
+                           env->sregs[SR_PC], env->sregs[SR_EAR], env->iflags);
+             log_cpu_state_mask(CPU_LOG_INT, env, 0);
+             env->iflags &= ~(IMM_FLAG | D_FLAG);
+-            env->sregs[SR_PC] = 0x20;
++            env->sregs[SR_PC] = cpu->base_vectors + 0x20;
+             break;
+ 
+         case EXCP_IRQ:
+@@ -233,7 +233,7 @@ void mb_cpu_do_interrupt(CPUState *cs)
+             env->sregs[SR_MSR] |= t;
+ 
+             env->regs[14] = env->sregs[SR_PC];
+-            env->sregs[SR_PC] = 0x10;
++            env->sregs[SR_PC] = cpu->base_vectors + 0x10;
+             //log_cpu_state_mask(CPU_LOG_INT, env, 0);
+             break;
+ 
+@@ -252,7 +252,7 @@ void mb_cpu_do_interrupt(CPUState *cs)
+             if (env->exception_index == EXCP_HW_BREAK) {
+                 env->regs[16] = env->sregs[SR_PC];
+                 env->sregs[SR_MSR] |= MSR_BIP;
+-                env->sregs[SR_PC] = 0x18;
++                env->sregs[SR_PC] = cpu->base_vectors + 0x18;
+             } else
+                 env->sregs[SR_PC] = env->btarget;
+             break;
+-- 
+1.7.10.4
+
+

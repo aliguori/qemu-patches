@@ -1,0 +1,84 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Liu Ping Fan <qemulist@gmail.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <anthony@codemonkey.ws>,
+ Paolo Bonzini <pbonzini@redhat.com>, Jan Kiszka <jan.kiszka@siemens.com>,
+ Stefan Hajnoczi <stefanha@redhat.com>, mdroth <mdroth@linux.vnet.ibm.com>
+Date: Wed, 17 Apr 2013 16:39:09 +0800
+Message-id: 1366187964-14265-1-git-send-email-qemulist@gmail.com
+Subject: [PATCH 00/15] port network layer onto glib
+
+From: Liu Ping Fan <pingfank@linux.vnet.ibm.com>
+
+summary:
+  patch1: GSource event abstraction
+  patch2~7: port network backend to glib
+  patch8~11: make network core re-entrant
+  patch12~15:  port the slirp backend onto glib
+
+For the patch --slirp: make slirp event dispatch based on slirp instance, not global
+The slirp_pollfds_fill/poll logic are untouch, but owning the format issue, it change much.
+Will fix in next verion.
+
+
+v3->v4:
+  1.separate GSource event to dedicated file
+  2.integrated with net core re-entrant
+  3.make slirp/  re-entrant
+
+v2->v3:
+  1.drop hub and the frontend(virtio net)
+  2.split the patch for NetClientSource
+
+v1->v2:
+  1.NetClientState can associate with up to 2 GSource, for virtio net, one for tx, one for rx,
+    so vq can run on different threads.
+  2.make network front-end onto glib, currently virtio net dataplane
+
+
+
+Liu Ping Fan (15):
+  util: introduce gsource event abstration
+  net: introduce bind_ctx to NetClientInfo
+  net: port tap onto GSource
+  net: resolve race of tap backend and its peer
+  net: port vde onto GSource
+  net: port socket to GSource
+  net: port tap-win32 onto GSource
+  net: hub use lock to protect ports list
+  net: introduce lock to protect NetQueue
+  net: introduce lock to protect NetClientState's peer's access
+  net: make netclient re-entrant with refcnt
+  slirp: make timeout local
+  slirp: make slirp event dispatch based on slirp instance, not global
+  slirp: handle race condition
+  slirp: use lock to protect the slirp_instances
+
+ hw/qdev-properties-system.c |   14 +
+ include/net/net.h           |   12 +
+ include/qemu/module.h       |    2 +
+ main-loop.c                 |    4 -
+ net/hub.c                   |   28 ++-
+ net/net.c                   |  123 ++++++++-
+ net/queue.c                 |   15 +-
+ net/slirp.c                 |   47 ++++-
+ net/socket.c                |  158 +++++++++---
+ net/tap-win32.c             |   28 ++-
+ net/tap.c                   |   67 ++++-
+ net/vde.c                   |   28 ++-
+ slirp/libslirp.h            |    7 +-
+ slirp/slirp.c               |  625 +++++++++++++++++++++----------------------
+ slirp/slirp.h               |    6 +
+ slirp/socket.c              |    2 +
+ slirp/socket.h              |    1 +
+ stubs/slirp.c               |    8 -
+ util/Makefile.objs          |    1 +
+ util/event_gsource.c        |  169 ++++++++++++
+ util/event_gsource.h        |   54 ++++
+ 21 files changed, 1003 insertions(+), 396 deletions(-)
+ create mode 100644 util/event_gsource.c
+ create mode 100644 util/event_gsource.h
+
+-- 
+1.7.4.4
+

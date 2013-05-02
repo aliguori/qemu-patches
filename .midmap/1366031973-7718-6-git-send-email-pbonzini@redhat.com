@@ -1,0 +1,1 @@
+../directory-reorganization-fixes-and-final-part/v1.1366057161/0005-acpi-move-declarations-from-pch-to-acpih.patch

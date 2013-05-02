@@ -1,0 +1,45 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+To: edgar.iglesias@gmail.com, qemu-devel@nongnu.org
+Cc: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+Date: Wed,  3 Apr 2013 15:17:13 +1000
+Message-id: ab6ad87bd3a4153cebea5d35f3d3e4886866abe9.1364965814.git.peter.crosthwaite@xilinx.com
+Subject: [PATCH 13/16] xilinx_axidma: Fix rx/tx halted bit.
+
+If there is no DMA buffer descriptor, the DMA halts, not idles.
+
+Signed-off-by: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+Acked-by: Edgar E. Iglesias <edgar.iglesias@xilinx.com>
+---
+changed from v3:
+Fixed for TX path as well as RX
+
+ hw/xilinx_axidma.c |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/hw/xilinx_axidma.c b/hw/xilinx_axidma.c
+index 02700ea..2bbfea1 100644
+--- a/hw/xilinx_axidma.c
++++ b/hw/xilinx_axidma.c
+@@ -276,7 +276,7 @@ static void stream_process_mem2s(struct Stream *s,
+         stream_desc_load(s, s->regs[R_CURDESC]);
+ 
+         if (s->desc.status & SDESC_STATUS_COMPLETE) {
+-            s->regs[R_DMASR] |= DMASR_IDLE;
++            s->regs[R_DMASR] |= DMASR_HALTED;
+             break;
+         }
+ 
+@@ -331,7 +331,7 @@ static void stream_process_s2mem(struct Stream *s,
+         stream_desc_load(s, s->regs[R_CURDESC]);
+ 
+         if (s->desc.status & SDESC_STATUS_COMPLETE) {
+-            s->regs[R_DMASR] |= DMASR_IDLE;
++            s->regs[R_DMASR] |= DMASR_HALTED;
+             break;
+         }
+ 
+-- 
+1.7.0.4
+
+

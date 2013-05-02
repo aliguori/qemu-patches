@@ -1,0 +1,137 @@
+From patches Mon Sep 17 00:00:00 2001
+From: peter.crosthwaite@xilinx.com
+To: Blue Swirl <blauwirbel@gmail.com>, Paolo Bonzini <pbonzini@redhat.com>,
+ qemu-devel@nongnu.org, Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+Cc: Blue Swirl <blauwirbel@gmail.com>, peter.maydell@linaro.org,
+ qemu-devel <qemu-devel@nongnu.org>,
+ Peter Crosthwaite <peter.crosthwaite@xilinx.com>,
+ "Edgar E. Iglesias" <edgar.iglesias@gmail.com>, edgar.iglesias@gmail.com,
+ Peter Maydell <peter.maydell@linaro.org>
+Date: Thu, 18 Apr 2013 14:47:31 +1000
+Message-id: d990882bb4317e4d8d784e6e296d45d3b27ee236.1366260005.git.peter.crosthwaite@xilinx.com
+Subject: [PATCH 3/3] configure/Make: Build libfdt from submodule DTC
+
+From: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+
+Configure to use the DTC submodule to build libfdt when no system libfdt
+is found. Prompt to install the DTC submodule if --enable-fdt is set but
+no DTC can be found.
+
+DTC has no out-of-tree build capability, so the configure will symlink
+the Makefile and scripts directory in the out of tree build directory
+and pass in all the needed DTC arguments to make out of tree build happen.
+Ideally we fix the DTC make to support out of tree, but did it this way to
+avoid commits to DTC.
+
+Signed-off-by: David Holsgrove <david.holsgrove@xilinx.com>
+Signed-off-by: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+Reviewed-by: Peter Maydell <peter.maydell@linaro.org>
+---
+changed from v4:
+Use error_exit fn (PMM review)
+changed from v3:
+Rebased against recent devls.
+Fixed some cosmetics.
+changed from v2:
+Fixed quoting of Make arguments (PMM review)
+Fixed comment styling and typos (PMM review)
+
+ Makefile  |   10 ++++++++++
+ configure |   31 ++++++++++++++++++++++++++-----
+ 2 files changed, 36 insertions(+), 5 deletions(-)
+
+diff --git a/Makefile b/Makefile
+index 67f19f2..88375dc 100644
+--- a/Makefile
++++ b/Makefile
+@@ -145,6 +145,15 @@ pixman/Makefile: $(SRC_PATH)/pixman/configure
+ $(SRC_PATH)/pixman/configure:
+ 	(cd $(SRC_PATH)/pixman; autoreconf -v --install)
+ 
++DTC_MAKE_ARGS=-I$(SRC_PATH)/dtc VPATH=$(SRC_PATH)/dtc -C dtc V="$(V)" LIBFDT_srcdir=$(SRC_PATH)/dtc/libfdt
++DTC_CFLAGS=$(CFLAGS) $(extra_cflags) -I$(BUILD_DIR)/dtc -I$(SRC_PATH)/dtc -I$(SRC_PATH)/dtc/libfdt
++
++subdir-dtc:dtc/libfdt dtc/tests
++	$(call quiet-command,$(MAKE) $(DTC_MAKE_ARGS) CPPFLAGS="$(DTC_CFLAGS)" LDFLAGS="$(LDFLAGS)" ARFLAGS="$(ARFLAGS)" CC="$(CC)" AR="$(AR)" LD="$(LD)" $(SUBDIR_MAKEFLAGS) libfdt,)
++
++dtc/%:
++	mkdir -p $@
++
+ $(SUBDIR_RULES): libqemuutil.a libqemustub.a $(common-obj-y)
+ 
+ ROMSUBDIR_RULES=$(patsubst %,romsubdir-%, $(ROMS))
+@@ -262,6 +271,7 @@ distclean: clean
+ 	rm -rf $$d || exit 1 ; \
+         done
+ 	if test -f pixman/config.log; then make -C pixman distclean; fi
++	if test -f dtc/version_gen.h; then make $(DTC_MAKE_ARGS) clean; fi
+ 
+ KEYMAPS=da     en-gb  et  fr     fr-ch  is  lt  modifiers  no  pt-br  sv \
+ ar      de     en-us  fi  fr-be  hr     it  lv  nl         pl  ru     th \
+diff --git a/configure b/configure
+index d5f1516..7546799 100755
+--- a/configure
++++ b/configure
+@@ -2496,17 +2496,34 @@ if test "$fdt" != "no" ; then
+ int main(void) { return 0; }
+ EOF
+   if compile_prog "" "$fdt_libs" ; then
++    # system DTC is good - use it
+     fdt=yes
+-    libs_softmmu="$libs_softmmu $fdt_libs"
+-  else
+-    if test "$fdt" = "yes" ; then
+-      feature_not_found "fdt"
++  elif test -d ${source_path}/dtc/libfdt ; then
++    # have submodule DTC - use it
++    fdt=yes
++    dtc_internal="yes"
++    mkdir -p dtc
++    if [ "$source_path" != `pwd` ] ; then
++       symlink "$source_path/dtc/Makefile" "dtc/Makefile"
++       symlink "$source_path/dtc/scripts" "dtc/scripts"
+     fi
++    fdt_cflags="-I\$(SRC_PATH)/dtc/libfdt"
++    fdt_libs="-L\$(BUILD_DIR)/dtc/libfdt $fdt_libs"
++  elif test "$fdt" = "yes" ; then
++    # have neither and want - prompt for system/submodule install
++    error_exit "ERROR: DTC not present. Your options:" \
++        "  (1) Preferred: Install the DTC devel package" \
++        "  (2) Fetch the DTC submodule, using:" \
++        "      git submodule update --init dtc"
++  else
++    # don't have and don't want
+     fdt_libs=
+     fdt=no
+   fi
+ fi
+ 
++libs_softmmu="$libs_softmmu $fdt_libs"
++
+ ##########################################
+ # GLX probe, used by milkymist-tmu2
+ if test "$glx" != "no" ; then
+@@ -3452,7 +3469,7 @@ if test "$cpu" = "ppc64" -a "$targetos" != "Darwin" ; then
+ fi
+ 
+ # add pixman flags after all config tests are done
+-QEMU_CFLAGS="$QEMU_CFLAGS $pixman_cflags"
++QEMU_CFLAGS="$QEMU_CFLAGS $pixman_cflags $fdt_cflags"
+ libs_softmmu="$libs_softmmu $pixman_libs"
+ 
+ echo "Install prefix    $prefix"
+@@ -4515,6 +4532,10 @@ if [ "$pixman" = "internal" ]; then
+   echo "config-host.h: subdir-pixman" >> $config_host_mak
+ fi
+ 
++if [ "$dtc_internal" = "yes" ]; then
++  echo "config-host.h: subdir-dtc" >> $config_host_mak
++fi
++
+ # build tree in object directory in case the source is not in the current directory
+ DIRS="tests tests/tcg tests/tcg/cris tests/tcg/lm32 tests/libqos"
+ DIRS="$DIRS pc-bios/optionrom pc-bios/spapr-rtas"
+-- 
+1.7.0.4
+
+

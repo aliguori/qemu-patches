@@ -1,0 +1,40 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+To: peter.maydell@linaro.org, qemu-devel@nongnu.org,
+ Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+Cc: qemu-devel@nongnu.org, Wendy Liang <jliang@xilinx.com>,
+ Jason Wu <huanyu@xilinx.com>, Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+Date: Wed,  3 Apr 2013 14:52:21 +1000
+Message-id: 494c1e005e225c915d295ddfd75d992ad2dabc3c.1364964526.git.peter.crosthwaite@xilinx.com
+Subject: [PATCH 1/1] cadence_uart: Flush queued characters on reset
+
+Reset can be used to empty the rx-fifo. As the fifo full condition is
+used to return false from can_receive, queued rx data should be flushed
+on reset accordingly.
+
+Cc: Wendy Liang <jliang@xilinx.com>
+Cc: Jason Wu <huanyu@xilinx.com>
+
+Signed-off-by: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+Reported-by: Jason Wu <huanyu@xilinx.com>
+---
+
+ hw/cadence_uart.c |    1 +
+ 1 files changed, 1 insertions(+), 0 deletions(-)
+
+diff --git a/hw/cadence_uart.c b/hw/cadence_uart.c
+index 5426f10..421ec99 100644
+--- a/hw/cadence_uart.c
++++ b/hw/cadence_uart.c
+@@ -157,6 +157,7 @@ static void uart_rx_reset(UartState *s)
+ {
+     s->rx_wpos = 0;
+     s->rx_count = 0;
++    qemu_chr_accept_input(s->chr);
+ 
+     s->r[R_SR] |= UART_SR_INTR_REMPTY;
+     s->r[R_SR] &= ~UART_SR_INTR_RFUL;
+-- 
+1.7.0.4
+
+

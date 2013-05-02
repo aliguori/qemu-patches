@@ -1,0 +1,1 @@
+../blockdev-Replace-undefined-error-in-qmp_block_resize/v1.1367526775/0001-blockdev-Replace-undefined-error-in-qmp_block_resize.patch

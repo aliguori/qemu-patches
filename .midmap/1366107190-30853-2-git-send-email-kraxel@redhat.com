@@ -1,0 +1,1 @@
+../usb-patch-queue/v1.1366132383/0001-usb-serial-Remove-double-call-to-qemu_chr_add_handlers-NULL-.patch

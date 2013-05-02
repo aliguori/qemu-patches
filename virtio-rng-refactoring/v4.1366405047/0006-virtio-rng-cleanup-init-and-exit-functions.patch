@@ -1,0 +1,168 @@
+From patches Mon Sep 17 00:00:00 2001
+From: fred.konrad@greensocs.com
+To: Anthony Liguori <aliguori@us.ibm.com>, qemu-devel@nongnu.org
+Cc: cornelia.huck@de.ibm.com, peter.maydell@linaro.org,
+ mark.burton@greensocs.com, fred.konrad@greensocs.com
+Date: Fri, 19 Apr 2013 15:57:33 +0200
+Message-id: 1366379855-28649-7-git-send-email-fred.konrad@greensocs.com
+Subject: [PATCH 6/8] virtio-rng: cleanup: init and exit functions.
+
+From: KONRAD Frederic <fred.konrad@greensocs.com>
+
+This remove old init and exit function as they are no longer needed.
+
+Signed-off-by: KONRAD Frederic <fred.konrad@greensocs.com>
+---
+ hw/virtio/virtio-rng.c     | 87 +++++++++++-----------------------------------
+ include/hw/virtio/virtio.h |  2 --
+ 2 files changed, 21 insertions(+), 68 deletions(-)
+
+diff --git a/hw/virtio/virtio-rng.c b/hw/virtio/virtio-rng.c
+index b70975b..805dd18 100644
+--- a/hw/virtio/virtio-rng.c
++++ b/hw/virtio/virtio-rng.c
+@@ -130,47 +130,45 @@ static void check_rate_limit(void *opaque)
+                    qemu_get_clock_ms(vm_clock) + s->conf.period_ms);
+ }
+ 
+-static VirtIODevice *virtio_rng_common_init(DeviceState *dev,
+-                                            VirtIORNGConf *conf,
+-                                            VirtIORNG **pvrng)
++static int virtio_rng_device_init(VirtIODevice *vdev)
+ {
+-    VirtIORNG *vrng = *pvrng;
+-    VirtIODevice *vdev;
++    DeviceState *qdev = DEVICE(vdev);
++    VirtIORNG *vrng = VIRTIO_RNG(vdev);
+     Error *local_err = NULL;
+ 
+-    /*
+-     * We have two cases here: the old virtio-rng-x device, and the
+-     * refactored virtio-rng.
+-     * This will disappear later in the serie.
+-     */
+-    if (vrng == NULL) {
+-        vdev = virtio_common_init("virtio-rng", VIRTIO_ID_RNG, 0,
+-                                  sizeof(VirtIORNG));
+-        vrng = DO_UPCAST(VirtIORNG, vdev, vdev);
+-    } else {
+-        vdev = VIRTIO_DEVICE(vrng);
+-        virtio_init(vdev, "virtio-rng", VIRTIO_ID_RNG, 0);
++    if (vrng->conf.rng == NULL) {
++        vrng->conf.default_backend = RNG_RANDOM(object_new(TYPE_RNG_RANDOM));
++
++        object_property_add_child(OBJECT(qdev),
++                                  "default-backend",
++                                  OBJECT(vrng->conf.default_backend),
++                                  NULL);
++
++        object_property_set_link(OBJECT(qdev),
++                                 OBJECT(vrng->conf.default_backend),
++                                 "rng", NULL);
+     }
+ 
+-    vrng->rng = conf->rng;
++    virtio_init(vdev, "virtio-rng", VIRTIO_ID_RNG, 0);
++
++    vrng->rng = vrng->conf.rng;
+     if (vrng->rng == NULL) {
+         qerror_report(QERR_INVALID_PARAMETER_VALUE, "rng", "a valid object");
+-        return NULL;
++        return -1;
+     }
+ 
+     rng_backend_open(vrng->rng, &local_err);
+     if (local_err) {
+         qerror_report_err(local_err);
+         error_free(local_err);
+-        return NULL;
++        return -1;
+     }
+ 
+     vrng->vq = virtio_add_queue(vdev, 8, handle_input);
+ 
+     vrng->vdev.get_features = get_features;
+ 
+-    vrng->qdev = dev;
+-    memcpy(&(vrng->conf), conf, sizeof(struct VirtIORNGConf));
++    vrng->qdev = qdev;
+ 
+     assert(vrng->conf.max_bytes <= INT64_MAX);
+     vrng->quota_remaining = vrng->conf.max_bytes;
+@@ -181,52 +179,9 @@ static VirtIODevice *virtio_rng_common_init(DeviceState *dev,
+     qemu_mod_timer(vrng->rate_limit_timer,
+                    qemu_get_clock_ms(vm_clock) + vrng->conf.period_ms);
+ 
+-    register_savevm(dev, "virtio-rng", -1, 1, virtio_rng_save,
++    register_savevm(qdev, "virtio-rng", -1, 1, virtio_rng_save,
+                     virtio_rng_load, vrng);
+ 
+-    return vdev;
+-}
+-
+-/*
+- * This two functions will be removed later in the serie.
+- */
+-VirtIODevice *virtio_rng_init(DeviceState *dev, VirtIORNGConf *conf)
+-{
+-    VirtIORNG *vdev = NULL;
+-    return virtio_rng_common_init(dev, conf, &vdev);
+-}
+-
+-void virtio_rng_exit(VirtIODevice *vdev)
+-{
+-    VirtIORNG *vrng = DO_UPCAST(VirtIORNG, vdev, vdev);
+-
+-    qemu_del_timer(vrng->rate_limit_timer);
+-    qemu_free_timer(vrng->rate_limit_timer);
+-    unregister_savevm(vrng->qdev, "virtio-rng", vrng);
+-    virtio_cleanup(vdev);
+-}
+-
+-static int virtio_rng_device_init(VirtIODevice *vdev)
+-{
+-    DeviceState *qdev = DEVICE(vdev);
+-    VirtIORNG *vrng = VIRTIO_RNG(vdev);
+-
+-    if (vrng->conf.rng == NULL) {
+-        vrng->conf.default_backend = RNG_RANDOM(object_new(TYPE_RNG_RANDOM));
+-
+-        object_property_add_child(OBJECT(qdev),
+-                                  "default-backend",
+-                                  OBJECT(vrng->conf.default_backend),
+-                                  NULL);
+-
+-        object_property_set_link(OBJECT(qdev),
+-                                 OBJECT(vrng->conf.default_backend),
+-                                 "rng", NULL);
+-    }
+-
+-    if (virtio_rng_common_init(qdev, &(vrng->conf), &vrng) == NULL) {
+-        return -1;
+-    }
+     return 0;
+ }
+ 
+diff --git a/include/hw/virtio/virtio.h b/include/hw/virtio/virtio.h
+index b21e5c2..c94ee34 100644
+--- a/include/hw/virtio/virtio.h
++++ b/include/hw/virtio/virtio.h
+@@ -262,7 +262,6 @@ VirtIODevice *virtio_balloon_init(DeviceState *dev);
+ typedef struct VirtIOSCSIConf VirtIOSCSIConf;
+ VirtIODevice *virtio_scsi_init(DeviceState *dev, VirtIOSCSIConf *conf);
+ typedef struct VirtIORNGConf VirtIORNGConf;
+-VirtIODevice *virtio_rng_init(DeviceState *dev, VirtIORNGConf *conf);
+ #ifdef CONFIG_VIRTFS
+ VirtIODevice *virtio_9p_init(DeviceState *dev, V9fsConf *conf);
+ #endif
+@@ -272,7 +271,6 @@ void virtio_net_exit(VirtIODevice *vdev);
+ void virtio_serial_exit(VirtIODevice *vdev);
+ void virtio_balloon_exit(VirtIODevice *vdev);
+ void virtio_scsi_exit(VirtIODevice *vdev);
+-void virtio_rng_exit(VirtIODevice *vdev);
+ 
+ #define DEFINE_VIRTIO_COMMON_FEATURES(_state, _field) \
+ 	DEFINE_PROP_BIT("indirect_desc", _state, _field, \
+-- 
+1.7.11.7
+

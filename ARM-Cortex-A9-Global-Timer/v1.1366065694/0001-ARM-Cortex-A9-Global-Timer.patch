@@ -1,0 +1,675 @@
+From patches Mon Sep 17 00:00:00 2001
+From: =?utf-8?q?Fran=C3=A7ois_Legal_=3Cfrancois=2Elegal=40thom=2Efr=2Eeu=2E?=
+ =?utf-8?q?org=3E?=
+To: =?ISO-8859-1?Q?Fran=E7ois_Legal?= <francois.legal@thom.fr.eu.org>,
+ =?UTF-8?Q?Fran=C3=A7ois_Legal?= <devel@thom.fr.eu.org>,
+ =?UTF-8?Q?Fran=C3=A7ois_Legal?= <francois.legal@thom.fr.eu.org>,
+ qemu-devel@nongnu.org
+Cc: qemu-devel@nongnu.org, Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+Date: Mon, 15 Apr 2013 17:41:34 +0200
+Message-id: 3e0e268a897603d5ae067f6e01fad68e@thom.fr.eu.org
+Subject: [PATCH 1/1] ARM Cortex A9 Global Timer
+
+ 
+
+Hello, 
+
+I made up this patch to implement the Cortex A9 global timer in
+Qemu. 
+
+My patch is based on the Qemu branch maintained by Xilinx for the Zynq.
+
+
+diff -urN qemu-master/hw/cpu/a9mpcore.c qemu-master.new/hw/cpu/a9mpcore.c
+---
+qemu-master/hw/cpu/a9mpcore.c 2013-04-08 20:12:33.000000000 +0200
++++
+qemu-master.new/hw/cpu/a9mpcore.c 2013-04-15 12:54:06.000000000 +0200
+@@ -15,6
++15,7 @@
+ uint32_t num_cpu;
+ MemoryRegion container;
+ DeviceState *mptimer;
++
+DeviceState *mpgtimer;
+ DeviceState *wdt;
+ DeviceState *gic;
+ DeviceState
+*scu;
+@@ -31,6 +32,7 @@
+ {
+ A9MPPrivState *s = FROM_SYSBUS(A9MPPrivState, dev);
+
+SysBusDevice *timerbusdev, *wdtbusdev, *gicbusdev, *scubusdev;
++ SysBusDevice
+*gtimerbusdev;
+ int i;
+
+ s->gic = qdev_create(NULL, "arm_gic");
+@@ -50,6 +52,11
+@@
+ qdev_init_nofail(s->scu);
+ scubusdev = SYS_BUS_DEVICE(s->scu);
+
++
+s->mpgtimer = qdev_create(NULL, "arm_mp_globaltimer");
++
+qdev_prop_set_uint32(s->mpgtimer, "num-cpu", s->num_cpu);
++
+qdev_init_nofail(s->mpgtimer);
++ gtimerbusdev = SYS_BUS_DEVICE(s->mpgtimer);
++
+
+s->mptimer = qdev_create(NULL, "arm_mptimer");
+ qdev_prop_set_uint32(s->mptimer,
+"num-cpu", s->num_cpu);
+ qdev_init_nofail(s->mptimer);
+@@ -68,8 +75,6 @@
+ *
+0x0600-0x06ff -- private timers and watchdogs
+ * 0x0700-0x0fff -- nothing
+ *
+0x1000-0x1fff -- GIC Distributor
+- *
+- * We should implement the global timer
+but don't currently do so.
+ */
+ memory_region_init(&s->container,
+"a9mp-priv-container", 0x2000);
+ memory_region_add_subregion(&s->container,
+0,
+@@ -80,6 +85,8 @@
+ /* Note that the A9 exposes only the "timer/watchdog for
+this core"
+ * memory region, not the "timer/watchdog for core X" ones 11MPcore
+has.
+ */
++ memory_region_add_subregion(&s->container, 0x200,
++
+sysbus_mmio_get_region(gtimerbusdev, 0));
+
+memory_region_add_subregion(&s->container, 0x600,
+
+sysbus_mmio_get_region(timerbusdev, 0));
+
+memory_region_add_subregion(&s->container, 0x620,
+@@ -90,10 +97,13 @@
+
+sysbus_init_mmio(dev, &s->container);
+
+ /* Wire up the interrupt from each
+watchdog and timer.
+- * For each core the timer is PPI 29 and the watchdog PPI
+30.
++ * For each core the global timer is PPI 27, the private
++ * timer is PPI
+29 and the watchdog PPI 30.
+ */
+ for (i = 0; i < s->num_cpu; i++) {
+ int ppibase
+= (s->num_irq - 32) + i * 32;
++ sysbus_connect_irq(gtimerbusdev, i,
++
+qdev_get_gpio_in(s->gic, ppibase + 27));
+ sysbus_connect_irq(timerbusdev, i,
+
+qdev_get_gpio_in(s->gic, ppibase + 29));
+ sysbus_connect_irq(wdtbusdev, i,
+diff
+-urN qemu-master/hw/timer/arm_mpgtimer.c
+qemu-master.new/hw/timer/arm_mpgtimer.c
+--- qemu-master/hw/timer/arm_mpgtimer.c
+1970-01-01 01:00:00.000000000 +0100
++++ qemu-master.new/hw/timer/arm_mpgtimer.c
+2013-04-15 13:56:23.000000000 +0200
+@@ -0,0 +1,359 @@
++/*
++ * Global peripheral
+timer block for ARM 11MPCore and A9MP
++ *
++ * Written by François LEGAL
++ *
++ *
+This program is free software; you can redistribute it and/or
++ * modify it
+under the terms of the GNU General Public License
++ * as published by the Free
+Software Foundation; either version
++ * 2 of the License, or (at your option)
+any later version.
++ *
++ * This program is distributed in the hope that it will
+be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++
+* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
++ * GNU General
+Public License for more details.
++ *
++ * You should have received a copy of the
+GNU General Public License along
++ * with this program; if not, see
+<http://www.gnu.org/licenses/>.
++ */
++
++#include "hw/sysbus.h"
++#include
+"qemu/timer.h"
++
++/* This device implements the per-cpu private timer and
+watchdog block
++ * which is used in both the ARM11MPCore and Cortex-A9MP.
++
+*/
++
++#define MAX_CPUS 4
++
++/* State of a single gtimer or block */
++typedef
+struct {
++ uint32_t control;
++ uint64_t compare;
++ uint32_t inc;
++ uint32_t
+status;
++ int64_t tick;
++
++ int64_t delta;
++ uint64_t *gtimer_counter;
++
+uint32_t *gtimer_control;
++
++ QEMUTimer *timer;
++ MemoryRegion iomem;
++ qemu_irq
+irq;
++} gTimerBlock;
++
++typedef struct {
++ SysBusDevice busdev;
++ uint32_t
+num_cpu;
++ uint64_t gtimer_counter;
++ uint32_t gtimer_control;
++ gTimerBlock
+gtimer[MAX_CPUS];
++ MemoryRegion iomem;
++} ARMMPGTimerState;
++
++static inline
+int get_current_cpu(ARMMPGTimerState *s)
++{
++ CPUState *cpu_single_cpu;
++
++ if
+(cpu_single_env != NULL) {
++ cpu_single_cpu = ENV_GET_CPU(cpu_single_env);
++
++
+if (cpu_single_cpu->cpu_index >= s->num_cpu) {
++ hw_error("arm_mptimer: num-cpu
+%d but this cpu is %d!n",
++ s->num_cpu, cpu_single_cpu->cpu_index);
++ }
++ return
+cpu_single_cpu->cpu_index;
++ } else {
++ return 0;
++ }
++}
++
++static inline void
+gtimerblock_update_irq(gTimerBlock *gtb)
++{
++ qemu_set_irq(gtb->irq,
+gtb->status);
++}
++
++/* Return conversion factor from mpcore timer ticks to qemu
+timer ticks. */
++static inline uint32_t gtimerblock_scale(gTimerBlock *gtb)
++{
++
+return ((((*gtb->gtimer_control) >> 8) & 0xff) + 1) * 10;
++}
++
++static void
+gtimerblock_reload(gTimerBlock *gtb, int restart)
++{
++ if (restart) {
++
+gtb->tick = qemu_get_clock_ns(vm_clock);
++ gtb->tick += (int64_t)(((gtb->compare
+- *gtb->gtimer_counter) +
++ gtb->delta) * gtimerblock_scale(gtb));
++ } else {
++
+gtb->tick += (int64_t)(gtb->inc * gtimerblock_scale(gtb));
++ }
++
+qemu_mod_timer(gtb->timer, gtb->tick);
++}
++
++static void gtimerblock_tick(void
+*opaque)
++{
++ gTimerBlock *gtb = (gTimerBlock *)opaque;
++ *gtb->gtimer_counter =
+gtb->compare;
++ if ((gtb->control | *gtb->gtimer_control) & 0x9) {
++
+gtb->compare += gtb->inc;
++ gtimerblock_reload(gtb, 0);
++ }
++ if (((gtb->control
+| *gtb->gtimer_control) & 0x7) &&
++ ((gtb->status & 1) == 0)) {
++ gtb->status =
+1;
++ gtimerblock_update_irq(gtb);
++ }
++}
++
++static uint64_t gtimer_read(void
+*opaque, hwaddr addr,
++ unsigned size)
++{
++ gTimerBlock *gtb = (gTimerBlock
+*)opaque;
++ int64_t val = 0;
++ switch (addr) {
++ case 0: /* Counter LSB */
++ if
+(*gtb->gtimer_control & 1) {
++ val = gtb->tick - qemu_get_clock_ns(vm_clock);
++
+val /= gtimerblock_scale(gtb);
++ }
++ return val < 0 ? val : 0 & 0xFFFFFFFF;
++
+case 4: /* Counter MSB. */
++ if (*gtb->gtimer_control & 1) {
++ val = gtb->tick -
+qemu_get_clock_ns(vm_clock);
++ val /= gtimerblock_scale(gtb);
++ }
++ return val <
+0 ? (val >> 32) : 0;
++ case 8: /* Control. */
++ return (gtb->control &
+0x0000000E) |
++ ((*gtb->gtimer_control) & 0x0000FF01);
++ case 12: /* Interrupt
+status. */
++ return gtb->status;
++ case 16: /* Compare LSB */
++ return
+gtb->compare & 0xFFFFFFFF;
++ case 20: /* Counter MSB */
++ return gtb->compare >>
+32;
++ case 24: /* Autoincrement */
++ return gtb->inc;
++ default:
++ return 0;
++
+}
++}
++
++static void gtimer_write(void *opaque, hwaddr addr,
++ uint64_t value,
+unsigned size)
++{
++ gTimerBlock *gtb = (gTimerBlock *)opaque;
++ int64_t old;
++
+switch (addr) {
++ case 0: /* Counter LSB */
++ old = (*gtb->gtimer_counter);
++
+old &= 0xFFFFFFFF;
++ gtb->delta = old - (value & 0xFFFFFFFF);
++ old |= value &
+0xFFFFFFFF;
++ *gtb->gtimer_counter = old;
++ /* Cancel the previous timer. */
++
+if (((gtb->control | *gtb->gtimer_control) & 7) == 7) {
++
+gtimerblock_reload(gtb, 1);
++ }
++ break;
++ case 4: /* Counter MSB. */
++ old =
+(*gtb->gtimer_counter);
++ old &= 0xFFFFFFFF00000000;
++ gtb->delta = old - (value
+<< 32);
++ old |= value << 32;
++ *gtb->gtimer_counter = old;
++ if (((gtb->control
+| *gtb->gtimer_control) & 7) == 7) {
++ gtimerblock_reload(gtb, 1);
++ }
++
+break;
++ case 8: /* Control. */
++ old = *gtb->gtimer_control;
++ gtb->control =
+value & 0x0000000E;
++ *gtb->gtimer_control = value & 0x0000FF01;
++ if (((old &
+1) == 0) && ((value & 7) == 7)) {
++ gtb->delta = 0;
++ gtimerblock_reload(gtb,
+1);
++ }
++ break;
++ case 12: /* Interrupt status. */
++ gtb->status ^= value &
+1;
++ gtimerblock_update_irq(gtb);
++ break;
++ case 16: /* Compare LSB */
++ old =
+gtb->compare;
++ old &= 0xFFFFFFFF;
++ gtb->delta = (value & 0xFFFFFFFF) - old;
++
+old |= value & 0xFFFFFFFF;
++ gtb->compare = old;
++ if (((gtb->control |
+*gtb->gtimer_control) & 7) == 7) {
++ gtimerblock_reload(gtb, 1);
++ }
++ break;
++
+case 20: /* Compare MSB. */
++ old = gtb->compare;
++ old &= 0xFFFFFFFF00000000;
++
+gtb->delta = (value << 32) - old;
++ old |= value << 32;
++ gtb->compare = old;
++
+if (((gtb->control | *gtb->gtimer_control) & 7) == 7) {
++
+gtimerblock_reload(gtb, 1);
++ }
++ break;
++ case 24: /* Autoincrement */
++
+gtb->inc = value;
++ break;
++ default:
++ break;
++ }
++}
++
++/* Wrapper functions to
+implement the "read timer/watchdog for
++ * the current CPU" memory regions.
++
+*/
++static uint64_t arm_thisgtimer_read(void *opaque, hwaddr addr,
++ unsigned
+size)
++{
++ ARMMPGTimerState *s = (ARMMPGTimerState *)opaque;
++ int id =
+get_current_cpu(s);
++ return gtimer_read(&s->gtimer[id], addr,
+size);
++}
++
++static void arm_thisgtimer_write(void *opaque, hwaddr addr,
++
+uint64_t value, unsigned size)
++{
++ ARMMPGTimerState *s = (ARMMPGTimerState
+*)opaque;
++ int id = get_current_cpu(s);
++ gtimer_write(&s->gtimer[id], addr,
+value, size);
++}
++
++static const MemoryRegionOps arm_thisgtimer_ops = {
++ .read
+= arm_thisgtimer_read,
++ .write = arm_thisgtimer_write,
++ .valid = {
++
+.min_access_size = 4,
++ .max_access_size = 4,
++ },
++ .endianness =
+DEVICE_NATIVE_ENDIAN,
++};
++
++static const MemoryRegionOps gtimerblock_ops = {
++
+.read = gtimer_read,
++ .write = gtimer_write,
++ .valid = {
++ .min_access_size =
+4,
++ .max_access_size = 4,
++ },
++ .endianness =
+DEVICE_NATIVE_ENDIAN,
++};
++
++static void gtimer_reset(gTimerBlock *gtb)
++{
++
+gtb->control = 0;
++ gtb->status = 0;
++ gtb->compare = 0;
++ gtb->inc = 0;
++
+gtb->tick = 0;
++}
++
++static void arm_mpgtimer_reset(DeviceState *dev)
++{
++
+ARMMPGTimerState *s =
++ FROM_SYSBUS(ARMMPGTimerState, SYS_BUS_DEVICE(dev));
++
+int i;
++ for (i = 0; i < ARRAY_SIZE(s->gtimer); i++) {
++
+gtimer_reset(&s->gtimer[i]);
++ }
++}
++
++static int arm_mpgtimer_init(SysBusDevice
+*dev)
++{
++ ARMMPGTimerState *s = FROM_SYSBUS(ARMMPGTimerState, dev);
++ int i;
++
+if (s->num_cpu < 1 || s->num_cpu > MAX_CPUS) {
++ hw_error("%s: num-cpu must be
+between 1 and %dn", __func__, MAX_CPUS);
++ }
++
++ /* We implement one timer block
+per CPU, and expose multiple MMIO regions:
++ * * region 0 is "timer for this
+core"
++ * * region 1 is "timer for core 0"
++ * * region 2 is "timer for core
+1"
++ * and so on.
++ * The outgoing interrupt lines are
++ * * timer for core 0
++
+* * timer for core 1
++ * and so on.
++ */
++ memory_region_init_io(&s->iomem,
+&arm_thisgtimer_ops, s,
++ "arm_mptimer_gtimer", 0x20);
++ sysbus_init_mmio(dev,
+&s->iomem);
++ for (i = 0; i < s->num_cpu; i++) {
++ gTimerBlock *gtb =
+&s->gtimer[i];
++ gtb->gtimer_counter = &s->gtimer_counter;
++ gtb->gtimer_control
+= &s->gtimer_control;
++ gtb->timer = qemu_new_timer_ns(vm_clock,
+gtimerblock_tick, gtb);
++ sysbus_init_irq(dev, &gtb->irq);
++
+memory_region_init_io(&gtb->iomem, &gtimerblock_ops, gtb,
++
+"arm_mptimer_gtimerblock", 0x20);
++ sysbus_init_mmio(dev, &gtb->iomem);
++ }
++
++
+return 0;
++}
++
++static const VMStateDescription vmstate_gtimerblock = {
++ .name
+= "arm_mptimer_gtimerblock",
++ .version_id = 2,
++ .minimum_version_id = 2,
++
+.fields = (VMStateField[]) {
++ VMSTATE_UINT32(control, gTimerBlock),
++
+VMSTATE_UINT32(status, gTimerBlock),
++ VMSTATE_UINT64(compare, gTimerBlock),
++
+VMSTATE_INT64(tick, gTimerBlock),
++ VMSTATE_END_OF_LIST()
++ }
++};
++
++static
+const VMStateDescription vmstate_arm_mpgtimer = {
++ .name =
+"arm_mp_globaltimer",
++ .version_id = 2,
++ .minimum_version_id = 2,
++ .fields =
+(VMStateField[]) {
++ VMSTATE_STRUCT_VARRAY_UINT32(gtimer, ARMMPGTimerState,
+num_cpu,
++ 1, vmstate_gtimerblock, gTimerBlock),
++ VMSTATE_END_OF_LIST()
++
+}
++};
++
++static Property arm_mpgtimer_properties[] = {
++
+DEFINE_PROP_UINT32("num-cpu", ARMMPGTimerState, num_cpu, 0),
++
+DEFINE_PROP_END_OF_LIST()
++};
++
++static void arm_mpgtimer_class_init(ObjectClass
+*klass, void *data)
++{
++ DeviceClass *dc = DEVICE_CLASS(klass);
++
+SysBusDeviceClass *sbc = SYS_BUS_DEVICE_CLASS(klass);
++
++ sbc->init =
+arm_mpgtimer_init;
++ dc->vmsd = &vmstate_arm_mpgtimer;
++ dc->reset =
+arm_mpgtimer_reset;
++ dc->no_user = 1;
++ dc->props =
+arm_mpgtimer_properties;
++}
++
++static const TypeInfo arm_mpgtimer_info = {
++
+.name = "arm_mp_globaltimer",
++ .parent = TYPE_SYS_BUS_DEVICE,
++ .instance_size
+= sizeof(ARMMPGTimerState),
++ .class_init =
+arm_mpgtimer_class_init,
++};
++
++static void
+arm_mpgtimer_register_types(void)
++{
++
+type_register_static(&arm_mpgtimer_info);
++}
++
++type_init(arm_mpgtimer_register_types)
++
+diff
+-urN qemu-master/hw/timer/arm_mptimer.c
+qemu-master.new/hw/timer/arm_mptimer.c
+--- qemu-master/hw/timer/arm_mptimer.c
+2013-04-08 20:12:33.000000000 +0200
++++ qemu-master.new/hw/timer/arm_mptimer.c
+2013-04-15 13:44:33.000000000 +0200
+@@ -49,13 +49,19 @@
+
+ static inline int
+get_current_cpu(ARMMPTimerState *s)
+ {
+- CPUState *cpu_single_cpu =
+ENV_GET_CPU(cpu_single_env);
++ CPUState *cpu_single_cpu;
+
+- if
+(cpu_single_cpu->cpu_index >= s->num_cpu) {
+- hw_error("arm_mptimer: num-cpu %d
+but this cpu is %d!n",
+- s->num_cpu, cpu_single_cpu->cpu_index);
++ if
+(cpu_single_env != NULL) {
++ cpu_single_cpu = ENV_GET_CPU(cpu_single_env);
++
++
+if (cpu_single_cpu->cpu_index >= s->num_cpu) {
++ hw_error("arm_mptimer: num-cpu
+%d but this cpu is %d!n",
++ s->num_cpu, cpu_single_cpu->cpu_index);
++ }
++ return
+cpu_single_cpu->cpu_index;
++ } else {
++ return 0;
+ }
+- return
+cpu_single_cpu->cpu_index;
+ }
+
+ static inline void
+timerblock_update_irq(TimerBlock *tb)
+diff -urN
+qemu-master/hw/timer/Makefile.objs qemu-master.new/hw/timer/Makefile.objs
+---
+qemu-master/hw/timer/Makefile.objs 2013-04-08 20:12:33.000000000 +0200
++++
+qemu-master.new/hw/timer/Makefile.objs 2013-04-15 12:54:06.000000000 +0200
+@@
+-24,5 +24,5 @@
+ obj-$(CONFIG_SH4) += sh_timer.o
+ obj-$(CONFIG_TUSB6010) +=
+tusb6010.o
+
+-obj-$(CONFIG_ARM_MPTIMER) +=
+arm_mptimer.o
++obj-$(CONFIG_ARM_MPTIMER) += arm_mptimer.o arm_mpgtimer.o
+
+obj-$(CONFIG_MC146818RTC) += mc146818rtc.o 
+
+Signed-off-by: François LEGAL
+<devel@thom.fr.eu.org> 
+
+ 

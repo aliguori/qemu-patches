@@ -1,0 +1,164 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Michal Novotny <minovotn@redhat.com>
+To: Eric Blake <eblake@redhat.com>, qemu-devel@nongnu.org,
+ Michal Novotny <minovotn@redhat.com>
+Cc: qemu-devel@nongnu.org, Michal Novotny <minovotn@redhat.com>,
+ lcapitulino@redhat.com
+Date: Tue,  9 Apr 2013 16:23:39 +0200
+Message-id: 3cbbe046d7a236711b868bb1565bf154d2389cb5.1365517320.git.minovotn@redhat.com
+Subject: [PATCH 1/1] Revert "New QMP command query-cpu-max and HMP command
+ cpu_max"
+
+This reverts commit 4d700430a20b3d53b7b15bc5f6666f7e570e3f2c as asked by
+Luiz. The patch has been obsoleted by extending MachineInfo structure
+by cpu-max field.
+
+Signed-off-by: Michal Novotny <minovotn@redhat.com>
+Reviewed-by: Eric Blake <eblake@redhat.com>
+---
+ hmp-commands.hx  |  2 --
+ hmp.c            |  8 --------
+ hmp.h            |  1 -
+ monitor.c        |  7 -------
+ qapi-schema.json | 11 -----------
+ qmp-commands.hx  | 22 ----------------------
+ vl.c             |  5 -----
+ 7 files changed, 56 deletions(-)
+
+diff --git a/hmp-commands.hx b/hmp-commands.hx
+index 3d98604..df44906 100644
+--- a/hmp-commands.hx
++++ b/hmp-commands.hx
+@@ -1643,8 +1643,6 @@ show qdev device model list
+ show roms
+ @item info tpm
+ show the TPM device
+-@item info cpu_max
+-show the number of CPUs supported by the machine being emulated.
+ @end table
+ ETEXI
+ 
+diff --git a/hmp.c b/hmp.c
+index dbe9b90..2e35b3d 100644
+--- a/hmp.c
++++ b/hmp.c
+@@ -750,14 +750,6 @@ void hmp_ringbuf_read(Monitor *mon, const QDict *qdict)
+     g_free(data);
+ }
+ 
+-void hmp_query_cpu_max(Monitor *mon, const QDict *qdict)
+-{
+-    int cpu_max;
+-
+-    cpu_max = qmp_query_cpu_max(NULL);
+-    monitor_printf(mon, "Maximum number of CPUs is %d\n", cpu_max);
+-}
+-
+ static void hmp_cont_cb(void *opaque, int err)
+ {
+     if (!err) {
+diff --git a/hmp.h b/hmp.h
+index 80e8b41..95fe76e 100644
+--- a/hmp.h
++++ b/hmp.h
+@@ -42,7 +42,6 @@ void hmp_stop(Monitor *mon, const QDict *qdict);
+ void hmp_system_reset(Monitor *mon, const QDict *qdict);
+ void hmp_system_powerdown(Monitor *mon, const QDict *qdict);
+ void hmp_cpu(Monitor *mon, const QDict *qdict);
+-void hmp_query_cpu_max(Monitor *mon, const QDict *qdict);
+ void hmp_memsave(Monitor *mon, const QDict *qdict);
+ void hmp_pmemsave(Monitor *mon, const QDict *qdict);
+ void hmp_ringbuf_write(Monitor *mon, const QDict *qdict);
+diff --git a/monitor.c b/monitor.c
+index c897e80..0f7d52c 100644
+--- a/monitor.c
++++ b/monitor.c
+@@ -2765,13 +2765,6 @@ static mon_cmd_t info_cmds[] = {
+         .mhandler.cmd = hmp_info_tpm,
+     },
+     {
+-        .name       = "cpu_max",
+-        .args_type  = "",
+-        .params     = "",
+-        .help       = "Get maximum number of VCPUs supported by machine",
+-        .mhandler.cmd = hmp_query_cpu_max,
+-    },
+-    {
+         .name       = NULL,
+     },
+ };
+diff --git a/qapi-schema.json b/qapi-schema.json
+index db542f6..0d8155b 100644
+--- a/qapi-schema.json
++++ b/qapi-schema.json
+@@ -1834,17 +1834,6 @@
+ { 'command': 'query-migrate-cache-size', 'returns': 'int' }
+ 
+ ##
+-## @query-cpu-max
+-##
+-## query maximum number of CPUs supported by machine
+-##
+-## Returns: number of CPUs
+-##
+-## Since: 1.5
+-###
+-{ 'command': 'query-cpu-max', 'returns': 'int' }
+-
+-##
+ # @ObjectPropertyInfo:
+ #
+ # @name: the name of the property
+diff --git a/qmp-commands.hx b/qmp-commands.hx
+index 1e0e11e..4d65422 100644
+--- a/qmp-commands.hx
++++ b/qmp-commands.hx
+@@ -385,28 +385,6 @@ Note: CPUs' indexes are obtained with the 'query-cpus' command.
+ EQMP
+ 
+     {
+-        .name       = "query-cpu-max",
+-        .args_type  = "",
+-        .mhandler.cmd_new = qmp_marshal_input_query_cpu_max,
+-    },
+-
+-SQMP
+-query-cpu-max
+--------------
+-
+-Get the maximum CPUs supported by the machine being currently
+-emulated.
+-
+-Returns json-int.
+-
+-Example:
+-
+--> { "execute": "query-cpu-max" }
+-<- { "return": 255 }
+-
+-EQMP
+-
+-    {
+         .name       = "memsave",
+         .args_type  = "val:l,size:i,filename:s,cpu:i?",
+         .mhandler.cmd_new = qmp_marshal_input_memsave,
+diff --git a/vl.c b/vl.c
+index d694a90..1a610f0 100644
+--- a/vl.c
++++ b/vl.c
+@@ -662,11 +662,6 @@ StatusInfo *qmp_query_status(Error **errp)
+     return info;
+ }
+ 
+-int64_t qmp_query_cpu_max(Error **errp)
+-{
+-    return current_machine->max_cpus;
+-}
+-
+ /***********************************************************/
+ /* real time host monotonic timer */
+ 
+-- 
+1.7.11.7
+
+

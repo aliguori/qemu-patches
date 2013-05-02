@@ -1,0 +1,48 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: asias@redhat.com, nab@linux-iscsi.org
+Date: Fri, 19 Apr 2013 16:24:16 +0200
+Message-id: 1366381460-6041-6-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 5/9] virtio: simplify Makefile conditionals
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ hw/Makefile.objs        | 2 +-
+ hw/virtio/Makefile.objs | 8 ++++----
+ 2 files changed, 5 insertions(+), 5 deletions(-)
+
+diff --git a/hw/Makefile.objs b/hw/Makefile.objs
+index b7a1613..0243d6a 100644
+--- a/hw/Makefile.objs
++++ b/hw/Makefile.objs
+@@ -24,7 +24,7 @@ devices-dirs-$(CONFIG_SOFTMMU) += ssi/
+ devices-dirs-$(CONFIG_SOFTMMU) += timer/
+ devices-dirs-$(CONFIG_TPM) += tpm/
+ devices-dirs-$(CONFIG_SOFTMMU) += usb/
+-devices-dirs-$(CONFIG_SOFTMMU) += virtio/
++devices-dirs-$(CONFIG_VIRTIO) += virtio/
+ devices-dirs-$(CONFIG_SOFTMMU) += watchdog/
+ devices-dirs-$(CONFIG_SOFTMMU) += xen/
+ devices-dirs-y += core/
+diff --git a/hw/virtio/Makefile.objs b/hw/virtio/Makefile.objs
+index c7e8013..cbe6d51 100644
+--- a/hw/virtio/Makefile.objs
++++ b/hw/virtio/Makefile.objs
+@@ -1,7 +1,7 @@
+-common-obj-$(CONFIG_VIRTIO) += virtio-rng.o
++common-obj-y += virtio-rng.o
+ common-obj-$(CONFIG_VIRTIO_PCI) += virtio-pci.o
+-common-obj-$(CONFIG_VIRTIO) += virtio-bus.o
++common-obj-y += virtio-bus.o
+ common-obj-$(CONFIG_VIRTIO_BLK_DATA_PLANE) += dataplane/
+ 
+-obj-$(CONFIG_VIRTIO) += virtio.o virtio-balloon.o 
+-obj-$(CONFIG_VHOST_NET) += vhost.o
++obj-y += virtio.o virtio-balloon.o 
++obj-$(CONFIG_LINUX) += vhost.o
+-- 
+1.8.1.4
+
+
+

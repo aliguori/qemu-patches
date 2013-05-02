@@ -1,0 +1,81 @@
+From patches Mon Sep 17 00:00:00 2001
+From: mrhines@linux.vnet.ibm.com
+To: Eric Blake <eblake@redhat.com>,
+ "Michael R. Hines" <mrhines@linux.vnet.ibm.com>, qemu-devel@nongnu.org,
+ "Michael S. Tsirkin" <mst@redhat.com>, Paolo Bonzini <pbonzini@redhat.com>
+Cc: Anthony Liguori <aliguori@us.ibm.com>, Paolo Bonzini <pbonzini@redhat.com>,
+ mst@redhat.com, quintela@redhat.com, qemu-devel@nongnu.org,
+ mrhines@linux.vnet.ibm.com, Michael R Hines <mrhines@us.ibm.com>,
+ Bulent Abali <abali@us.ibm.com>, owasserm@redhat.com,
+ Eric Blake <eblake@redhat.com>, "Michael S. Tsirkin" <mst@redhat.com>,
+ pbonzini@redhat.com, Gokul B Kandiraju <gokul@us.ibm.com>
+Date: Wed, 17 Apr 2013 19:07:16 -0400
+Message-id: 1366240040-10730-8-git-send-email-mrhines@linux.vnet.ibm.com
+Subject: [PATCH 07/11] rdma: introduce capability for chunk registration
+
+From: "Michael R. Hines" <mrhines@us.ibm.com>
+
+This capability allows you to disable dynamic chunk registration
+for better throughput on high-performance links.
+
+It is enabled by default.
+
+Signed-off-by: Michael R. Hines <mrhines@us.ibm.com>
+---
+ migration.c      |   10 ++++++++++
+ qapi-schema.json |    8 +++++++-
+ 2 files changed, 17 insertions(+), 1 deletion(-)
+
+diff --git a/migration.c b/migration.c
+index 3b4b467..5afd9b8 100644
+--- a/migration.c
++++ b/migration.c
+@@ -66,6 +66,7 @@ MigrationState *migrate_get_current(void)
+         .state = MIG_STATE_SETUP,
+         .bandwidth_limit = MAX_THROTTLE,
+         .xbzrle_cache_size = DEFAULT_MIGRATE_CACHE_SIZE,
++        .enabled_capabilities[MIGRATION_CAPABILITY_X_CHUNK_REGISTER_DESTINATION] = true,
+     };
+ 
+     return &current_migration;
+@@ -474,6 +475,15 @@ void qmp_migrate_set_downtime(double value, Error **errp)
+     max_downtime = (uint64_t)value;
+ }
+ 
++bool migrate_chunk_register_destination(void)
++{
++    MigrationState *s;
++
++    s = migrate_get_current();
++
++    return s->enabled_capabilities[MIGRATION_CAPABILITY_X_CHUNK_REGISTER_DESTINATION];
++}
++
+ int migrate_use_xbzrle(void)
+ {
+     MigrationState *s;
+diff --git a/qapi-schema.json b/qapi-schema.json
+index 751d3c2..297707e 100644
+--- a/qapi-schema.json
++++ b/qapi-schema.json
+@@ -599,10 +599,16 @@
+ #          This feature allows us to minimize migration traffic for certain work
+ #          loads, by sending compressed difference of the pages
+ #
++# @x-chunk-register-destination: (since 1.5) RDMA option which controls whether
++#          or not the entire VM memory footprint is mlock() on demand or all at once.
++#          Refer to docs/rdma.txt for more advice on when to take advantage option.
++#          Enabled by default, and will be renamed to 'chunk-register-destination' 
++#          after experimental testing is complete.
++#
+ # Since: 1.2
+ ##
+ { 'enum': 'MigrationCapability',
+-  'data': ['xbzrle'] }
++  'data': ['xbzrle', 'x-chunk-register-destination'] }
+ 
+ ##
+ # @MigrationCapabilityStatus
+-- 
+1.7.10.4
+

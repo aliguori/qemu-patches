@@ -1,0 +1,55 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Dunrong Huang <riegamaths@gmail.com>
+To: Dunrong Huang <riegamaths@gmail.com>, qemu-devel <qemu-devel@nongnu.org>
+Cc: Blue Swirl <blauwirbel@gmail.com>, Paolo Bonzini <pbonzini@redhat.com>,
+ qemu-devel <qemu-devel@nongnu.org>,
+ Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+Date: Mon, 29 Apr 2013 22:52:12 +0800
+Message-id: 1367247132-19622-1-git-send-email-riegamaths@gmail.com
+Subject: [PATCH 1/1] rules.mk: Fix build breakage
+
+The following error occurs when building dtc module:
+
+        CHK version_gen.h
+         CC libfdt/fdt.o
+cc1: error: dtc: No such file or directory [-Werror]
+cc1: all warnings being treated as errors
+make[1]: *** [libfdt/fdt.o] Error 1
+make: *** [subdir-dtc] Error 2
+
+In rules.mak, "-I$(<D) -I$(@D)" was expanded to "-Idtc -I." when
+building submodule dct. Due to the using of "-Wmissing-include-dirs,
+a warning would be rarsed. To avoid it, add "-I$(<D) -I$(@D)" to
+QEMU_INCLUDES instead of QEMU_CFLAGS so that QEMU_CFLAGS does not
+contain the "-Idtc".
+
+Cc: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+Cc: Blue Swirl <blauwirbel@gmail.com>
+Cc: Paolo Bonzini <pbonzini@redhat.com>
+Signed-off-by: Dunrong Huang <riegamaths@gmail.com>
+Reviewed-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+v1 -> v2:
+   * Fix it by adding "-I$(<D) -I$(@D)" to QEMU_INCLUDES instead of
+     QEMU_CFLAGS(thanks to Paolo Bonzini for correction)
+   
+ rules.mak | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/rules.mak b/rules.mak
+index 292a422..2572070 100644
+--- a/rules.mak
++++ b/rules.mak
+@@ -15,7 +15,7 @@ MAKEFLAGS += -rR
+ QEMU_DGFLAGS += -MMD -MP -MT $@ -MF $(*D)/$(*F).d
+ 
+ # Same as -I$(SRC_PATH) -I., but for the nested source/object directories
+-QEMU_CFLAGS += -I$(<D) -I$(@D)
++QEMU_INCLUDES += -I$(<D) -I$(@D)
+ 
+ %.o: %.c
+ 	$(call quiet-command,$(CC) $(QEMU_INCLUDES) $(QEMU_CFLAGS) $(QEMU_DGFLAGS) $(CFLAGS) -c -o $@ $<,"  CC    $(TARGET_DIR)$@")
+-- 
+1.8.1.5
+
+

@@ -1,0 +1,121 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Fam Zheng <famz@redhat.com>
+To: Stefan Hajnoczi <stefanha@gmail.com>, Fam Zheng <famz@redhat.com>,
+ qemu-devel@nongnu.org
+Cc: kwolf@redhat.com, Fam Zheng <famz@redhat.com>, qemu-devel@nongnu.org,
+ stefanha@redhat.com, Feiran Zheng <feiran.zheng@emc.com>
+Date: Fri, 19 Apr 2013 11:48:45 +0800
+Message-id: 1366343325-5252-6-git-send-email-famz@redhat.com
+Subject: [PATCH 5/5] vmdk: add bdrv_co_write_zeroes
+
+From: Feiran Zheng <feiran.zheng@emc.com>
+
+Use special offset to write zeroes efficiently, when zeroed-grain GTE is
+available. If zero-write an allocated cluster, cluster is leaked because
+its offset pointer is overwritten by "0x1".
+
+Signed-off-by: Fam Zheng <famz@redhat.com>
+---
+ block/vmdk.c | 63 +++++++++++++++++++++++++++++++++++++++++++++++-------------
+ 1 file changed, 50 insertions(+), 13 deletions(-)
+
+diff --git a/block/vmdk.c b/block/vmdk.c
+index 5daa9f2..3055847 100644
+--- a/block/vmdk.c
++++ b/block/vmdk.c
+@@ -1163,8 +1163,16 @@ static coroutine_fn int vmdk_co_read(BlockDriverState *bs, int64_t sector_num,
+     return ret;
+ }
+ 
++/**
++ * params:
++ *  - zeroed:       buf is ignored (data is zero), use zeroed_grain GTE
++ *                  feature if possible, otherwise return -ENOTSUP.
++ *  - zero_dry_run: used for zeroed == true only, don't update L2 table, just
++ *                  try if it's supported
++ */
+ static int vmdk_write(BlockDriverState *bs, int64_t sector_num,
+-                     const uint8_t *buf, int nb_sectors)
++                      const uint8_t *buf, int nb_sectors,
++                      bool zeroed, bool zero_dry_run)
+ {
+     BDRVVmdkState *s = bs->opaque;
+     VmdkExtent *extent = NULL;
+@@ -1220,17 +1228,30 @@ static int vmdk_write(BlockDriverState *bs, int64_t sector_num,
+         if (n > nb_sectors) {
+             n = nb_sectors;
+         }
+-
+-        ret = vmdk_write_extent(extent,
+-                        cluster_offset, index_in_cluster * 512,
+-                        buf, n, sector_num);
+-        if (ret) {
+-            return ret;
+-        }
+-        if (m_data.valid) {
+-            /* update L2 tables */
+-            if (vmdk_L2update(extent, &m_data) == -1) {
+-                return -EIO;
++        if (zeroed) {
++            /* Do zeroed write, buf is ignored */
++            if (extent->has_zero_grain &&
++                    index_in_cluster == 0 &&
++                    n >= extent->cluster_sectors) {
++                n = extent->cluster_sectors;
++                if (!zero_dry_run) {
++                    m_data.offset = VMDK_GTE_ZEROED;
++                }
++            } else {
++                return -ENOTSUP;
++            }
++        } else {
++            ret = vmdk_write_extent(extent,
++                            cluster_offset, index_in_cluster * 512,
++                            buf, n, sector_num);
++            if (ret) {
++                return ret;
++            }
++            if (m_data.valid) {
++                /* update L2 tables */
++                if (vmdk_L2update(extent, &m_data) == -1) {
++                    return -EIO;
++                }
+             }
+         }
+         nb_sectors -= n;
+@@ -1256,7 +1277,22 @@ static coroutine_fn int vmdk_co_write(BlockDriverState *bs, int64_t sector_num,
+     int ret;
+     BDRVVmdkState *s = bs->opaque;
+     qemu_co_mutex_lock(&s->lock);
+-    ret = vmdk_write(bs, sector_num, buf, nb_sectors);
++    ret = vmdk_write(bs, sector_num, buf, nb_sectors, false, false);
++    qemu_co_mutex_unlock(&s->lock);
++    return ret;
++}
++
++static int coroutine_fn vmdk_co_write_zeroes(BlockDriverState *bs,
++                                             int64_t sector_num,
++                                             int nb_sectors)
++{
++    int ret;
++    BDRVVmdkState *s = bs->opaque;
++    qemu_co_mutex_lock(&s->lock);
++    ret = vmdk_write(bs, sector_num, NULL, nb_sectors, true, true);
++    if (!ret) {
++        ret = vmdk_write(bs, sector_num, NULL, nb_sectors, true, false);
++    }
+     qemu_co_mutex_unlock(&s->lock);
+     return ret;
+ }
+@@ -1736,6 +1772,7 @@ static BlockDriver bdrv_vmdk = {
+     .bdrv_reopen_prepare = vmdk_reopen_prepare,
+     .bdrv_read      = vmdk_co_read,
+     .bdrv_write     = vmdk_co_write,
++    .bdrv_co_write_zeroes = vmdk_co_write_zeroes,
+     .bdrv_close     = vmdk_close,
+     .bdrv_create    = vmdk_create,
+     .bdrv_co_flush_to_disk  = vmdk_co_flush,
+-- 
+1.8.1.4
+
+

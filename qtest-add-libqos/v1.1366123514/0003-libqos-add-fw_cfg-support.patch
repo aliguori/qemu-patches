@@ -1,0 +1,214 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Anthony Liguori <aliguori@us.ibm.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>
+Date: Tue, 16 Apr 2013 09:45:17 -0500
+Message-id: 1366123521-4330-4-git-send-email-aliguori@us.ibm.com
+Subject: [PATCH 3/7] libqos: add fw_cfg support
+
+fw_cfg is needed to get the top of memory which is necessary for
+doing PCI allocation and allocating RAM for DMA.
+
+Add a PC version of fw_cfg and enough abstraction to support other
+platforms.
+
+Signed-off-by: Anthony Liguori <aliguori@us.ibm.com>
+---
+ tests/Makefile           |  4 ++--
+ tests/libqos/fw_cfg-pc.c | 40 +++++++++++++++++++++++++++++++++++++
+ tests/libqos/fw_cfg-pc.h | 20 +++++++++++++++++++
+ tests/libqos/fw_cfg.c    | 51 ++++++++++++++++++++++++++++++++++++++++++++++++
+ tests/libqos/fw_cfg.h    | 34 ++++++++++++++++++++++++++++++++
+ 5 files changed, 147 insertions(+), 2 deletions(-)
+ create mode 100644 tests/libqos/fw_cfg-pc.c
+ create mode 100644 tests/libqos/fw_cfg-pc.h
+ create mode 100644 tests/libqos/fw_cfg.c
+ create mode 100644 tests/libqos/fw_cfg.h
+
+diff --git a/tests/Makefile b/tests/Makefile
+index 5303b29..ce91980 100644
+--- a/tests/Makefile
++++ b/tests/Makefile
+@@ -116,8 +116,8 @@ tests/test-visitor-serialization$(EXESUF): tests/test-visitor-serialization.o $(
+ 
+ tests/test-mul64$(EXESUF): tests/test-mul64.o libqemuutil.a
+ 
+-libqos-obj-y = tests/libqos/pci.o
+-libqos-pc-obj-y = $(libqos-obj-y) tests/libqos/pci-pc.o
++libqos-obj-y = tests/libqos/pci.o tests/libqos/fw_cfg.o
++libqos-pc-obj-y = $(libqos-obj-y) tests/libqos/pci-pc.o tests/libqos/fw_cfg-pc.o
+ 
+ tests/rtc-test$(EXESUF): tests/rtc-test.o
+ tests/m48t59-test$(EXESUF): tests/m48t59-test.o
+diff --git a/tests/libqos/fw_cfg-pc.c b/tests/libqos/fw_cfg-pc.c
+new file mode 100644
+index 0000000..613604d
+--- /dev/null
++++ b/tests/libqos/fw_cfg-pc.c
+@@ -0,0 +1,40 @@
++/*
++ * libqos fw_cfg support for PC
++ *
++ * Copyright IBM, Corp. 2012-2013
++ *
++ * Authors:
++ *  Anthony Liguori   <aliguori@us.ibm.com>
++ *
++ * This work is licensed under the terms of the GNU GPL, version 2 or later.
++ * See the COPYING file in the top-level directory.
++ */
++
++#include "libqos/fw_cfg-pc.h"
++#include "libqtest.h"
++#include <glib.h>
++
++static void pc_fw_cfg_select(QFWCFG *fw_cfg, uint16_t key)
++{
++    outw(0x510, key);
++}
++
++static void pc_fw_cfg_read(QFWCFG *fw_cfg, void *data, size_t len)
++{
++    uint8_t *ptr = data;
++    int i;
++
++    for (i = 0; i < len; i++) {
++        ptr[i] = inb(0x511);
++    }
++}
++
++QFWCFG *pc_fw_cfg_init(void)
++{
++    QFWCFG *fw_cfg = g_malloc0(sizeof(*fw_cfg));
++
++    fw_cfg->select = pc_fw_cfg_select;
++    fw_cfg->read = pc_fw_cfg_read;
++
++    return fw_cfg;
++}
+diff --git a/tests/libqos/fw_cfg-pc.h b/tests/libqos/fw_cfg-pc.h
+new file mode 100644
+index 0000000..444bd79
+--- /dev/null
++++ b/tests/libqos/fw_cfg-pc.h
+@@ -0,0 +1,20 @@
++/*
++ * libqos fw_cfg support for PC
++ *
++ * Copyright IBM, Corp. 2012-2013
++ *
++ * Authors:
++ *  Anthony Liguori   <aliguori@us.ibm.com>
++ *
++ * This work is licensed under the terms of the GNU GPL, version 2 or later.
++ * See the COPYING file in the top-level directory.
++ */
++
++#ifndef LIBQOS_FW_CFG_PC_H
++#define LIBQOS_FW_CFG_PC_H
++
++#include "libqos/fw_cfg.h"
++
++QFWCFG *pc_fw_cfg_init(void);
++
++#endif
+diff --git a/tests/libqos/fw_cfg.c b/tests/libqos/fw_cfg.c
+new file mode 100644
+index 0000000..799139e
+--- /dev/null
++++ b/tests/libqos/fw_cfg.c
+@@ -0,0 +1,51 @@
++/*
++ * libqos fw_cfg support
++ *
++ * Copyright IBM, Corp. 2012-2013
++ *
++ * Authors:
++ *  Anthony Liguori   <aliguori@us.ibm.com>
++ *
++ * This work is licensed under the terms of the GNU GPL, version 2 or later.
++ * See the COPYING file in the top-level directory.
++ */
++
++#include "libqos/fw_cfg.h"
++
++void qfw_cfg_select(QFWCFG *fw_cfg, uint16_t key)
++{
++    fw_cfg->select(fw_cfg, key);
++}
++
++void qfw_cfg_read_data(QFWCFG *fw_cfg, void *data, size_t len)
++{
++    fw_cfg->read(fw_cfg, data, len);
++}
++
++void qfw_cfg_get(QFWCFG *fw_cfg, uint16_t key, void *data, size_t len)
++{
++    qfw_cfg_select(fw_cfg, key);
++    qfw_cfg_read_data(fw_cfg, data, len);
++}
++
++uint16_t qfw_cfg_get_u16(QFWCFG *fw_cfg, uint16_t key)
++{
++    uint16_t value;
++    qfw_cfg_get(fw_cfg, key, &value, sizeof(value));
++    return value;
++}
++
++uint32_t qfw_cfg_get_u32(QFWCFG *fw_cfg, uint16_t key)
++{
++    uint32_t value;
++    qfw_cfg_get(fw_cfg, key, &value, sizeof(value));
++    return value;
++}
++
++uint64_t qfw_cfg_get_u64(QFWCFG *fw_cfg, uint16_t key)
++{
++    uint64_t value;
++    qfw_cfg_get(fw_cfg, key, &value, sizeof(value));
++    return value;
++}
++
+diff --git a/tests/libqos/fw_cfg.h b/tests/libqos/fw_cfg.h
+new file mode 100644
+index 0000000..44fc42b
+--- /dev/null
++++ b/tests/libqos/fw_cfg.h
+@@ -0,0 +1,34 @@
++/*
++ * libqos fw_cfg support
++ *
++ * Copyright IBM, Corp. 2012-2013
++ *
++ * Authors:
++ *  Anthony Liguori   <aliguori@us.ibm.com>
++ *
++ * This work is licensed under the terms of the GNU GPL, version 2 or later.
++ * See the COPYING file in the top-level directory.
++ */
++
++#ifndef LIBQOS_FW_CFG_H
++#define LIBQOS_FW_CFG_H
++
++#include <stdint.h>
++#include <sys/types.h>
++
++typedef struct QFWCFG QFWCFG;
++
++struct QFWCFG
++{
++    void (*select)(QFWCFG *fw_cfg, uint16_t key);
++    void (*read)(QFWCFG *fw_cfg, void *data, size_t len);
++};
++
++void qfw_cfg_select(QFWCFG *fw_cfg, uint16_t key);
++void qfw_cfg_read_data(QFWCFG *fw_cfg, void *data, size_t len);
++void qfw_cfg_get(QFWCFG *fw_cfg, uint16_t key, void *data, size_t len);
++uint16_t qfw_cfg_get_u16(QFWCFG *fw_cfg, uint16_t key);
++uint32_t qfw_cfg_get_u32(QFWCFG *fw_cfg, uint16_t key);
++uint64_t qfw_cfg_get_u64(QFWCFG *fw_cfg, uint16_t key);
++
++#endif
+-- 
+1.8.0
+

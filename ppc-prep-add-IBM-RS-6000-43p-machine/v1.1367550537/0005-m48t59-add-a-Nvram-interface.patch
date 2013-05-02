@@ -1,0 +1,182 @@
+From patches Mon Sep 17 00:00:00 2001
+From: =?utf-8?q?Herv=C3=A9_Poussineau_=3Chpoussin=40reactos=2Eorg=3E?=
+To: qemu-devel@nongnu.org
+Cc: qemu-ppc@nongnu.org, =?UTF-8?q?Andreas=20F=C3=A4rber?= <afaerber@suse.de>,
+ =?UTF-8?q?Herv=C3=A9=20Poussineau?= <hpoussin@reactos.org>
+Date: Thu,  2 May 2013 22:09:02 +0200
+Message-id: 1367525344-7755-6-git-send-email-hpoussin@reactos.org
+Subject: [PATCH 5/7] m48t59: add a Nvram interface
+
+Signed-off-by: Hervé Poussineau <hpoussin@reactos.org>
+---
+ hw/timer/m48t59.c         |   61 +++++++++++++++++++++++++++++++++++++++++++++
+ include/hw/timer/m48t59.h |   24 ++++++++++++++++++
+ 2 files changed, 85 insertions(+)
+
+diff --git a/hw/timer/m48t59.c b/hw/timer/m48t59.c
+index 23a6ab3..3ecb14e 100644
+--- a/hw/timer/m48t59.c
++++ b/hw/timer/m48t59.c
+@@ -796,6 +796,24 @@ static int m48t59_init1(SysBusDevice *dev)
+     return 0;
+ }
+ 
++static uint32_t m48txx_isa_read(Nvram *obj, uint32_t addr)
++{
++    M48txxISAState *d = M48TXX_ISA(obj);
++    return m48t59_read(&d->state, addr);
++}
++
++static void m48txx_isa_write(Nvram *obj, uint32_t addr, uint32_t val)
++{
++    M48txxISAState *d = M48TXX_ISA(obj);
++    m48t59_write(&d->state, addr, val);
++}
++
++static void m48txx_isa_toggle_lock(Nvram *obj, int lock)
++{
++    M48txxISAState *d = M48TXX_ISA(obj);
++    m48t59_toggle_lock(&d->state, lock);
++}
++
+ static Property m48t59_isa_properties[] = {
+     DEFINE_PROP_HEX32("iobase", M48txxISAState, io_base, 0x74),
+     DEFINE_PROP_END_OF_LIST(),
+@@ -805,6 +823,7 @@ static void m48txx_isa_class_init(ObjectClass *klass, void *data)
+ {
+     DeviceClass *dc = DEVICE_CLASS(klass);
+     ISADeviceClass *ic = ISA_DEVICE_CLASS(klass);
++    NvramClass *nc = NVRAM_CLASS(klass);
+     M48txxISADeviceClass *u = M48TXX_ISA_CLASS(klass);
+     M48txxInfo *info = data;
+ 
+@@ -814,13 +833,36 @@ static void m48txx_isa_class_init(ObjectClass *klass, void *data)
+     if (info) {
+         dc->props = m48t59_isa_properties;
+         u->info = *info;
++    } else {
++        nc->read = m48txx_isa_read;
++        nc->write = m48txx_isa_write;
++        nc->toggle_lock = m48txx_isa_toggle_lock;
+     }
+ }
+ 
++static uint32_t m48txx_sysbus_read(Nvram *obj, uint32_t addr)
++{
++    M48txxSysBusState *d = M48TXX_SYS_BUS(obj);
++    return m48t59_read(&d->state, addr);
++}
++
++static void m48txx_sysbus_write(Nvram *obj, uint32_t addr, uint32_t val)
++{
++    M48txxSysBusState *d = M48TXX_SYS_BUS(obj);
++    m48t59_write(&d->state, addr, val);
++}
++
++static void m48txx_sysbus_toggle_lock(Nvram *obj, int lock)
++{
++    M48txxSysBusState *d = M48TXX_SYS_BUS(obj);
++    m48t59_toggle_lock(&d->state, lock);
++}
++
+ static void m48txx_sysbus_class_init(ObjectClass *klass, void *data)
+ {
+     DeviceClass *dc = DEVICE_CLASS(klass);
+     SysBusDeviceClass *k = SYS_BUS_DEVICE_CLASS(klass);
++    NvramClass *nc = NVRAM_CLASS(klass);
+     M48txxSysBusDeviceClass *u = M48TXX_SYS_BUS_CLASS(klass);
+     M48txxInfo *info = data;
+ 
+@@ -828,15 +870,29 @@ static void m48txx_sysbus_class_init(ObjectClass *klass, void *data)
+     dc->reset = m48t59_reset_sysbus;
+     if (info) {
+         u->info = *info;
++    } else {
++        nc->read = m48txx_sysbus_read;
++        nc->write = m48txx_sysbus_write;
++        nc->toggle_lock = m48txx_sysbus_toggle_lock;
+     }
+ }
+ 
++static const TypeInfo nvram_info = {
++    .name = TYPE_NVRAM,
++    .parent = TYPE_INTERFACE,
++    .class_size = sizeof(NvramClass),
++};
++
+ static const TypeInfo m48txx_sysbus_type_info = {
+     .name = TYPE_M48TXX_SYS_BUS,
+     .parent = TYPE_SYS_BUS_DEVICE,
+     .instance_size = sizeof(M48txxSysBusState),
+     .abstract = true,
+     .class_init = m48txx_sysbus_class_init,
++    .interfaces = (InterfaceInfo[]) {
++        { TYPE_NVRAM },
++        { }
++    }
+ };
+ 
+ static const TypeInfo m48txx_isa_type_info = {
+@@ -845,6 +901,10 @@ static const TypeInfo m48txx_isa_type_info = {
+     .instance_size = sizeof(M48txxISAState),
+     .abstract = true,
+     .class_init = m48txx_isa_class_init,
++    .interfaces = (InterfaceInfo[]) {
++        { TYPE_NVRAM },
++        { }
++    }
+ };
+ 
+ static void m48t59_register_types(void)
+@@ -861,6 +921,7 @@ static void m48t59_register_types(void)
+     };
+     int i;
+ 
++    type_register_static(&nvram_info);
+     type_register_static(&m48txx_sysbus_type_info);
+     type_register_static(&m48txx_isa_type_info);
+ 
+diff --git a/include/hw/timer/m48t59.h b/include/hw/timer/m48t59.h
+index 59337fa..72b7ac1 100644
+--- a/include/hw/timer/m48t59.h
++++ b/include/hw/timer/m48t59.h
+@@ -1,6 +1,9 @@
+ #ifndef NVRAM_H
+ #define NVRAM_H
+ 
++#include "qemu-common.h"
++#include "qom/object.h"
++
+ /* NVRAM helpers */
+ typedef uint32_t (*nvram_read_t)(void *private, uint32_t addr);
+ typedef void (*nvram_write_t)(void *private, uint32_t addr, uint32_t val);
+@@ -31,4 +34,25 @@ M48t59State *m48t59_init_isa(ISABus *bus, uint32_t io_base, uint16_t size,
+ M48t59State *m48t59_init(qemu_irq IRQ, hwaddr mem_base,
+                          uint32_t io_base, uint16_t size, int type);
+ 
++#define TYPE_NVRAM "nvram"
++
++#define NVRAM_CLASS(klass) \
++    OBJECT_CLASS_CHECK(NvramClass, (klass), TYPE_NVRAM)
++#define NVRAM_GET_CLASS(obj) \
++    OBJECT_GET_CLASS(NvramClass, (obj), TYPE_NVRAM)
++#define NVRAM(obj) \
++    INTERFACE_CHECK(Nvram, (obj), TYPE_NVRAM)
++
++typedef struct Nvram {
++    Object parent;
++} Nvram;
++
++typedef struct NvramClass {
++    InterfaceClass parent;
++
++    uint32_t (*read)(Nvram *obj, uint32_t addr);
++    void (*write)(Nvram *obj, uint32_t addr, uint32_t val);
++    void (*toggle_lock)(Nvram *obj, int lock);
++} NvramClass;
++
+ #endif /* !NVRAM_H */
+-- 
+1.7.10.4
+
+

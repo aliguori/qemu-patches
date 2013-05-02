@@ -1,0 +1,196 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Richard Henderson <rth@twiddle.net>
+To: qemu-devel@nongnu.org
+Cc: av1474@comtv.ru, agraf@suse.de, aurelien@aurel32.net
+Date: Mon,  1 Apr 2013 21:23:13 -0700
+Message-id: 1364876610-3933-11-git-send-email-rth@twiddle.net
+Subject: [PATCH 10/27] tcg-ppc64: Improve constant add and sub ops.
+
+Use SUBFIC to implement subtraction with constant op1.  Improve constant
+addition -- previously we'd emit useless addis with 0.  Use new constraints
+to force the driver to pull full 64-bit constants into a register.
+
+Reviewed-by: Aurelien Jarno <aurelien@aurel32.net>
+Signed-off-by: Richard Henderson <rth@twiddle.net>
+---
+ tcg/ppc64/tcg-target.c | 117 ++++++++++++++++++++++++++++++-------------------
+ 1 file changed, 72 insertions(+), 45 deletions(-)
+
+diff --git a/tcg/ppc64/tcg-target.c b/tcg/ppc64/tcg-target.c
+index 0e4826d..d12fd61 100644
+--- a/tcg/ppc64/tcg-target.c
++++ b/tcg/ppc64/tcg-target.c
+@@ -329,6 +329,7 @@ static int tcg_target_const_match (tcg_target_long val,
+ #define MULLI  OPCD(  7)
+ #define CMPLI  OPCD( 10)
+ #define CMPI   OPCD( 11)
++#define SUBFIC OPCD( 8)
+ 
+ #define LWZU   OPCD( 33)
+ #define STWU   OPCD( 37)
+@@ -988,32 +989,6 @@ static void tcg_out_st (TCGContext *s, TCGType type, TCGReg arg, TCGReg arg1,
+         tcg_out_ldsta (s, arg, arg1, arg2, STD, STDX);
+ }
+ 
+-static void ppc_addi32(TCGContext *s, TCGReg rt, TCGReg ra, tcg_target_long si)
+-{
+-    if (!si && rt == ra)
+-        return;
+-
+-    if (si == (int16_t) si)
+-        tcg_out32(s, ADDI | TAI(rt, ra, si));
+-    else {
+-        uint16_t h = ((si >> 16) & 0xffff) + ((uint16_t) si >> 15);
+-        tcg_out32(s, ADDIS | TAI(rt, ra, h));
+-        tcg_out32(s, ADDI | TAI(rt, rt, si));
+-    }
+-}
+-
+-static void ppc_addi64(TCGContext *s, TCGReg rt, TCGReg ra, tcg_target_long si)
+-{
+-    /* XXX: suboptimal */
+-    if (si == (int16_t) si
+-        || ((((uint64_t) si >> 31) == 0) && (si & 0x8000) == 0))
+-        ppc_addi32 (s, rt, ra, si);
+-    else {
+-        tcg_out_movi (s, TCG_TYPE_I64, 0, si);
+-        tcg_out32(s, ADD | TAB(rt, ra, 0));
+-    }
+-}
+-
+ static void tcg_out_cmp (TCGContext *s, int cond, TCGArg arg1, TCGArg arg2,
+                          int const_arg2, int cr, int arch64)
+ {
+@@ -1226,6 +1201,7 @@ void ppc_tb_set_jmp_target (unsigned long jmp_addr, unsigned long addr)
+ static void tcg_out_op (TCGContext *s, TCGOpcode opc, const TCGArg *args,
+                         const int *const_args)
+ {
++    TCGArg a0, a1, a2;
+     int c;
+ 
+     switch (opc) {
+@@ -1314,16 +1290,37 @@ static void tcg_out_op (TCGContext *s, TCGOpcode opc, const TCGArg *args,
+         break;
+ 
+     case INDEX_op_add_i32:
+-        if (const_args[2])
+-            ppc_addi32 (s, args[0], args[1], args[2]);
+-        else
+-            tcg_out32 (s, ADD | TAB (args[0], args[1], args[2]));
++        a0 = args[0], a1 = args[1], a2 = args[2];
++        if (const_args[2]) {
++            int32_t l, h;
++        do_addi_32:
++            l = (int16_t)a2;
++            h = a2 - l;
++            if (h) {
++                tcg_out32(s, ADDIS | TAI(a0, a1, h >> 16));
++                a1 = a0;
++            }
++            if (l || a0 != a1) {
++                tcg_out32(s, ADDI | TAI(a0, a1, l));
++            }
++        } else {
++            tcg_out32(s, ADD | TAB(a0, a1, a2));
++        }
+         break;
+     case INDEX_op_sub_i32:
+-        if (const_args[2])
+-            ppc_addi32 (s, args[0], args[1], -args[2]);
+-        else
+-            tcg_out32 (s, SUBF | TAB (args[0], args[2], args[1]));
++        a0 = args[0], a1 = args[1], a2 = args[2];
++        if (const_args[1]) {
++            if (const_args[2]) {
++                tcg_out_movi(s, TCG_TYPE_I32, a0, a1 - a2);
++            } else {
++                tcg_out32(s, SUBFIC | TAI(a0, a2, a1));
++            }
++        } else if (const_args[2]) {
++            a2 = -a2;
++            goto do_addi_32;
++        } else {
++            tcg_out32(s, SUBF | TAB(a0, a2, a1));
++        }
+         break;
+ 
+     case INDEX_op_and_i64:
+@@ -1453,16 +1450,46 @@ static void tcg_out_op (TCGContext *s, TCGOpcode opc, const TCGArg *args,
+         break;
+ 
+     case INDEX_op_add_i64:
+-        if (const_args[2])
+-            ppc_addi64 (s, args[0], args[1], args[2]);
+-        else
+-            tcg_out32 (s, ADD | TAB (args[0], args[1], args[2]));
++        a0 = args[0], a1 = args[1], a2 = args[2];
++        if (const_args[2]) {
++            int32_t l0, h1, h2;
++        do_addi_64:
++            /* We can always split any 32-bit constant into
++               3 sign-extending pieces.  */
++            l0 = (int16_t)a2;
++            a2 -= l0;
++            h1 = ((int64_t)a2 > 0 && (int32_t)a2 < 0 ? 0x40000000 : 0);
++            h2 = a2 - h1;
++
++            if (h2) {
++                tcg_out32(s, ADDIS | TAI(a0, a1, h2 >> 16));
++                a1 = a0;
++            }
++            if (h1) {
++                tcg_out32(s, ADDIS | TAI(a0, a1, h1 >> 16));
++                a1 = a0;
++            }
++            if (l0 || a0 != a1) {
++                tcg_out32(s, ADDI | TAI(a0, a1, l0));
++            }
++        } else {
++            tcg_out32(s, ADD | TAB(a0, a1, a2));
++        }
+         break;
+     case INDEX_op_sub_i64:
+-        if (const_args[2])
+-            ppc_addi64 (s, args[0], args[1], -args[2]);
+-        else
+-            tcg_out32 (s, SUBF | TAB (args[0], args[2], args[1]));
++        a0 = args[0], a1 = args[1], a2 = args[2];
++        if (const_args[1]) {
++            if (const_args[2]) {
++                tcg_out_movi(s, TCG_TYPE_I64, a0, a1 - a2);
++            } else {
++                tcg_out32(s, SUBFIC | TAI(a0, a2, a1));
++            }
++        } else if (const_args[2]) {
++            a2 = -a2;
++            goto do_addi_64;
++        } else {
++            tcg_out32(s, SUBF | TAB(a0, a2, a1));
++        }
+         break;
+ 
+     case INDEX_op_shl_i64:
+@@ -1613,7 +1640,7 @@ static const TCGTargetOpDef ppc_op_defs[] = {
+     { INDEX_op_divu_i32, { "r", "r", "r" } },
+     { INDEX_op_rem_i32, { "r", "r", "r" } },
+     { INDEX_op_remu_i32, { "r", "r", "r" } },
+-    { INDEX_op_sub_i32, { "r", "r", "ri" } },
++    { INDEX_op_sub_i32, { "r", "rI", "ri" } },
+     { INDEX_op_and_i32, { "r", "r", "ri" } },
+     { INDEX_op_or_i32, { "r", "r", "ri" } },
+     { INDEX_op_xor_i32, { "r", "r", "ri" } },
+@@ -1628,8 +1655,8 @@ static const TCGTargetOpDef ppc_op_defs[] = {
+     { INDEX_op_neg_i32, { "r", "r" } },
+     { INDEX_op_not_i32, { "r", "r" } },
+ 
+-    { INDEX_op_add_i64, { "r", "r", "ri" } },
+-    { INDEX_op_sub_i64, { "r", "r", "ri" } },
++    { INDEX_op_add_i64, { "r", "r", "rTU" } },
++    { INDEX_op_sub_i64, { "r", "rI", "rTU" } },
+     { INDEX_op_and_i64, { "r", "r", "rU" } },
+     { INDEX_op_or_i64, { "r", "r", "rU" } },
+     { INDEX_op_xor_i64, { "r", "r", "rU" } },
+-- 
+1.8.1.4
+
+

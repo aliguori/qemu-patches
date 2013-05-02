@@ -1,0 +1,50 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: Paolo Bonzini <pbonzini@redhat.com>, Riku Voipio <riku.voipio@iki.fi>,
+ qemu-devel@nongnu.org
+Cc: peter.maydell@linaro.org, qemu-devel@nongnu.org, edgar.iglesias@gmail.com
+Date: Wed, 17 Apr 2013 16:26:34 +0200
+Message-id: 1366208807-4433-1-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 00/13] TARGET_*_ALIGNMENT cleanup,
+ and config-target.mak trimming
+
+This series expands on the one I sent yesterday, but also fixes some
+confusion between target (CPU) and ABI types in linux-user/elfload.c.
+
+target_short/int/llong and the corresponding unsigned types are renamed
+to abi_short/int/llong, and TARGET_*_ALIGNMENT is similarly renamed to
+ABI_*_ALIGNMENT.  target_long/ulong, which identify the register width
+in the CPU, do not have special alignment anymore.  Core dumps are
+changed to use the new types, with fixes to include the full 64-bit
+contents of mipsn32 registers.
+
+
+Paolo Bonzini (13):
+  configure: QEMU_INCLUDES are the same for all subtargets
+  elfload: fix size of ABI-dependent fields in core dumps
+  elfload: fix size of registers for N32
+  elfload: use tswapreg consistently in elf_core_copy_regs
+  elfload: use abi_short/ushort instead of target_short/ushort
+  elfload: use abi_int/uint instead of target_int/uint
+  elfload: only give abi_long/ulong the alignment specified by the target
+  elfload: use abi_llong/ullong instead of target_llong/ullong
+  configure: move CONFIG_QEMU_LDST_OPTIMIZATION to config-host.mak
+  configure: move common libraries to config-host.mak
+  configure: eliminate target_libs_softmmu
+  configure: CONFIG_NO_XEN is duplicated
+  configure: remove duplicate test
+
+ Makefile.target                  |  10 +--
+ configure                        | 129 ++++++++++++-----------------
+ default-configs/lm32-softmmu.mak |   1 +
+ hw/display/Makefile.objs         |   5 +-
+ include/exec/cpu-defs.h          |  14 +---
+ include/exec/user/abitypes.h     |  46 ++++++++--
+ include/hw/xen/xen.h             |   2 +-
+ linux-user/elfload.c             | 175 ++++++++++++++++++++-------------------
+ 8 files changed, 196 insertions(+), 186 deletions(-)
+
+-- 
+1.8.1.4
+
+

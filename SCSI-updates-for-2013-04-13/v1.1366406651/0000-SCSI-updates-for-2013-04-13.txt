@@ -1,0 +1,82 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: "Nicholas A. Bellinger" <nab@linux-iscsi.org>,
+ Paolo Bonzini <pbonzini@redhat.com>, Gerd Hoffmann <kraxel@redhat.com>,
+ qemu-devel@nongnu.org, Stefan Weil <sw@weilnetz.de>
+Cc: "Nicholas A. Bellinger" <nab@linux-iscsi.org>,
+ Paolo Bonzini <pbonzini@redhat.com>,
+ target-devel <target-devel@vger.kernel.org>,
+ Anthony Liguori <anthony@codemonkey.ws>, qemu-devel@nongnu.org,
+ nab@linux-iscsi.org, Kevin O'Connor <kevin@koconnor.net>, "Michael S.
+ Tsirkin" <mst@redhat.com>, "Michael S. Tsirkin" <mst@redhat.com>,
+ "seabios@seabios.org" <seabios@seabios.org>, asias@redhat.com,
+ Gerd Hoffmann <kraxel@redhat.com>
+Date: Fri, 19 Apr 2013 16:24:11 +0200
+Message-id: 1366381460-6041-1-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 0/9] SCSI updates for 2013-04-13
+
+The following changes since commit 09dada400328d75daf79e3eca1e48e024fec148d:
+
+  configure: remove duplicate test (2013-04-18 14:12:31 +0200)
+
+are available in the git repository at:
+
+  git://github.com/bonzini/qemu.git scsi-next
+
+for you to fetch changes up to d6e51919a7e3250bbfb4bb0ad0f208ab6fd688a4:
+
+  vhost-scsi-s390: new device supporting the tcm_vhost Linux kernel module (2013-04-19 16:19:13 +0200)
+
+The VMware PVSCSI implementation and vhost-scsi are finally getting in.
+
+Paolo
+----------------------------------------------------------------
+Dmitry Fleytman (1):
+      scsi: VMWare PVSCSI paravirtual device implementation
+
+Nicholas Bellinger (3):
+      vhost: Add vhost_commit callback for SeaBIOS ROM region re-mapping
+      vhost-scsi: new device supporting the tcm_vhost Linux kernel module
+      vhost-scsi-pci: new device supporting the tcm_vhost Linux kernel module
+
+Paolo Bonzini (5):
+      scsi: avoid assertion failure on VERIFY command
+      virtio-scsi: create VirtIOSCSICommon
+      virtio: simplify Makefile conditionals
+      vhost-scsi-ccw: new device supporting the tcm_vhost Linux kernel module
+      vhost-scsi-s390: new device supporting the tcm_vhost Linux kernel module
+
+ configure                       |   10 +
+ default-configs/pci.mak         |    1 +
+ docs/specs/vmw_pvscsi-spec.txt  |   92 +++
+ hw/Makefile.objs                |    2 +-
+ hw/s390x/s390-virtio-bus.c      |   51 +-
+ hw/s390x/s390-virtio-bus.h      |   16 +
+ hw/s390x/virtio-ccw.c           |   53 +-
+ hw/s390x/virtio-ccw.h           |   14 +
+ hw/scsi/Makefile.objs           |    7 +-
+ hw/scsi/scsi-disk.c             |   19 +-
+ hw/scsi/vhost-scsi.c            |  288 ++++++++++
+ hw/scsi/virtio-scsi.c           |  212 +++----
+ hw/scsi/vmw_pvscsi.c            | 1216 +++++++++++++++++++++++++++++++++++++++
+ hw/scsi/vmw_pvscsi.h            |  434 ++++++++++++++
+ hw/virtio/Makefile.objs         |    8 +-
+ hw/virtio/vhost.c               |   53 +-
+ hw/virtio/virtio-pci.c          |   65 ++-
+ hw/virtio/virtio-pci.h          |   18 +
+ include/hw/pci/pci.h            |    1 +
+ include/hw/virtio/vhost-scsi.h  |   73 +++
+ include/hw/virtio/vhost.h       |    3 +
+ include/hw/virtio/virtio-scsi.h |  135 ++++-
+ include/qemu/osdep.h            |    4 +
+ trace-events                    |   35 ++
+ 24 files changed, 2636 insertions(+), 174 deletions(-)
+ create mode 100644 docs/specs/vmw_pvscsi-spec.txt
+ create mode 100644 hw/scsi/vhost-scsi.c
+ create mode 100644 hw/scsi/vmw_pvscsi.c
+ create mode 100644 hw/scsi/vmw_pvscsi.h
+ create mode 100644 include/hw/virtio/vhost-scsi.h
+-- 
+1.8.1.4
+
+

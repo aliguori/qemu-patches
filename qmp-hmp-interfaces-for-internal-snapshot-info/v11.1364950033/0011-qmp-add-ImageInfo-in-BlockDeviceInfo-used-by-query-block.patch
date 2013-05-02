@@ -1,0 +1,229 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Wenchao Xia <xiawenc@linux.vnet.ibm.com>
+To: Markus Armbruster <armbru@redhat.com>, Stefan Hajnoczi <stefanha@gmail.com>,
+ Wenchao Xia <xiawenc@linux.vnet.ibm.com>, qemu-devel@nongnu.org,
+ Luiz Capitulino <lcapitulino@redhat.com>
+Cc: kwolf@redhat.com, Wenchao Xia <xiawenc@linux.vnet.ibm.com>,
+ qemu-devel@nongnu.org, stefanha@gmail.com,
+ Stefan Hajnoczi <stefanha@gmail.com>, armbru@redhat.com,
+ lcapitulino@redhat.com, Luiz Capitulino <lcapitulino@redhat.com>,
+ Markus Armbruster <armbru@redhat.com>, pbonzini@redhat.com
+Date: Tue,  2 Apr 2013 19:47:24 +0800
+Message-id: 1364903250-10429-12-git-send-email-xiawenc@linux.vnet.ibm.com
+Subject: [PATCH 11/17] qmp: add ImageInfo in BlockDeviceInfo used by
+ query-block
+
+  Now image info will be retrieved as an embbed json object inside
+BlockDeviceInfo, backing chain info and all related internal snapshot
+info can be got in the enhanced recursive structure of ImageInfo.
+
+Signed-off-by: Wenchao Xia <xiawenc@linux.vnet.ibm.com>
+---
+ block/qapi.c         |   38 ++++++++++++++++++++++++++--
+ include/block/qapi.h |    4 ++-
+ qapi-schema.json     |    5 +++-
+ qmp-commands.hx      |   67 +++++++++++++++++++++++++++++++++++++++++++++++++-
+ 4 files changed, 108 insertions(+), 6 deletions(-)
+
+diff --git a/block/qapi.c b/block/qapi.c
+index fa61c85..e98a028 100644
+--- a/block/qapi.c
++++ b/block/qapi.c
+@@ -202,9 +202,14 @@ int bdrv_query_image_info(BlockDriverState *bs,
+     return 0;
+ }
+ 
+-BlockInfo *bdrv_query_info(BlockDriverState *bs)
++/* @p_info will be set only on success. */
++void bdrv_query_info(BlockDriverState *bs,
++                     BlockInfo **p_info,
++                     Error **errp)
+ {
+     BlockInfo *info = g_malloc0(sizeof(*info));
++    BlockDriverState *bs0;
++    ImageInfo **p_image_info;
+     info->device = g_strdup(bs->device_name);
+     info->type = g_strdup("unknown");
+     info->locked = bdrv_dev_is_medium_locked(bs);
+@@ -258,8 +263,28 @@ BlockInfo *bdrv_query_info(BlockDriverState *bs)
+             info->inserted->iops_wr =
+                            bs->io_limits.iops[BLOCK_IO_LIMIT_WRITE];
+         }
++
++        bs0 = bs;
++        p_image_info = &info->inserted->image;
++        while (1) {
++            if (bdrv_query_image_info(bs0, p_image_info, errp)) {
++                goto err;
++            }
++            if (bs0->drv && bs0->backing_hd) {
++                bs0 = bs0->backing_hd;
++                (*p_image_info)->has_backing_image = true;
++                p_image_info = &((*p_image_info)->backing_image);
++            } else {
++                break;
++            }
++        }
+     }
+-    return info;
++
++    *p_info = info;
++    return;
++
++ err:
++    qapi_free_BlockInfo(info);
+ }
+ 
+ SnapshotInfoList *qmp_query_snapshots(Error **errp)
+@@ -286,11 +311,18 @@ BlockInfoList *qmp_query_block(Error **errp)
+ 
+     while ((bs = bdrv_next(bs))) {
+         BlockInfoList *info = g_malloc0(sizeof(*info));
+-        info->value = bdrv_query_info(bs);
++        bdrv_query_info(bs, &info->value, errp);
++        if (error_is_set(errp)) {
++            goto err;
++        }
+ 
+         *p_next = info;
+         p_next = &info->next;
+     }
+ 
+     return head;
++
++ err:
++    qapi_free_BlockInfoList(head);
++    return NULL;
+ }
+diff --git a/include/block/qapi.h b/include/block/qapi.h
+index 0039a70..e0fd0a5 100644
+--- a/include/block/qapi.h
++++ b/include/block/qapi.h
+@@ -35,5 +35,7 @@ int bdrv_query_snapshot_info_list(BlockDriverState *bs,
+ int bdrv_query_image_info(BlockDriverState *bs,
+                           ImageInfo **p_info,
+                           Error **errp);
+-BlockInfo *bdrv_query_info(BlockDriverState *bs);
++void bdrv_query_info(BlockDriverState *bs,
++                     BlockInfo **p_info,
++                     Error **errp);
+ #endif
+diff --git a/qapi-schema.json b/qapi-schema.json
+index ad9dd82..02dabc3 100644
+--- a/qapi-schema.json
++++ b/qapi-schema.json
+@@ -756,6 +756,8 @@
+ #
+ # @iops_wr: write I/O operations per second is specified
+ #
++# @image: the info of image used (since: 1.5)
++#
+ # Since: 0.14.0
+ #
+ # Notes: This interface is only found in @BlockInfo.
+@@ -765,7 +767,8 @@
+             '*backing_file': 'str', 'backing_file_depth': 'int',
+             'encrypted': 'bool', 'encryption_key_missing': 'bool',
+             'bps': 'int', 'bps_rd': 'int', 'bps_wr': 'int',
+-            'iops': 'int', 'iops_rd': 'int', 'iops_wr': 'int'} }
++            'iops': 'int', 'iops_rd': 'int', 'iops_wr': 'int',
++            'image': 'ImageInfo' } }
+ 
+ ##
+ # @BlockDeviceIoStatus:
+diff --git a/qmp-commands.hx b/qmp-commands.hx
+index 6b20684..b856be7 100644
+--- a/qmp-commands.hx
++++ b/qmp-commands.hx
+@@ -1703,6 +1703,47 @@ Each json-object contain the following:
+          - "iops": limit total I/O operations per second (json-int)
+          - "iops_rd": limit read operations per second (json-int)
+          - "iops_wr": limit write operations per second (json-int)
++         - "image": the detail of the image, it is a json-object containing
++            the following:
++             - "filename": image file name (json-string)
++             - "format": image format (json-string)
++             - "virtual-size": image capacity in bytes (json-int)
++             - "dirty-flag": true if image is not cleanly closed, not present
++                             means clean (json-bool, optional)
++             - "actual-size": actual size on disk in bytes of the image, not
++                              present when image does not support thin
++                              provision (json-int, optional)
++             - "cluster-size": size of a cluster in bytes, not present if image
++                               format does not support it (json-int, optional)
++             - "encrypted": true if the image is encrypted, not present means
++                            false or the image format does not support
++                            encryption (json-bool, optional)
++             - "backing_file": backing file name, not present means no backing
++                               file is used or the image format does not
++                               support backing file chain
++                               (json-string, optional)
++             - "full-backing-filename": full path of the backing file, not
++                                        present if it equals backing_file or no
++                                        backing file is used
++                                        (json-string, optional)
++             - "backing-filename-format": the format of the backing file, not
++                                          present means unknown or no backing
++                                          file (json-string, optional)
++             - "snapshots": the internal snapshot info, it is an optional list
++                of json-object containing the following:
++                 - "id": unique snapshot id (json-string)
++                 - "name": snapshot name (json-string)
++                 - "vm-state-size": size of the VM state in bytes (json-int)
++                 - "date-sec": UTC date of the snapshot in seconds (json-int)
++                 - "date-nsec": fractional part in nanoseconds to be used with
++                                date-sec(json-int)
++                 - "vm-clock-sec": VM clock relative to boot in seconds
++                                   (json-int)
++                 - "vm-clock-nsec": fractional part in nanoseconds to be used
++                                    with vm-clock-sec (json-int)
++             - "backing-image": the detail of the backing image, it is an
++                                optional json-object only present when a
++                                backing image present for this image
+ 
+ - "io-status": I/O operation status, only present if the device supports it
+                and the VM is configured to stop on errors. It's always reset
+@@ -1724,13 +1765,37 @@ Example:
+                "drv":"qcow2",
+                "encrypted":false,
+                "file":"disks/test.img",
+-               "backing_file_depth":0,
++               "backing_file_depth":1,
+                "bps":1000000,
+                "bps_rd":0,
+                "bps_wr":0,
+                "iops":1000000,
+                "iops_rd":0,
+                "iops_wr":0,
++               "image":{
++                  "filename":"disks/test.img",
++                  "format":"qcow2",
++                  "virtual-size":2048000,
++                  "backing_file":"base.img",
++                  "full-backing-filename":"disks/base.img",
++                  "backing-filename-format:"qcow2",
++                  "snapshots":[
++                     {
++                        "id": "1",
++                        "name": "snapshot1",
++                        "vm-state-size": 0,
++                        "date-sec": 10000200,
++                        "date-nsec": 12,
++                        "vm-clock-sec": 206,
++                        "vm-clock-nsec": 30
++                     }
++                  ],
++                  "backing-image":{
++                      "filename":"disks/base.img",
++                      "format":"qcow2",
++                      "virtual-size":2048000
++                  }
++               }
+             },
+             "type":"unknown"
+          },
+-- 
+1.7.1
+
+
+

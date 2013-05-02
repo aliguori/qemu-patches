@@ -1,0 +1,32 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Kevin Wolf <kwolf@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: kwolf@redhat.com, aurelien@aurel32.net
+Date: Tue,  2 Apr 2013 11:28:24 +0200
+Message-id: 1364894905-12955-2-git-send-email-kwolf@redhat.com
+Subject: [PATCH 1/2] po/Makefile: Fix dependency for %.mo
+
+Otherwise make will refuse to build updated .po files.
+
+Signed-off-by: Kevin Wolf <kwolf@redhat.com>
+---
+ po/Makefile | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/po/Makefile b/po/Makefile
+index 8297ab5..60ccd7d 100644
+--- a/po/Makefile
++++ b/po/Makefile
+@@ -30,7 +30,7 @@ install: $(OBJS)
+ 	    $(INSTALL) -m644 $$obj $(DESTDIR)$(prefix)/share/locale/$$base/LC_MESSAGES/qemu.mo; \
+ 	done
+ 
+-%.mo:
++%.mo: %.po
+ 	@msgfmt -o $@ $(SRC_PATH)/po/`basename $@ .mo`.po
+ 
+ messages.po: $(SRC_PATH)/ui/gtk.c
+-- 
+1.8.1.4
+
+

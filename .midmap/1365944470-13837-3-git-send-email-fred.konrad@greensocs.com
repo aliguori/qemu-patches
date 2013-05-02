@@ -1,0 +1,1 @@
+../virtio-rng-refactoring/v3.1365969662/0002-virtio-rng-add-virtio-rng-device.patch

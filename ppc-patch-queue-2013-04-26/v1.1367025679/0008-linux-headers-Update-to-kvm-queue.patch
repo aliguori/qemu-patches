@@ -1,0 +1,55 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Alexander Graf <agraf@suse.de>
+To: qemu-ppc@nongnu.org
+Cc: Blue Swirl <blauwirbel@gmail.com>, Aurelien Jarno <aurelien@aurel32.net>,
+ qemu-devel@nongnu.org
+Date: Fri, 26 Apr 2013 20:21:27 +0200
+Message-id: 1367000509-8833-9-git-send-email-agraf@suse.de
+Subject: [PATCH 08/30] linux-headers: Update to kvm/queue
+
+Based on kvm.git queue branch with commit e1e2e605.
+
+Signed-off-by: Alexander Graf <agraf@suse.de>
+---
+ linux-headers/asm-powerpc/kvm.h |    5 +++++
+ linux-headers/linux/kvm.h       |    3 +++
+ 2 files changed, 8 insertions(+), 0 deletions(-)
+
+diff --git a/linux-headers/asm-powerpc/kvm.h b/linux-headers/asm-powerpc/kvm.h
+index 16064d0..ef072b1 100644
+--- a/linux-headers/asm-powerpc/kvm.h
++++ b/linux-headers/asm-powerpc/kvm.h
+@@ -417,4 +417,9 @@ struct kvm_get_htab_header {
+ #define KVM_REG_PPC_EPCR	(KVM_REG_PPC | KVM_REG_SIZE_U32 | 0x85)
+ #define KVM_REG_PPC_EPR		(KVM_REG_PPC | KVM_REG_SIZE_U32 | 0x86)
+ 
++/* Timer Status Register OR/CLEAR interface */
++#define KVM_REG_PPC_OR_TSR	(KVM_REG_PPC | KVM_REG_SIZE_U32 | 0x87)
++#define KVM_REG_PPC_CLEAR_TSR	(KVM_REG_PPC | KVM_REG_SIZE_U32 | 0x88)
++#define KVM_REG_PPC_TCR		(KVM_REG_PPC | KVM_REG_SIZE_U32 | 0x89)
++#define KVM_REG_PPC_TSR		(KVM_REG_PPC | KVM_REG_SIZE_U32 | 0x8a)
+ #endif /* __LINUX_KVM_POWERPC_H */
+diff --git a/linux-headers/linux/kvm.h b/linux-headers/linux/kvm.h
+index caca979..eb02d8a 100644
+--- a/linux-headers/linux/kvm.h
++++ b/linux-headers/linux/kvm.h
+@@ -449,12 +449,15 @@ enum {
+ 	kvm_ioeventfd_flag_nr_datamatch,
+ 	kvm_ioeventfd_flag_nr_pio,
+ 	kvm_ioeventfd_flag_nr_deassign,
++	kvm_ioeventfd_flag_nr_virtio_ccw_notify,
+ 	kvm_ioeventfd_flag_nr_max,
+ };
+ 
+ #define KVM_IOEVENTFD_FLAG_DATAMATCH (1 << kvm_ioeventfd_flag_nr_datamatch)
+ #define KVM_IOEVENTFD_FLAG_PIO       (1 << kvm_ioeventfd_flag_nr_pio)
+ #define KVM_IOEVENTFD_FLAG_DEASSIGN  (1 << kvm_ioeventfd_flag_nr_deassign)
++#define KVM_IOEVENTFD_FLAG_VIRTIO_CCW_NOTIFY \
++	(1 << kvm_ioeventfd_flag_nr_virtio_ccw_notify)
+ 
+ #define KVM_IOEVENTFD_VALID_FLAG_MASK  ((1 << kvm_ioeventfd_flag_nr_max) - 1)
+ 
+-- 
+1.6.0.2
+
+

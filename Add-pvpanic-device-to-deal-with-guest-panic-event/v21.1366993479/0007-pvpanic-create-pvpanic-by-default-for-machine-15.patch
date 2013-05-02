@@ -1,0 +1,164 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Hu Tao <hutao@cn.fujitsu.com>
+To: Hu Tao <hutao@cn.fujitsu.com>, qemu-devel@nongnu.org
+Cc: Paolo Bonzini <pbonzini@redhat.com>, qemu-devel@nongnu.org,
+ Markus Armbruster <armbru@redhat.com>
+Date: Fri, 26 Apr 2013 11:24:46 +0800
+Message-id: f840042f0e1205041f8feaf0d39ca639884f3a00.1366945969.git.hutao@cn.fujitsu.com
+Subject: [PATCH 7/8] pvpanic: create pvpanic by default for machine 1.5
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+Signed-off-by: Hu Tao <hutao@cn.fujitsu.com>
+Reviewed-by: Markus Armbruster <armbru@redhat.com>
+---
+ hw/i386/pc_piix.c    | 12 ++++++++++++
+ hw/i386/pc_q35.c     |  7 +++++++
+ hw/misc/pvpanic.c    |  7 +++++++
+ include/hw/i386/pc.h |  3 +++
+ 4 files changed, 29 insertions(+)
+
+diff --git a/hw/i386/pc_piix.c b/hw/i386/pc_piix.c
+index 89b4cb4..d71a1c6 100644
+--- a/hw/i386/pc_piix.c
++++ b/hw/i386/pc_piix.c
+@@ -55,6 +55,8 @@ static const int ide_iobase[MAX_IDE_BUS] = { 0x1f0, 0x170 };
+ static const int ide_iobase2[MAX_IDE_BUS] = { 0x3f6, 0x376 };
+ static const int ide_irq[MAX_IDE_BUS] = { 14, 15 };
+ 
++static bool has_pvpanic = true;
++
+ /* PC hardware initialisation */
+ static void pc_init1(MemoryRegion *system_memory,
+                      MemoryRegion *system_io,
+@@ -218,6 +220,10 @@ static void pc_init1(MemoryRegion *system_memory,
+     if (pci_enabled) {
+         pc_pci_device_init(pci_bus);
+     }
++
++    if (has_pvpanic) {
++        pvpanic_init(isa_bus);
++    }
+ }
+ 
+ static void pc_init_pci(QEMUMachineInitArgs *args)
+@@ -238,6 +244,7 @@ static void pc_init_pci(QEMUMachineInitArgs *args)
+ static void pc_init_pci_1_4(QEMUMachineInitArgs *args)
+ {
+     pc_sysfw_flash_vs_rom_bug_compatible = true;
++    has_pvpanic = false;
+     pc_init_pci(args);
+ }
+ 
+@@ -245,6 +252,7 @@ static void pc_init_pci_1_3(QEMUMachineInitArgs *args)
+ {
+     enable_compat_apic_id_mode();
+     pc_sysfw_flash_vs_rom_bug_compatible = true;
++    has_pvpanic = false;
+     pc_init_pci(args);
+ }
+ 
+@@ -254,6 +262,7 @@ static void pc_init_pci_1_2(QEMUMachineInitArgs *args)
+     disable_kvm_pv_eoi();
+     enable_compat_apic_id_mode();
+     pc_sysfw_flash_vs_rom_bug_compatible = true;
++    has_pvpanic = false;
+     pc_init_pci(args);
+ }
+ 
+@@ -262,6 +271,7 @@ static void pc_init_pci_1_0(QEMUMachineInitArgs *args)
+ {
+     disable_kvm_pv_eoi();
+     enable_compat_apic_id_mode();
++    has_pvpanic = false;
+     pc_init_pci(args);
+ }
+ 
+@@ -274,6 +284,7 @@ static void pc_init_pci_no_kvmclock(QEMUMachineInitArgs *args)
+     const char *kernel_cmdline = args->kernel_cmdline;
+     const char *initrd_filename = args->initrd_filename;
+     const char *boot_device = args->boot_device;
++    has_pvpanic = false;
+     disable_kvm_pv_eoi();
+     enable_compat_apic_id_mode();
+     pc_init1(get_system_memory(),
+@@ -291,6 +302,7 @@ static void pc_init_isa(QEMUMachineInitArgs *args)
+     const char *kernel_cmdline = args->kernel_cmdline;
+     const char *initrd_filename = args->initrd_filename;
+     const char *boot_device = args->boot_device;
++    has_pvpanic = false;
+     if (cpu_model == NULL)
+         cpu_model = "486";
+     disable_kvm_pv_eoi();
+diff --git a/hw/i386/pc_q35.c b/hw/i386/pc_q35.c
+index f160893..6a03ba4 100644
+--- a/hw/i386/pc_q35.c
++++ b/hw/i386/pc_q35.c
+@@ -45,6 +45,8 @@
+ /* ICH9 AHCI has 6 ports */
+ #define MAX_SATA_PORTS     6
+ 
++static bool has_pvpanic = true;
++
+ /* PC hardware initialisation */
+ static void pc_q35_init(QEMUMachineInitArgs *args)
+ {
+@@ -194,11 +196,16 @@ static void pc_q35_init(QEMUMachineInitArgs *args)
+     if (pci_enabled) {
+         pc_pci_device_init(host_bus);
+     }
++
++    if (has_pvpanic) {
++        pvpanic_init(isa_bus);
++    }
+ }
+ 
+ static void pc_q35_init_1_4(QEMUMachineInitArgs *args)
+ {
+     pc_sysfw_flash_vs_rom_bug_compatible = true;
++    has_pvpanic = false;
+     pc_q35_init(args);
+ }
+ 
+diff --git a/hw/misc/pvpanic.c b/hw/misc/pvpanic.c
+index a80fae5..31e1b1d 100644
+--- a/hw/misc/pvpanic.c
++++ b/hw/misc/pvpanic.c
+@@ -19,6 +19,7 @@
+ #include "qemu/log.h"
+ 
+ #include "hw/nvram/fw_cfg.h"
++#include "hw/i386/pc.h"
+ 
+ /* The bit of supported pv event */
+ #define PVPANIC_F_PANICKED      0
+@@ -107,6 +108,12 @@ static int pvpanic_isa_initfn(ISADevice *dev)
+     return 0;
+ }
+ 
++int pvpanic_init(ISABus *bus)
++{
++    isa_create_simple(bus, TYPE_ISA_PVPANIC_DEVICE);
++    return 0;
++}
++
+ static Property pvpanic_isa_properties[] = {
+     DEFINE_PROP_UINT16("ioport", PVPanicState, ioport, 0x505),
+     DEFINE_PROP_END_OF_LIST(),
+diff --git a/include/hw/i386/pc.h b/include/hw/i386/pc.h
+index 14b504c..dd6bc24 100644
+--- a/include/hw/i386/pc.h
++++ b/include/hw/i386/pc.h
+@@ -171,6 +171,9 @@ static inline bool isa_ne2000_init(ISABus *bus, int base, int irq, NICInfo *nd)
+ extern bool pc_sysfw_flash_vs_rom_bug_compatible;
+ void pc_system_firmware_init(MemoryRegion *rom_memory);
+ 
++/* pvpanic.c */
++int pvpanic_init(ISABus *bus);
++
+ /* e820 types */
+ #define E820_RAM        1
+ #define E820_RESERVED   2
+-- 
+1.8.1.4
+
+

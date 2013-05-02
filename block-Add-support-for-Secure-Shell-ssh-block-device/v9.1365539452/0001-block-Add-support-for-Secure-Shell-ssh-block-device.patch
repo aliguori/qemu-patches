@@ -1,0 +1,33 @@
+From patches Mon Sep 17 00:00:00 2001
+From: "Richard W.M. Jones" <rjones@redhat.com>
+To: Stefan Hajnoczi <stefanha@gmail.com>, qemu-devel@nongnu.org,
+ "Richard W.M. Jones" <rjones@redhat.com>
+Cc: qemu-devel@nongnu.org
+Date: Tue,  9 Apr 2013 15:30:52 +0100
+Message-id: 1365517855-16906-1-git-send-email-rjones@redhat.com
+Subject: [PATCH 1/3] block: Add support for Secure Shell (ssh) block device.
+
+Changes since v8:
+
+- Implement the suggestions of Stefan Hajnoczi.
+
+- Add host_key_check parameter, which you can use like this:
+
+  ssh://[...]?host_key_check=no     # skip the check entirely
+  ssh://[...]?host_key_check=yes    # the default, uses known_hosts
+
+  # or check for a specific host key fingerprint:
+  ssh://[...]?host_key_check=md5:<usual SSH host key fingerprint>
+  ssh://[...]?host_key_check=sha1:<SHA1 fingerprint>
+
+Note that I cannot persuade OpenSSH to display the SHA1 fingerprint of
+a host key, so sha1: is not tested.
+
+A possible extension to this would be to check for the exact key (not
+the fingerprint, which is just a hash of the key), although in this
+case the URI would be very long indeed, possibly longer than URIs are
+supposed to be in some cases.
+
+Rich.
+
+

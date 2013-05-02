@@ -1,0 +1,28 @@
+From patches Mon Sep 17 00:00:00 2001
+From: "li guang" <lig.fnst@cn.fujitsu.com>
+To: "Fred ." <eldmannen@gmail.com>, seabios <seabios@seabios.org>,
+ qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, Paolo Bonzini <pbonzini@redhat.com>,
+ seabios <seabios@seabios.org>, "qemu-devel@nongnu.org" <qemu-devel@nongnu.org>,
+ peter.maydell@linaro.org
+Date: Wed, 17 Apr 2013 15:32:33 +0800
+Message-id: 1366183953.24286.8.camel@liguang.fnst.cn.fujitsu.com
+Subject: [PATCH 0/2] Embedded Controller chip emulation
+
+Embedded Controller chip could commonly be found
+at platforms for laptop, it generally does
+power management, keyboard and mouse simulation,
+ACPI defined operation, low-speed devices handling ...
+It talks with OS via io-port 0x60/0x54, 0x62/0x66,
+the first pair is for i8042 compatible, the last
+pair is for ACPI functions.
+As QEMU has done power management, i8042 emulation,
+this RFC patch will only focus on ACPI functions.
+you can find standard description a ACPI SPEC
+"ACPI Embedded Controller Interface Specification"
+
+
+_______________________________________________
+SeaBIOS mailing list
+SeaBIOS@seabios.org
+http://www.seabios.org/mailman/listinfo/seabios

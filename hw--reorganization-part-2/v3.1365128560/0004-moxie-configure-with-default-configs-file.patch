@@ -1,0 +1,39 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: 
+Date: Thu,  4 Apr 2013 21:22:44 +0200
+Message-id: 1365103395-11547-5-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 04/35] moxie: configure with default-configs file
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ default-configs/moxie-softmmu.mak | 3 +++
+ hw/moxie/Makefile.objs            | 2 +-
+ 2 files changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/default-configs/moxie-softmmu.mak b/default-configs/moxie-softmmu.mak
+index 8ede8d5..0a8194a 100644
+--- a/default-configs/moxie-softmmu.mak
++++ b/default-configs/moxie-softmmu.mak
+@@ -1 +1,4 @@
+ # Default configuration for moxie-softmmu
++
++CONFIG_SERIAL=y
++CONFIG_VGA=y
+diff --git a/hw/moxie/Makefile.objs b/hw/moxie/Makefile.objs
+index a5f1742..f5e04e8 100644
+--- a/hw/moxie/Makefile.objs
++++ b/hw/moxie/Makefile.objs
+@@ -1,5 +1,5 @@
+ # moxie boards
+-obj-y = serial.o mc146818rtc.o vga.o
++obj-y = mc146818rtc.o
+ 
+ obj-y := $(addprefix ../,$(obj-y))
+ obj-y += moxiesim.o
+-- 
+1.8.1.4
+
+
+

@@ -1,0 +1,68 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Gerd Hoffmann <kraxel@redhat.com>
+To: Anthony Liguori <aliguori@us.ibm.com>, Paolo Bonzini <pbonzini@redhat.com>,
+ Luiz Capitulino <lcapitulino@redhat.com>, qemu-devel@nongnu.org,
+ Eric Blake <eblake@redhat.com>, Markus Armbruster <armbru@redhat.com>,
+ Gerd Hoffmann <kraxel@redhat.com>
+Cc: Anthony Liguori <aliguori@us.ibm.com>, Paolo Bonzini <pbonzini@redhat.com>,
+ Eric Blake <eblake@redhat.com>, qemu-devel@nongnu.org, lcapitulino@redhat.com,
+ Luiz Capitulino <lcapitulino@redhat.com>,
+ Markus Armbruster <armbru@redhat.com>, Gerd Hoffmann <kraxel@redhat.com>
+Date: Thu, 18 Apr 2013 11:01:14 +0200
+Message-id: 1366275680-15416-1-git-send-email-kraxel@redhat.com
+Subject: [PATCH 0/5] console: qom-ify & extent screendump monitor command
+
+  Hi,
+
+This patch qom-ifies the QemuConsoles and adds an new, optional
+parameter to the screendump command to specify the device you
+want dump from.
+
+Question for the QOM guys: where in the tree should the QemuConsoles
+show up?  I can't find anything in the tree doing this.  I've placed
+them below /backend.  See patch #2.  Ok?  Better suggestions?
+
+Question for the libvirt guys:  Is it ok for libvirt to just extend the
+existing screendump command?  Can libvirt figure there is a new
+(optional) parameter?  See patch #5.
+
+Gerd Hoffmann (5):
+  console: qom-ify QemuConsole
+  console: Hook QemuConsoles into qom tree
+  console: add device link to QemuConsoles
+  console: add qemu_console_lookup_by_device
+  console: extend screendump monitor cmd
+
+ hmp-commands.hx              |    6 ++--
+ hmp.c                        |    3 +-
+ hw/arm/musicpal.c            |    2 +-
+ hw/display/blizzard.c        |    2 +-
+ hw/display/cirrus_vga.c      |    4 +--
+ hw/display/exynos4210_fimd.c |    2 +-
+ hw/display/g364fb.c          |    2 +-
+ hw/display/jazz_led.c        |    2 +-
+ hw/display/milkymist-vgafb.c |    2 +-
+ hw/display/omap_lcdc.c       |    2 +-
+ hw/display/pl110.c           |    2 +-
+ hw/display/pxa2xx_lcd.c      |    2 +-
+ hw/display/qxl.c             |    4 +--
+ hw/display/sm501.c           |    2 +-
+ hw/display/ssd0303.c         |    2 +-
+ hw/display/ssd0323.c         |    2 +-
+ hw/display/tc6393xb.c        |    2 +-
+ hw/display/tcx.c             |    4 +--
+ hw/display/vga-isa-mm.c      |    2 +-
+ hw/display/vga-isa.c         |    2 +-
+ hw/display/vga-pci.c         |    2 +-
+ hw/display/vmware_vga.c      |    7 ++--
+ hw/unicore32/puv3.c          |    2 +-
+ include/ui/console.h         |   19 ++++++++++-
+ qapi-schema.json             |    4 ++-
+ qmp-commands.hx              |    3 +-
+ ui/console.c                 |   76 ++++++++++++++++++++++++++++++++++++++++--
+ 27 files changed, 128 insertions(+), 36 deletions(-)
+
+-- 
+1.7.9.7
+
+

@@ -1,0 +1,169 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: peter.maydell@linaro.org, mst@redhat.com
+Date: Thu, 11 Apr 2013 18:10:29 +0200
+Message-id: 1365696633-30727-9-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 08/12] include: avoid useless includes of exec/ headers
+
+Headers in include/exec/ are for the deepest innards of QEMU,
+they should almost never be included directly.
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ arch_init.c            | 1 -
+ dump.c                 | 6 +++++-
+ hw/alpha/typhoon.c     | 1 -
+ hw/ide/ahci.c          | 1 -
+ hw/ide/internal.h      | 1 -
+ hw/net/vmxnet_tx_pkt.c | 2 +-
+ hw/usb/libhw.c         | 2 +-
+ kvm-stub.c             | 1 -
+ translate-all.c        | 5 ++---
+ 9 files changed, 9 insertions(+), 11 deletions(-)
+
+diff --git a/arch_init.c b/arch_init.c
+index 769ce77..0de3e7e 100644
+--- a/arch_init.c
++++ b/arch_init.c
+@@ -40,7 +40,6 @@
+ #include "hw/audio/audio.h"
+ #include "sysemu/kvm.h"
+ #include "migration/migration.h"
+-#include "exec/gdbstub.h"
+ #include "hw/i386/smbios.h"
+ #include "exec/address-spaces.h"
+ #include "hw/audio/pcspk.h"
+diff --git a/dump.c b/dump.c
+index a25f509..b34f143 100644
+--- a/dump.c
++++ b/dump.c
+@@ -23,7 +23,6 @@
+ #include "sysemu/memory_mapping.h"
+ #include "qapi/error.h"
+ #include "qmp-commands.h"
+-#include "exec/gdbstub.h"
+ 
+ static uint16_t cpu_convert_to_target16(uint16_t val, int endian)
+ {
+@@ -268,6 +267,11 @@ static int write_elf64_note(DumpState *s)
+     return 0;
+ }
+ 
++static inline int cpu_index(CPUState *cpu)
++{
++    return cpu->cpu_index + 1;
++}
++
+ static int write_elf64_notes(DumpState *s)
+ {
+     CPUArchState *env;
+diff --git a/hw/alpha/typhoon.c b/hw/alpha/typhoon.c
+index 68420f4..1ead187 100644
+--- a/hw/alpha/typhoon.c
++++ b/hw/alpha/typhoon.c
+@@ -7,7 +7,6 @@
+  */
+ 
+ #include "cpu.h"
+-#include "exec/exec-all.h"
+ #include "hw/hw.h"
+ #include "hw/devices.h"
+ #include "sysemu/sysemu.h"
+diff --git a/hw/ide/ahci.c b/hw/ide/ahci.c
+index d0ae8af..3405583 100644
+--- a/hw/ide/ahci.c
++++ b/hw/ide/ahci.c
+@@ -29,7 +29,6 @@
+ 
+ #include "monitor/monitor.h"
+ #include "sysemu/dma.h"
+-#include "exec/cpu-common.h"
+ #include "internal.h"
+ #include <hw/ide/pci.h>
+ #include <hw/ide/ahci.h>
+diff --git a/hw/ide/internal.h b/hw/ide/internal.h
+index 2c89b50..0efb2da 100644
+--- a/hw/ide/internal.h
++++ b/hw/ide/internal.h
+@@ -8,7 +8,6 @@
+  */
+ #include <hw/ide.h>
+ #include <hw/isa/isa.h>
+-#include "exec/iorange.h"
+ #include "sysemu/dma.h"
+ #include "sysemu/sysemu.h"
+ #include "hw/block/block.h"
+diff --git a/hw/net/vmxnet_tx_pkt.c b/hw/net/vmxnet_tx_pkt.c
+index b1e795b..fc01e4d 100644
+--- a/hw/net/vmxnet_tx_pkt.c
++++ b/hw/net/vmxnet_tx_pkt.c
+@@ -15,6 +15,7 @@
+  *
+  */
+ 
++#include "hw/hw.h"
+ #include "vmxnet_tx_pkt.h"
+ #include "net/eth.h"
+ #include "qemu-common.h"
+@@ -22,7 +23,6 @@
+ #include "net/checksum.h"
+ #include "net/tap.h"
+ #include "net/net.h"
+-#include "exec/cpu-common.h"
+ 
+ enum {
+     VMXNET_TX_PKT_VHDR_FRAG = 0,
+diff --git a/hw/usb/libhw.c b/hw/usb/libhw.c
+index 75f022f..d2d4b51 100644
+--- a/hw/usb/libhw.c
++++ b/hw/usb/libhw.c
+@@ -20,7 +20,7 @@
+  * THE SOFTWARE.
+  */
+ #include "qemu-common.h"
+-#include "exec/cpu-common.h"
++#include "hw/hw.h"
+ #include "hw/usb.h"
+ #include "sysemu/dma.h"
+ 
+diff --git a/kvm-stub.c b/kvm-stub.c
+index 760aadc..f6137d3 100644
+--- a/kvm-stub.c
++++ b/kvm-stub.c
+@@ -14,7 +14,6 @@
+ #include "hw/hw.h"
+ #include "hw/pci/msi.h"
+ #include "cpu.h"
+-#include "exec/gdbstub.h"
+ #include "sysemu/kvm.h"
+ 
+ KVMState *kvm_state;
+diff --git a/translate-all.c b/translate-all.c
+index a98c646..08dd038 100644
+--- a/translate-all.c
++++ b/translate-all.c
+@@ -35,9 +35,6 @@
+ #include "cpu.h"
+ #include "disas/disas.h"
+ #include "tcg.h"
+-#include "qemu/timer.h"
+-#include "exec/memory.h"
+-#include "exec/address-spaces.h"
+ #if defined(CONFIG_USER_ONLY)
+ #include "qemu.h"
+ #if defined(__FreeBSD__) || defined(__FreeBSD_kernel__)
+@@ -55,6 +52,8 @@
+ #include <libutil.h>
+ #endif
+ #endif
++#else
++#include "exec/address-spaces.h"
+ #endif
+ 
+ #include "exec/cputlb.h"
+-- 
+1.8.1.4
+
+
+

@@ -1,0 +1,440 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Gerd Hoffmann <kraxel@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>,
+ =?utf-8?b?IkFuZHJlYXMgRsOkcmJlciI=?= <andreas.faerber@web.de>,
+ Gerd Hoffmann <kraxel@redhat.com>
+Date: Tue, 12 Mar 2013 11:32:46 +0100
+Message-id: 1363084369-27517-16-git-send-email-kraxel@redhat.com
+Subject: [PATCH 15/18] console: zap displaystate from dcl callbacks
+
+Now that nobody depends on DisplayState in DisplayChangeListener
+callbacks any more we can remove the parameter from all callbacks.
+
+Signed-off-by: Gerd Hoffmann <kraxel@redhat.com>
+---
+ hw/qxl.c             |    5 +----
+ include/ui/console.h |   12 ++----------
+ ui/cocoa.m           |    5 +----
+ ui/console.c         |   22 +++++++++++-----------
+ ui/curses.c          |    8 ++------
+ ui/gtk.c             |    6 ++----
+ ui/sdl.c             |   11 +++--------
+ ui/spice-display.c   |    5 +----
+ ui/vnc.c             |    5 -----
+ 9 files changed, 23 insertions(+), 56 deletions(-)
+
+diff --git a/hw/qxl.c b/hw/qxl.c
+index 6ed61be..0939ace 100644
+--- a/hw/qxl.c
++++ b/hw/qxl.c
+@@ -1865,7 +1865,6 @@ static void qxl_vm_change_state_handler(void *opaque, int running,
+ /* display change listener */
+ 
+ static void display_update(DisplayChangeListener *dcl,
+-                           struct DisplayState *ds,
+                            int x, int y, int w, int h)
+ {
+     PCIQXLDevice *qxl = container_of(dcl, PCIQXLDevice, ssd.dcl);
+@@ -1876,7 +1875,6 @@ static void display_update(DisplayChangeListener *dcl,
+ }
+ 
+ static void display_switch(DisplayChangeListener *dcl,
+-                           struct DisplayState *ds,
+                            struct DisplaySurface *surface)
+ {
+     PCIQXLDevice *qxl = container_of(dcl, PCIQXLDevice, ssd.dcl);
+@@ -1887,8 +1885,7 @@ static void display_switch(DisplayChangeListener *dcl,
+     }
+ }
+ 
+-static void display_refresh(DisplayChangeListener *dcl,
+-                            struct DisplayState *ds)
++static void display_refresh(DisplayChangeListener *dcl)
+ {
+     PCIQXLDevice *qxl = container_of(dcl, PCIQXLDevice, ssd.dcl);
+ 
+diff --git a/include/ui/console.h b/include/ui/console.h
+index ab59e15..256c86f 100644
+--- a/include/ui/console.h
++++ b/include/ui/console.h
+@@ -150,34 +150,26 @@ void cursor_get_mono_mask(QEMUCursor *c, int transparent, uint8_t *mask);
+ typedef struct DisplayChangeListenerOps {
+     const char *dpy_name;
+ 
+-    void (*dpy_refresh)(DisplayChangeListener *dcl,
+-                        struct DisplayState *s);
++    void (*dpy_refresh)(DisplayChangeListener *dcl);
+ 
+     void (*dpy_gfx_update)(DisplayChangeListener *dcl,
+-                           struct DisplayState *s,
+                            int x, int y, int w, int h);
+     void (*dpy_gfx_switch)(DisplayChangeListener *dcl,
+-                           struct DisplayState *s,
+                            struct DisplaySurface *new_surface);
+     void (*dpy_gfx_copy)(DisplayChangeListener *dcl,
+-                         struct DisplayState *s, int src_x, int src_y,
++                         int src_x, int src_y,
+                          int dst_x, int dst_y, int w, int h);
+ 
+     void (*dpy_text_cursor)(DisplayChangeListener *dcl,
+-                            struct DisplayState *s,
+                             int x, int y);
+     void (*dpy_text_resize)(DisplayChangeListener *dcl,
+-                            struct DisplayState *s,
+                             int w, int h);
+     void (*dpy_text_update)(DisplayChangeListener *dcl,
+-                            struct DisplayState *s,
+                             int x, int y, int w, int h);
+ 
+     void (*dpy_mouse_set)(DisplayChangeListener *dcl,
+-                          struct DisplayState *s,
+                           int x, int y, int on);
+     void (*dpy_cursor_define)(DisplayChangeListener *dcl,
+-                              struct DisplayState *s,
+                               QEMUCursor *cursor);
+ } DisplayChangeListenerOps;
+ 
+diff --git a/ui/cocoa.m b/ui/cocoa.m
+index 9a56fb8..8e0eaa2 100644
+--- a/ui/cocoa.m
++++ b/ui/cocoa.m
+@@ -955,7 +955,6 @@ int main (int argc, const char * argv[]) {
+ 
+ #pragma mark qemu
+ static void cocoa_update(DisplayChangeListener *dcl,
+-                         DisplayState *dontuse,
+                          int x, int y, int w, int h)
+ {
+     COCOA_DEBUG("qemu_cocoa: cocoa_update\n");
+@@ -974,7 +973,6 @@ static void cocoa_update(DisplayChangeListener *dcl,
+ }
+ 
+ static void cocoa_switch(DisplayChangeListener *dcl,
+-                         DisplayState *dontuse,
+                          DisplaySurface *surface)
+ {
+     COCOA_DEBUG("qemu_cocoa: cocoa_resize\n");
+@@ -982,8 +980,7 @@ static void cocoa_switch(DisplayChangeListener *dcl,
+     [cocoaView switchSurface:surface];
+ }
+ 
+-static void cocoa_refresh(DisplayChangeListener *dcl,
+-                          DisplayState *dontuse)
++static void cocoa_refresh(DisplayChangeListener *dcl)
+ {
+     COCOA_DEBUG("qemu_cocoa: cocoa_refresh\n");
+ 
+diff --git a/ui/console.c b/ui/console.c
+index c66c1e9..8e5c2d3 100644
+--- a/ui/console.c
++++ b/ui/console.c
+@@ -1373,7 +1373,7 @@ void register_displaychangelistener(DisplayState *ds,
+     QLIST_INSERT_HEAD(&ds->listeners, dcl, next);
+     gui_setup_refresh(ds);
+     if (dcl->ops->dpy_gfx_switch) {
+-        dcl->ops->dpy_gfx_switch(dcl, ds, ds->surface);
++        dcl->ops->dpy_gfx_switch(dcl, ds->surface);
+     }
+ }
+ 
+@@ -1400,7 +1400,7 @@ void dpy_gfx_update(DisplayState *s, int x, int y, int w, int h)
+ 
+     QLIST_FOREACH(dcl, &s->listeners, next) {
+         if (dcl->ops->dpy_gfx_update) {
+-            dcl->ops->dpy_gfx_update(dcl, s, x, y, w, h);
++            dcl->ops->dpy_gfx_update(dcl, x, y, w, h);
+         }
+     }
+ }
+@@ -1414,7 +1414,7 @@ void dpy_gfx_replace_surface(DisplayState *s,
+     s->surface = surface;
+     QLIST_FOREACH(dcl, &s->listeners, next) {
+         if (dcl->ops->dpy_gfx_switch) {
+-            dcl->ops->dpy_gfx_switch(dcl, s, surface);
++            dcl->ops->dpy_gfx_switch(dcl, surface);
+         }
+     }
+     qemu_free_displaysurface(old_surface);
+@@ -1425,7 +1425,7 @@ void dpy_refresh(DisplayState *s)
+     struct DisplayChangeListener *dcl;
+     QLIST_FOREACH(dcl, &s->listeners, next) {
+         if (dcl->ops->dpy_refresh) {
+-            dcl->ops->dpy_refresh(dcl, s);
++            dcl->ops->dpy_refresh(dcl);
+         }
+     }
+ }
+@@ -1436,9 +1436,9 @@ void dpy_gfx_copy(struct DisplayState *s, int src_x, int src_y,
+     struct DisplayChangeListener *dcl;
+     QLIST_FOREACH(dcl, &s->listeners, next) {
+         if (dcl->ops->dpy_gfx_copy) {
+-            dcl->ops->dpy_gfx_copy(dcl, s, src_x, src_y, dst_x, dst_y, w, h);
++            dcl->ops->dpy_gfx_copy(dcl, src_x, src_y, dst_x, dst_y, w, h);
+         } else { /* TODO */
+-            dcl->ops->dpy_gfx_update(dcl, s, dst_x, dst_y, w, h);
++            dcl->ops->dpy_gfx_update(dcl, dst_x, dst_y, w, h);
+         }
+     }
+ }
+@@ -1448,7 +1448,7 @@ void dpy_text_cursor(struct DisplayState *s, int x, int y)
+     struct DisplayChangeListener *dcl;
+     QLIST_FOREACH(dcl, &s->listeners, next) {
+         if (dcl->ops->dpy_text_cursor) {
+-            dcl->ops->dpy_text_cursor(dcl, s, x, y);
++            dcl->ops->dpy_text_cursor(dcl, x, y);
+         }
+     }
+ }
+@@ -1458,7 +1458,7 @@ void dpy_text_update(DisplayState *s, int x, int y, int w, int h)
+     struct DisplayChangeListener *dcl;
+     QLIST_FOREACH(dcl, &s->listeners, next) {
+         if (dcl->ops->dpy_text_update) {
+-            dcl->ops->dpy_text_update(dcl, s, x, y, w, h);
++            dcl->ops->dpy_text_update(dcl, x, y, w, h);
+         }
+     }
+ }
+@@ -1468,7 +1468,7 @@ void dpy_text_resize(DisplayState *s, int w, int h)
+     struct DisplayChangeListener *dcl;
+     QLIST_FOREACH(dcl, &s->listeners, next) {
+         if (dcl->ops->dpy_text_resize) {
+-            dcl->ops->dpy_text_resize(dcl, s, w, h);
++            dcl->ops->dpy_text_resize(dcl, w, h);
+         }
+     }
+ }
+@@ -1478,7 +1478,7 @@ void dpy_mouse_set(struct DisplayState *s, int x, int y, int on)
+     struct DisplayChangeListener *dcl;
+     QLIST_FOREACH(dcl, &s->listeners, next) {
+         if (dcl->ops->dpy_mouse_set) {
+-            dcl->ops->dpy_mouse_set(dcl, s, x, y, on);
++            dcl->ops->dpy_mouse_set(dcl, x, y, on);
+         }
+     }
+ }
+@@ -1488,7 +1488,7 @@ void dpy_cursor_define(struct DisplayState *s, QEMUCursor *cursor)
+     struct DisplayChangeListener *dcl;
+     QLIST_FOREACH(dcl, &s->listeners, next) {
+         if (dcl->ops->dpy_cursor_define) {
+-            dcl->ops->dpy_cursor_define(dcl, s, cursor);
++            dcl->ops->dpy_cursor_define(dcl, cursor);
+         }
+     }
+ }
+diff --git a/ui/curses.c b/ui/curses.c
+index ca9856c..ff82307 100644
+--- a/ui/curses.c
++++ b/ui/curses.c
+@@ -42,7 +42,6 @@ static int width, height, gwidth, gheight, invalidate;
+ static int px, py, sminx, sminy, smaxx, smaxy;
+ 
+ static void curses_update(DisplayChangeListener *dcl,
+-                          DisplayState *ds,
+                           int x, int y, int w, int h)
+ {
+     chtype *line;
+@@ -95,7 +94,6 @@ static void curses_calc_pad(void)
+ }
+ 
+ static void curses_resize(DisplayChangeListener *dcl,
+-                          DisplayState *ds,
+                           int width, int height)
+ {
+     if (width == gwidth && height == gheight) {
+@@ -134,7 +132,6 @@ static void curses_winch_handler(int signum)
+ #endif
+ 
+ static void curses_cursor_position(DisplayChangeListener *dcl,
+-                                   DisplayState *ds,
+                                    int x, int y)
+ {
+     if (x >= 0) {
+@@ -161,8 +158,7 @@ static void curses_cursor_position(DisplayChangeListener *dcl,
+ 
+ static kbd_layout_t *kbd_layout = NULL;
+ 
+-static void curses_refresh(DisplayChangeListener *dcl,
+-                           DisplayState *ds)
++static void curses_refresh(DisplayChangeListener *dcl)
+ {
+     int chr, nextchr, keysym, keycode, keycode_alt;
+ 
+@@ -195,7 +191,7 @@ static void curses_refresh(DisplayChangeListener *dcl,
+             clear();
+             refresh();
+             curses_calc_pad();
+-            curses_update(dcl, ds, 0, 0, width, height);
++            curses_update(dcl, 0, 0, width, height);
+             continue;
+         }
+ #endif
+diff --git a/ui/gtk.c b/ui/gtk.c
+index f06f18e..2dab5ae 100644
+--- a/ui/gtk.c
++++ b/ui/gtk.c
+@@ -266,7 +266,7 @@ static void gd_update_full_redraw(GtkDisplayState *s)
+ /** DisplayState Callbacks **/
+ 
+ static void gd_update(DisplayChangeListener *dcl,
+-                      DisplayState *dontuse, int x, int y, int w, int h)
++                      int x, int y, int w, int h)
+ {
+     GtkDisplayState *s = container_of(dcl, GtkDisplayState, dcl);
+     int x1, x2, y1, y2;
+@@ -298,14 +298,12 @@ static void gd_update(DisplayChangeListener *dcl,
+     gtk_widget_queue_draw_area(s->drawing_area, mx + x1, my + y1, (x2 - x1), (y2 - y1));
+ }
+ 
+-static void gd_refresh(DisplayChangeListener *dcl,
+-                       DisplayState *dontuse)
++static void gd_refresh(DisplayChangeListener *dcl)
+ {
+     vga_hw_update();
+ }
+ 
+ static void gd_switch(DisplayChangeListener *dcl,
+-                      DisplayState *dontuse,
+                       DisplaySurface *surface)
+ {
+     GtkDisplayState *s = container_of(dcl, GtkDisplayState, dcl);
+diff --git a/ui/sdl.c b/ui/sdl.c
+index 58f16bc..8da0534 100644
+--- a/ui/sdl.c
++++ b/ui/sdl.c
+@@ -61,7 +61,6 @@ static int scaling_active = 0;
+ static Notifier mouse_mode_notifier;
+ 
+ static void sdl_update(DisplayChangeListener *dcl,
+-                       DisplayState *dontuse,
+                        int x, int y, int w, int h)
+ {
+     //    printf("updating x=%d y=%d w=%d h=%d\n", x, y, w, h);
+@@ -108,7 +107,6 @@ static void do_sdl_resize(int width, int height, int bpp)
+ }
+ 
+ static void sdl_switch(DisplayChangeListener *dcl,
+-                       DisplayState *dontuse,
+                        DisplaySurface *new_surface)
+ {
+ 
+@@ -523,7 +521,7 @@ static void handle_keydown(SDL_Event *ev)
+         case 0x16: /* 'u' key on US keyboard */
+             if (scaling_active) {
+                 scaling_active = 0;
+-                sdl_switch(dcl, NULL, NULL);
++                sdl_switch(dcl, NULL);
+                 vga_hw_invalidate();
+                 vga_hw_update();
+             }
+@@ -763,8 +761,7 @@ static void handle_activation(SDL_Event *ev)
+     }
+ }
+ 
+-static void sdl_refresh(DisplayChangeListener *dcl,
+-                        DisplayState *dontuse)
++static void sdl_refresh(DisplayChangeListener *dcl)
+ {
+     SDL_Event ev1, *ev = &ev1;
+ 
+@@ -779,7 +776,7 @@ static void sdl_refresh(DisplayChangeListener *dcl,
+     while (SDL_PollEvent(ev)) {
+         switch (ev->type) {
+         case SDL_VIDEOEXPOSE:
+-            sdl_update(dcl, dontuse, 0, 0, real_screen->w, real_screen->h);
++            sdl_update(dcl, 0, 0, real_screen->w, real_screen->h);
+             break;
+         case SDL_KEYDOWN:
+             handle_keydown(ev);
+@@ -815,7 +812,6 @@ static void sdl_refresh(DisplayChangeListener *dcl,
+ }
+ 
+ static void sdl_mouse_warp(DisplayChangeListener *dcl,
+-                           DisplayState *ds,
+                            int x, int y, int on)
+ {
+     if (on) {
+@@ -833,7 +829,6 @@ static void sdl_mouse_warp(DisplayChangeListener *dcl,
+ }
+ 
+ static void sdl_mouse_define(DisplayChangeListener *dcl,
+-                             DisplayState *ds,
+                              QEMUCursor *c)
+ {
+     uint8_t *image, *mask;
+diff --git a/ui/spice-display.c b/ui/spice-display.c
+index 5bbe23b..2127b3f 100644
+--- a/ui/spice-display.c
++++ b/ui/spice-display.c
+@@ -583,7 +583,6 @@ static const QXLInterface dpy_interface = {
+ };
+ 
+ static void display_update(DisplayChangeListener *dcl,
+-                           struct DisplayState *ds,
+                            int x, int y, int w, int h)
+ {
+     SimpleSpiceDisplay *ssd = container_of(dcl, SimpleSpiceDisplay, dcl);
+@@ -591,15 +590,13 @@ static void display_update(DisplayChangeListener *dcl,
+ }
+ 
+ static void display_switch(DisplayChangeListener *dcl,
+-                           struct DisplayState *ds,
+                            struct DisplaySurface *surface)
+ {
+     SimpleSpiceDisplay *ssd = container_of(dcl, SimpleSpiceDisplay, dcl);
+     qemu_spice_display_switch(ssd, surface);
+ }
+ 
+-static void display_refresh(DisplayChangeListener *dcl,
+-                            struct DisplayState *ds)
++static void display_refresh(DisplayChangeListener *dcl)
+ {
+     SimpleSpiceDisplay *ssd = container_of(dcl, SimpleSpiceDisplay, dcl);
+     qemu_spice_display_refresh(ssd);
+diff --git a/ui/vnc.c b/ui/vnc.c
+index f38aeda..bbe1e0f 100644
+--- a/ui/vnc.c
++++ b/ui/vnc.c
+@@ -430,7 +430,6 @@ static void vnc_refresh(void *opaque);
+ static int vnc_refresh_server_surface(VncDisplay *vd);
+ 
+ static void vnc_dpy_update(DisplayChangeListener *dcl,
+-                           DisplayState *ds,
+                            int x, int y, int w, int h)
+ {
+     int i;
+@@ -575,7 +574,6 @@ void *vnc_server_fb_ptr(VncDisplay *vd, int x, int y)
+ }
+ 
+ static void vnc_dpy_switch(DisplayChangeListener *dcl,
+-                           DisplayState *dontuse,
+                            DisplaySurface *surface)
+ {
+     VncDisplay *vd = container_of(dcl, VncDisplay, dcl);
+@@ -740,7 +738,6 @@ static void vnc_copy(VncState *vs, int src_x, int src_y, int dst_x, int dst_y, i
+ }
+ 
+ static void vnc_dpy_copy(DisplayChangeListener *dcl,
+-                         DisplayState *dontuse,
+                          int src_x, int src_y,
+                          int dst_x, int dst_y, int w, int h)
+ {
+@@ -814,7 +811,6 @@ static void vnc_dpy_copy(DisplayChangeListener *dcl,
+ }
+ 
+ static void vnc_mouse_set(DisplayChangeListener *dcl,
+-                          DisplayState *dontuse,
+                           int x, int y, int visible)
+ {
+     /* can we ask the client(s) to move the pointer ??? */
+@@ -842,7 +838,6 @@ static int vnc_cursor_define(VncState *vs)
+ }
+ 
+ static void vnc_dpy_cursor_define(DisplayChangeListener *dcl,
+-                                  DisplayState *dontuse,
+                                   QEMUCursor *c)
+ {
+     VncDisplay *vd = vnc_display;
+-- 
+1.7.9.7
+

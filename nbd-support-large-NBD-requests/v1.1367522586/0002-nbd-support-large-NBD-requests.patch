@@ -1,0 +1,114 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Stefan Hajnoczi <stefanha@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Nick Thomas <nick@bytemark.co.uk>, Paolo Bonzini <pbonzini@redhat.com>,
+ Stefan Hajnoczi <stefanha@redhat.com>, Kevin Wolf <kwolf@redhat.com>
+Date: Thu,  2 May 2013 14:23:08 +0200
+Message-id: 1367497388-5962-3-git-send-email-stefanha@redhat.com
+Subject: [PATCH 2/2] nbd: support large NBD requests
+
+The Linux nbd driver recently increased the maximum supported request
+size up to 32 MB:
+
+  commit 078be02b80359a541928c899c2631f39628f56df
+  Author: Michal Belczyk <belczyk@bsd.krakow.pl>
+  Date:   Tue Apr 30 15:28:28 2013 -0700
+
+      nbd: increase default and max request sizes
+
+      Raise the default max request size for nbd to 128KB (from 127KB) to get it
+      4KB aligned.  This patch also allows the max request size to be increased
+      (via /sys/block/nbd<x>/queue/max_sectors_kb) to 32MB.
+
+QEMU's 1 MB buffers are too small to handle these requests.
+
+This patch allocates data buffers dynamically and allows up to 32 MB per
+request.
+
+Reported-by: Nick Thomas <nick@bytemark.co.uk>
+Signed-off-by: Stefan Hajnoczi <stefanha@redhat.com>
+---
+ include/block/nbd.h |  3 ++-
+ nbd.c               | 17 +++++++++++------
+ 2 files changed, 13 insertions(+), 7 deletions(-)
+
+diff --git a/include/block/nbd.h b/include/block/nbd.h
+index 0903d7a..c90f5e4 100644
+--- a/include/block/nbd.h
++++ b/include/block/nbd.h
+@@ -58,7 +58,8 @@ enum {
+ 
+ #define NBD_DEFAULT_PORT	10809
+ 
+-#define NBD_BUFFER_SIZE (1024*1024)
++/* Maximum size of a single READ/WRITE data buffer */
++#define NBD_MAX_BUFFER_SIZE (32 * 1024 * 1024)
+ 
+ ssize_t nbd_wr_sync(int fd, void *buffer, size_t size, bool do_read);
+ int tcp_socket_incoming(const char *address, uint16_t port);
+diff --git a/nbd.c b/nbd.c
+index 761f4ec..2606403 100644
+--- a/nbd.c
++++ b/nbd.c
+@@ -844,13 +844,11 @@ void nbd_client_close(NBDClient *client)
+ static NBDRequest *nbd_request_get(NBDClient *client)
+ {
+     NBDRequest *req;
+-    NBDExport *exp = client->exp;
+ 
+     assert(client->nb_requests <= MAX_NBD_REQUESTS - 1);
+     client->nb_requests++;
+ 
+     req = g_slice_new0(NBDRequest);
+-    req->data = qemu_blockalign(exp->bs, NBD_BUFFER_SIZE);
+     nbd_client_get(client);
+     req->client = client;
+     return req;
+@@ -860,7 +858,9 @@ static void nbd_request_put(NBDRequest *req)
+ {
+     NBDClient *client = req->client;
+ 
+-    qemu_vfree(req->data);
++    if (req->data) {
++        qemu_vfree(req->data);
++    }
+     g_slice_free(NBDRequest, req);
+ 
+     if (client->nb_requests-- == MAX_NBD_REQUESTS) {
+@@ -1007,6 +1007,7 @@ static ssize_t nbd_co_receive_request(NBDRequest *req, struct nbd_request *reque
+ {
+     NBDClient *client = req->client;
+     int csock = client->sock;
++    uint32_t command;
+     ssize_t rc;
+ 
+     client->recv_coroutine = qemu_coroutine_self();
+@@ -1018,9 +1019,9 @@ static ssize_t nbd_co_receive_request(NBDRequest *req, struct nbd_request *reque
+         goto out;
+     }
+ 
+-    if (request->len > NBD_BUFFER_SIZE) {
++    if (request->len > NBD_MAX_BUFFER_SIZE) {
+         LOG("len (%u) is larger than max len (%u)",
+-            request->len, NBD_BUFFER_SIZE);
++            request->len, NBD_MAX_BUFFER_SIZE);
+         rc = -EINVAL;
+         goto out;
+     }
+@@ -1034,7 +1035,11 @@ static ssize_t nbd_co_receive_request(NBDRequest *req, struct nbd_request *reque
+ 
+     TRACE("Decoding type");
+ 
+-    if ((request->type & NBD_CMD_MASK_COMMAND) == NBD_CMD_WRITE) {
++    command = request->type & NBD_CMD_MASK_COMMAND;
++    if (command == NBD_CMD_READ || command == NBD_CMD_WRITE) {
++        req->data = qemu_blockalign(client->exp->bs, request->len);
++    }
++    if (command == NBD_CMD_WRITE) {
+         TRACE("Reading %u byte(s)", request->len);
+ 
+         if (qemu_co_recv(csock, req->data, request->len) != request->len) {
+-- 
+1.8.1.4
+
+

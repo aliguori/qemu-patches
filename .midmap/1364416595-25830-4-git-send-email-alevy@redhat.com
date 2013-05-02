@@ -1,0 +1,1 @@
+../ccid-and-libcacard-fixes-for-windows-mingw/v2.1364441785/0003-ccid-card-passthru-dev-smartcard-reader-add-debug-environment-variables.patch

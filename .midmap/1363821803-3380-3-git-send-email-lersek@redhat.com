@@ -1,0 +1,1 @@
+../build-ACPI-MADT-for-fw_cfg-clients/v1.1363843392/0002-change-element-type-from-char-to-unsigned-char-in-ACPI-table-data.patch

@@ -1,0 +1,217 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: 
+Date: Thu,  4 Apr 2013 21:22:46 +0200
+Message-id: 1365103395-11547-7-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 06/35] hw: move virtio devices to hw/ subdirectories
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ configure                             | 2 +-
+ hw/Makefile.objs                      | 5 -----
+ hw/block/Makefile.objs                | 3 +++
+ hw/block/dataplane/Makefile.objs      | 1 +
+ hw/{ => block}/dataplane/ioq.c        | 0
+ hw/{ => block}/dataplane/ioq.h        | 0
+ hw/{ => block}/dataplane/virtio-blk.c | 0
+ hw/{ => block}/dataplane/virtio-blk.h | 0
+ hw/{ => block}/virtio-blk.c           | 0
+ hw/char/Makefile.objs                 | 2 ++
+ hw/{ => char}/virtio-serial-bus.c     | 0
+ hw/dataplane/Makefile.objs            | 1 -
+ hw/net/Makefile.objs                  | 3 +++
+ hw/{ => net}/vhost_net.c              | 0
+ hw/{ => net}/virtio-net.c             | 0
+ hw/scsi/Makefile.objs                 | 1 +
+ hw/{ => scsi}/virtio-scsi.c           | 0
+ hw/virtio/Makefile.objs               | 3 +++
+ hw/virtio/dataplane/Makefile.objs     | 1 +
+ hw/{ => virtio}/dataplane/hostmem.c   | 0
+ hw/{ => virtio}/dataplane/vring.c     | 0
+ hw/{ => virtio}/vhost.c               | 0
+ hw/{ => virtio}/virtio-balloon.c      | 0
+ hw/{ => virtio}/virtio.c              | 0
+ 24 files changed, 15 insertions(+), 7 deletions(-)
+ create mode 100644 hw/block/dataplane/Makefile.objs
+ rename hw/{ => block}/dataplane/ioq.c (100%)
+ rename hw/{ => block}/dataplane/ioq.h (100%)
+ rename hw/{ => block}/dataplane/virtio-blk.c (100%)
+ rename hw/{ => block}/dataplane/virtio-blk.h (100%)
+ rename hw/{ => block}/virtio-blk.c (100%)
+ rename hw/{ => char}/virtio-serial-bus.c (100%)
+ delete mode 100644 hw/dataplane/Makefile.objs
+ rename hw/{ => net}/vhost_net.c (100%)
+ rename hw/{ => net}/virtio-net.c (100%)
+ rename hw/{ => scsi}/virtio-scsi.c (100%)
+ create mode 100644 hw/virtio/dataplane/Makefile.objs
+ rename hw/{ => virtio}/dataplane/hostmem.c (100%)
+ rename hw/{ => virtio}/dataplane/vring.c (100%)
+ rename hw/{ => virtio}/vhost.c (100%)
+ rename hw/{ => virtio}/virtio-balloon.c (100%)
+ rename hw/{ => virtio}/virtio.c (100%)
+
+diff --git a/configure b/configure
+index fbea75e..8183a4c 100755
+--- a/configure
++++ b/configure
+@@ -3814,7 +3814,7 @@ if test "$glusterfs" = "yes" ; then
+ fi
+ 
+ if test "$virtio_blk_data_plane" = "yes" ; then
+-  echo "CONFIG_VIRTIO_BLK_DATA_PLANE=y" >> $config_host_mak
++  echo 'CONFIG_VIRTIO_BLK_DATA_PLANE=$(CONFIG_VIRTIO)' >> $config_host_mak
+ fi
+ 
+ # USB host support
+diff --git a/hw/Makefile.objs b/hw/Makefile.objs
+index d208a5d..9dc7596 100644
+--- a/hw/Makefile.objs
++++ b/hw/Makefile.objs
+@@ -34,11 +34,6 @@ ifeq ($(CONFIG_SOFTMMU),y)
+ # Per-target files
+ # virtio has to be here due to weird dependency between PCI and virtio-net.
+ # need to fix this properly
+-obj-$(CONFIG_VIRTIO) += dataplane/
+-obj-$(CONFIG_VIRTIO) += virtio.o virtio-blk.o virtio-balloon.o virtio-net.o
+-obj-$(CONFIG_VIRTIO) += virtio-serial-bus.o virtio-scsi.o
+-obj-$(CONFIG_SOFTMMU) += vhost_net.o
+-obj-$(CONFIG_VHOST_NET) += vhost.o
+ obj-$(CONFIG_VGA) += vga.o
+ 
+ # Inter-VM PCI shared memory & VFIO PCI device assignment
+diff --git a/hw/block/Makefile.objs b/hw/block/Makefile.objs
+index 5fa5101..856915e 100644
+--- a/hw/block/Makefile.objs
++++ b/hw/block/Makefile.objs
+@@ -6,3 +6,6 @@ common-obj-$(CONFIG_PFLASH_CFI01) += pflash_cfi01.o
+ common-obj-$(CONFIG_PFLASH_CFI02) += pflash_cfi02.o
+ common-obj-$(CONFIG_XEN_BACKEND) += xen_disk.o
+ common-obj-$(CONFIG_ECC) += ecc.o
++
++obj-$(CONFIG_VIRTIO) += virtio-blk.o
++obj-$(CONFIG_VIRTIO_BLK_DATA_PLANE) += dataplane/
+diff --git a/hw/block/dataplane/Makefile.objs b/hw/block/dataplane/Makefile.objs
+new file mode 100644
+index 0000000..9da2eb8
+--- /dev/null
++++ b/hw/block/dataplane/Makefile.objs
+@@ -0,0 +1 @@
++obj-y += ioq.o virtio-blk.o
+diff --git a/hw/dataplane/ioq.c b/hw/block/dataplane/ioq.c
+similarity index 100%
+rename from hw/dataplane/ioq.c
+rename to hw/block/dataplane/ioq.c
+diff --git a/hw/dataplane/ioq.h b/hw/block/dataplane/ioq.h
+similarity index 100%
+rename from hw/dataplane/ioq.h
+rename to hw/block/dataplane/ioq.h
+diff --git a/hw/dataplane/virtio-blk.c b/hw/block/dataplane/virtio-blk.c
+similarity index 100%
+rename from hw/dataplane/virtio-blk.c
+rename to hw/block/dataplane/virtio-blk.c
+diff --git a/hw/dataplane/virtio-blk.h b/hw/block/dataplane/virtio-blk.h
+similarity index 100%
+rename from hw/dataplane/virtio-blk.h
+rename to hw/block/dataplane/virtio-blk.h
+diff --git a/hw/virtio-blk.c b/hw/block/virtio-blk.c
+similarity index 100%
+rename from hw/virtio-blk.c
+rename to hw/block/virtio-blk.c
+diff --git a/hw/char/Makefile.objs b/hw/char/Makefile.objs
+index eee23ff..ddfd3ec 100644
+--- a/hw/char/Makefile.objs
++++ b/hw/char/Makefile.objs
+@@ -8,3 +8,5 @@ common-obj-$(CONFIG_VIRTIO) += virtio-console.o
+ common-obj-$(CONFIG_XILINX) += xilinx_uartlite.o
+ common-obj-$(CONFIG_XEN_BACKEND) += xen_console.o
+ common-obj-$(CONFIG_CADENCE) += cadence_uart.o
++
++obj-$(CONFIG_VIRTIO) += virtio-serial-bus.o
+diff --git a/hw/virtio-serial-bus.c b/hw/char/virtio-serial-bus.c
+similarity index 100%
+rename from hw/virtio-serial-bus.c
+rename to hw/char/virtio-serial-bus.c
+diff --git a/hw/dataplane/Makefile.objs b/hw/dataplane/Makefile.objs
+deleted file mode 100644
+index 701111c..0000000
+--- a/hw/dataplane/Makefile.objs
++++ /dev/null
+@@ -1 +0,0 @@
+-obj-$(CONFIG_VIRTIO_BLK_DATA_PLANE) += hostmem.o vring.o ioq.o virtio-blk.o
+diff --git a/hw/net/Makefile.objs b/hw/net/Makefile.objs
+index ad91293..73217d8 100644
+--- a/hw/net/Makefile.objs
++++ b/hw/net/Makefile.objs
+@@ -20,3 +20,6 @@ common-obj-$(CONFIG_MIPSNET) += mipsnet.o
+ common-obj-$(CONFIG_XILINX_AXI) += xilinx_axienet.o
+ 
+ common-obj-$(CONFIG_CADENCE) += cadence_gem.o
++
++obj-$(CONFIG_VIRTIO) += virtio-net.o
++obj-y += vhost_net.o
+diff --git a/hw/vhost_net.c b/hw/net/vhost_net.c
+similarity index 100%
+rename from hw/vhost_net.c
+rename to hw/net/vhost_net.c
+diff --git a/hw/virtio-net.c b/hw/net/virtio-net.c
+similarity index 100%
+rename from hw/virtio-net.c
+rename to hw/net/virtio-net.c
+diff --git a/hw/scsi/Makefile.objs b/hw/scsi/Makefile.objs
+index 6a56504..b76b9c3 100644
+--- a/hw/scsi/Makefile.objs
++++ b/hw/scsi/Makefile.objs
+@@ -4,3 +4,4 @@ common-obj-$(CONFIG_LSI_SCSI_PCI) += lsi53c895a.o
+ common-obj-$(CONFIG_MEGASAS_SCSI_PCI) += megasas.o
+ common-obj-$(CONFIG_ESP) += esp.o
+ common-obj-$(CONFIG_ESP_PCI) += esp-pci.o
++obj-$(CONFIG_VIRTIO) += virtio-scsi.o
+diff --git a/hw/virtio-scsi.c b/hw/scsi/virtio-scsi.c
+similarity index 100%
+rename from hw/virtio-scsi.c
+rename to hw/scsi/virtio-scsi.c
+diff --git a/hw/virtio/Makefile.objs b/hw/virtio/Makefile.objs
+index ed63495..c7e8013 100644
+--- a/hw/virtio/Makefile.objs
++++ b/hw/virtio/Makefile.objs
+@@ -1,4 +1,7 @@
+ common-obj-$(CONFIG_VIRTIO) += virtio-rng.o
+ common-obj-$(CONFIG_VIRTIO_PCI) += virtio-pci.o
+ common-obj-$(CONFIG_VIRTIO) += virtio-bus.o
++common-obj-$(CONFIG_VIRTIO_BLK_DATA_PLANE) += dataplane/
+ 
++obj-$(CONFIG_VIRTIO) += virtio.o virtio-balloon.o 
++obj-$(CONFIG_VHOST_NET) += vhost.o
+diff --git a/hw/virtio/dataplane/Makefile.objs b/hw/virtio/dataplane/Makefile.objs
+new file mode 100644
+index 0000000..a91bf33
+--- /dev/null
++++ b/hw/virtio/dataplane/Makefile.objs
+@@ -0,0 +1 @@
++common-obj-y += hostmem.o vring.o
+diff --git a/hw/dataplane/hostmem.c b/hw/virtio/dataplane/hostmem.c
+similarity index 100%
+rename from hw/dataplane/hostmem.c
+rename to hw/virtio/dataplane/hostmem.c
+diff --git a/hw/dataplane/vring.c b/hw/virtio/dataplane/vring.c
+similarity index 100%
+rename from hw/dataplane/vring.c
+rename to hw/virtio/dataplane/vring.c
+diff --git a/hw/vhost.c b/hw/virtio/vhost.c
+similarity index 100%
+rename from hw/vhost.c
+rename to hw/virtio/vhost.c
+diff --git a/hw/virtio-balloon.c b/hw/virtio/virtio-balloon.c
+similarity index 100%
+rename from hw/virtio-balloon.c
+rename to hw/virtio/virtio-balloon.c
+diff --git a/hw/virtio.c b/hw/virtio/virtio.c
+similarity index 100%
+rename from hw/virtio.c
+rename to hw/virtio/virtio.c
+-- 
+1.8.1.4
+
+
+

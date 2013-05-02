@@ -1,0 +1,1 @@
+../virtio-rng-refactoring/v4.1366816073/0006-virtio-rng-cleanup-init-and-exit-functions.patch

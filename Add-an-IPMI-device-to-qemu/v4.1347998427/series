@@ -1,0 +1,17 @@
+0000-Add-an-IPMI-device-to-qemu.txt
+0001-vl-Move-init_timer_alarm-earlier.patch
+0002-qemu-char-Allocate-CharDriverState-in-qemu_chr_new_from_opts.patch
+0003-qemu-char-Allow-a-chardev-to-reconnect-if-disconnected.patch
+0004-qemu-char-Fix-a-race-reporting-opens-and-closes.patch
+0005-qemu-char-remove-free-of-chr-from-win_stdio_close.patch
+0006-qemu-char-Close-fd-at-end-of-file.patch
+0007-qom-release-previous-object-when-setting.patch
+0008-Add-a-base-IPMI-interface.patch
+0009-IPMI-Add-a-PC-ISA-type-structure.patch
+0010-IPMI-Add-a-KCS-low-level-interface.patch
+0011-IPMI-Add-a-BT-low-level-interface.patch
+0012-IPMI-Add-a-local-BMC-simulation.patch
+0013-IPMI-Add-an-external-connection-simulation-interface.patch
+0014-IPMI-Add-tests.patch
+0015-IPMI-Add-documentation.patch
+0016-ipmi-Add-migration-capability-to-the-IPMI-device.patch

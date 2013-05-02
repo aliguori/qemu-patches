@@ -1,0 +1,1 @@
+../qmp-hmp-interfaces-for-internal-snapshot-info/v11.1364950033/0001-block-move-bdrv_snapshot_find-to-block-snapshotc.patch

@@ -1,0 +1,58 @@
+From patches Mon Sep 17 00:00:00 2001
+From: mrhines@linux.vnet.ibm.com
+To: Anthony Liguori <aliguori@us.ibm.com>, Paolo Bonzini <pbonzini@redhat.com>,
+ qemu-devel@nongnu.org, mrhines@linux.vnet.ibm.com,
+ "Michael R. Hines" <mrhines@linux.vnet.ibm.com>
+Cc: Anthony Liguori <aliguori@us.ibm.com>, Paolo Bonzini <pbonzini@redhat.com>,
+ mst@redhat.com, quintela@redhat.com, Juan Quintela <quintela@redhat.com>,
+ qemu-devel@nongnu.org, mrhines@linux.vnet.ibm.com,
+ Michael R Hines <mrhines@us.ibm.com>, Bulent Abali <abali@us.ibm.com>,
+ owasserm@redhat.com, pbonzini@redhat.com, Gokul B Kandiraju <gokul@us.ibm.com>
+Date: Mon, 15 Apr 2013 22:44:38 -0400
+Message-id: 1366080286-9288-1-git-send-email-mrhines@linux.vnet.ibm.com
+Subject: [PATCH 0/8] rdma: migration support
+
+From: "Michael R. Hines" <mrhines@us.ibm.com>
+
+The following changes since commit 24a6e7f4d91e9ed5f8117ecb083431a23f8609a0:
+
+  virtio-balloon: fix dynamic properties. (2013-04-15 17:06:58 -0500)
+
+are available in the git repository at:
+
+  git@github.com:hinesmr/qemu.git rdma_patch_v2
+
+for you to fetch changes up to 633d528cd87dc16f9095572e1b301a243728db56:
+
+  rdma: add documentation (2013-04-15 22:27:34 -0400)
+
+----------------------------------------------------------------
+Michael R. Hines (8):
+      rdma: introduce qemu_ram_foreach_block
+      rdma: new QEMUFileOps hooks
+      rdma: export ram_handle_compressed()
+      rdma: introduce capability for chunk registration
+      rdma: core rdma logic
+      rdma: send pc.ram
+      rdma: print out throughput while debugging
+      rdma: add documentation
+
+ Makefile.objs                 |    1 +
+ arch_init.c                   |   59 +-
+ configure                     |   29 +
+ docs/rdma.txt                 |  336 +++++
+ exec.c                        |    9 +
+ include/exec/cpu-common.h     |    5 +
+ include/migration/migration.h |   23 +
+ include/migration/qemu-file.h |   30 +
+ migration-rdma.c              | 2732 +++++++++++++++++++++++++++++++++++++++++
+ migration.c                   |   27 +-
+ qapi-schema.json              |    2 +-
+ savevm.c                      |   75 +-
+ 12 files changed, 3307 insertions(+), 21 deletions(-)
+ create mode 100644 docs/rdma.txt
+ create mode 100644 migration-rdma.c
+
+-- 
+1.7.10.4
+

@@ -1,0 +1,63 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Stefan Hajnoczi <stefanha@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, Dmitry Fleytman <dmitry@daynix.com>,
+ Stefan Hajnoczi <stefanha@redhat.com>, rth@twiddle.net
+Date: Mon, 8 Apr 2013 14:42:58 +0200
+Message-id: 1365424978-4348-3-git-send-email-stefanha@redhat.com
+Subject: [PATCH 2/2] vmxnet3: const_cpu_to_le64 wrapping for feature bits
+ dropped
+
+From: Dmitry Fleytman <dmitry@daynix.com>
+
+Byte swap is redundant because shared memory reading functions
+already swap bytes when required
+
+Signed-off-by: Dmitry Fleytman <dmitry@daynix.com>
+Acked-by: Alexander Graf <agraf@suse.de>
+Signed-off-by: Stefan Hajnoczi <stefanha@redhat.com>
+---
+ hw/vmxnet3.h | 11 ++++-------
+ 1 file changed, 4 insertions(+), 7 deletions(-)
+
+diff --git a/hw/vmxnet3.h b/hw/vmxnet3.h
+index 7db0c8f..4eae7c7 100644
+--- a/hw/vmxnet3.h
++++ b/hw/vmxnet3.h
+@@ -37,10 +37,8 @@
+ #define __packed QEMU_PACKED
+ 
+ #if defined(HOST_WORDS_BIGENDIAN)
+-#define const_cpu_to_le64(x) bswap_64(x)
+ #define __BIG_ENDIAN_BITFIELD
+ #else
+-#define const_cpu_to_le64(x) (x)
+ #endif
+ 
+ /*
+@@ -137,10 +135,10 @@ struct UPT1_RSSConf {
+ 
+ /* features */
+ enum {
+-    UPT1_F_RXCSUM        = const_cpu_to_le64(0x0001), /* rx csum verification */
+-    UPT1_F_RSS        = const_cpu_to_le64(0x0002),
+-    UPT1_F_RXVLAN        = const_cpu_to_le64(0x0004), /* VLAN tag stripping */
+-    UPT1_F_LRO        = const_cpu_to_le64(0x0008),
++    UPT1_F_RXCSUM        = 0x0001, /* rx csum verification */
++    UPT1_F_RSS           = 0x0002,
++    UPT1_F_RXVLAN        = 0x0004, /* VLAN tag stripping */
++    UPT1_F_LRO           = 0x0008,
+ };
+ 
+ /* all registers are 32 bit wide */
+@@ -752,7 +750,6 @@ struct Vmxnet3_DriverShared {
+ #undef __le32
+ #undef __le64
+ #undef __packed
+-#undef const_cpu_to_le64
+ #if defined(HOST_WORDS_BIGENDIAN)
+ #undef __BIG_ENDIAN_BITFIELD
+ #endif
+-- 
+1.8.1.4
+

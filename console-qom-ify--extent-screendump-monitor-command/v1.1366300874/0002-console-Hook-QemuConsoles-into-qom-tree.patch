@@ -1,0 +1,48 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Gerd Hoffmann <kraxel@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, Gerd Hoffmann <kraxel@redhat.com>,
+ eblake@redhat.com, lcapitulino@redhat.com
+Date: Thu, 18 Apr 2013 11:01:16 +0200
+Message-id: 1366275680-15416-3-git-send-email-kraxel@redhat.com
+Subject: [PATCH 2/5] console: Hook QemuConsoles into qom tree
+
+Put them named "console[$index]" below "/backend", so you can
+list & inspect them via QMP.
+
+Signed-off-by: Gerd Hoffmann <kraxel@redhat.com>
+---
+ ui/console.c |   10 ++++++++++
+ 1 file changed, 10 insertions(+)
+
+diff --git a/ui/console.c b/ui/console.c
+index e9f3080..b92bde3 100644
+--- a/ui/console.c
++++ b/ui/console.c
+@@ -1541,6 +1541,8 @@ static DisplayState *get_alloc_displaystate(void)
+  */
+ DisplayState *init_displaystate(void)
+ {
++    Error *local_err = NULL;
++    gchar *name;
+     int i;
+ 
+     if (!display_state) {
+@@ -1552,6 +1554,14 @@ DisplayState *init_displaystate(void)
+             consoles[i]->ds == NULL) {
+             text_console_do_init(consoles[i]->chr, display_state);
+         }
++
++        /* Hook up into the qom tree here (not in new_console()), once
++         * all QemuConsoles are created and the order / numbering
++         * doesn't change any more */
++        name = g_strdup_printf("console[%d]", i);
++        object_property_add_child(container_get(object_get_root(), "/backend"),
++                                  name, OBJECT(consoles[i]), &local_err);
++        g_free(name);
+     }
+ 
+     return display_state;
+-- 
+1.7.9.7
+

@@ -1,0 +1,199 @@
+From patches Mon Sep 17 00:00:00 2001
+From: liguang <lig.fnst@cn.fujitsu.com>
+To: Anthony Liguori <aliguori@us.ibm.com>, peter.maydell@linaro.org,
+ stefanha@gmail.com, qemu-devel@nongnu.org, pbonzini@redhat.com,
+ afaerber@suse.de
+Cc: liguang <lig.fnst@cn.fujitsu.com>
+Date: Fri, 5 Apr 2013 12:28:10 +0800
+Message-id: 1365136091-26148-7-git-send-email-lig.fnst@cn.fujitsu.com
+Subject: [PATCH 6/7] ich9: refactor wakeup/reset function
+
+realize wakeup function for ICH9-LPC device
+
+Signed-off-by: liguang <lig.fnst@cn.fujitsu.com>
+---
+ hw/acpi.c      |   20 +++++++++-----------
+ hw/acpi.h      |    3 ++-
+ hw/acpi_ich9.c |    2 +-
+ hw/ich9.h      |    2 ++
+ hw/lpc_ich9.c  |   31 ++++++++++++++++++++++++++++++-
+ 5 files changed, 44 insertions(+), 14 deletions(-)
+
+diff --git a/hw/acpi.c b/hw/acpi.c
+index 53e47d5..ab8b415 100644
+--- a/hw/acpi.c
++++ b/hw/acpi.c
+@@ -241,12 +241,11 @@ int acpi_table_add(const char *t)
+ 
+ }
+ 
+-static void acpi_notify_wakeup(Notifier *notifier, void *data)
++void acpi_power_wakeup(ACPIREGS *ar)
+ {
+-    ACPIREGS *ar = container_of(notifier, ACPIREGS, wakeup);
+-    WakeupReason *reason = data;
++    WakeupReason  reason = power_management_wakeup_reason();
+ 
+-    switch (*reason) {
++    switch (reason) {
+     case QEMU_WAKEUP_REASON_RTC:
+         ar->pm1.evt.sts |=
+             (ACPI_BITMASK_WAKE_STATUS | ACPI_BITMASK_RT_CLOCK_STATUS);
+@@ -288,9 +287,9 @@ static void acpi_pm1_evt_write_sts(ACPIREGS *ar, uint16_t val)
+ static void acpi_pm1_evt_write_en(ACPIREGS *ar, uint16_t val)
+ {
+     ar->pm1.evt.en = val;
+-    qemu_system_wakeup_enable(QEMU_WAKEUP_REASON_RTC,
++    power_management_wakeup_capability(QEMU_WAKEUP_REASON_RTC,
+                               val & ACPI_BITMASK_RT_CLOCK_ENABLE);
+-    qemu_system_wakeup_enable(QEMU_WAKEUP_REASON_PMTIMER,
++    power_management_wakeup_capability(QEMU_WAKEUP_REASON_PMTIMER,
+                               val & ACPI_BITMASK_TIMER_ENABLE);
+ }
+ 
+@@ -306,8 +305,8 @@ void acpi_pm1_evt_reset(ACPIREGS *ar)
+ {
+     ar->pm1.evt.sts = 0;
+     ar->pm1.evt.en = 0;
+-    qemu_system_wakeup_enable(QEMU_WAKEUP_REASON_RTC, 0);
+-    qemu_system_wakeup_enable(QEMU_WAKEUP_REASON_PMTIMER, 0);
++    power_management_wakeup_capability(QEMU_WAKEUP_REASON_RTC, false);
++    power_management_wakeup_capability(QEMU_WAKEUP_REASON_PMTIMER, false);
+ }
+ 
+ static uint64_t acpi_pm_evt_read(void *opaque, hwaddr addr, unsigned width)
+@@ -385,7 +384,8 @@ static uint32_t acpi_pm_tmr_get(ACPIREGS *ar)
+ static void acpi_pm_tmr_timer(void *opaque)
+ {
+     ACPIREGS *ar = opaque;
+-    qemu_system_wakeup_request(QEMU_WAKEUP_REASON_PMTIMER);
++    power_management_wakeup_reason_set(QEMU_WAKEUP_REASON_PMTIMER);
++    power_management_set(POWER_WAKEUP);
+     ar->tmr.update_sci(ar);
+ }
+ 
+@@ -474,8 +474,6 @@ static const MemoryRegionOps acpi_pm_cnt_ops = {
+ 
+ void acpi_pm1_cnt_init(ACPIREGS *ar, MemoryRegion *parent)
+ {
+-    ar->wakeup.notify = acpi_notify_wakeup;
+-    qemu_register_wakeup_notifier(&ar->wakeup);
+     memory_region_init_io(&ar->pm1.cnt.io, &acpi_pm_cnt_ops, ar, "acpi-cnt", 2);
+     memory_region_add_subregion(parent, 4, &ar->pm1.cnt.io);
+ }
+diff --git a/hw/acpi.h b/hw/acpi.h
+index c3628d0..98f7c5f 100644
+--- a/hw/acpi.h
++++ b/hw/acpi.h
+@@ -117,7 +117,6 @@ struct ACPIREGS {
+         ACPIPM1EVT  evt;
+         ACPIPM1CNT  cnt;
+     } pm1;
+-    Notifier wakeup;
+ };
+ 
+ /* PM_TMR */
+@@ -154,4 +153,6 @@ void acpi_gpe_reset(ACPIREGS *ar);
+ void acpi_gpe_ioport_writeb(ACPIREGS *ar, uint32_t addr, uint32_t val);
+ uint32_t acpi_gpe_ioport_readb(ACPIREGS *ar, uint32_t addr);
+ 
++void acpi_power_wakeup(ACPIREGS *ar);
++
+ #endif /* !QEMU_HW_ACPI_H */
+diff --git a/hw/acpi_ich9.c b/hw/acpi_ich9.c
+index 29f84ff..a3bfa44 100644
+--- a/hw/acpi_ich9.c
++++ b/hw/acpi_ich9.c
+@@ -176,7 +176,7 @@ const VMStateDescription vmstate_ich9_pm = {
+     }
+ };
+ 
+-static void pm_reset(void *opaque)
++void pm_reset(void *opaque)
+ {
+     ICH9LPCPMRegs *pm = opaque;
+     ich9_pm_iospace_update(pm, 0);
+diff --git a/hw/ich9.h b/hw/ich9.h
+index e7d2df7..2d4fb90 100644
+--- a/hw/ich9.h
++++ b/hw/ich9.h
+@@ -22,6 +22,7 @@ PCIINTxRoute ich9_route_intx_pin_to_irq(void *opaque, int pirq_pin);
+ void ich9_lpc_pm_init(PCIDevice *pci_lpc, qemu_irq cmos_s3);
+ PCIBus *ich9_d2pbr_init(PCIBus *bus, int devfn, int sec_bus);
+ i2c_bus *ich9_smb_init(PCIBus *bus, int devfn, uint32_t smb_io_base);
++void pm_reset(void *opaque);
+ 
+ #define ICH9_CC_SIZE                            (16 * 1024)     /* 16KB */
+ 
+@@ -30,6 +31,7 @@ i2c_bus *ich9_smb_init(PCIBus *bus, int devfn, uint32_t smb_io_base);
+      OBJECT_CHECK(ICH9LPCState, (obj), TYPE_ICH9_LPC_DEVICE)
+ 
+ typedef struct ICH9LPCState {
++    DeviceState qdev;
+     /* ICH9 LPC PCI to ISA bridge */
+     PCIDevice d;
+ 
+diff --git a/hw/lpc_ich9.c b/hw/lpc_ich9.c
+index ff0a309..2635df3 100644
+--- a/hw/lpc_ich9.c
++++ b/hw/lpc_ich9.c
+@@ -467,6 +467,8 @@ static void ich9_lpc_reset(DeviceState *qdev)
+ 
+     lpc->sci_level = 0;
+     lpc->rst_cnt = 0;
++
++    pm_reset(&lpc->pm);
+ }
+ 
+ static const MemoryRegionOps rbca_mmio_ops = {
+@@ -525,11 +527,39 @@ static const MemoryRegionOps ich9_rst_cnt_ops = {
+     .endianness = DEVICE_LITTLE_ENDIAN
+ };
+ 
++static void ich9_lpc_wakeup(DeviceState *dev)
++{
++    ICH9LPCState *lpc = ICH9_LPC_DEVICE(PCI_DEVICE(dev));
++
++    acpi_power_wakeup(&lpc->pm.acpi_regs);
++}
++
++static void ich9_lpc_powr_management(void *opaque, int n, int l)
++{
++    DeviceState *qdev = opaque;
++
++    switch (power_state()) {
++    case POWER_WAKEUP:
++        ich9_lpc_wakeup(qdev);
++        break;
++    case POWER_RESET:
++    case POWER_ON:
++        ich9_lpc_reset(qdev);
++        break;
++    case POWER_OFF:
++    default:
++        break;
++    }
++}
++
+ static int ich9_lpc_initfn(PCIDevice *d)
+ {
+     ICH9LPCState *lpc = ICH9_LPC_DEVICE(d);
+     ISABus *isa_bus;
+ 
++    lpc->qdev.power_signal_in = qemu_allocate_irqs(ich9_lpc_powr_management,
++                                                   d, 1);
++    connect_power_signal(lpc->qdev.power_signal_in);
+     isa_bus = isa_bus_new(&d->qdev, get_system_io());
+ 
+     pci_set_long(d->wmask + ICH9_LPC_PMBASE,
+@@ -610,7 +640,6 @@ static void ich9_lpc_class_init(ObjectClass *klass, void *data)
+     k->device_id = PCI_DEVICE_ID_INTEL_ICH9_8;
+     k->revision = ICH9_A2_LPC_REVISION;
+     k->class_id = PCI_CLASS_BRIDGE_ISA;
+-
+ }
+ 
+ static const TypeInfo ich9_lpc_info = {
+-- 
+1.7.2.5
+

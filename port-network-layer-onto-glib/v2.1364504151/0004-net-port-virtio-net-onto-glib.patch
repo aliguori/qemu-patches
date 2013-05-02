@@ -1,0 +1,269 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Liu Ping Fan <qemulist@gmail.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, Paolo Bonzini <pbonzini@redhat.com>,
+ Stefan Hajnoczi <stefanha@gmail.com>, mdroth <mdroth@linux.vnet.ibm.com>
+Date: Thu, 28 Mar 2013 15:55:55 +0800
+Message-id: 1364457355-4119-5-git-send-email-qemulist@gmail.com
+Subject: [PATCH 4/4] net: port virtio net onto glib
+
+From: Liu Ping Fan <pingfank@linux.vnet.ibm.com>
+
+Signed-off-by: Liu Ping Fan <pingfank@linux.vnet.ibm.com>
+---
+ hw/virtio-net.c |  165 +++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ hw/virtio.c     |    6 ++
+ hw/virtio.h     |    2 +
+ 3 files changed, 173 insertions(+), 0 deletions(-)
+
+diff --git a/hw/virtio-net.c b/hw/virtio-net.c
+index bb2c26c..c6ebd68 100644
+--- a/hw/virtio-net.c
++++ b/hw/virtio-net.c
+@@ -61,6 +61,7 @@ typedef struct VirtIONet
+     uint8_t nouni;
+     uint8_t nobcast;
+     uint8_t vhost_started;
++    uint8_t dataplane_started;
+     struct {
+         int in_use;
+         int first_multi;
+@@ -98,6 +99,9 @@ static VirtIOFeature feature_sizes[] = {
+     {}
+ };
+ 
++static void virtio_net_data_plane_start(VirtIONet *n);
++static void virtio_net_data_plane_stop(VirtIONet *n);
++
+ static VirtIONetQueue *virtio_net_get_subqueue(NetClientState *nc)
+ {
+     VirtIONet *n = qemu_get_nic_opaque(nc);
+@@ -150,6 +154,12 @@ static bool virtio_net_started(VirtIONet *n, uint8_t status)
+         (n->status & VIRTIO_NET_S_LINK_UP) && n->vdev.vm_running;
+ }
+ 
++#if 0
++static void virtio_net_data_plane_status(VirtIONet *n, uint8_t status)
++{
++}
++#endif
++
+ static void virtio_net_vhost_status(VirtIONet *n, uint8_t status)
+ {
+     NetClientState *nc = qemu_get_queue(n->nic);
+@@ -197,6 +207,19 @@ static void virtio_net_set_status(struct VirtIODevice *vdev, uint8_t status)
+ 
+     virtio_net_vhost_status(n, status);
+ 
++    if (virtio_net_started(n, status) && !n->vhost_started) {
++        /* use data plane */
++        if (!n->dataplane_started) {
++            virtio_net_data_plane_start(n);
++            n->dataplane_started = 1;
++            return;
++        } else {
++            virtio_net_data_plane_stop(n);
++            n->dataplane_started = 0;
++            return;
++        }
++    }
++
+     for (i = 0; i < n->max_queues; i++) {
+         q = &n->vqs[i];
+ 
+@@ -1008,6 +1031,141 @@ static void virtio_net_handle_tx_timer(VirtIODevice *vdev, VirtQueue *vq)
+     }
+ }
+ 
++/* In esseatial, this is ioevent handler */
++static gboolean virtio_net_tx_handler(gpointer user_data)
++{
++    NetClientSource *nsrc = (NetClientSource *)user_data;
++    VirtQueue *vq = (VirtQueue *)nsrc->opaque;
++    VirtIODevice *vdev =  virtio_queue_get_vdev(vq);
++    VirtIONet *n = to_virtio_net(vdev);
++    VirtIONetQueue *q = &n->vqs[vq2q(virtio_get_queue_index(vq))];
++    int32_t ret;
++
++    event_notifier_test_and_clear(virtio_queue_get_host_notifier(vq));
++
++    /* This happens when device was stopped but VCPU wasn't. */
++    if (!n->vdev.vm_running) {
++        return false;
++    }
++    virtio_queue_set_notification(vq, 0);
++    ret = virtio_net_flush_tx(q);
++    if (ret >= n->tx_burst) {
++        event_notifier_set(virtio_queue_get_host_notifier(vq));
++    } else if (ret >= 0) {
++        /* ret == -EBUSY, will rely on cb to re-enable */
++        virtio_queue_set_notification(vq, 1);
++    }
++
++    return true;
++}
++
++static gboolean virtio_net_rx_handler(gpointer user_data)
++{
++    NetClientSource *nsrc = (NetClientSource *)user_data;
++    VirtQueue *vq = (VirtQueue *)nsrc->opaque;
++    VirtIODevice *vdev =  virtio_queue_get_vdev(vq);
++
++    event_notifier_test_and_clear(virtio_queue_get_host_notifier(vq));
++    virtio_net_handle_rx(vdev, vq);
++
++    return true;
++}
++
++/* Detach the org ioeventfd handler */
++static void queue_host_notifier_rebind(VirtQueue *vq)
++{
++    VirtIODevice *vdev =  virtio_queue_get_vdev(vq);
++    VirtIONet *n = to_virtio_net(vdev);
++    VirtIONetQueue *q;
++    NetClientState *nc;
++    NetClientSource *nsrc;
++    nc = &n->nic->ncs[vq2q(virtio_get_queue_index(vq))];
++    q = &n->vqs[vq2q(virtio_get_queue_index(vq))];
++
++    if (vq == q->rx_vq) {
++        nsrc = nc->nsrc[0];
++    } else {
++        nsrc = nc->nsrc[1];
++    }
++    event_notifier_set_handler(virtio_queue_get_host_notifier(vq), NULL);
++    g_source_attach(&nsrc->source, nsrc->ctx);
++}
++
++static void virtio_net_host_notifiers_rebind(VirtIONet *n)
++{
++    VirtIONetQueue *q;
++    int i;
++
++    for (i = 0; i < n->curr_queues; i++) {
++        q = &n->vqs[i];
++        queue_host_notifier_rebind(q->rx_vq);
++        queue_host_notifier_rebind(q->tx_vq);
++    }
++}
++
++static void virtio_net_gsource_init(VirtIONet *n)
++{
++    VirtIONetQueue *q;
++    NetClientState *nc;
++    NetClientSource *nsrc;
++    VirtIODevice *vdev = &n->vdev;
++    int fd;
++    int i;
++
++    for (i = 0; i < n->curr_queues; i++) {
++
++        q = &n->vqs[i];
++        /* rx */
++        nsrc = (NetClientSource *)g_source_new(&net_gsource_funcs,
++                    sizeof(NetClientSource));
++        vdev->binding->set_host_notifier(vdev->binding_opaque, i, true);
++        fd = event_notifier_get_fd(virtio_queue_get_host_notifier(q->rx_vq));
++        nc = &n->nic->ncs[i];
++        net_init_gsource(nc, 0, nsrc, fd, G_IO_IN, NULL, NULL,
++            virtio_net_rx_handler, q->rx_vq);
++        /* tx */
++        nsrc = (NetClientSource *)g_source_new(&net_gsource_funcs,
++                    sizeof(NetClientSource));
++        vdev->binding->set_host_notifier(vdev->binding_opaque, 2*i+1, true);
++        fd = event_notifier_get_fd(virtio_queue_get_host_notifier(q->tx_vq));
++        net_init_gsource(nc, 1, nsrc, fd, G_IO_IN, NULL, NULL,
++            virtio_net_tx_handler, q->tx_vq);
++    }
++}
++
++static void virtio_net_data_plane_start(VirtIONet *n)
++{
++    virtio_net_gsource_init(n);
++    virtio_net_host_notifiers_rebind(n);
++}
++
++static void queue_data_plane_stop(VirtIONetQueue *q)
++{
++    VirtIONet *n = q->n;
++    VirtIODevice *vdev = &n->vdev;
++    int idx;
++    NetClientSource *nsrc;
++    NetClientState *nc;
++    idx = vq2q(virtio_get_queue_index(q->rx_vq));
++    nc = &n->nic->ncs[idx];
++
++    vdev->binding->set_host_notifier(vdev->binding_opaque, 2*idx, false);
++    nsrc = nc->nsrc[0];
++    g_source_destroy(&nsrc->source);
++    vdev->binding->set_host_notifier(vdev->binding_opaque, 2*idx+1, false);
++    nsrc = nc->nsrc[1];
++    g_source_destroy(&nsrc->source);
++}
++
++static void virtio_net_data_plane_stop(VirtIONet *n)
++{
++    int i;
++
++    for (i = 0; i < n->curr_queues; i++) {
++        queue_data_plane_stop(&n->vqs[i]);
++    }
++}
++
+ static void virtio_net_handle_tx_bh(VirtIODevice *vdev, VirtQueue *vq)
+ {
+     VirtIONet *n = to_virtio_net(vdev);
+@@ -1274,6 +1432,12 @@ static void virtio_net_cleanup(NetClientState *nc)
+     n->nic = NULL;
+ }
+ 
++static void virtio_net_bind_ctx(NetClientState *nc, GMainContext *ctx)
++{
++    g_source_attach(&nc->nsrc[0]->source, ctx);
++    g_source_attach(&nc->nsrc[1]->source, ctx);
++}
++
+ static NetClientInfo net_virtio_info = {
+     .type = NET_CLIENT_OPTIONS_KIND_NIC,
+     .size = sizeof(NICState),
+@@ -1281,6 +1445,7 @@ static NetClientInfo net_virtio_info = {
+     .receive = virtio_net_receive,
+         .cleanup = virtio_net_cleanup,
+     .link_status_changed = virtio_net_set_link_status,
++    .bind_ctx = virtio_net_bind_ctx,
+ };
+ 
+ static bool virtio_net_guest_notifier_pending(VirtIODevice *vdev, int idx)
+diff --git a/hw/virtio.c b/hw/virtio.c
+index e259348..d21c4f2 100644
+--- a/hw/virtio.c
++++ b/hw/virtio.c
+@@ -658,6 +658,12 @@ int virtio_queue_get_id(VirtQueue *vq)
+     return vq - &vdev->vq[0];
+ }
+ 
++VirtIODevice *virtio_queue_get_vdev(VirtQueue *vq)
++{
++    VirtIODevice *vdev = vq->vdev;
++    return vdev;
++}
++
+ void virtio_queue_notify_vq(VirtQueue *vq)
+ {
+     if (vq->vring.desc) {
+diff --git a/hw/virtio.h b/hw/virtio.h
+index 1e206b8..afe4cf4 100644
+--- a/hw/virtio.h
++++ b/hw/virtio.h
+@@ -283,6 +283,8 @@ void virtio_queue_set_last_avail_idx(VirtIODevice *vdev, int n, uint16_t idx);
+ VirtQueue *virtio_get_queue(VirtIODevice *vdev, int n);
+ uint16_t virtio_get_queue_index(VirtQueue *vq);
+ int virtio_queue_get_id(VirtQueue *vq);
++VirtIODevice *virtio_queue_get_vdev(VirtQueue *vq);
++
+ EventNotifier *virtio_queue_get_guest_notifier(VirtQueue *vq);
+ void virtio_queue_set_guest_notifier_fd_handler(VirtQueue *vq, bool assign,
+                                                 bool with_irqfd);
+-- 
+1.7.4.4
+

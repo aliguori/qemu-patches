@@ -1,0 +1,1 @@
+../qapi-and-snapshot-code-clean-up-in-block-layer/v1.1367015468/0001-block-drop-bs_snapshots-global-variable.patch

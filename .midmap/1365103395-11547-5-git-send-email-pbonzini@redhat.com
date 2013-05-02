@@ -1,0 +1,1 @@
+../hw--reorganization-part-2/v3.1365128560/0004-moxie-configure-with-default-configs-file.patch

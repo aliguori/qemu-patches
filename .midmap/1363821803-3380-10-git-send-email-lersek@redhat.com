@@ -1,0 +1,1 @@
+../build-ACPI-MADT-for-fw_cfg-clients/v1.1363843392/0009-Introduce-IO_APIC_DEFAULT_ADDRESS-for-0xfec00000.patch

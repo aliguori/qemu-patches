@@ -1,0 +1,393 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Liu Ping Fan <qemulist@gmail.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <anthony@codemonkey.ws>,
+ Paolo Bonzini <pbonzini@redhat.com>, Jan Kiszka <jan.kiszka@siemens.com>,
+ Stefan Hajnoczi <stefanha@redhat.com>, mdroth <mdroth@linux.vnet.ibm.com>
+Date: Fri, 26 Apr 2013 10:47:34 +0800
+Message-id: 1366944455-14239-14-git-send-email-qemulist@gmail.com
+Subject: [PATCH 13/14] slirp: handle race condition
+
+From: Liu Ping Fan <pingfank@linux.vnet.ibm.com>
+
+Slirp and its peer can run on different context at the same time.
+Using lock to protect. Lock rule: no extra lock can be hold after
+slirp->lock. This will protect us from deadlock when calling to peer.
+
+As to coding style, they accord to the nearby code's style.
+
+Signed-off-by: Liu Ping Fan <pingfank@linux.vnet.ibm.com>
+---
+ slirp/if.c    |   57 ++++++++++++++++++++++++++++++++--------
+ slirp/main.h  |    3 +-
+ slirp/mbuf.h  |    2 +
+ slirp/slirp.c |   81 ++++++++++++++++++++++++++++++++++++++++++---------------
+ slirp/slirp.h |    6 +++-
+ 5 files changed, 115 insertions(+), 34 deletions(-)
+
+diff --git a/slirp/if.c b/slirp/if.c
+index dcd5faf..b6a30a8 100644
+--- a/slirp/if.c
++++ b/slirp/if.c
+@@ -132,12 +132,21 @@ diddit:
+ 		}
+ 	}
+ 
+-#ifndef FULL_BOLT
+-	/*
+-	 * This prevents us from malloc()ing too many mbufs
+-	 */
+-	if_start(ifm->slirp);
+-#endif
++}
++
++static void mbuf_free(gpointer data, gpointer user_data)
++{
++    struct mbuf *ifm = data;
++    m_free(ifm);
++}
++
++static void if_send_free(gpointer data, gpointer user_data)
++{
++    struct mbuf *ifm = data;
++    Slirp *slirp = user_data;
++
++    if_encap(slirp, ifm);
++    m_free(ifm);
+ }
+ 
+ /*
+@@ -156,7 +165,10 @@ void if_start(Slirp *slirp)
+ {
+     uint64_t now = qemu_get_clock_ns(rt_clock);
+     bool from_batchq, next_from_batchq;
+-    struct mbuf *ifm, *ifm_next, *ifqt;
++    struct mbuf *ifm, *ifm_next, *ifqt, *mclone;
++    GList *drop_list, *send_list;
++    drop_list = send_list = NULL;
++    int ret;
+ 
+     DEBUG_CALL("if_start");
+ 
+@@ -192,9 +204,27 @@ void if_start(Slirp *slirp)
+         }
+ 
+         /* Try to send packet unless it already expired */
+-        if (ifm->expiration_date >= now && !if_encap(slirp, ifm)) {
+-            /* Packet is delayed due to pending ARP resolution */
+-            continue;
++        if (ifm->expiration_date < now) {
++            drop_list = g_list_append(drop_list, ifm);
++        } else {
++            ret = if_query(slirp, ifm);
++            switch (ret) {
++            case 2:
++                send_list = g_list_append(send_list, ifm);
++                break;
++            case 1:
++                mclone = m_get(slirp);
++                m_copy(mclone, ifm, 0, ifm->m_len);
++                mclone->arp_requested = true;
++                send_list = g_list_append(send_list, mclone);
++                /* Packet is delayed due to pending ARP resolution */
++                continue;
++            case 0:
++                continue;
++            case -1:
++                drop_list = g_list_append(drop_list, ifm);
++                break;
++            }
+         }
+ 
+         if (ifm == slirp->next_m) {
+@@ -230,8 +260,13 @@ void if_start(Slirp *slirp)
+             ifm->ifq_so->so_nqueued = 0;
+         }
+ 
+-        m_free(ifm);
+     }
+ 
+     slirp->if_start_busy = false;
++    qemu_mutex_unlock(&slirp->lock);
++
++    g_list_foreach(drop_list, mbuf_free, NULL);
++    g_list_free(drop_list);
++    g_list_foreach(send_list, if_send_free, slirp);
++    g_list_free(send_list);
+ }
+diff --git a/slirp/main.h b/slirp/main.h
+index f2e58cf..c0b7881 100644
+--- a/slirp/main.h
++++ b/slirp/main.h
+@@ -44,7 +44,8 @@ extern int tcp_keepintvl;
+ #define PROTO_PPP 0x2
+ #endif
+ 
+-int if_encap(Slirp *slirp, struct mbuf *ifm);
++int if_query(Slirp *slirp, struct mbuf *ifm);
++void if_encap(Slirp *slirp, struct mbuf *ifm);
+ ssize_t slirp_send(struct socket *so, const void *buf, size_t len, int flags);
+ 
+ #endif
+diff --git a/slirp/mbuf.h b/slirp/mbuf.h
+index 3f3ab09..a61ab94 100644
+--- a/slirp/mbuf.h
++++ b/slirp/mbuf.h
+@@ -34,6 +34,7 @@
+ #define _MBUF_H_
+ 
+ #define MINCSIZE 4096	/* Amount to increase mbuf if too small */
++#define ETH_ALEN 6
+ 
+ /*
+  * Macros for type conversion
+@@ -82,6 +83,7 @@ struct m_hdr {
+ struct mbuf {
+ 	struct	m_hdr m_hdr;
+ 	Slirp *slirp;
++	uint8_t ethaddr[ETH_ALEN];
+ 	bool	arp_requested;
+ 	uint64_t expiration_date;
+ 	/* start of dynamic buffer area, must be last element */
+diff --git a/slirp/slirp.c b/slirp/slirp.c
+index 691f82f..8f5cbe0 100644
+--- a/slirp/slirp.c
++++ b/slirp/slirp.c
+@@ -206,6 +206,7 @@ Slirp *slirp_init(int restricted, struct in_addr vnetwork,
+ 
+     slirp_init_once();
+ 
++    qemu_mutex_init(&slirp->lock);
+     slirp->restricted = restricted;
+ 
+     if_init(slirp);
+@@ -248,6 +249,7 @@ void slirp_cleanup(Slirp *slirp)
+ 
+     ip_cleanup(slirp);
+     m_cleanup(slirp);
++    qemu_mutex_destroy(&slirp->lock);
+ 
+     g_free(slirp->vdnssearch);
+     g_free(slirp->tftp_prefix);
+@@ -410,6 +412,7 @@ gboolean slirp_handler(gpointer data)
+     struct socket *so, *so_next;
+     int ret;
+ 
++    qemu_mutex_lock(&slirp->lock);
+     /*
+      * See if anything has timed out
+      */
+@@ -593,6 +596,7 @@ gboolean slirp_handler(gpointer data)
+         }
+     }
+ 
++    /* drop the slirp->lock inside it */
+     if_start(slirp);
+     return true;
+ }
+@@ -612,6 +616,7 @@ static void arp_input(Slirp *slirp, const uint8_t *pkt, int pkt_len)
+         if (ah->ar_tip == ah->ar_sip) {
+             /* Gratuitous ARP */
+             arp_table_add(slirp, ah->ar_sip, ah->ar_sha);
++            qemu_mutex_unlock(&slirp->lock);
+             return;
+         }
+ 
+@@ -624,6 +629,7 @@ static void arp_input(Slirp *slirp, const uint8_t *pkt, int pkt_len)
+                 if (ex_ptr->ex_addr.s_addr == ah->ar_tip)
+                     goto arp_ok;
+             }
++            qemu_mutex_unlock(&slirp->lock);
+             return;
+         arp_ok:
+             memset(arp_reply, 0, sizeof(arp_reply));
+@@ -645,13 +651,19 @@ static void arp_input(Slirp *slirp, const uint8_t *pkt, int pkt_len)
+             rah->ar_sip = ah->ar_tip;
+             memcpy(rah->ar_tha, ah->ar_sha, ETH_ALEN);
+             rah->ar_tip = ah->ar_sip;
++            qemu_mutex_unlock(&slirp->lock);
++            /* lock should be dropped before calling peer */
+             slirp_output(slirp->opaque, arp_reply, sizeof(arp_reply));
++        } else {
++            qemu_mutex_unlock(&slirp->lock);
+         }
+         break;
+     case ARPOP_REPLY:
+         arp_table_add(slirp, ah->ar_sip, ah->ar_sha);
++        qemu_mutex_unlock(&slirp->lock);
+         break;
+     default:
++        qemu_mutex_unlock(&slirp->lock);
+         break;
+     }
+ }
+@@ -665,14 +677,18 @@ void slirp_input(Slirp *slirp, const uint8_t *pkt, int pkt_len)
+         return;
+ 
+     proto = ntohs(*(uint16_t *)(pkt + 12));
++
++    qemu_mutex_lock(&slirp->lock);
+     switch(proto) {
+     case ETH_P_ARP:
++        /* drop slirp->lock inside */
+         arp_input(slirp, pkt, pkt_len);
+-        break;
++        return;
+     case ETH_P_IP:
+         m = m_get(slirp);
+-        if (!m)
+-            return;
++        if (!m) {
++            break;
++        }
+         /* Note: we add to align the IP header */
+         if (M_FREEROOM(m) < pkt_len + 2) {
+             m_inc(m, pkt_len + 2);
+@@ -682,34 +698,51 @@ void slirp_input(Slirp *slirp, const uint8_t *pkt, int pkt_len)
+ 
+         m->m_data += 2 + ETH_HLEN;
+         m->m_len -= 2 + ETH_HLEN;
+-
++        /* It just append packet, does not send immediately,
++                * so no need to drop slirp->lock inside.
++                */
+         ip_input(m);
+-        break;
++        /* drop slirp->lock inside */
++        if_start(slirp);
++        return;
+     default:
+         break;
+     }
++    qemu_mutex_unlock(&slirp->lock);
+ }
+ 
+-/* Output the IP packet to the ethernet device. Returns 0 if the packet must be
+- * re-queued.
+- */
+-int if_encap(Slirp *slirp, struct mbuf *ifm)
++/* -1 silent drop, 0 sllent, 1 need send out arp, 2 normal */
++int if_query(Slirp *slirp, struct mbuf *ifm)
+ {
+     uint8_t buf[1600];
+-    struct ethhdr *eh = (struct ethhdr *)buf;
+-    uint8_t ethaddr[ETH_ALEN];
+     const struct ip *iph = (const struct ip *)ifm->m_data;
+ 
+     if (ifm->m_len + ETH_HLEN > sizeof(buf)) {
++        return -1;
++    }
++    if (ifm->arp_requested) {
++        return 0;
++    }
++    if (!arp_table_search(slirp, iph->ip_dst.s_addr, ifm->ethaddr)) {
++        ifm->arp_requested = true;
+         return 1;
+     }
++    return 2;
++}
+ 
+-    if (!arp_table_search(slirp, iph->ip_dst.s_addr, ethaddr)) {
++/* Output the IP packet to the ethernet device.
++ */
++void if_encap(Slirp *slirp, struct mbuf *ifm)
++{
++    uint8_t buf[1600];
++    struct ethhdr *eh = (struct ethhdr *)buf;
++    const struct ip *iph = (const struct ip *)ifm->m_data;
++
++    if (ifm->arp_requested) {
+         uint8_t arp_req[ETH_HLEN + sizeof(struct arphdr)];
+         struct ethhdr *reh = (struct ethhdr *)arp_req;
+         struct arphdr *rah = (struct arphdr *)(arp_req + ETH_HLEN);
+ 
+-        if (!ifm->arp_requested) {
+             /* If the client addr is not known, send an ARP request */
+             memset(reh->h_dest, 0xff, ETH_ALEN);
+             memcpy(reh->h_source, special_ethaddr, ETH_ALEN - 4);
+@@ -735,21 +768,17 @@ int if_encap(Slirp *slirp, struct mbuf *ifm)
+             rah->ar_tip = iph->ip_dst.s_addr;
+             slirp->client_ipaddr = iph->ip_dst;
+             slirp_output(slirp->opaque, arp_req, sizeof(arp_req));
+-            ifm->arp_requested = true;
+ 
+             /* Expire request and drop outgoing packet after 1 second */
+             ifm->expiration_date = qemu_get_clock_ns(rt_clock) + 1000000000ULL;
+-        }
+-        return 0;
+     } else {
+-        memcpy(eh->h_dest, ethaddr, ETH_ALEN);
++        memcpy(eh->h_dest, ifm->ethaddr, ETH_ALEN);
+         memcpy(eh->h_source, special_ethaddr, ETH_ALEN - 4);
+         /* XXX: not correct */
+         memcpy(&eh->h_source[2], &slirp->vhost_addr, 4);
+         eh->h_proto = htons(ETH_P_IP);
+         memcpy(buf + sizeof(struct ethhdr), ifm->m_data, ifm->m_len);
+         slirp_output(slirp->opaque, buf, ifm->m_len + ETH_HLEN);
+-        return 1;
+     }
+ }
+ 
+@@ -860,15 +889,25 @@ void slirp_socket_recv(Slirp *slirp, struct in_addr guest_addr, int guest_port,
+                        const uint8_t *buf, int size)
+ {
+     int ret;
+-    struct socket *so = slirp_find_ctl_socket(slirp, guest_addr, guest_port);
++    struct socket *so;
++
++    qemu_mutex_lock(&slirp->lock);
++    so = slirp_find_ctl_socket(slirp, guest_addr, guest_port);
+ 
+-    if (!so)
++    if (!so) {
++        qemu_mutex_unlock(&slirp->lock);
+         return;
++    }
+ 
+     ret = soreadbuf(so, (const char *)buf, size);
+ 
+-    if (ret > 0)
++    if (ret > 0) {
+         tcp_output(sototcpcb(so));
++        /* release lock inside */
++        if_start(slirp);
++        return;
++    }
++    qemu_mutex_unlock(&slirp->lock);
+ }
+ 
+ static void slirp_tcp_save(QEMUFile *f, struct tcpcb *tp)
+diff --git a/slirp/slirp.h b/slirp/slirp.h
+index 008360e..8ec0888 100644
+--- a/slirp/slirp.h
++++ b/slirp/slirp.h
+@@ -135,6 +135,7 @@ void free(void *ptr);
+ 
+ #include "qemu/queue.h"
+ #include "qemu/sockets.h"
++#include "qemu/thread.h"
+ 
+ #include "libslirp.h"
+ #include "ip.h"
+@@ -158,7 +159,6 @@ void free(void *ptr);
+ #include "bootp.h"
+ #include "tftp.h"
+ 
+-#define ETH_ALEN 6
+ #define ETH_HLEN 14
+ 
+ #define ETH_P_IP  0x0800        /* Internet Protocol packet  */
+@@ -207,6 +207,10 @@ struct Slirp {
+     u_int last_slowtimo;
+     int do_slowtimo;
+ 
++    /* lock to protect slirp running both on frontend or SlirpState context.
++         * Lock rule: biglock ->lock.  Should be dropped before calling peer.
++         */
++    QemuMutex lock;
+     /* virtual network configuration */
+     struct in_addr vnetwork_addr;
+     struct in_addr vnetwork_mask;
+-- 
+1.7.4.4
+

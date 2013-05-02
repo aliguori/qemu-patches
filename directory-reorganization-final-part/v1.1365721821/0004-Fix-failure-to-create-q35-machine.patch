@@ -1,0 +1,52 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: peter.maydell@linaro.org, Hu Tao <hutao@cn.fujitsu.com>, mst@redhat.com
+Date: Thu, 11 Apr 2013 18:10:25 +0200
+Message-id: 1365696633-30727-5-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 04/12] Fix failure to create q35 machine
+
+From: Hu Tao <hutao@cn.fujitsu.com>
+
+This is a regression introduced by c0907c9e6417c. How to reproduce:
+
+$ qemu-system-x86_64 -nodefaults -vnc :0 -M q35
+qemu-system-x86_64: Unknown device 'q35-pcihost' for default sysbus
+Aborted (core dumped)
+
+Tested-by: Markus Armbruster <armbru@redhat.com>
+Signed-off-by: Hu Tao <hutao@cn.fujitsu.com>
+---
+ default-configs/i386-softmmu.mak   | 2 +-
+ default-configs/x86_64-softmmu.mak | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/default-configs/i386-softmmu.mak b/default-configs/i386-softmmu.mak
+index 4ac0694..6d9d364 100644
+--- a/default-configs/i386-softmmu.mak
++++ b/default-configs/i386-softmmu.mak
+@@ -42,6 +42,6 @@ CONFIG_ISA_TESTDEV=y
+ CONFIG_VMPORT=y
+ CONFIG_SGA=y
+ CONFIG_LPC_ICH9=y
+-CONFIG_Q35=y
++CONFIG_PCI_Q35=y
+ CONFIG_APIC=y
+ CONFIG_IOAPIC=y
+diff --git a/default-configs/x86_64-softmmu.mak b/default-configs/x86_64-softmmu.mak
+index bf4091c..3b06310 100644
+--- a/default-configs/x86_64-softmmu.mak
++++ b/default-configs/x86_64-softmmu.mak
+@@ -42,6 +42,6 @@ CONFIG_ISA_TESTDEV=y
+ CONFIG_VMPORT=y
+ CONFIG_SGA=y
+ CONFIG_LPC_ICH9=y
+-CONFIG_Q35=y
++CONFIG_PCI_Q35=y
+ CONFIG_APIC=y
+ CONFIG_IOAPIC=y
+-- 
+1.8.1.4
+
+
+

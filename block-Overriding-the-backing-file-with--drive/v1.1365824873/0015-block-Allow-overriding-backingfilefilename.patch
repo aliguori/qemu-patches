@@ -1,0 +1,36 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Kevin Wolf <kwolf@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: kwolf@redhat.com, stefanha@redhat.com
+Date: Fri, 12 Apr 2013 22:48:08 +0200
+Message-id: 1365799688-19918-16-git-send-email-kwolf@redhat.com
+Subject: [PATCH 15/15] block: Allow overriding backing.file.filename
+
+If a filename is passed in the driver-specific options from the command
+line, the backing file path from the image is ignored now.
+
+Signed-off-by: Kevin Wolf <kwolf@redhat.com>
+Reviewed-by: Eric Blake <eblake@redhat.com>
+---
+ block.c | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/block.c b/block.c
+index c2d1d2d..3a45c2a 100644
+--- a/block.c
++++ b/block.c
+@@ -889,7 +889,9 @@ int bdrv_open_backing_file(BlockDriverState *bs, QDict *options)
+     }
+ 
+     bs->open_flags &= ~BDRV_O_NO_BACKING;
+-    if (bs->backing_file[0] == '\0' && qdict_size(options) == 0) {
++    if (qdict_haskey(options, "file.filename")) {
++        backing_filename[0] = '\0';
++    } else if (bs->backing_file[0] == '\0' && qdict_size(options) == 0) {
+         QDECREF(options);
+         return 0;
+     }
+-- 
+1.8.1.4
+
+

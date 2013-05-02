@@ -1,0 +1,64 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Pavel Hrdina <phrdina@redhat.com>
+To: Markus Armbruster <armbru@redhat.com>, qemu-devel@nongnu.org,
+ Pavel Hrdina <phrdina@redhat.com>
+Cc: qemu-devel@nongnu.org, phrdina@redhat.com, armbru@redhat.com,
+ Pavel Hrdina <phrdina@redhat.com>, lcapitulino@redhat.com
+Date: Fri, 29 Mar 2013 15:12:29 +0100
+Message-id: 451dff8502328bfb24afa139cbdfeeebc60d3e67.1364565637.git.phrdina@redhat.com
+Subject: [PATCH 02/11] block: add error parameter to del_existing_snapshots()
+
+Signed-off-by: Pavel Hrdina <phrdina@redhat.com>
+Reviewed-by: Eric Blake <eblake@redhat.com>
+---
+ savevm.c | 12 +++++++-----
+ 1 file changed, 7 insertions(+), 5 deletions(-)
+
+diff --git a/savevm.c b/savevm.c
+index 77c5291..dc1f4a4 100644
+--- a/savevm.c
++++ b/savevm.c
+@@ -2224,7 +2224,7 @@ static int bdrv_snapshot_find(BlockDriverState *bs, QEMUSnapshotInfo *sn_info,
+ /*
+  * Deletes snapshots of a given name in all opened images.
+  */
+-static int del_existing_snapshots(Monitor *mon, const char *name)
++static int del_existing_snapshots(const char *name, Error **errp)
+ {
+     BlockDriverState *bs;
+     QEMUSnapshotInfo sn1, *snapshot = &sn1;
+@@ -2237,9 +2237,8 @@ static int del_existing_snapshots(Monitor *mon, const char *name)
+         {
+             ret = bdrv_snapshot_delete(bs, name);
+             if (ret < 0) {
+-                monitor_printf(mon,
+-                               "Error while deleting snapshot on '%s'\n",
+-                               bdrv_get_device_name(bs));
++                error_setg(errp, "error while deleting snapshot on '%s'",
++                           bdrv_get_device_name(bs));
+                 return -1;
+             }
+         }
+@@ -2259,6 +2258,7 @@ void do_savevm(Monitor *mon, const QDict *qdict)
+     qemu_timeval tv;
+     struct tm tm;
+     const char *name = qdict_get_try_str(qdict, "name");
++    Error *local_err = NULL;
+ 
+     /* Verify if there is a device that doesn't support snapshots and is writable */
+     bs = NULL;
+@@ -2307,7 +2307,9 @@ void do_savevm(Monitor *mon, const QDict *qdict)
+     }
+ 
+     /* Delete old snapshots of the same name */
+-    if (name && del_existing_snapshots(mon, name) < 0) {
++    if (name && del_existing_snapshots(name, &local_err) < 0) {
++        monitor_printf(mon, "%s\n", error_get_pretty(local_err));
++        error_free(local_err);
+         goto the_end;
+     }
+ 
+-- 
+1.8.1.4
+
+

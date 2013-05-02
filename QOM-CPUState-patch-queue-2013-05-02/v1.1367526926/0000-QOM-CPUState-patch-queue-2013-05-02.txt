@@ -1,0 +1,148 @@
+From patches Mon Sep 17 00:00:00 2001
+From: =?utf-8?q?Andreas_F=C3=A4rber_=3Cafaerber=40suse=2Ede=3E?=
+To: qemu-devel@nongnu.org
+Cc: Blue Swirl <blauwirbel@gmail.com>, Eduardo Habkost <ehabkost@redhat.com>,
+ Anthony Liguori <anthony@codemonkey.ws>,
+ =?UTF-8?q?Aur=C3=A9lien=20Jarno?= <aurelien@aurel32.net>,
+ Igor Mammedov <imammedo@redhat.com>,
+ =?UTF-8?q?Andreas=20F=C3=A4rber?= <afaerber@suse.de>,
+ Jan Kiszka <jan.kiszka@siemens.com>, Jens Freimann <jfrei@linux.vnet.ibm.com>
+Date: Thu,  2 May 2013 15:35:26 +0200
+Message-id: 1367501755-32272-1-git-send-email-afaerber@suse.de
+Subject: [PATCH 00/29] QOM CPUState patch queue 2013-05-02
+
+Hello,
+
+This is my current QOM CPU patch queue. Please pull.
+
+It includes:
+* x86 CPU hot-plug support,
+* x86 CPUID feature word array cleanups,
+* first round of cleanups for dump support,
+* pause_all_vcpus() fix for TCG,
+* main() cleanup.
+
+Regards,
+Andreas
+
+Cc: Anthony Liguori <anthony@codemonkey.ws>
+Cc: Blue Swirl <blauwirbel@gmail.com>
+Cc: Aurélien Jarno <aurelien@aurel32.net>
+
+Cc: Eduardo Habkost <ehabkost@redhat.com>
+Cc: Igor Mammedov <imammedo@redhat.com>
+Cc: Jens Freimann <jfrei@linux.vnet.ibm.com>
+Cc: Jan Kiszka <jan.kiszka@siemens.com>
+
+
+The following changes since commit e9016ee2bda1b7757072b856b2196f691aee3388:
+
+  virtio-net: count VIRTIO_NET_F_MAC when calculating config_len (2013-04-30 16:04:24 -0500)
+
+are available in the git repository at:
+
+  git://github.com/afaerber/qemu-cpu.git qom-cpu
+
+for you to fetch changes up to e7bdf659c16e1cefd61f53648503d8c060668d6b:
+
+  Drop redundant resume_all_vcpus() from main() (2013-05-02 13:44:19 +0200)
+
+----------------------------------------------------------------
+Andreas Färber (1):
+      cpus: Fix pausing TCG CPUs while in vCPU thread
+
+Eduardo Habkost (4):
+      target-i386: Group together level, xlevel, xlevel2 fields
+      target-i386/kvm.c: Code formatting changes
+      target-i386: Break CPUID feature definition lines
+      target-i386: Replace cpuid_*features fields with a feature word array
+
+Igor Mammedov (21):
+      cpu: Make kvm-stub.o available outside softmmu
+      cpu: Call cpu_synchronize_post_init() from DeviceClass::realize()
+      cpu: Introduce cpu_resume(), for single CPU
+      cpu: Resume CPU from DeviceClass::realize() if hot-plugged
+      cpu: Introduce CPU hot-plug notifier
+      pc: Update rtc_cmos on CPU hot-plug
+      cpu: Introduce get_arch_id() method and override it for X86CPU
+      cpus: Use qemu_for_each_cpu() in TCG thread
+      cpu: Add helper cpu_exists(), to check if CPU with specified id exists
+      acpi_piix4: Add infrastructure to send CPU hot-plug GPE to guest
+      target-i386: Introduce feat2prop() for CPU properties
+      target-i386: Introduce apic-id CPU property
+      target-i386: Do not allow to set apic-id once CPU is realized
+      target-i386: Replace MSI_SPACE_SIZE with APIC_SPACE_SIZE
+      kvmvapic: Make dependency on sysbus.h explicit
+      target-i386: Introduce ICC bus/device/bridge
+      target-i386: Attach ICC bus to CPU on its creation
+      target-i386: Move APIC to ICC bus
+      Add hot_add_cpu hook to QEMUMachine
+      QMP: Add cpu-add command
+      pc: Implement QEMUMachine::hot_add_cpu hook
+
+Jan Kiszka (1):
+      Drop redundant resume_all_vcpus() from main()
+
+Jens Freimann (1):
+      cpu: Move cpu_write_elfXX_note() functions to CPUState
+
+Michael S. Tsirkin (1):
+      cpu: Add qemu_for_each_cpu()
+
+ MAINTAINERS                        |   6 +
+ Makefile.target                    |  14 +-
+ bsd-user/elfload.c                 |   2 +-
+ bsd-user/main.c                    |   4 +-
+ cpus.c                             |  27 +-
+ default-configs/i386-softmmu.mak   |   1 +
+ default-configs/x86_64-softmmu.mak |   1 +
+ docs/specs/acpi_cpu_hotplug.txt    |  22 ++
+ dump-stub.c                        |  28 --
+ dump.c                             |   8 +-
+ exec.c                             |  10 +
+ hw/acpi/piix4.c                    |  90 ++++++-
+ hw/cpu/Makefile.objs               |   1 +
+ hw/cpu/icc_bus.c                   | 119 +++++++++
+ hw/i386/kvm/apic.c                 |   2 +-
+ hw/i386/kvm/clock.c                |   2 +-
+ hw/i386/kvmvapic.c                 |   1 +
+ hw/i386/pc.c                       |  88 ++++++-
+ hw/i386/pc_piix.c                  |  10 +-
+ hw/i386/pc_q35.c                   |  10 +-
+ hw/intc/apic.c                     |   2 +-
+ hw/intc/apic_common.c              |  18 +-
+ hw/timer/mc146818rtc.c             |   7 +
+ hw/xen/xen_apic.c                  |   2 +-
+ include/hw/boards.h                |   3 +
+ include/hw/cpu/icc_bus.h           |  82 ++++++
+ include/hw/i386/apic_internal.h    |   8 +-
+ include/hw/i386/pc.h               |   3 +-
+ include/hw/timer/mc146818rtc.h     |   1 +
+ include/qom/cpu.h                  |  77 ++++++
+ include/sysemu/dump.h              |   9 -
+ include/sysemu/kvm.h               |  24 +-
+ include/sysemu/sysemu.h            |   3 +
+ kvm-all.c                          |   1 +
+ kvm-stub.c                         |   8 +-
+ linux-user/elfload.c               |   2 +-
+ linux-user/main.c                  |   4 +-
+ qapi-schema.json                   |  13 +
+ qmp-commands.hx                    |  23 ++
+ qmp.c                              |  10 +
+ qom/cpu.c                          | 114 ++++++++
+ stubs/Makefile.objs                |   1 +
+ stubs/cpus.c                       |   5 +
+ target-i386/arch_dump.c            |  38 +--
+ target-i386/cpu-qom.h              |   9 +
+ target-i386/cpu.c                  | 520 ++++++++++++++++++++++++-------------
+ target-i386/cpu.h                  |  19 +-
+ target-i386/helper.c               |   4 +-
+ target-i386/kvm.c                  |   5 +-
+ target-i386/misc_helper.c          |  14 +-
+ target-i386/translate.c            |  10 +-
+ vl.c                               |   2 -
+ 52 files changed, 1161 insertions(+), 326 deletions(-)
+ create mode 100644 docs/specs/acpi_cpu_hotplug.txt
+ create mode 100644 hw/cpu/icc_bus.c
+ create mode 100644 include/hw/cpu/icc_bus.h
+ create mode 100644 stubs/cpus.c

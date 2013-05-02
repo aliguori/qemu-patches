@@ -1,0 +1,55 @@
+From patches Mon Sep 17 00:00:00 2001
+From: "Michael S. Tsirkin" <mst@redhat.com>
+To: pbonzini@redhat.com, gleb@redhat.com, mtosatti@redhat.com,
+ qemu-devel@nongnu.org, kvm@vger.kernel.org
+Cc: 
+Date: Wed, 3 Apr 2013 11:59:27 +0300
+Message-id: cover.1364979441.git.mst@redhat.com
+Subject: [PATCH 0/4] kvm-unittests: add pci PORT IO and MMIO speed tests
+
+These patches add a test device, useful to measure speed of MMIO versus PIO, in
+different configurations. As I didn't want to reserve a hardcoded range
+of memory, I added pci device for this instead.  Used together with the
+kvm unittest patches I posted on kvm mailing list.
+
+To use, simply add the device on the pci bus.
+Example test output:
+	mmio-no-eventfd:pci-mem 8796
+	mmio-wildcard-eventfd:pci-mem 3609
+	mmio-datamatch-eventfd:pci-mem 3685
+	portio-no-eventfd:pci-io 5287
+	portio-wildcard-eventfd:pci-io 1762
+	portio-datamatch-eventfd:pci-io 1777
+
+First interesting conclusion is that the overhead of MMIO
+exit to QEMU as compared to PIO is double that of
+MMIO ioeventfd as compared to PIO eventfd. Is this a known fact?
+
+I also had to extend kvm in a minor way, making all ioeventfd
+options accessible through the API. This actually needs less code
+than checking that users DTRT.
+
+What's the best way to merge this patchset?
+I'm guessing the kvm tree ...
+
+Michael S. Tsirkin (4):
+  kvm: remove unused APIs
+  kvm: support any size for pio eventfd
+  kvm: support non datamatch ioeventfd
+  pci: add pci test device
+
+ hw/i386/Makefile.objs |   2 +-
+ hw/pci-testdev.c      | 306 ++++++++++++++++++++++++++++++++++++++++++++++++++
+ hw/pci/pci.h          |   1 +
+ include/sysemu/kvm.h  |   4 -
+ kvm-all.c             | 133 +++++++++++-----------
+ kvm-stub.c            |  10 --
+ 6 files changed, 376 insertions(+), 80 deletions(-)
+ create mode 100644 hw/pci-testdev.c
+
+-- 
+MST
+--
+To unsubscribe from this list: send the line "unsubscribe kvm" in
+the body of a message to majordomo@vger.kernel.org
+More majordomo info at  http://vger.kernel.org/majordomo-info.html

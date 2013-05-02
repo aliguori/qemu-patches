@@ -1,0 +1,46 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Alon Levy <alevy@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: mlureau@redhat.com
+Date: Mon, 22 Apr 2013 18:04:42 +0300
+Message-id: 1366643098-2566-13-git-send-email-alevy@redhat.com
+Subject: [PATCH 12/28] libcacard: remove sql: prefix
+
+From: Marc-André Lureau <marcandre.lureau@gmail.com>
+
+For some reason, with sql:/ prefix, the PKCS11 modules are not loaded.
+
+This patch goes on top of Alon smartcard series.
+---
+ libcacard/vcard_emul_nss.c | 6 ++----
+ 1 file changed, 2 insertions(+), 4 deletions(-)
+
+diff --git a/libcacard/vcard_emul_nss.c b/libcacard/vcard_emul_nss.c
+index 21d4689..6b1ca8a 100644
+--- a/libcacard/vcard_emul_nss.c
++++ b/libcacard/vcard_emul_nss.c
+@@ -893,7 +893,7 @@ vcard_emul_init(const VCardEmulOptions *options)
+     if (options->nss_db) {
+         rv = NSS_Init(options->nss_db);
+     } else {
+-        gchar *path, *db;
++        gchar *path;
+ #ifndef _WIN32
+         path = g_strdup("/etc/pki/nssdb");
+ #else
+@@ -905,10 +905,8 @@ vcard_emul_init(const VCardEmulOptions *options)
+         path = g_build_filename(
+             g_get_system_config_dirs()[0], "pki", "nssdb", NULL);
+ #endif
+-        db = g_strdup_printf("sql:%s", path);
+ 
+-        rv = NSS_Init(db);
+-        g_free(db);
++        rv = NSS_Init(path);
+         g_free(path);
+     }
+     if (rv != SECSuccess) {
+-- 
+1.8.2
+
+

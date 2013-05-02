@@ -1,0 +1,28 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Luiz Capitulino <lcapitulino@redhat.com>
+To: Luiz Capitulino <lcapitulino@redhat.com>, qemu-devel@nongnu.org
+Cc: qemu-devel@nongnu.org, kraxel@redhat.com, fred.konrad@greensocs.com
+Date: Mon, 25 Mar 2013 15:40:37 -0400
+Message-id: 1364240439-23450-1-git-send-email-lcapitulino@redhat.com
+Subject: [PATCH 0/2] Monitor: make output buffer dynamic
+
+Hi,
+
+This series fixes an easy to reproduce assertion in the Monitor code. The
+second patch contains all the relevant details.
+
+Gerd, I'd like a reviewed-by from you before merging this.
+
+Luiz Capitulino (2):
+  qstring: add qobject_get_length()
+  Monitor: Make output buffer dynamic
+
+ include/qapi/qmp/qstring.h |  1 +
+ monitor.c                  | 42 +++++++++++++++++++++++++-----------------
+ qobject/qstring.c          |  8 ++++++++
+ 3 files changed, 34 insertions(+), 17 deletions(-)
+
+Reviewed-by: Gerd Hoffmann <kraxel@redhat.com>
+-- 
+1.8.1.4
+

@@ -1,0 +1,16 @@
+0001-target-i386-translate-mininally-change-gen_intermediate_code_internal.patch
+0002-target-lm32-translate-mininally-change-gen_intermediate_code_internal.patch
+0003-target-arm-translate-mininally-change-gen_intermediate_code_internal.patch
+0004-target-mips-translate-mininally-change-gen_intermediate_code_internal.patch
+0005-target-alpha-translate-mininally-change-gen_intermediate_code_internal.patch
+0006-target-cris-translate-mininally-change-gen_intermediate_code_internal.patch
+0007-target-m68k-translate-mininally-change-gen_intermediate_code_internal.patch
+0008-target-microblaze-translate-mininally-change-gen_intermediate_code_interna.patch
+0009-target-moxie-translate-mininally-change-gen_intermediate_code_internal.patch
+0010-target-openrisc-translate-mininally-change-gen_intermediate_code_internal.patch
+0011-target-ppc-translate-mininally-change-gen_intermediate_code_internal-Signed-off-by-liguang-ligfnstcnfujitsucom.patch
+0012-target-s390-translate-mininally-change-gen_intermediate_code_internal.patch
+0013-target-sh4-translate-mininally-change-gen_intermediate_code_internal.patch
+0014-target-sparc-translate-mininally-change-gen_intermediate_code_internal.patch
+0015-target-unicore32-translate-mininally-change-gen_intermediate_code_internal.patch
+0016-target-xtensa-translate-mininally-change-gen_intermediate_code_internal.patch

@@ -1,0 +1,1 @@
+../KVM-flash-memory-support/v2.1367384187/0006-pc_sysfw-change-rom_only-default-to-0.patch

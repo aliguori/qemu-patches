@@ -1,0 +1,79 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: 
+Date: Tue,  2 Apr 2013 16:58:56 +0200
+Message-id: 1364914749-11141-23-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 22/35] hw: move SD/MMC devices to hw/sd/,
+ configure with default-configs/
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ hw/arm/Makefile.objs            | 4 ++--
+ hw/lm32/Makefile.objs           | 1 -
+ hw/sd/Makefile.objs             | 4 ++++
+ hw/{ => sd}/milkymist-memcard.c | 0
+ hw/{ => sd}/omap_mmc.c          | 0
+ hw/{ => sd}/pxa2xx_mmci.c       | 0
+ 6 files changed, 6 insertions(+), 3 deletions(-)
+ rename hw/{ => sd}/milkymist-memcard.c (100%)
+ rename hw/{ => sd}/omap_mmc.c (100%)
+ rename hw/{ => sd}/pxa2xx_mmci.c (100%)
+
+diff --git a/hw/arm/Makefile.objs b/hw/arm/Makefile.objs
+index 7691540..8e8e799 100644
+--- a/hw/arm/Makefile.objs
++++ b/hw/arm/Makefile.objs
+@@ -7,9 +7,9 @@ obj-y += exynos4210_pmu.o
+ obj-y += a15mpcore.o
+ obj-y += armv7m_nvic.o
+ obj-y += pxa2xx_dma.o
+-obj-y += pxa2xx_mmci.o pxa2xx_pcmcia.o
++obj-y += pxa2xx_pcmcia.o
+ obj-y += zaurus.o
+-obj-y += omap_dma.o omap_clk.o omap_mmc.o \
++obj-y += omap_dma.o omap_clk.o \
+                 omap_gpio.o omap_intc.o
+ obj-y += soc_dma.o \
+                 omap_gpmc.o omap_sdrc.o omap_tap.o omap_l4.o
+diff --git a/hw/lm32/Makefile.objs b/hw/lm32/Makefile.objs
+index f911ac6..bf8d152 100644
+--- a/hw/lm32/Makefile.objs
++++ b/hw/lm32/Makefile.objs
+@@ -2,7 +2,6 @@
+ obj-y += lm32_pic.o
+ obj-y += lm32_sys.o
+ obj-y += milkymist-hpdmc.o
+-obj-y += milkymist-memcard.o
+ obj-y += milkymist-pfpu.o
+ 
+ obj-y := $(addprefix ../,$(obj-y))
+diff --git a/hw/sd/Makefile.objs b/hw/sd/Makefile.objs
+index 8acce02..f1aed83 100644
+--- a/hw/sd/Makefile.objs
++++ b/hw/sd/Makefile.objs
+@@ -2,3 +2,7 @@ common-obj-$(CONFIG_PL181) += pl181.o
+ common-obj-$(CONFIG_SSI_SD) += ssi-sd.o
+ common-obj-$(CONFIG_SD) += sd.o
+ common-obj-$(CONFIG_SDHCI) += sdhci.o
++
++obj-$(CONFIG_MILKYMIST) += milkymist-memcard.o
++obj-$(CONFIG_OMAP) += omap_mmc.o
++obj-$(CONFIG_PXA2XX) += pxa2xx_mmci.o
+diff --git a/hw/milkymist-memcard.c b/hw/sd/milkymist-memcard.c
+similarity index 100%
+rename from hw/milkymist-memcard.c
+rename to hw/sd/milkymist-memcard.c
+diff --git a/hw/omap_mmc.c b/hw/sd/omap_mmc.c
+similarity index 100%
+rename from hw/omap_mmc.c
+rename to hw/sd/omap_mmc.c
+diff --git a/hw/pxa2xx_mmci.c b/hw/sd/pxa2xx_mmci.c
+similarity index 100%
+rename from hw/pxa2xx_mmci.c
+rename to hw/sd/pxa2xx_mmci.c
+-- 
+1.8.1.4
+
+
+

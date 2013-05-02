@@ -1,0 +1,1 @@
+../build-include-config--all-devicesmak-after-defining-CONFIG_SOFTMMU-and-CONFIG_USER_ONLY/v1.1366127438/0001-build-include-config--all-devicesmak-after-defining-CONFIG_SOFTMMU-and-CONFIG_USER_ONLY.patch

@@ -1,0 +1,43 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Jeff Cody <jcody@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: kwolf@redhat.com, stefanha@redhat.com
+Date: Tue, 23 Apr 2013 10:24:19 -0400
+Message-id: cover.1366726446.git.jcody@redhat.com
+Subject: [PATCH 0/5] Initial VHDX support
+
+This adds the initial support for VHDX image files.  
+
+It currently only supports read operations of VHDX, for fixed and dynamic files.
+
+Notably, the following is not yet supported:
+    * Differencing files
+    * Log replay (so we will refuse to open any images that are not 'clean')
+    * .bdrv_create()
+    * write operations other than to the header
+
+
+Jeff Cody (5):
+  qemu: add castagnoli crc32c checksum algorithm
+  block: vhdx header for the QEMU support of VHDX images
+  block: initial VHDX driver support framework - supports open and probe
+  block: add read-only support to VHDX image format.
+  block: add header update capability for VHDX images.
+
+ block/Makefile.objs   |    1 +
+ block/vhdx.c          | 1041 +++++++++++++++++++++++++++++++++++++++++++++++++
+ block/vhdx.h          |  352 +++++++++++++++++
+ configure             |   13 +
+ include/qemu/crc32c.h |   35 ++
+ util/Makefile.objs    |    1 +
+ util/crc32c.c         |  115 ++++++
+ 7 files changed, 1558 insertions(+)
+ create mode 100644 block/vhdx.c
+ create mode 100644 block/vhdx.h
+ create mode 100644 include/qemu/crc32c.h
+ create mode 100644 util/crc32c.c
+
+-- 
+1.8.1.4
+
+

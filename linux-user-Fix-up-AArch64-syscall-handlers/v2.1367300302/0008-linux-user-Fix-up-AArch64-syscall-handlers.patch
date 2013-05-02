@@ -1,0 +1,105 @@
+From patches Mon Sep 17 00:00:00 2001
+From: John Rigby <john.rigby@linaro.org>
+To: qemu-devel <qemu-devel@nongnu.org>
+Cc: Riku Voipio <riku.voipio@iki.org>, Peter Maydell <peter.maydell@linaro.org>,
+ Alexander Graf <agraf@suse.de>
+Date: Tue, 30 Apr 2013 00:38:22 -0600
+Message-id: 1367303902-9773-1-git-send-email-john.rigby@linaro.org
+Subject: [PATCH 08/12] linux-user: Fix up AArch64 syscall handlers
+
+From: Alexander Graf <agraf@suse.de>
+
+Some syscall handlers have special code for ARM enabled that we don't
+need on AArch64. Exclude AArch64 in those cases. In other places we
+can share struct definitions with other targets or have to provide our
+own.
+
+With this patch applied, most syscall definitions in linux-user should
+be sound for AArch64.
+
+Signed-off-by: Alexander Graf <agraf@suse.de>
+---
+ linux-user/syscall.c      |    5 +++--
+ linux-user/syscall_defs.h |   28 ++++++++++++++++++++++++++--
+ 2 files changed, 29 insertions(+), 4 deletions(-)
+
+diff --git a/linux-user/syscall.c b/linux-user/syscall.c
+index 1c23314..171424e 100644
+--- a/linux-user/syscall.c
++++ b/linux-user/syscall.c
+@@ -4863,7 +4863,7 @@ static inline abi_long host_to_target_stat64(void *cpu_env,
+                                              abi_ulong target_addr,
+                                              struct stat *host_st)
+ {
+-#ifdef TARGET_ARM
++#if defined(TARGET_ARM) && defined(TARGET_ABI32)
+     if (((CPUARMState *)cpu_env)->eabi) {
+         struct target_eabi_stat64 *target_st;
+ 
+@@ -6495,7 +6495,8 @@ abi_long do_syscall(void *cpu_env, int num, abi_long arg1,
+ #endif
+ #ifdef TARGET_NR_mmap
+     case TARGET_NR_mmap:
+-#if (defined(TARGET_I386) && defined(TARGET_ABI32)) || defined(TARGET_ARM) || \
++#if (defined(TARGET_I386) && defined(TARGET_ABI32)) || \
++    (defined(TARGET_ARM) && defined(TARGET_ABI32)) || \
+     defined(TARGET_M68K) || defined(TARGET_CRIS) || defined(TARGET_MICROBLAZE) \
+     || defined(TARGET_S390X)
+         {
+diff --git a/linux-user/syscall_defs.h b/linux-user/syscall_defs.h
+index 92c01a9..08f7559 100644
+--- a/linux-user/syscall_defs.h
++++ b/linux-user/syscall_defs.h
+@@ -1137,7 +1137,8 @@ struct target_winsize {
+ #define TARGET_MAP_UNINITIALIZED 0x4000000	/* for anonymous mmap, memory could be uninitialized */
+ #endif
+ 
+-#if (defined(TARGET_I386) && defined(TARGET_ABI32)) || defined(TARGET_ARM) \
++#if (defined(TARGET_I386) && defined(TARGET_ABI32)) \
++    || (defined(TARGET_ARM) && defined(TARGET_ABI32)) \
+     || defined(TARGET_CRIS) || defined(TARGET_UNICORE32) \
+     || defined(TARGET_OPENRISC)
+ struct target_stat {
+@@ -1836,6 +1837,28 @@ struct target_stat {
+     abi_long       st_blocks;
+     abi_ulong  __unused[3];
+ };
++#elif defined(TARGET_AARCH64)
++struct target_stat {
++    abi_ulong  st_dev;
++    abi_ulong  st_ino;
++    unsigned int st_mode;
++    unsigned int st_nlink;
++    unsigned int   st_uid;
++    unsigned int   st_gid;
++    abi_ulong  st_rdev;
++    abi_ulong  _pad1;
++    abi_long  st_size;
++    int        st_blksize;
++    int        __pad2;
++    abi_long   st_blocks;
++    abi_long  target_st_atime;
++    abi_ulong  target_st_atime_nsec;
++    abi_long  target_st_mtime;
++    abi_ulong  target_st_mtime_nsec;
++    abi_long  target_st_ctime;
++    abi_ulong  target_st_ctime_nsec;
++    unsigned int __unused[2];
++};
+ #elif defined(TARGET_OPENRISC)
+ struct target_stat {
+     abi_ulong st_dev;
+@@ -1918,7 +1941,8 @@ struct target_statfs64 {
+ 	uint32_t	f_spare[6];
+ };
+ #elif (defined(TARGET_PPC64) || defined(TARGET_X86_64) || \
+-       defined(TARGET_SPARC64)) && !defined(TARGET_ABI32)
++       defined(TARGET_SPARC64) || defined(TARGET_AARCH64)) && \
++       !defined(TARGET_ABI32)
+ struct target_statfs {
+ 	abi_long f_type;
+ 	abi_long f_bsize;
+-- 
+1.7.9.5
+
+

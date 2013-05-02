@@ -1,0 +1,139 @@
+From patches Mon Sep 17 00:00:00 2001
+From: =?utf-8?q?Andreas_F=C3=A4rber_=3Cafaerber=40suse=2Ede=3E?=
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, Igor Mammedov <imammedo@redhat.com>,
+ =?UTF-8?q?Andreas=20F=C3=A4rber?= <afaerber@suse.de>,
+ Gleb Natapov <gleb@redhat.com>, Marcelo Tosatti <mtosatti@redhat.com>,
+ "open list:Overall" <kvm@vger.kernel.org>
+Date: Thu,  2 May 2013 15:35:28 +0200
+Message-id: 1367501755-32272-3-git-send-email-afaerber@suse.de
+Subject: [PATCH 02/29] cpu: Call cpu_synchronize_post_init() from
+ DeviceClass::realize()
+
+From: Igor Mammedov <imammedo@redhat.com>
+
+If hotplugged, synchronize CPU state to KVM.
+
+Signed-off-by: Igor Mammedov <imammedo@redhat.com>
+Reviewed-by: Eduardo Habkost <ehabkost@redhat.com>
+Signed-off-by: Andreas Färber <afaerber@suse.de>
+---
+ include/sysemu/kvm.h | 20 ++++++++++----------
+ kvm-all.c            |  1 +
+ kvm-stub.c           |  1 +
+ qom/cpu.c            |  6 ++++++
+ vl.c                 |  1 -
+ 5 files changed, 18 insertions(+), 11 deletions(-)
+
+diff --git a/include/sysemu/kvm.h b/include/sysemu/kvm.h
+index 2bc1f6b..9735c1d 100644
+--- a/include/sysemu/kvm.h
++++ b/include/sysemu/kvm.h
+@@ -250,8 +250,6 @@ int kvm_check_extension(KVMState *s, unsigned int extension);
+ uint32_t kvm_arch_get_supported_cpuid(KVMState *env, uint32_t function,
+                                       uint32_t index, int reg);
+ void kvm_cpu_synchronize_state(CPUArchState *env);
+-void kvm_cpu_synchronize_post_reset(CPUState *cpu);
+-void kvm_cpu_synchronize_post_init(CPUState *cpu);
+ 
+ /* generic hooks - to be moved/refactored once there are more users */
+ 
+@@ -262,6 +260,16 @@ static inline void cpu_synchronize_state(CPUArchState *env)
+     }
+ }
+ 
++#if !defined(CONFIG_USER_ONLY)
++int kvm_physical_memory_addr_from_host(KVMState *s, void *ram_addr,
++                                       hwaddr *phys_addr);
++#endif
++
++#endif /* NEED_CPU_H */
++
++void kvm_cpu_synchronize_post_reset(CPUState *cpu);
++void kvm_cpu_synchronize_post_init(CPUState *cpu);
++
+ static inline void cpu_synchronize_post_reset(CPUState *cpu)
+ {
+     if (kvm_enabled()) {
+@@ -276,14 +284,6 @@ static inline void cpu_synchronize_post_init(CPUState *cpu)
+     }
+ }
+ 
+-
+-#if !defined(CONFIG_USER_ONLY)
+-int kvm_physical_memory_addr_from_host(KVMState *s, void *ram_addr,
+-                                       hwaddr *phys_addr);
+-#endif
+-
+-#endif
+-
+ int kvm_irqchip_add_msi_route(KVMState *s, MSIMessage msg);
+ int kvm_irqchip_update_msi_route(KVMState *s, int virq, MSIMessage msg);
+ void kvm_irqchip_release_virq(KVMState *s, int virq);
+diff --git a/kvm-all.c b/kvm-all.c
+index 2d92721..f6c0f4a 100644
+--- a/kvm-all.c
++++ b/kvm-all.c
+@@ -109,6 +109,7 @@ bool kvm_async_interrupts_allowed;
+ bool kvm_irqfds_allowed;
+ bool kvm_msi_via_irqfd_allowed;
+ bool kvm_gsi_routing_allowed;
++bool kvm_allowed;
+ 
+ static const KVMCapabilityInfo kvm_required_capabilites[] = {
+     KVM_CAP_INFO(USER_MEMORY),
+diff --git a/kvm-stub.c b/kvm-stub.c
+index b228378..b2c8f9b 100644
+--- a/kvm-stub.c
++++ b/kvm-stub.c
+@@ -25,6 +25,7 @@ bool kvm_async_interrupts_allowed;
+ bool kvm_irqfds_allowed;
+ bool kvm_msi_via_irqfd_allowed;
+ bool kvm_gsi_routing_allowed;
++bool kvm_allowed;
+ 
+ int kvm_init_vcpu(CPUState *cpu)
+ {
+diff --git a/qom/cpu.c b/qom/cpu.c
+index e242dcb..66f7c00 100644
+--- a/qom/cpu.c
++++ b/qom/cpu.c
+@@ -20,6 +20,7 @@
+ 
+ #include "qom/cpu.h"
+ #include "qemu-common.h"
++#include "sysemu/kvm.h"
+ 
+ void cpu_reset_interrupt(CPUState *cpu, int mask)
+ {
+@@ -57,6 +58,11 @@ static ObjectClass *cpu_common_class_by_name(const char *cpu_model)
+ 
+ static void cpu_common_realizefn(DeviceState *dev, Error **errp)
+ {
++    CPUState *cpu = CPU(dev);
++
++    if (dev->hotplugged) {
++        cpu_synchronize_post_init(cpu);
++    }
+ }
+ 
+ static void cpu_class_init(ObjectClass *klass, void *data)
+diff --git a/vl.c b/vl.c
+index b5a547e..41c367d 100644
+--- a/vl.c
++++ b/vl.c
+@@ -267,7 +267,6 @@ static NotifierList machine_init_done_notifiers =
+     NOTIFIER_LIST_INITIALIZER(machine_init_done_notifiers);
+ 
+ static bool tcg_allowed = true;
+-bool kvm_allowed;
+ bool xen_allowed;
+ uint32_t xen_domid;
+ enum xen_mode xen_mode = XEN_EMULATE;
+-- 
+1.8.1.4
+
+--
+To unsubscribe from this list: send the line "unsubscribe kvm" in
+the body of a message to majordomo@vger.kernel.org
+More majordomo info at  http://vger.kernel.org/majordomo-info.html

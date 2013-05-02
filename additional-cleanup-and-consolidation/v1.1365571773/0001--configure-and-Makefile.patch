@@ -1,0 +1,115 @@
+From patches Mon Sep 17 00:00:00 2001
+From: mrhines@linux.vnet.ibm.com
+To: Paolo Bonzini <pbonzini@redhat.com>, qemu-devel@nongnu.org,
+ mrhines@linux.vnet.ibm.com, "Michael R. Hines" <mrhines@linux.vnet.ibm.com>
+Cc: Anthony Liguori <aliguori@us.ibm.com>, mst@redhat.com,
+ qemu-devel@nongnu.org, Michael R Hines <mrhines@us.ibm.com>,
+ Bulent Abali <abali@us.ibm.com>, owasserm@redhat.com, pbonzini@redhat.com,
+ Gokul B Kandiraju <gokul@us.ibm.com>
+Date: Wed, 10 Apr 2013 00:29:34 -0400
+Message-id: 1365568180-19593-2-git-send-email-mrhines@linux.vnet.ibm.com
+Subject: [PATCH 1/7] ./configure and Makefile
+
+From: "Michael R. Hines" <mrhines@us.ibm.com>
+
+RDMA is enabled by default per the usual ./configure testing.
+
+Only one new file is added in the patch now (migration-rdma.c),
+which is conditionalized by CONFIG_RDMA.
+
+Signed-off-by: Michael R. Hines <mrhines@us.ibm.com>
+---
+ Makefile.objs |    1 +
+ configure     |   29 +++++++++++++++++++++++++++++
+ 2 files changed, 30 insertions(+)
+
+diff --git a/Makefile.objs b/Makefile.objs
+index e568c01..10431bd 100644
+--- a/Makefile.objs
++++ b/Makefile.objs
+@@ -49,6 +49,7 @@ common-obj-$(CONFIG_POSIX) += os-posix.o
+ common-obj-$(CONFIG_LINUX) += fsdev/
+ 
+ common-obj-y += migration.o migration-tcp.o
++common-obj-$(CONFIG_RDMA) += migration-rdma.o
+ common-obj-y += qemu-char.o #aio.o
+ common-obj-y += block-migration.o
+ common-obj-y += page_cache.o xbzrle.o
+diff --git a/configure b/configure
+index 1ed939a..8ade7ce 100755
+--- a/configure
++++ b/configure
+@@ -180,6 +180,7 @@ xfs=""
+ 
+ vhost_net="no"
+ kvm="no"
++rdma="yes"
+ gprof="no"
+ debug_tcg="no"
+ debug="no"
+@@ -918,6 +919,10 @@ for opt do
+   ;;
+   --enable-gtk) gtk="yes"
+   ;;
++  --enable-rdma) rdma="yes"
++  ;;
++  --disable-rdma) rdma="no"
++  ;;
+   --with-gtkabi=*) gtkabi="$optarg"
+   ;;
+   --enable-tpm) tpm="yes"
+@@ -1122,6 +1127,8 @@ echo "  --enable-bluez           enable bluez stack connectivity"
+ echo "  --disable-slirp          disable SLIRP userspace network connectivity"
+ echo "  --disable-kvm            disable KVM acceleration support"
+ echo "  --enable-kvm             enable KVM acceleration support"
++echo "  --disable-rdma           disable RDMA-based migration support"
++echo "  --enable-rdma            enable RDMA-based migration support"
+ echo "  --enable-tcg-interpreter enable TCG with bytecode interpreter (TCI)"
+ echo "  --disable-nptl           disable usermode NPTL support"
+ echo "  --enable-nptl            enable usermode NPTL support"
+@@ -1767,6 +1774,23 @@ EOF
+   libs_softmmu="$sdl_libs $libs_softmmu"
+ fi
+ 
++if test "$rdma" != "no" ; then
++  cat > $TMPC <<EOF
++#include <rdma/rdma_cma.h>
++int main(void) { return 0; }
++EOF
++  rdma_libs="-lrdmacm -libverbs"
++  if compile_prog "-Werror" "$rdma_libs" ; then
++    rdma="yes"
++    libs_softmmu="$libs_softmmu $rdma_libs"
++  else
++    if test "$rdma" = "yes" ; then
++      feature_not_found "rdma"
++    fi
++    rdma="no"
++  fi
++fi
++
+ ##########################################
+ # VNC TLS/WS detection
+ if test "$vnc" = "yes" -a \( "$vnc_tls" != "no" -o "$vnc_ws" != "no" \) ; then
+@@ -3408,6 +3432,7 @@ echo "Linux AIO support $linux_aio"
+ echo "ATTR/XATTR support $attr"
+ echo "Install blobs     $blobs"
+ echo "KVM support       $kvm"
++echo "RDMA support      $rdma"
+ echo "TCG interpreter   $tcg_interpreter"
+ echo "fdt support       $fdt"
+ echo "preadv support    $preadv"
+@@ -4377,6 +4402,10 @@ if [ "$pixman" = "internal" ]; then
+   echo "config-host.h: subdir-pixman" >> $config_host_mak
+ fi
+ 
++if test "$rdma" = "yes" ; then
++echo "CONFIG_RDMA=y" >> $config_host_mak
++fi
++
+ # build tree in object directory in case the source is not in the current directory
+ DIRS="tests tests/tcg tests/tcg/cris tests/tcg/lm32"
+ DIRS="$DIRS pc-bios/optionrom pc-bios/spapr-rtas"
+-- 
+1.7.10.4
+

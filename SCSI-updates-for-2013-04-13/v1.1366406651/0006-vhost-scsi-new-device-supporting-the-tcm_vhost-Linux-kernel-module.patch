@@ -1,0 +1,520 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: asias@redhat.com, "Michael S. Tsirkin" <mst@redhat.com>,
+ nab@linux-iscsi.org
+Date: Fri, 19 Apr 2013 16:24:17 +0200
+Message-id: 1366381460-6041-7-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 6/9] vhost-scsi: new device supporting the tcm_vhost Linux
+ kernel module
+
+From: Nicholas Bellinger <nab@linux-iscsi.org>
+
+The WWPN specified in configfs is passed to "-device vhost-scsi-pci".
+The tgpt field of the SET_ENDPOINT ioctl is obsolete now, so it is not
+available from the QEMU command-line.  Instead, I hardcode it to zero.
+
+Changes in Patch-v2:
+   - Add vhost_scsi_get_features() in order to determine feature bits
+     supports by host kernel (mst + nab)
+   - Re-enable usage of DEFINE_VIRTIO_COMMON_FEATURES, and allow
+     EVENT_IDX to be disabled by host in vhost_scsi_get_features()
+   - Drop unused hotplug bit in DEFINE_VHOST_SCSI_PROPERTIES
+
+Changes in Patch-v1:
+   - Set event_idx=off by default (nab, thanks asias)
+   - Disable hotplug feature bit for v3.9 tcm_vhost kernel code, need to
+     re-enable in v3.10 (nab)
+   - Update to latest qemu.git/master HEAD
+
+Changes in WIP-V3:
+   - Drop ioeventfd vhost_scsi_properties (asias, thanks stefanha)
+   - Add CONFIG_VHOST_SCSI (asias, thanks stefanha)
+   - Add hotplug feature bit
+
+Changes in WIP-V2:
+   - Add backend guest masking support (nab)
+   - Bump ABI_VERSION to 1 (nab)
+   - Set up set_guest_notifiers (asias)
+   - Set up vs->dev.vq_index (asias)
+   - Drop vs->vs.vdev.{set,clear}_vhost_endpoint (asias)
+   - Drop VIRTIO_CONFIG_S_DRIVER check in vhost_scsi_set_status (asias)
+
+Howto:
+   Use the latest seabios, at least commit b44a7be17b
+   git clone git://git.seabios.org/seabios.git
+   make
+   cp out/bios.bin /usr/share/qemu/bios.bin
+   qemu -device vhost-scsi-pci,wwpn=naa.6001405bd4e8476d
+...
+
+Cc: Michael S. Tsirkin <mst@redhat.com>
+Signed-off-by: Nicholas Bellinger <nab@linux-iscsi.org>
+Signed-off-by: Asias He <asias@redhat.com>
+[ Rebase on top of VirtIOSCSICommon patch, fix bugs in feature
+  negotiation and irqfd masking - Paolo ]
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ configure                       |  10 ++
+ hw/scsi/Makefile.objs           |   6 +-
+ hw/scsi/vhost-scsi.c            | 288 ++++++++++++++++++++++++++++++++++++++++
+ include/hw/virtio/vhost-scsi.h  |  73 ++++++++++
+ include/hw/virtio/virtio-scsi.h |   2 +
+ 5 files changed, 378 insertions(+), 1 deletion(-)
+ create mode 100644 hw/scsi/vhost-scsi.c
+ create mode 100644 include/hw/virtio/vhost-scsi.h
+
+diff --git a/configure b/configure
+index ed49f91..51a6c56 100755
+--- a/configure
++++ b/configure
+@@ -179,6 +179,7 @@ libattr=""
+ xfs=""
+ 
+ vhost_net="no"
++vhost_scsi="no"
+ kvm="no"
+ gprof="no"
+ debug_tcg="no"
+@@ -543,6 +544,7 @@ Haiku)
+   usb="linux"
+   kvm="yes"
+   vhost_net="yes"
++  vhost_scsi="yes"
+   if [ "$cpu" = "i386" -o "$cpu" = "x86_64" ] ; then
+     audio_possible_drivers="$audio_possible_drivers fmod"
+   fi
+@@ -870,6 +872,10 @@ for opt do
+   ;;
+   --enable-vhost-net) vhost_net="yes"
+   ;;
++  --disable-vhost-scsi) vhost_scsi="no"
++  ;;
++  --enable-vhost-scsi) vhost_scsi="yes"
++  ;;
+   --disable-glx) glx="no"
+   ;;
+   --enable-glx) glx="yes"
+@@ -3553,6 +3559,7 @@ echo "sigev_thread_id   $sigev_thread_id"
+ echo "uuid support      $uuid"
+ echo "libcap-ng support $cap_ng"
+ echo "vhost-net support $vhost_net"
++echo "vhost-scsi support $vhost_scsi"
+ echo "Trace backend     $trace_backend"
+ echo "Trace output file $trace_file-<pid>"
+ echo "spice support     $spice ($spice_protocol_version/$spice_server_version)"
+@@ -3836,6 +3843,9 @@ fi
+ if test "$virtfs" = "yes" ; then
+   echo "CONFIG_VIRTFS=y" >> $config_host_mak
+ fi
++if test "$vhost_scsi" = "yes" ; then
++  echo "CONFIG_VHOST_SCSI=y" >> $config_host_mak
++fi
+ if test "$blobs" = "yes" ; then
+   echo "INSTALL_BLOBS=yes" >> $config_host_mak
+ fi
+diff --git a/hw/scsi/Makefile.objs b/hw/scsi/Makefile.objs
+index eaec6c8..121ddc5 100644
+--- a/hw/scsi/Makefile.objs
++++ b/hw/scsi/Makefile.objs
+@@ -6,4 +6,8 @@ common-obj-$(CONFIG_VMW_PVSCSI_SCSI_PCI) += vmw_pvscsi.o
+ common-obj-$(CONFIG_ESP) += esp.o
+ common-obj-$(CONFIG_ESP_PCI) += esp-pci.o
+ obj-$(CONFIG_PSERIES) += spapr_vscsi.o
+-obj-$(CONFIG_VIRTIO) += virtio-scsi.o
++
++ifeq ($(CONFIG_VIRTIO),y)
++obj-y += virtio-scsi.o
++obj-$(CONFIG_VHOST_SCSI) += vhost-scsi.o
++endif
+diff --git a/hw/scsi/vhost-scsi.c b/hw/scsi/vhost-scsi.c
+new file mode 100644
+index 0000000..3dd1a0f
+--- /dev/null
++++ b/hw/scsi/vhost-scsi.c
+@@ -0,0 +1,288 @@
++/*
++ * vhost_scsi host device
++ *
++ * Copyright IBM, Corp. 2011
++ *
++ * Authors:
++ *  Stefan Hajnoczi   <stefanha@linux.vnet.ibm.com>
++ *
++ * Changes for QEMU mainline + tcm_vhost kernel upstream:
++ *  Nicholas Bellinger <nab@risingtidesystems.com>
++ *
++ * This work is licensed under the terms of the GNU LGPL, version 2 or later.
++ * See the COPYING.LIB file in the top-level directory.
++ *
++ */
++
++#include <sys/ioctl.h>
++#include "config.h"
++#include "qemu/queue.h"
++#include "monitor/monitor.h"
++#include "migration/migration.h"
++#include "hw/virtio/vhost-scsi.h"
++#include "hw/virtio/vhost.h"
++#include "hw/virtio/virtio-scsi.h"
++
++static int vhost_scsi_set_endpoint(VHostSCSI *s)
++{
++    VirtIOSCSICommon *vs = VIRTIO_SCSI_COMMON(s);
++    struct vhost_scsi_target backend;
++    int ret;
++
++    memset(&backend, 0, sizeof(backend));
++    pstrcpy(backend.vhost_wwpn, sizeof(backend.vhost_wwpn), vs->conf.wwpn);
++    ret = ioctl(s->dev.control, VHOST_SCSI_SET_ENDPOINT, &backend);
++    if (ret < 0) {
++        return -errno;
++    }
++    return 0;
++}
++
++static void vhost_scsi_clear_endpoint(VHostSCSI *s)
++{
++    VirtIOSCSICommon *vs = VIRTIO_SCSI_COMMON(s);
++    struct vhost_scsi_target backend;
++
++    memset(&backend, 0, sizeof(backend));
++    pstrcpy(backend.vhost_wwpn, sizeof(backend.vhost_wwpn), vs->conf.wwpn);
++    ioctl(s->dev.control, VHOST_SCSI_CLEAR_ENDPOINT, &backend);
++}
++
++static int vhost_scsi_start(VHostSCSI *s)
++{
++    int ret, abi_version, i;
++    VirtIODevice *vdev = VIRTIO_DEVICE(s);
++
++    if (!vdev->binding->set_guest_notifiers) {
++        error_report("binding does not support guest notifiers");
++        return -ENOSYS;
++    }
++
++    ret = ioctl(s->dev.control, VHOST_SCSI_GET_ABI_VERSION, &abi_version);
++    if (ret < 0) {
++        return -errno;
++    }
++    if (abi_version > VHOST_SCSI_ABI_VERSION) {
++        error_report("vhost-scsi: The running tcm_vhost kernel abi_version:"
++                     " %d is greater than vhost_scsi userspace supports: %d, please"
++                     " upgrade your version of QEMU\n", abi_version,
++                     VHOST_SCSI_ABI_VERSION);
++        return -ENOSYS;
++    }
++
++    ret = vhost_dev_enable_notifiers(&s->dev, vdev);
++    if (ret < 0) {
++        return ret;
++    }
++
++    s->dev.acked_features = vdev->guest_features;
++    ret = vhost_dev_start(&s->dev, vdev);
++    if (ret < 0) {
++        error_report("Error start vhost dev");
++        goto err_notifiers;
++    }
++
++    ret = vhost_scsi_set_endpoint(s);
++    if (ret < 0) {
++        error_report("Error set vhost-scsi endpoint");
++        goto err_vhost_stop;
++    }
++
++    ret = vdev->binding->set_guest_notifiers(vdev->binding_opaque, s->dev.nvqs, true);
++    if (ret < 0) {
++        error_report("Error binding guest notifier");
++        goto err_endpoint;
++    }
++
++    /* guest_notifier_mask/pending not used yet, so just unmask
++     * everything here.  virtio-pci will do the right thing by
++     * enabling/disabling irqfd.
++     */
++    for (i = 0; i < s->dev.nvqs; i++) {
++        vhost_virtqueue_mask(&s->dev, vdev, i, false);
++    }
++
++    return ret;
++
++err_endpoint:
++    vhost_scsi_clear_endpoint(s);
++err_vhost_stop:
++    vhost_dev_stop(&s->dev, vdev);
++err_notifiers:
++    vhost_dev_disable_notifiers(&s->dev, vdev);
++    return ret;
++}
++
++static void vhost_scsi_stop(VHostSCSI *s)
++{
++    VirtIODevice *vdev = VIRTIO_DEVICE(s);
++    int ret = 0;
++
++    if (!vdev->binding->set_guest_notifiers) {
++        ret = vdev->binding->set_guest_notifiers(vdev->binding_opaque,
++                                                 s->dev.nvqs, false);
++        if (ret < 0) {
++                error_report("vhost guest notifier cleanup failed: %d\n", ret);
++        }
++    }
++    assert(ret >= 0);
++
++    vhost_scsi_clear_endpoint(s);
++    vhost_dev_stop(&s->dev, vdev);
++    vhost_dev_disable_notifiers(&s->dev, vdev);
++}
++
++static uint32_t vhost_scsi_get_features(VirtIODevice *vdev,
++                                        uint32_t features)
++{
++    VHostSCSI *s = VHOST_SCSI(vdev);
++
++    /* Clear features not supported by host kernel. */
++    if (!(s->dev.features & (1 << VIRTIO_F_NOTIFY_ON_EMPTY))) {
++        features &= ~(1 << VIRTIO_F_NOTIFY_ON_EMPTY);
++    }
++    if (!(s->dev.features & (1 << VIRTIO_RING_F_INDIRECT_DESC))) {
++        features &= ~(1 << VIRTIO_RING_F_INDIRECT_DESC);
++    }
++    if (!(s->dev.features & (1 << VIRTIO_RING_F_EVENT_IDX))) {
++        features &= ~(1 << VIRTIO_RING_F_EVENT_IDX);
++    }
++    if (!(s->dev.features & (1 << VIRTIO_SCSI_F_HOTPLUG))) {
++        features &= ~(1 << VIRTIO_SCSI_F_HOTPLUG);
++    }
++
++    return features;
++}
++
++static void vhost_scsi_set_config(VirtIODevice *vdev,
++                                  const uint8_t *config)
++{
++    VirtIOSCSIConfig *scsiconf = (VirtIOSCSIConfig *)config;
++    VirtIOSCSICommon *vs = VIRTIO_SCSI_COMMON(vdev);
++
++    if ((uint32_t) ldl_raw(&scsiconf->sense_size) != vs->sense_size ||
++        (uint32_t) ldl_raw(&scsiconf->cdb_size) != vs->cdb_size) {
++        error_report("vhost-scsi does not support changing the sense data and CDB sizes");
++        exit(1);
++    }
++}
++
++static void vhost_scsi_set_status(VirtIODevice *vdev, uint8_t val)
++{
++    VHostSCSI *s = (VHostSCSI *)vdev;
++    bool start = (val & VIRTIO_CONFIG_S_DRIVER_OK);
++
++    if (s->dev.started == start) {
++        return;
++    }
++
++    if (start) {
++        int ret;
++
++        ret = vhost_scsi_start(s);
++        if (ret < 0) {
++            error_report("virtio-scsi: unable to start vhost: %s\n",
++                         strerror(-ret));
++
++            /* There is no userspace virtio-scsi fallback so exit */
++            exit(1);
++        }
++    } else {
++        vhost_scsi_stop(s);
++    }
++}
++
++static int vhost_scsi_init(VirtIODevice *vdev)
++{
++    VirtIOSCSICommon *vs = VIRTIO_SCSI_COMMON(vdev);
++    VHostSCSI *s = VHOST_SCSI(vdev);
++    int vhostfd = -1;
++    int ret;
++
++    if (!vs->conf.wwpn) {
++        error_report("vhost-scsi: missing wwpn\n");
++        return -EINVAL;
++    }
++
++    if (vs->conf.vhostfd) {
++        vhostfd = monitor_handle_fd_param(cur_mon, vs->conf.vhostfd);
++        if (vhostfd == -1) {
++            error_report("vhost-scsi: unable to parse vhostfd\n");
++            return -EINVAL;
++        }
++    }
++
++    ret = virtio_scsi_common_init(vs);
++    if (ret < 0) {
++        return ret;
++    }
++
++    vdev->get_features = vhost_scsi_get_features;
++    vdev->set_config = vhost_scsi_set_config;
++    vdev->set_status = vhost_scsi_set_status;
++
++    s->dev.nvqs = VHOST_SCSI_VQ_NUM_FIXED + vs->conf.num_queues;
++    s->dev.vqs = g_new(struct vhost_virtqueue, s->dev.nvqs);
++    s->dev.vq_index = 0;
++
++    ret = vhost_dev_init(&s->dev, vhostfd, "/dev/vhost-scsi", true);
++    if (ret < 0) {
++        error_report("vhost-scsi: vhost initialization failed: %s\n",
++                strerror(-ret));
++        return ret;
++    }
++    s->dev.backend_features = 0;
++
++    error_setg(&s->migration_blocker,
++            "vhost-scsi does not support migration");
++    migrate_add_blocker(s->migration_blocker);
++
++    return 0;
++}
++
++static int vhost_scsi_exit(DeviceState *qdev)
++{
++    VirtIODevice *vdev = VIRTIO_DEVICE(qdev);
++    VHostSCSI *s = VHOST_SCSI(qdev);
++    VirtIOSCSICommon *vs = VIRTIO_SCSI_COMMON(qdev);
++
++    migrate_del_blocker(s->migration_blocker);
++    error_free(s->migration_blocker);
++
++    /* This will stop vhost backend. */
++    vhost_scsi_set_status(vdev, 0);
++
++    g_free(s->dev.vqs);
++    return virtio_scsi_common_exit(vs);
++}
++
++static Property vhost_scsi_properties[] = {
++    DEFINE_VHOST_SCSI_PROPERTIES(VHostSCSI, parent_obj.conf),
++    DEFINE_PROP_END_OF_LIST(),
++};
++
++static void vhost_scsi_class_init(ObjectClass *klass, void *data)
++{
++    DeviceClass *dc = DEVICE_CLASS(klass);
++    VirtioDeviceClass *vdc = VIRTIO_DEVICE_CLASS(klass);
++    dc->exit = vhost_scsi_exit;
++    dc->props = vhost_scsi_properties;
++    vdc->init = vhost_scsi_init;
++    vdc->get_features = vhost_scsi_get_features;
++    vdc->set_config = vhost_scsi_set_config;
++    vdc->set_status = vhost_scsi_set_status;
++}
++
++static const TypeInfo vhost_scsi_info = {
++    .name = TYPE_VHOST_SCSI,
++    .parent = TYPE_VIRTIO_SCSI_COMMON,
++    .instance_size = sizeof(VHostSCSI),
++    .class_init = vhost_scsi_class_init,
++};
++
++static void virtio_register_types(void)
++{
++    type_register_static(&vhost_scsi_info);
++}
++
++type_init(virtio_register_types)
+diff --git a/include/hw/virtio/vhost-scsi.h b/include/hw/virtio/vhost-scsi.h
+new file mode 100644
+index 0000000..85cc031
+--- /dev/null
++++ b/include/hw/virtio/vhost-scsi.h
+@@ -0,0 +1,73 @@
++/*
++ * vhost_scsi host device
++ *
++ * Copyright IBM, Corp. 2011
++ *
++ * Authors:
++ *  Stefan Hajnoczi   <stefanha@linux.vnet.ibm.com>
++ *
++ * This work is licensed under the terms of the GNU LGPL, version 2 or later.
++ * See the COPYING.LIB file in the top-level directory.
++ *
++ */
++
++#ifndef VHOST_SCSI_H
++#define VHOST_SCSI_H
++
++#include "qemu-common.h"
++#include "hw/qdev.h"
++#include "hw/virtio/virtio-scsi.h"
++#include "hw/virtio/vhost.h"
++
++/*
++ * Used by QEMU userspace to ensure a consistent vhost-scsi ABI.
++ *
++ * ABI Rev 0: July 2012 version starting point for v3.6-rc merge candidate +
++ *            RFC-v2 vhost-scsi userspace.  Add GET_ABI_VERSION ioctl usage
++ * ABI Rev 1: January 2013. Ignore vhost_tpgt filed in struct vhost_scsi_target.
++ * 	      All the targets under vhost_wwpn can be seen and used by guest.
++ */
++
++#define VHOST_SCSI_ABI_VERSION 1
++
++/* TODO #include <linux/vhost.h> properly */
++/* For VHOST_SCSI_SET_ENDPOINT/VHOST_SCSI_CLEAR_ENDPOINT ioctl */
++struct vhost_scsi_target {
++    int abi_version;
++    char vhost_wwpn[224];
++    unsigned short vhost_tpgt;
++    unsigned short reserved;
++};
++
++enum vhost_scsi_vq_list {
++    VHOST_SCSI_VQ_CONTROL = 0,
++    VHOST_SCSI_VQ_EVENT = 1,
++    VHOST_SCSI_VQ_NUM_FIXED = 2,
++};
++
++#define VHOST_VIRTIO 0xAF
++#define VHOST_SCSI_SET_ENDPOINT _IOW(VHOST_VIRTIO, 0x40, struct vhost_scsi_target)
++#define VHOST_SCSI_CLEAR_ENDPOINT _IOW(VHOST_VIRTIO, 0x41, struct vhost_scsi_target)
++#define VHOST_SCSI_GET_ABI_VERSION _IOW(VHOST_VIRTIO, 0x42, int)
++
++#define TYPE_VHOST_SCSI "vhost-scsi"
++#define VHOST_SCSI(obj) \
++        OBJECT_CHECK(VHostSCSI, (obj), TYPE_VHOST_SCSI)
++
++typedef struct VHostSCSI {
++    VirtIOSCSICommon parent_obj;
++
++    Error *migration_blocker;
++
++    struct vhost_dev dev;
++} VHostSCSI;
++
++#define DEFINE_VHOST_SCSI_PROPERTIES(_state, _conf_field) \
++    DEFINE_PROP_STRING("vhostfd", _state, _conf_field.vhostfd), \
++    DEFINE_PROP_STRING("wwpn", _state, _conf_field.wwpn), \
++    DEFINE_PROP_UINT32("num_queues", _state, _conf_field.num_queues, 1), \
++    DEFINE_PROP_UINT32("max_sectors", _state, _conf_field.max_sectors, 0xFFFF), \
++    DEFINE_PROP_UINT32("cmd_per_lun", _state, _conf_field.cmd_per_lun, 128)
++
++
++#endif
+diff --git a/include/hw/virtio/virtio-scsi.h b/include/hw/virtio/virtio-scsi.h
+index 4a961b9..4db346b 100644
+--- a/include/hw/virtio/virtio-scsi.h
++++ b/include/hw/virtio/virtio-scsi.h
+@@ -151,6 +151,8 @@ struct VirtIOSCSIConf {
+     uint32_t num_queues;
+     uint32_t max_sectors;
+     uint32_t cmd_per_lun;
++    char *vhostfd;
++    char *wwpn;
+ };
+ 
+ typedef struct VirtIOSCSICommon {
+-- 
+1.8.1.4
+
+
+

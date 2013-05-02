@@ -1,0 +1,88 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: 
+Date: Thu,  4 Apr 2013 21:22:49 +0200
+Message-id: 1365103395-11547-10-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 09/35] hw: make all of hw/pci/ configurable via
+ default-configs/
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ default-configs/i386-softmmu.mak   | 1 +
+ default-configs/ppc64-softmmu.mak  | 2 ++
+ default-configs/x86_64-softmmu.mak | 1 +
+ hw/i386/Makefile.objs              | 2 +-
+ hw/pci/Makefile.objs               | 2 ++
+ hw/ppc/Makefile.objs               | 2 +-
+ 6 files changed, 8 insertions(+), 2 deletions(-)
+
+diff --git a/default-configs/i386-softmmu.mak b/default-configs/i386-softmmu.mak
+index a2658cd..e041a63 100644
+--- a/default-configs/i386-softmmu.mak
++++ b/default-configs/i386-softmmu.mak
+@@ -28,3 +28,4 @@ CONFIG_I8259=y
+ CONFIG_PFLASH_CFI01=y
+ CONFIG_TPM_TIS=y
+ CONFIG_TPM_PASSTHROUGH=y
++CONFIG_PCI_HOTPLUG=y
+diff --git a/default-configs/ppc64-softmmu.mak b/default-configs/ppc64-softmmu.mak
+index ee895e9..26f74b0 100644
+--- a/default-configs/ppc64-softmmu.mak
++++ b/default-configs/ppc64-softmmu.mak
+@@ -42,3 +42,5 @@ CONFIG_I8259=y
+ CONFIG_XILINX=y
+ CONFIG_PSERIES=$(CONFIG_FDT)
+ CONFIG_E500=$(CONFIG_FDT)
++# For pSeries
++CONFIG_PCI_HOTPLUG=y
+diff --git a/default-configs/x86_64-softmmu.mak b/default-configs/x86_64-softmmu.mak
+index fe4b70b..5ba1116 100644
+--- a/default-configs/x86_64-softmmu.mak
++++ b/default-configs/x86_64-softmmu.mak
+@@ -28,3 +28,4 @@ CONFIG_I8259=y
+ CONFIG_PFLASH_CFI01=y
+ CONFIG_TPM_TIS=y
+ CONFIG_TPM_PASSTHROUGH=y
++CONFIG_PCI_HOTPLUG=y
+diff --git a/hw/i386/Makefile.objs b/hw/i386/Makefile.objs
+index a78c0b2..c813b1e 100644
+--- a/hw/i386/Makefile.objs
++++ b/hw/i386/Makefile.objs
+@@ -2,7 +2,7 @@ obj-y += mc146818rtc.o
+ obj-y += apic_common.o apic.o
+ obj-y += sga.o ioapic_common.o ioapic.o piix_pci.o
+ obj-y += vmport.o
+-obj-y += pci/pci-hotplug.o wdt_ib700.o
++obj-y += wdt_ib700.o
+ obj-y += debugcon.o debugexit.o
+ obj-y += pc_sysfw.o
+ obj-y += lpc_ich9.o q35.o
+diff --git a/hw/pci/Makefile.objs b/hw/pci/Makefile.objs
+index aac5f65..a1511ab 100644
+--- a/hw/pci/Makefile.objs
++++ b/hw/pci/Makefile.objs
+@@ -9,3 +9,5 @@ common-obj-$(CONFIG_NO_PCI) += pci-stub.o
+ common-obj-$(CONFIG_ALL) += pci-stub.o
+ 
+ common-obj-$(CONFIG_PCI) += bridge/ host/
++
++obj-$(CONFIG_PCI_HOTPLUG) += pci-hotplug.o
+diff --git a/hw/ppc/Makefile.objs b/hw/ppc/Makefile.objs
+index 4de0209..ef1d9ed 100644
+--- a/hw/ppc/Makefile.objs
++++ b/hw/ppc/Makefile.objs
+@@ -2,7 +2,7 @@
+ obj-y += mc146818rtc.o
+ # IBM pSeries (sPAPR)
+ obj-$(CONFIG_PSERIES) += spapr_vty.o spapr_llan.o spapr_vscsi.o
+-obj-$(CONFIG_PSERIES) += spapr_pci.o pci/pci-hotplug.o
++obj-$(CONFIG_PSERIES) += spapr_pci.o
+ obj-$(CONFIG_PSERIES) += spapr_nvram.o
+ # PowerPC 4xx boards
+ obj-y += ppc4xx_pci.o
+-- 
+1.8.1.4
+
+
+

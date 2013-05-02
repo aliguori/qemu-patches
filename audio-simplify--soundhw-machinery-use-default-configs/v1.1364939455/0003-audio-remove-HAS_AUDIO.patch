@@ -1,0 +1,126 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: av1474@comtv.ru
+Date: Tue,  2 Apr 2013 16:50:58 +0200
+Message-id: 1364914261-4237-4-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 3/6] audio: remove HAS_AUDIO
+
+Several targets can have wavcapture/-soundhw support via PCI cards.
+HAS_AUDIO is a useless limitation, remove it.
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ arch_init.c     | 9 ---------
+ configure       | 8 --------
+ hmp-commands.hx | 4 ----
+ monitor.c       | 2 --
+ 4 files changed, 23 deletions(-)
+
+diff --git a/arch_init.c b/arch_init.c
+index f9ad23b..94b5c27 100644
+--- a/arch_init.c
++++ b/arch_init.c
+@@ -887,7 +887,6 @@ SaveVMHandlers savevm_ram_handlers = {
+     .cancel = ram_migration_cancel,
+ };
+ 
+-#ifdef HAS_AUDIO
+ struct soundhw {
+     const char *name;
+     const char *descr;
+@@ -1006,14 +1005,6 @@ void audio_init(ISABus *isa_bus, PCIBus *pci_bus)
+         }
+     }
+ }
+-#else
+-void select_soundhw(const char *optarg)
+-{
+-}
+-void audio_init(ISABus *isa_bus, PCIBus *pci_bus)
+-{
+-}
+-#endif
+ 
+ int qemu_uuid_parse(const char *str, uint8_t *uuid)
+ {
+diff --git a/configure b/configure
+index dec699d..16380f6 100755
+--- a/configure
++++ b/configure
+@@ -4320,14 +4320,6 @@ alpha)
+ ;;
+ esac
+ 
+-if test "$target_softmmu" = "yes" ; then
+-  case "$TARGET_BASE_ARCH" in
+-  arm|lm32|i386|mips|ppc)
+-    cflags="-DHAS_AUDIO $cflags"
+-  ;;
+-  esac
+-fi
+-
+ if test "$gprof" = "yes" ; then
+   echo "TARGET_GPROF=yes" >> $config_target_mak
+   if test "$target_linux_user" = "yes" ; then
+diff --git a/hmp-commands.hx b/hmp-commands.hx
+index 3d98604..67d452b 100644
+--- a/hmp-commands.hx
++++ b/hmp-commands.hx
+@@ -736,7 +736,6 @@ info mice
+ @end example
+ ETEXI
+ 
+-#ifdef HAS_AUDIO
+     {
+         .name       = "wavcapture",
+         .args_type  = "path:F,freq:i?,bits:i?,nchannels:i?",
+@@ -744,7 +743,6 @@ ETEXI
+         .help       = "capture audio to a wave file (default frequency=44100 bits=16 channels=2)",
+         .mhandler.cmd = do_wav_capture,
+     },
+-#endif
+ STEXI
+ @item wavcapture @var{filename} [@var{frequency} [@var{bits} [@var{channels}]]]
+ @findex wavcapture
+@@ -759,7 +757,6 @@ Defaults:
+ @end itemize
+ ETEXI
+ 
+-#ifdef HAS_AUDIO
+     {
+         .name       = "stopcapture",
+         .args_type  = "n:i",
+@@ -767,7 +764,6 @@ ETEXI
+         .help       = "stop capture",
+         .mhandler.cmd = do_stop_capture,
+     },
+-#endif
+ STEXI
+ @item stopcapture @var{index}
+ @findex stopcapture
+diff --git a/monitor.c b/monitor.c
+index 4ec1db9..b3c707c 100644
+--- a/monitor.c
++++ b/monitor.c
+@@ -1853,7 +1853,6 @@ static void do_info_capture(Monitor *mon, const QDict *qdict)
+     }
+ }
+ 
+-#ifdef HAS_AUDIO
+ static void do_stop_capture(Monitor *mon, const QDict *qdict)
+ {
+     int i;
+@@ -1894,7 +1893,6 @@ static void do_wav_capture(Monitor *mon, const QDict *qdict)
+     }
+     QLIST_INSERT_HEAD (&capture_head, s, entries);
+ }
+-#endif
+ 
+ static qemu_acl *find_acl(Monitor *mon, const char *name)
+ {
+-- 
+1.8.1.4
+
+
+

@@ -1,0 +1,49 @@
+From patches Mon Sep 17 00:00:00 2001
+From: "Michael S. Tsirkin" <mst@redhat.com>
+To: anthony.perard@citrix.com, qemu-devel@nongnu.org
+Cc: 
+Date: Sun, 21 Apr 2013 11:39:42 +0300
+Message-id: 20130421083942.GA24418@redhat.com
+Subject: [PATCH 1/1] pci: use current bus # for pci_for_each_device
+
+I see two types of users of pci_for_each_device: some pass in bus #
+directly, some pass in 0.  I am guessing that those passing 0 really
+want the root, so the right thing is likely to
+use the bus number directly.
+Could some Xen folks comment on whether the following
+patch breaks anything?
+If not I'll apply it, and will add another patch removing
+bus_nr from pci_for_each_device completely, on top.
+
+Signed-off-by: Michael S. Tsirkin <mst@redhat.com>
+
+---
+
+Untested patch below.
+
+diff --git a/hw/xen/xen_platform.c b/hw/xen/xen_platform.c
+index b6c6793..7d2ca63 100644
+--- a/hw/xen/xen_platform.c
++++ b/hw/xen/xen_platform.c
+@@ -94,7 +94,7 @@ static void unplug_nic(PCIBus *b, PCIDevice *d, void *o)
+ 
+ static void pci_unplug_nics(PCIBus *bus)
+ {
+-    pci_for_each_device(bus, 0, unplug_nic, NULL);
++    pci_for_each_device(bus, pci_bus_num(bus), unplug_nic, NULL);
+ }
+ 
+ static void unplug_disks(PCIBus *b, PCIDevice *d, void *o)
+@@ -109,7 +109,7 @@ static void unplug_disks(PCIBus *b, PCIDevice *d, void *o)
+ 
+ static void pci_unplug_disks(PCIBus *bus)
+ {
+-    pci_for_each_device(bus, 0, unplug_disks, NULL);
++    pci_for_each_device(bus, pci_bus_num(bus), unplug_disks, NULL);
+ }
+ 
+ static void platform_fixed_ioport_writew(void *opaque, uint32_t addr, uint32_t val)
+
+-- 
+MST
+

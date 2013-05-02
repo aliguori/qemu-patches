@@ -1,0 +1,1 @@
+../libqos-support/v1.1362491604/0002-i440fx-test-add-test-to-compare-default-register-values-against-spec.patch

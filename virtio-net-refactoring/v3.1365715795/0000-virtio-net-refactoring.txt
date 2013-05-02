@@ -1,0 +1,64 @@
+From patches Mon Sep 17 00:00:00 2001
+From: fred.konrad@greensocs.com
+To: Anthony Liguori <aliguori@us.ibm.com>, aliguori@us.ibm.com,
+ qemu-devel@nongnu.org, fred.konrad@greensocs.com
+Cc: Anthony Liguori <aliguori@us.ibm.com>, peter.maydell@linaro.org,
+ aliguori@us.ibm.com, mark.burton@greensocs.com, qemu-devel@nongnu.org,
+ cornelia.huck@de.ibm.com, fred.konrad@greensocs.com
+Date: Thu, 11 Apr 2013 16:29:55 +0200
+Message-id: 1365690602-22729-1-git-send-email-fred.konrad@greensocs.com
+Subject: [PATCH 0/7] virtio-net refactoring.
+
+From: KONRAD Frederic <fred.konrad@greensocs.com>
+
+This is the next part of virtio-refactoring.
+
+Basically it creates virtio-net-device which extends virtio-device.
+Then a virtio-net-device can be connected on a virtio-bus.
+virtio-net-pci, virtio-net-s390 and virtio-net-ccw are created too,
+they extend respectively virtio-pci, virtio-s390-device, virtio-ccw-device and
+have a virtio-net-device.
+
+You can checkout my branch here:
+
+git://project.greensocs.com/qemu-virtio.git virtio-net-v3
+
+Note: it applies on top of virtio-9p-v3.
+
+I made basic tests (with linux guests) on:
+    * qemu-system-i386
+
+Changes v2 -> v3:
+    * Added property macro.
+    * Rebased on virtio-net-ccw.
+    * Renamed device "virtio-net" => "virtio-net-device".
+    * Rebased.
+
+Thanks,
+
+Fred
+
+KONRAD Frederic (7):
+  virtio: add two functions to VirtioDeviceClass.
+  virtio-net: add the virtio-net device.
+  virtio-net-pci: switch to the new API.
+  virtio-net-s390: switch to the new API.
+  virtio-net-ccw: switch to the new API.
+  virtio-net: cleanup: use QOM cast.
+  virtio-net: cleanup: init and exit function.
+
+ hw/net/virtio-net.c            | 244 ++++++++++++++++++++++++++---------------
+ hw/s390x/s390-virtio-bus.c     |  33 +++---
+ hw/s390x/s390-virtio-bus.h     |  13 ++-
+ hw/s390x/virtio-ccw.c          |  35 +++---
+ hw/s390x/virtio-ccw.h          |  13 ++-
+ hw/virtio/virtio-pci.c         | 116 ++++++++++----------
+ hw/virtio/virtio-pci.h         |  15 ++-
+ include/hw/virtio/virtio-net.h |  15 ++-
+ include/hw/virtio/virtio.h     |  12 ++
+ 9 files changed, 311 insertions(+), 185 deletions(-)
+
+Tested-by: Cornelia Huck <cornelia.huck@de.ibm.com>
+-- 
+1.8.1.4
+

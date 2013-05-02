@@ -1,0 +1,1 @@
+../qmp-hmp-interfaces-for-internal-snapshot-info/v11.1364950033/0014-hmp-add-function-hmp_info_snapshots.patch

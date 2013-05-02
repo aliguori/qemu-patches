@@ -1,0 +1,1 @@
+../block-Vectored-bdrv_writev_vmstate/v1.1365215272/0003-block-Introduce-bdrv_pwritev-for-qcow2_save_vmstate.patch

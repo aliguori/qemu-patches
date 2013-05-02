@@ -1,0 +1,44 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Hu Tao <hutao@cn.fujitsu.com>
+To: Hu Tao <hutao@cn.fujitsu.com>, qemu-devel@nongnu.org
+Cc: Paolo Bonzini <pbonzini@redhat.com>, qemu-devel@nongnu.org,
+ Markus Armbruster <armbru@redhat.com>
+Date: Fri, 26 Apr 2013 11:24:43 +0800
+Message-id: d63f8bcdbfbec8135b1b57f9247c513a3e25762c.1366945969.git.hutao@cn.fujitsu.com
+Subject: [PATCH 4/8] fw_cfg: add required header files
+
+If fw_cfg.h is included alone, gcc gives error messages like these:
+
+  error: unknown type name ‘uint32_t’
+  error: unknown type name ‘size_t’
+  error: unknown type name ‘hwaddr’
+  ...
+
+Signed-off-by: Hu Tao <hutao@cn.fujitsu.com>
+Reviewed-by: Markus Armbruster <armbru@redhat.com>
+---
+ include/hw/nvram/fw_cfg.h | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/include/hw/nvram/fw_cfg.h b/include/hw/nvram/fw_cfg.h
+index 05c8df1..3e4a334 100644
+--- a/include/hw/nvram/fw_cfg.h
++++ b/include/hw/nvram/fw_cfg.h
+@@ -1,6 +1,13 @@
+ #ifndef FW_CFG_H
+ #define FW_CFG_H
+ 
++#ifndef NO_QEMU_PROTOS
++#include <stdint.h>
++#include <stddef.h>
++
++#include "exec/hwaddr.h"
++#endif
++
+ #define FW_CFG_SIGNATURE        0x00
+ #define FW_CFG_ID               0x01
+ #define FW_CFG_UUID             0x02
+-- 
+1.8.1.4
+
+

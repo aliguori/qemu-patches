@@ -1,0 +1,38 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Jan Kiszka <jan.kiszka@siemens.com>
+To: Anthony Liguori <aliguori@us.ibm.com>, qemu-devel <qemu-devel@nongnu.org>
+Cc: Andreas Faerber <afaerber@suse.de>,
+ Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+Date: Mon, 29 Apr 2013 15:09:16 +0200
+Message-id: cover.1367240955.git.jan.kiszka@siemens.com
+Subject: [PATCH 0/2] i2c: Add AT24Cxx EEPROM model
+
+Changes in v4:
+ - instead of provide size property, register at24c1..1024 types to
+   allow specifying the size via the device name
+
+Jan Kiszka (2):
+  i2c: Introduce device address mask
+  Add AT24Cxx I2C EEPROM device model
+
+ hw/arm/pxa2xx.c        |    3 +-
+ hw/arm/tosa.c          |    2 +-
+ hw/arm/z2.c            |    2 +-
+ hw/audio/wm8750.c      |    2 +-
+ hw/display/ssd0303.c   |    2 +-
+ hw/gpio/max7310.c      |    2 +-
+ hw/i2c/core.c          |   14 ++-
+ hw/i2c/smbus.c         |    2 +-
+ hw/input/lm832x.c      |    2 +-
+ hw/misc/tmp105.c       |    2 +-
+ hw/nvram/Makefile.objs |    2 +-
+ hw/nvram/at24.c        |  391 ++++++++++++++++++++++++++++++++++++++++++++++++
+ hw/timer/ds1338.c      |    2 +-
+ hw/timer/twl92230.c    |    2 +-
+ include/hw/i2c/i2c.h   |    4 +-
+ 15 files changed, 417 insertions(+), 17 deletions(-)
+ create mode 100644 hw/nvram/at24.c
+
+-- 
+1.7.3.4
+

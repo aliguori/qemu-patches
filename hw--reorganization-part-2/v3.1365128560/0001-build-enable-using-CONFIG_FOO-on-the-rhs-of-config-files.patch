@@ -1,0 +1,35 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: 
+Date: Thu,  4 Apr 2013 21:22:41 +0200
+Message-id: 1365103395-11547-2-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 01/35] build: enable using $(CONFIG_FOO) on the rhs of config
+ files
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ Makefile | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/Makefile b/Makefile
+index 80344d9..0b6e6a1 100644
+--- a/Makefile
++++ b/Makefile
+@@ -76,7 +76,10 @@ config-all-devices.mak:
+ 	$(call quiet-command,echo '# no devices' > $@,"  GEN   $@")
+ else
+ config-all-devices.mak: $(SUBDIR_DEVICES_MAK)
+-	$(call quiet-command,cat $(SUBDIR_DEVICES_MAK) | grep =y | sort -u > $@,"  GEN   $@")
++	$(call quiet-command, sed -n \
++             's|^\([^=]*\)=\(.*\)$$|\1:=$$(findstring y,$$(\1)\2)|p' \
++             $(SUBDIR_DEVICES_MAK) | sort -u > $@, \
++             "  GEN   $@")
+ endif
+ 
+ -include $(SUBDIR_DEVICES_MAK_DEP)
+-- 
+1.8.1.4
+
+
+

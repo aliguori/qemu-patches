@@ -1,0 +1,41 @@
+From patches Mon Sep 17 00:00:00 2001
+From: "Peter Maydell" <peter.maydell@linaro.org>
+To: Anthony Liguori <aliguori@us.ibm.com>, Blue Swirl <blauwirbel@gmail.com>
+Cc: Paul Brook <paul@codesourcery.com>, qemu-devel@nongnu.org
+Date: Fri,  5 Apr 2013 18:13:11 +0100
+Message-id: 1365181999-15387-7-git-send-email-peter.maydell@linaro.org
+Subject: [PATCH 06/14] hw/onenand.c: fix migration of dynamically allocated
+ buffer "otp"
+
+From: Igor Mitsyanko <i.mitsyanko@gmail.com>
+
+VMSTATE_BUFFER_UNSAFE should be used for buffers inlined in device state, not
+for buffers allocated dynamically. Change to VMSTATE_BUFFER_POINTER_UNSAFE macro,
+which will do migration right.
+
+Signed-off-by: Igor Mitsyanko <i.mitsyanko@gmail.com>
+Reviewed-by: Peter Maydell <peter.maydell@linaro.org>
+Message-id: 1362923278-4080-4-git-send-email-i.mitsyanko@gmail.com
+Signed-off-by: Peter Maydell <peter.maydell@linaro.org>
+---
+ hw/onenand.c |    3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/hw/onenand.c b/hw/onenand.c
+index ddba366..57a346d 100644
+--- a/hw/onenand.c
++++ b/hw/onenand.c
+@@ -185,7 +185,8 @@ static const VMStateDescription vmstate_onenand = {
+         VMSTATE_UINT8(ecc.cp, OneNANDState),
+         VMSTATE_UINT16_ARRAY(ecc.lp, OneNANDState, 2),
+         VMSTATE_UINT16(ecc.count, OneNANDState),
+-        VMSTATE_BUFFER_UNSAFE(otp, OneNANDState, 0, ((64 + 2) << PAGE_SHIFT)),
++        VMSTATE_BUFFER_POINTER_UNSAFE(otp, OneNANDState, 0,
++            ((64 + 2) << PAGE_SHIFT)),
+         VMSTATE_END_OF_LIST()
+     }
+ };
+-- 
+1.7.9.5
+
+

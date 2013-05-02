@@ -1,0 +1,1 @@
+../Block-patches/v1.1367001860/0004-sheepdog-implement-bdrv_co_is_allocated.patch

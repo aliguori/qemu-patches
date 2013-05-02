@@ -1,0 +1,36 @@
+From patches Mon Sep 17 00:00:00 2001
+From: mrhines@linux.vnet.ibm.com
+To: qemu-devel@nongnu.org, mrhines@linux.vnet.ibm.com
+Cc: Anthony Liguori <aliguori@us.ibm.com>, mst@redhat.com,
+ qemu-devel@nongnu.org, Michael R Hines <mrhines@us.ibm.com>,
+ Bulent Abali <abali@us.ibm.com>, owasserm@redhat.com, pbonzini@redhat.com,
+ Gokul B Kandiraju <gokul@us.ibm.com>
+Date: Mon, 8 Apr 2013 23:04:41 -0400
+Message-id: 1365476681-31593-13-git-send-email-mrhines@linux.vnet.ibm.com
+Subject: [PATCH 12/12] don't set nonblock on invalid file descriptor
+
+From: "Michael R. Hines" <mrhines@us.ibm.com>
+
+migration.c thinks this is an error for RDMA, but it's not.
+
+Signed-off-by: Michael R. Hines <mrhines@us.ibm.com>
+---
+ util/oslib-posix.c |    2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/util/oslib-posix.c b/util/oslib-posix.c
+index 4e4b819..0b398f4 100644
+--- a/util/oslib-posix.c
++++ b/util/oslib-posix.c
+@@ -144,6 +144,8 @@ void qemu_set_block(int fd)
+ void qemu_set_nonblock(int fd)
+ {
+     int f;
++    if(fd == -1)
++        return;
+     f = fcntl(fd, F_GETFL);
+     fcntl(fd, F_SETFL, f | O_NONBLOCK);
+ }
+-- 
+1.7.10.4
+

@@ -1,0 +1,80 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Stefan Hajnoczi <stefanha@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>
+Date: Fri, 12 Apr 2013 16:38:19 +0200
+Message-id: 1365777502-7035-2-git-send-email-stefanha@redhat.com
+Subject: [PATCH 1/4] target-moxie: Fix VMState registration
+
+From: Peter Maydell <peter.maydell@linaro.org>
+
+Register the CPU VMState in the correct way, via cpu_class_set_vmsd(),
+rather than doing it in two different wrong ways (once by providing
+cpu_save and cpu_load functions, and once by setting the vmsd field in
+DeviceClass).
+
+Signed-off-by: Peter Maydell <peter.maydell@linaro.org>
+Reviewed-by: Andreas Färber <afaerber@suse.de>
+Signed-off-by: Stefan Hajnoczi <stefanha@redhat.com>
+---
+ target-moxie/cpu.c     |  2 +-
+ target-moxie/cpu.h     |  2 --
+ target-moxie/machine.c | 12 +-----------
+ 3 files changed, 2 insertions(+), 14 deletions(-)
+
+diff --git a/target-moxie/cpu.c b/target-moxie/cpu.c
+index c0855f0..f2b0791 100644
+--- a/target-moxie/cpu.c
++++ b/target-moxie/cpu.c
+@@ -97,7 +97,7 @@ static void moxie_cpu_class_init(ObjectClass *oc, void *data)
+ 
+     cc->class_by_name = moxie_cpu_class_by_name;
+ 
+-    dc->vmsd = &vmstate_moxie_cpu;
++    cpu_class_set_vmsd(cc, &vmstate_moxie_cpu);
+     cc->do_interrupt = moxie_cpu_do_interrupt;
+ }
+ 
+diff --git a/target-moxie/cpu.h b/target-moxie/cpu.h
+index 988729a..a9d9ace 100644
+--- a/target-moxie/cpu.h
++++ b/target-moxie/cpu.h
+@@ -28,8 +28,6 @@
+ 
+ #define TARGET_HAS_ICE 1
+ 
+-#define CPU_SAVE_VERSION 1
+-
+ #define ELF_MACHINE     0xFEED /* EM_MOXIE */
+ 
+ #define MOXIE_EX_DIV0        0
+diff --git a/target-moxie/machine.c b/target-moxie/machine.c
+index 5bfdb28..0f5992b 100644
+--- a/target-moxie/machine.c
++++ b/target-moxie/machine.c
+@@ -3,7 +3,7 @@
+ 
+ const VMStateDescription vmstate_moxie_cpu = {
+     .name = "cpu",
+-    .version_id = CPU_SAVE_VERSION,
++    .version_id = 1,
+     .minimum_version_id = 1,
+     .minimum_version_id_old = 1,
+     .fields      = (VMStateField[]) {
+@@ -16,13 +16,3 @@ const VMStateDescription vmstate_moxie_cpu = {
+         VMSTATE_END_OF_LIST()
+     }
+ };
+-
+-void cpu_save(QEMUFile *f, void *opaque)
+-{
+-    vmstate_save_state(f, &vmstate_moxie_cpu, opaque);
+-}
+-
+-int cpu_load(QEMUFile *f, void *opaque, int version_id)
+-{
+-    return vmstate_load_state(f, &vmstate_moxie_cpu, opaque, version_id);
+-}
+-- 
+1.8.1.4
+

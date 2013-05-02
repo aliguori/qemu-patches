@@ -1,0 +1,140 @@
+From patches Mon Sep 17 00:00:00 2001
+From: "Peter Maydell" <peter.maydell@linaro.org>
+To: Anthony Liguori <aliguori@us.ibm.com>, Blue Swirl <blauwirbel@gmail.com>
+Cc: Paul Brook <paul@codesourcery.com>, qemu-devel@nongnu.org
+Date: Fri,  5 Apr 2013 18:13:13 +0100
+Message-id: 1365181999-15387-9-git-send-email-peter.maydell@linaro.org
+Subject: [PATCH 08/14] arm_gic: Fix sizes of state fields in preparation for
+ vmstate support
+
+In preparation for switching to vmstate for migration support, fix
+the sizes of various GIC state fields. In particular, we replace all
+the bitfields (which VMState can't deal with) with straightforward
+uint8_t values which we do bit operations on. (The bitfields made
+more sense when NCPU was set differently in different situations,
+but we now always model at the architectural limit of 8.)
+
+Signed-off-by: Peter Maydell <peter.maydell@linaro.org>
+Reviewed-by: Igor Mitsyanko <i.mitsyanko@gmail.com>
+Reviewed-by: Andreas Färber <afaerber@suse.de>
+Message-id: 1363975375-3166-3-git-send-email-peter.maydell@linaro.org
+---
+ hw/arm_gic_common.c   |    4 ++--
+ hw/arm_gic_internal.h |   42 +++++++++++++++++++++---------------------
+ hw/armv7m_nvic.c      |    4 ++--
+ 3 files changed, 25 insertions(+), 25 deletions(-)
+
+diff --git a/hw/arm_gic_common.c b/hw/arm_gic_common.c
+index f2dc8bf..f95bec3 100644
+--- a/hw/arm_gic_common.c
++++ b/hw/arm_gic_common.c
+@@ -149,7 +149,7 @@ static void arm_gic_common_reset(DeviceState *dev)
+         s->current_pending[i] = 1023;
+         s->running_irq[i] = 1023;
+         s->running_priority[i] = 0x100;
+-        s->cpu_enabled[i] = 0;
++        s->cpu_enabled[i] = false;
+     }
+     for (i = 0; i < 16; i++) {
+         GIC_SET_ENABLED(i, ALL_CPU_MASK);
+@@ -161,7 +161,7 @@ static void arm_gic_common_reset(DeviceState *dev)
+             s->irq_target[i] = 1;
+         }
+     }
+-    s->enabled = 0;
++    s->enabled = false;
+ }
+ 
+ static Property arm_gic_common_properties[] = {
+diff --git a/hw/arm_gic_internal.h b/hw/arm_gic_internal.h
+index 3e1928b..99a3bc3 100644
+--- a/hw/arm_gic_internal.h
++++ b/hw/arm_gic_internal.h
+@@ -45,14 +45,14 @@
+ #define GIC_SET_ACTIVE(irq, cm) s->irq_state[irq].active |= (cm)
+ #define GIC_CLEAR_ACTIVE(irq, cm) s->irq_state[irq].active &= ~(cm)
+ #define GIC_TEST_ACTIVE(irq, cm) ((s->irq_state[irq].active & (cm)) != 0)
+-#define GIC_SET_MODEL(irq) s->irq_state[irq].model = 1
+-#define GIC_CLEAR_MODEL(irq) s->irq_state[irq].model = 0
++#define GIC_SET_MODEL(irq) s->irq_state[irq].model = true
++#define GIC_CLEAR_MODEL(irq) s->irq_state[irq].model = false
+ #define GIC_TEST_MODEL(irq) s->irq_state[irq].model
+ #define GIC_SET_LEVEL(irq, cm) s->irq_state[irq].level = (cm)
+ #define GIC_CLEAR_LEVEL(irq, cm) s->irq_state[irq].level &= ~(cm)
+ #define GIC_TEST_LEVEL(irq, cm) ((s->irq_state[irq].level & (cm)) != 0)
+-#define GIC_SET_TRIGGER(irq) s->irq_state[irq].trigger = 1
+-#define GIC_CLEAR_TRIGGER(irq) s->irq_state[irq].trigger = 0
++#define GIC_SET_TRIGGER(irq) s->irq_state[irq].trigger = true
++#define GIC_CLEAR_TRIGGER(irq) s->irq_state[irq].trigger = false
+ #define GIC_TEST_TRIGGER(irq) s->irq_state[irq].trigger
+ #define GIC_GET_PRIORITY(irq, cpu) (((irq) < GIC_INTERNAL) ?            \
+                                     s->priority1[irq][cpu] :            \
+@@ -61,30 +61,30 @@
+ 
+ typedef struct gic_irq_state {
+     /* The enable bits are only banked for per-cpu interrupts.  */
+-    unsigned enabled:NCPU;
+-    unsigned pending:NCPU;
+-    unsigned active:NCPU;
+-    unsigned level:NCPU;
+-    unsigned model:1; /* 0 = N:N, 1 = 1:N */
+-    unsigned trigger:1; /* nonzero = edge triggered.  */
++    uint8_t enabled;
++    uint8_t pending;
++    uint8_t active;
++    uint8_t level;
++    bool model; /* 0 = N:N, 1 = 1:N */
++    bool trigger; /* nonzero = edge triggered.  */
+ } gic_irq_state;
+ 
+ typedef struct GICState {
+     SysBusDevice busdev;
+     qemu_irq parent_irq[NCPU];
+-    int enabled;
+-    int cpu_enabled[NCPU];
++    bool enabled;
++    bool cpu_enabled[NCPU];
+ 
+     gic_irq_state irq_state[GIC_MAXIRQ];
+-    int irq_target[GIC_MAXIRQ];
+-    int priority1[GIC_INTERNAL][NCPU];
+-    int priority2[GIC_MAXIRQ - GIC_INTERNAL];
+-    int last_active[GIC_MAXIRQ][NCPU];
+-
+-    int priority_mask[NCPU];
+-    int running_irq[NCPU];
+-    int running_priority[NCPU];
+-    int current_pending[NCPU];
++    uint8_t irq_target[GIC_MAXIRQ];
++    uint8_t priority1[GIC_INTERNAL][NCPU];
++    uint8_t priority2[GIC_MAXIRQ - GIC_INTERNAL];
++    uint16_t last_active[GIC_MAXIRQ][NCPU];
++
++    uint16_t priority_mask[NCPU];
++    uint16_t running_irq[NCPU];
++    uint16_t running_priority[NCPU];
++    uint16_t current_pending[NCPU];
+ 
+     uint32_t num_cpu;
+ 
+diff --git a/hw/armv7m_nvic.c b/hw/armv7m_nvic.c
+index d198cfd..2351200 100644
+--- a/hw/armv7m_nvic.c
++++ b/hw/armv7m_nvic.c
+@@ -458,10 +458,10 @@ static void armv7m_nvic_reset(DeviceState *dev)
+      * as enabled by default, and with a priority mask which allows
+      * all interrupts through.
+      */
+-    s->gic.cpu_enabled[0] = 1;
++    s->gic.cpu_enabled[0] = true;
+     s->gic.priority_mask[0] = 0x100;
+     /* The NVIC as a whole is always enabled. */
+-    s->gic.enabled = 1;
++    s->gic.enabled = true;
+     systick_reset(s);
+ }
+ 
+-- 
+1.7.9.5
+
+

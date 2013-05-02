@@ -1,0 +1,9 @@
+0000-make-audio-card-configuration-uniform.txt
+0001-adlib-qdev-ify.patch
+0002-audio-remove-the-need-for-audio-card-CONFIG_-symbols.patch
+0003-audio-remove-HAS_AUDIO.patch
+0004-audio-remove-CONFIG_-symbols.patch
+0005-audio-replace-audio-card-configuration-with-default-configs.patch
+0006-qom-do-not-return-root-for-empty-path.patch
+0007-audio-look-for-the-ISA-and-PCI-buses.patch
+0008-audio-enable-PCI-audio-cards-for-all-PCI-enabled-targets.patch

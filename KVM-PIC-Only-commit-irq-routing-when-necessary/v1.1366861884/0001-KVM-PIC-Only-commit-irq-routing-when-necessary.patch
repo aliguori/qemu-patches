@@ -1,0 +1,83 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Alexander Graf <agraf@suse.de>
+To: qemu-ppc@nongnu.org
+Cc: Jan Kiszka <jan.kiszka@siemens.com>, qemu-devel@nongnu.org
+Date: Wed, 24 Apr 2013 22:51:24 +0200
+Message-id: 1366836684-20936-1-git-send-email-agraf@suse.de
+Subject: [PATCH 1/1] KVM: PIC: Only commit irq routing when necessary
+
+The current logic updates KVM's view of our interrupt map every time we
+change it. While this is nice and bullet proof, it slows things down
+badly for me. QEMU spends about 3 seconds on every start telling KVM what
+news it has on its routing maps.
+
+Instead, let's just synchronize the whole irq routing map as a whole when
+we're done constructing it. For things that change during runtime, we can
+still update the routing table on demand.
+
+Signed-off-by: Alexander Graf <agraf@suse.de>
+CC: Jan Kiszka <jan.kiszka@siemens.com>
+
+diff --git a/hw/kvm/ioapic.c b/hw/kvm/ioapic.c
+index 23877d4..3d561a5 100644
+--- a/hw/kvm/ioapic.c
++++ b/hw/kvm/ioapic.c
+@@ -40,6 +40,7 @@ void kvm_pc_setup_irq_routing(bool pci_enabled)
+                 }
+             }
+         }
++        kvm_irqchip_commit_routes(s);
+     }
+ }
+ 
+diff --git a/include/sysemu/kvm.h b/include/sysemu/kvm.h
+index df43951..8a9ebda 100644
+--- a/include/sysemu/kvm.h
++++ b/include/sysemu/kvm.h
+@@ -210,6 +210,7 @@ int kvm_set_irq(KVMState *s, int irq, int level);
+ int kvm_irqchip_send_msi(KVMState *s, MSIMessage msg);
+ 
+ void kvm_irqchip_add_irq_route(KVMState *s, int gsi, int irqchip, int pin);
++void kvm_irqchip_commit_routes(KVMState *s);
+ 
+ void kvm_put_apic_state(DeviceState *d, struct kvm_lapic_state *kapic);
+ void kvm_get_apic_state(DeviceState *d, struct kvm_lapic_state *kapic);
+diff --git a/kvm-all.c b/kvm-all.c
+index 73dea26..130cdbc 100644
+--- a/kvm-all.c
++++ b/kvm-all.c
+@@ -900,7 +900,7 @@ void kvm_init_irq_routing(KVMState *s)
+     kvm_arch_init_irq_routing(s);
+ }
+ 
+-static void kvm_irqchip_commit_routes(KVMState *s)
++void kvm_irqchip_commit_routes(KVMState *s)
+ {
+     int ret;
+ 
+@@ -934,8 +934,6 @@ static void kvm_add_routing_entry(KVMState *s,
+     new->u = entry->u;
+ 
+     set_gsi(s, entry->gsi);
+-
+-    kvm_irqchip_commit_routes(s);
+ }
+ 
+ static int kvm_update_routing_entry(KVMState *s,
+@@ -1086,6 +1084,7 @@ int kvm_irqchip_send_msi(KVMState *s, MSIMessage msg)
+         route->kroute.u.msi.data = le32_to_cpu(msg.data);
+ 
+         kvm_add_routing_entry(s, &route->kroute);
++        kvm_irqchip_commit_routes(s);
+ 
+         QTAILQ_INSERT_TAIL(&s->msi_hashtab[kvm_hash_msi(msg.data)], route,
+                            entry);
+@@ -1118,6 +1117,7 @@ int kvm_irqchip_add_msi_route(KVMState *s, MSIMessage msg)
+     kroute.u.msi.data = le32_to_cpu(msg.data);
+ 
+     kvm_add_routing_entry(s, &kroute);
++    kvm_irqchip_commit_routes(s);
+ 
+     return virq;
+ }
+

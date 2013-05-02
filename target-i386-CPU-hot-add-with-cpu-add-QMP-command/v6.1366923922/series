@@ -1,0 +1,16 @@
+0000-target-i386-CPU-hot-add-with-cpu-add-QMP-command.txt
+0001-exec-add-qemu_for_each_cpu.patch
+0002-cpu-add-helper-cpu_exists-to-check-if-CPU-with-specified-id-exists.patch
+0003-acpi_piix4-add-infrastructure-to-send-CPU-hot-plug-GPE-to-guest.patch
+0004-target-i386-introduce-apic-id-property.patch
+0005-target-i386-introduce-ICC-bus-device-bridge.patch
+0006-target-i386-cpu-attach-ICC-bus-to-CPU-on-its-creation.patch
+0007-target-i386-replace-MSI_SPACE_SIZE-with-APIC_SPACE_SIZE.patch
+0008-target-i386-kvmvapic-make-expilict-dependency-on-sysbush.patch
+0009-target-i386-move-APIC-to-ICC-bus.patch
+0010-extend-memory_region_find-and-use-it-in-kvm-ioapic.patch
+0011-target-i386-move-IOAPIC-to-ICC-bus.patch
+0012-pc-pass-QEMUMachineInitArgs-down-to-pc_cpus_init.patch
+0013-add-hot_add_cpu-hook-to-QEMUMachine-and-export-machine_args.patch
+0014-target-i386-implement-machine-hot_add_cpu-hook.patch
+0015-QMP-add-cpu-add-command.patch

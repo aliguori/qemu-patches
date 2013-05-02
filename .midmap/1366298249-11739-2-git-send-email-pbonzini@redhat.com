@@ -1,0 +1,1 @@
+../qcow2py-dump-metadata/v1.1366323444/0001-qcow2py-rename-class-to-Qcow.patch

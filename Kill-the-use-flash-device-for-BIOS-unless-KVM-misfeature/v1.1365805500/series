@@ -1,0 +1,4 @@
+0000-Kill-the-use-flash-device-for-BIOS-unless-KVM-misfeature.txt
+0001-pc-Inline-pc_init_pci_1_3-into-pc_init_pci_1_2.patch
+0002-pc-Split-pc_init_pci_1_0-off-pc_init_pci_1_2.patch
+0003-pc-Kill-the-use-flash-device-for-BIOS-unless-KVM-misfeature.patch

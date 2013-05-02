@@ -1,0 +1,436 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Jason Wang <jasowang@redhat.com>
+To: aliguori@us.ibm.com, shajnocz@redhat.com, qemu-devel@nongnu.org,
+ mst@redhat.com
+Cc: krkumar2@in.ibm.com, kvm@vger.kernel.org, mprivozn@redhat.com,
+ rusty@rustcorp.com.au, Jason Wang <jasowang@redhat.com>,
+ gaowanlong@cn.fujitsu.com, jwhan@filewood.snu.ac.kr, shiyer@redhat.com
+Date: Fri, 25 Jan 2013 18:35:30 +0800
+Message-id: 1359110143-42984-8-git-send-email-jasowang@redhat.com
+Subject: [PATCH 07/20] net: multiqueue support
+
+This patch adds basic multiqueue support for qemu. The idea is simple, an array
+of NetClientStates were introduced in NICState, parse_netdev() were extended to
+find and match all NetClientStates belongs to the backend and place their
+pointers in NICConf. Then qemu_new_nic can setup a N:N mapping between NICStates
+that belongs to a nic and NICStates belongs to the netdev. And a queue_index
+were introduced in NetClientState to track its index. After this, each peers of
+a NICState were abstracted as a queue.
+
+After this change, all NetClientState that belongs to the same backend/nic has
+the same id. When use want to change the link status, all NetClientStates that
+belongs to the same backend/nic will be also changed. When user want to delete
+a device or netdev, all NetClientStates that belongs to the same backend/nic
+will be deleted also. Changing or deleting an specific queue is not allowed.
+
+Signed-off-by: Jason Wang <jasowang@redhat.com>
+---
+ hw/dp8393x.c                |    2 +-
+ hw/mcf_fec.c                |    2 +-
+ hw/qdev-properties-system.c |   46 +++++++++++++++---
+ hw/qdev-properties.h        |    6 +-
+ include/net/net.h           |   18 +++++--
+ net/net.c                   |  113 +++++++++++++++++++++++++++++++------------
+ 6 files changed, 139 insertions(+), 48 deletions(-)
+
+diff --git a/hw/dp8393x.c b/hw/dp8393x.c
+index 0273fad..808157b 100644
+--- a/hw/dp8393x.c
++++ b/hw/dp8393x.c
+@@ -900,7 +900,7 @@ void dp83932_init(NICInfo *nd, hwaddr base, int it_shift,
+     s->regs[SONIC_SR] = 0x0004; /* only revision recognized by Linux */
+ 
+     s->conf.macaddr = nd->macaddr;
+-    s->conf.peer = nd->netdev;
++    s->conf.peers.ncs[0] = nd->netdev;
+ 
+     s->nic = qemu_new_nic(&net_dp83932_info, &s->conf, nd->model, nd->name, s);
+ 
+diff --git a/hw/mcf_fec.c b/hw/mcf_fec.c
+index 909e32b..8e60f09 100644
+--- a/hw/mcf_fec.c
++++ b/hw/mcf_fec.c
+@@ -472,7 +472,7 @@ void mcf_fec_init(MemoryRegion *sysmem, NICInfo *nd,
+     memory_region_add_subregion(sysmem, base, &s->iomem);
+ 
+     s->conf.macaddr = nd->macaddr;
+-    s->conf.peer = nd->netdev;
++    s->conf.peers.ncs[0] = nd->netdev;
+ 
+     s->nic = qemu_new_nic(&net_mcf_fec_info, &s->conf, nd->model, nd->name, s);
+ 
+diff --git a/hw/qdev-properties-system.c b/hw/qdev-properties-system.c
+index ce0f793..ce3af22 100644
+--- a/hw/qdev-properties-system.c
++++ b/hw/qdev-properties-system.c
+@@ -173,16 +173,47 @@ PropertyInfo qdev_prop_chr = {
+ 
+ static int parse_netdev(DeviceState *dev, const char *str, void **ptr)
+ {
+-    NetClientState *netdev = qemu_find_netdev(str);
++    NICPeers *peers_ptr = (NICPeers *)ptr;
++    NICConf *conf = container_of(peers_ptr, NICConf, peers);
++    NetClientState **ncs = peers_ptr->ncs;
++    NetClientState *peers[MAX_QUEUE_NUM];
++    int queues, i = 0;
++    int ret;
+ 
+-    if (netdev == NULL) {
+-        return -ENOENT;
++    queues = qemu_find_net_clients_except(str, peers,
++                                          NET_CLIENT_OPTIONS_KIND_NIC,
++                                          MAX_QUEUE_NUM);
++    if (queues == 0) {
++        ret = -ENOENT;
++        goto err;
+     }
+-    if (netdev->peer) {
+-        return -EEXIST;
++
++    if (queues > MAX_QUEUE_NUM) {
++        ret = -E2BIG;
++        goto err;
++    }
++
++    for (i = 0; i < queues; i++) {
++        if (peers[i] == NULL) {
++            ret = -ENOENT;
++            goto err;
++        }
++
++        if (peers[i]->peer) {
++            ret = -EEXIST;
++            goto err;
++        }
++
++        ncs[i] = peers[i];
++        ncs[i]->queue_index = i;
+     }
+-    *ptr = netdev;
++
++    conf->queues = queues;
++
+     return 0;
++
++err:
++    return ret;
+ }
+ 
+ static const char *print_netdev(void *ptr)
+@@ -249,7 +280,8 @@ static void set_vlan(Object *obj, Visitor *v, void *opaque,
+ {
+     DeviceState *dev = DEVICE(obj);
+     Property *prop = opaque;
+-    NetClientState **ptr = qdev_get_prop_ptr(dev, prop);
++    NICPeers *peers_ptr = qdev_get_prop_ptr(dev, prop);
++    NetClientState **ptr = &peers_ptr->ncs[0];
+     Error *local_err = NULL;
+     int32_t id;
+     NetClientState *hubport;
+diff --git a/hw/qdev-properties.h b/hw/qdev-properties.h
+index ddcf774..20c67f3 100644
+--- a/hw/qdev-properties.h
++++ b/hw/qdev-properties.h
+@@ -31,7 +31,7 @@ extern PropertyInfo qdev_prop_pci_host_devaddr;
+         .name      = (_name),                                    \
+         .info      = &(_prop),                                   \
+         .offset    = offsetof(_state, _field)                    \
+-            + type_check(_type,typeof_field(_state, _field)),    \
++            + type_check(_type, typeof_field(_state, _field)),   \
+         }
+ #define DEFINE_PROP_DEFAULT(_name, _state, _field, _defval, _prop, _type) { \
+         .name      = (_name),                                           \
+@@ -77,9 +77,9 @@ extern PropertyInfo qdev_prop_pci_host_devaddr;
+ #define DEFINE_PROP_STRING(_n, _s, _f)             \
+     DEFINE_PROP(_n, _s, _f, qdev_prop_string, char*)
+ #define DEFINE_PROP_NETDEV(_n, _s, _f)             \
+-    DEFINE_PROP(_n, _s, _f, qdev_prop_netdev, NetClientState*)
++    DEFINE_PROP(_n, _s, _f, qdev_prop_netdev, NICPeers)
+ #define DEFINE_PROP_VLAN(_n, _s, _f)             \
+-    DEFINE_PROP(_n, _s, _f, qdev_prop_vlan, NetClientState*)
++    DEFINE_PROP(_n, _s, _f, qdev_prop_vlan, NICPeers)
+ #define DEFINE_PROP_DRIVE(_n, _s, _f) \
+     DEFINE_PROP(_n, _s, _f, qdev_prop_drive, BlockDriverState *)
+ #define DEFINE_PROP_MACADDR(_n, _s, _f)         \
+diff --git a/include/net/net.h b/include/net/net.h
+index 22adc99..43a045e 100644
+--- a/include/net/net.h
++++ b/include/net/net.h
+@@ -9,24 +9,32 @@
+ #include "migration/vmstate.h"
+ #include "qapi-types.h"
+ 
++#define MAX_QUEUE_NUM 1024
++
+ struct MACAddr {
+     uint8_t a[6];
+ };
+ 
+ /* qdev nic properties */
+ 
++typedef struct NICPeers {
++    NetClientState *ncs[MAX_QUEUE_NUM];
++} NICPeers;
++
+ typedef struct NICConf {
+     MACAddr macaddr;
+-    NetClientState *peer;
++    NICPeers peers;
+     int32_t bootindex;
++    int32_t queues;
+ } NICConf;
+ 
+ #define DEFINE_NIC_PROPERTIES(_state, _conf)                            \
+     DEFINE_PROP_MACADDR("mac",   _state, _conf.macaddr),                \
+-    DEFINE_PROP_VLAN("vlan",     _state, _conf.peer),                   \
+-    DEFINE_PROP_NETDEV("netdev", _state, _conf.peer),                   \
++    DEFINE_PROP_VLAN("vlan",     _state, _conf.peers),                   \
++    DEFINE_PROP_NETDEV("netdev", _state, _conf.peers),                   \
+     DEFINE_PROP_INT32("bootindex", _state, _conf.bootindex, -1)
+ 
++
+ /* Net clients */
+ 
+ typedef void (NetPoll)(NetClientState *, bool enable);
+@@ -60,10 +68,11 @@ struct NetClientState {
+     char info_str[256];
+     unsigned receive_disabled : 1;
+     NetClientDestructor *destructor;
++    unsigned int queue_index;
+ };
+ 
+ typedef struct NICState {
+-    NetClientState nc;
++    NetClientState ncs[MAX_QUEUE_NUM];
+     NICConf *conf;
+     void *opaque;
+     bool peer_deleted;
+@@ -82,6 +91,7 @@ NICState *qemu_new_nic(NetClientInfo *info,
+                        const char *name,
+                        void *opaque);
+ void qemu_del_nic(NICState *nic);
++NetClientState *qemu_get_subqueue(NICState *nic, int queue_index);
+ NetClientState *qemu_get_queue(NICState *nic);
+ NICState *qemu_get_nic(NetClientState *nc);
+ void *qemu_get_nic_opaque(NetClientState *nc);
+diff --git a/net/net.c b/net/net.c
+index 6368896..a71de70 100644
+--- a/net/net.c
++++ b/net/net.c
+@@ -236,28 +236,44 @@ NICState *qemu_new_nic(NetClientInfo *info,
+                        void *opaque)
+ {
+     NetClientState *nc;
++    NetClientState **peers = conf->peers.ncs;
+     NICState *nic;
++    int i;
+ 
+     assert(info->type == NET_CLIENT_OPTIONS_KIND_NIC);
+     assert(info->size >= sizeof(NICState));
+ 
+-    nc = qemu_new_net_client(info, conf->peer, model, name);
++    nc = qemu_new_net_client(info, peers[0], model, name);
++    nc->queue_index = 0;
+ 
+     nic = qemu_get_nic(nc);
+     nic->conf = conf;
+     nic->opaque = opaque;
+ 
++    for (i = 1; i < conf->queues; i++) {
++        qemu_net_client_setup(&nic->ncs[i], info, peers[i], model, nc->name,
++                              NULL);
++        nic->ncs[i].queue_index = i;
++    }
++
+     return nic;
+ }
+ 
++NetClientState *qemu_get_subqueue(NICState *nic, int queue_index)
++{
++    return &nic->ncs[queue_index];
++}
++
+ NetClientState *qemu_get_queue(NICState *nic)
+ {
+-    return &nic->nc;
++    return qemu_get_subqueue(nic, 0);
+ }
+ 
+ NICState *qemu_get_nic(NetClientState *nc)
+ {
+-    return DO_UPCAST(NICState, nc, nc);
++    NetClientState *nc0 = nc - nc->queue_index;
++
++    return DO_UPCAST(NICState, ncs[0], nc0);
+ }
+ 
+ void *qemu_get_nic_opaque(NetClientState *nc)
+@@ -271,9 +287,7 @@ static void qemu_cleanup_net_client(NetClientState *nc)
+ {
+     QTAILQ_REMOVE(&net_clients, nc, next);
+ 
+-    if (nc->info->cleanup) {
+-        nc->info->cleanup(nc);
+-    }
++    nc->info->cleanup(nc);
+ }
+ 
+ static void qemu_free_net_client(NetClientState *nc)
+@@ -293,6 +307,17 @@ static void qemu_free_net_client(NetClientState *nc)
+ 
+ void qemu_del_net_client(NetClientState *nc)
+ {
++    NetClientState *ncs[MAX_QUEUE_NUM];
++    int queues, i;
++
++    /* If the NetClientState belongs to a multiqueue backend, we will change all
++     * other NetClientStates also.
++     */
++    queues = qemu_find_net_clients_except(nc->name, ncs,
++                                          NET_CLIENT_OPTIONS_KIND_NIC,
++                                          MAX_QUEUE_NUM);
++    assert(queues != 0);
++
+     /* If there is a peer NIC, delete and cleanup client, but do not free. */
+     if (nc->peer && nc->peer->info->type == NET_CLIENT_OPTIONS_KIND_NIC) {
+         NICState *nic = qemu_get_nic(nc->peer);
+@@ -300,34 +325,47 @@ void qemu_del_net_client(NetClientState *nc)
+             return;
+         }
+         nic->peer_deleted = true;
+-        /* Let NIC know peer is gone. */
+-        nc->peer->link_down = true;
++
++        for (i = 0; i < queues; i++) {
++            ncs[i]->peer->link_down = true;
++        }
++
+         if (nc->peer->info->link_status_changed) {
+             nc->peer->info->link_status_changed(nc->peer);
+         }
+-        qemu_cleanup_net_client(nc);
++
++        for (i = 0; i < queues; i++) {
++            qemu_cleanup_net_client(ncs[i]);
++        }
++
+         return;
+     }
+ 
+     assert(nc->info->type != NET_CLIENT_OPTIONS_KIND_NIC);
+ 
+-    qemu_cleanup_net_client(nc);
+-    qemu_free_net_client(nc);
++    for (i = 0; i < queues; i++) {
++        qemu_cleanup_net_client(ncs[i]);
++        qemu_free_net_client(ncs[i]);
++    }
+ }
+ 
+ void qemu_del_nic(NICState *nic)
+ {
+-    NetClientState *nc = qemu_get_queue(nic);
++    int i, queues = nic->conf->queues;
++
+     /* If this is a peer NIC and peer has already been deleted, free it now. */
+-    if (nc->peer && nc->info->type == NET_CLIENT_OPTIONS_KIND_NIC) {
+-        NICState *nic = qemu_get_nic(nc);
+-        if (nic->peer_deleted) {
+-            qemu_free_net_client(nc->peer);
++    if (nic->peer_deleted) {
++        for (i = 0; i < queues; i++) {
++            qemu_free_net_client(qemu_get_subqueue(nic, i)->peer);
+         }
+     }
+ 
+-    qemu_cleanup_net_client(nc);
+-    qemu_free_net_client(nc);
++    for (i = queues - 1; i >= 0; i--) {
++        NetClientState *nc = qemu_get_subqueue(nic, i);
++
++        qemu_cleanup_net_client(nc);
++        qemu_free_net_client(nc);
++    }
+ }
+ 
+ void qemu_foreach_nic(qemu_nic_foreach func, void *opaque)
+@@ -336,7 +374,9 @@ void qemu_foreach_nic(qemu_nic_foreach func, void *opaque)
+ 
+     QTAILQ_FOREACH(nc, &net_clients, next) {
+         if (nc->info->type == NET_CLIENT_OPTIONS_KIND_NIC) {
+-            func(qemu_get_nic(nc), opaque);
++            if (nc->queue_index == 0) {
++                func(qemu_get_nic(nc), opaque);
++            }
+         }
+     }
+ }
+@@ -913,8 +953,10 @@ void qmp_netdev_del(const char *id, Error **errp)
+ 
+ void print_net_client(Monitor *mon, NetClientState *nc)
+ {
+-    monitor_printf(mon, "%s: type=%s,%s\n", nc->name,
+-                   NetClientOptionsKind_lookup[nc->info->type], nc->info_str);
++    monitor_printf(mon, "%s: index=%d,type=%s,%s\n", nc->name,
++                   nc->queue_index,
++                   NetClientOptionsKind_lookup[nc->info->type],
++                   nc->info_str);
+ }
+ 
+ void do_info_network(Monitor *mon, const QDict *qdict)
+@@ -945,20 +987,23 @@ void do_info_network(Monitor *mon, const QDict *qdict)
+ 
+ void qmp_set_link(const char *name, bool up, Error **errp)
+ {
+-    NetClientState *nc = NULL;
++    NetClientState *ncs[MAX_QUEUE_NUM];
++    NetClientState *nc;
++    int queues, i;
+ 
+-    QTAILQ_FOREACH(nc, &net_clients, next) {
+-        if (!strcmp(nc->name, name)) {
+-            goto done;
+-        }
+-    }
+-done:
+-    if (!nc) {
++    queues = qemu_find_net_clients_except(name, ncs,
++                                          NET_CLIENT_OPTIONS_KIND_MAX,
++                                          MAX_QUEUE_NUM);
++
++    if (queues == 0) {
+         error_set(errp, QERR_DEVICE_NOT_FOUND, name);
+         return;
+     }
++    nc = ncs[0];
+ 
+-    nc->link_down = !up;
++    for (i = 0; i < queues; i++) {
++        ncs[i]->link_down = !up;
++    }
+ 
+     if (nc->info->link_status_changed) {
+         nc->info->link_status_changed(nc);
+@@ -978,9 +1023,13 @@ done:
+ 
+ void net_cleanup(void)
+ {
+-    NetClientState *nc, *next_vc;
++    NetClientState *nc;
+ 
+-    QTAILQ_FOREACH_SAFE(nc, &net_clients, next, next_vc) {
++    /* We may del multiple entries during qemu_del_net_client(),
++     * so QTAILQ_FOREACH_SAFE() is also not safe here.
++     */
++    while (!QTAILQ_EMPTY(&net_clients)) {
++        nc = QTAILQ_FIRST(&net_clients);
+         if (nc->info->type == NET_CLIENT_OPTIONS_KIND_NIC) {
+             qemu_del_nic(qemu_get_nic(nc));
+         } else {
+-- 
+1.7.1
+
+--
+To unsubscribe from this list: send the line "unsubscribe kvm" in
+the body of a message to majordomo@vger.kernel.org
+More majordomo info at  http://vger.kernel.org/majordomo-info.html

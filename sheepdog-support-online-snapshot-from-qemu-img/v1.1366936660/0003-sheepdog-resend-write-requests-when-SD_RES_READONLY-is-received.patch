@@ -1,0 +1,150 @@
+From patches Mon Sep 17 00:00:00 2001
+From: MORITA Kazutaka <morita.kazutaka@lab.ntt.co.jp>
+To: kwolf@redhat.com, MORITA Kazutaka <morita.kazutaka@lab.ntt.co.jp>,
+ stefanha@redhat.com, Liu Yuan <namei.unix@gmail.com>
+Cc: kwolf@redhat.com, MORITA Kazutaka <morita.kazutaka@lab.ntt.co.jp>,
+ sheepdog@lists.wpkg.org, qemu-devel@nongnu.org, stefanha@redhat.com
+Date: Thu, 25 Apr 2013 19:37:43 +0900
+Message-id: 1366886263-21263-4-git-send-email-morita.kazutaka@lab.ntt.co.jp
+Subject: [PATCH 3/3] sheepdog: resend write requests when SD_RES_READONLY is
+ received
+
+When a snapshot is taken from out side of qemu (e.g. qemu-img
+snapshot), write requests to the current vdi return SD_RES_READONLY.
+In this case, the sheepdog block driver needs to update the current
+inode to the latest one and resend the write requests.
+
+Signed-off-by: MORITA Kazutaka <morita.kazutaka@lab.ntt.co.jp>
+---
+ block/sheepdog.c |   98 +++++++++++++++++++++++++++++++++++++++++++++++++++++-
+ 1 files changed, 97 insertions(+), 1 deletions(-)
+
+diff --git a/block/sheepdog.c b/block/sheepdog.c
+index f4e7204..3338cd1 100644
+--- a/block/sheepdog.c
++++ b/block/sheepdog.c
+@@ -605,6 +605,7 @@ static int do_req(int sockfd, SheepdogReq *hdr, void *data,
+ static int coroutine_fn add_aio_request(BDRVSheepdogState *s, AIOReq *aio_req,
+                            struct iovec *iov, int niov, bool create,
+                            enum AIOCBState aiocb_type);
++static int resend_aioreq(BDRVSheepdogState *s, AIOReq *aio_req);
+ 
+ 
+ static AIOReq *find_pending_req(BDRVSheepdogState *s, uint64_t oid)
+@@ -749,9 +750,19 @@ static void coroutine_fn aio_read_response(void *opaque)
+         }
+     }
+ 
+-    if (rsp.result != SD_RES_SUCCESS) {
++    switch (rsp.result) {
++    case SD_RES_SUCCESS:
++        break;
++    case SD_RES_READONLY:
++        ret = resend_aioreq(s, aio_req);
++        if (ret == SD_RES_SUCCESS) {
++            goto out;
++        }
++        /* fall through */
++    default:
+         acb->ret = -EIO;
+         error_report("%s", sd_strerror(rsp.result));
++        break;
+     }
+ 
+     free_aio_req(s, aio_req);
+@@ -1150,6 +1161,91 @@ static int write_object(int fd, char *buf, uint64_t oid, int copies,
+                              create, cache_flags);
+ }
+ 
++/* update inode with the latest state */
++static int coroutine_fn reload_vdi_object(BDRVSheepdogState *s)
++{
++    SheepdogInode *inode;
++    int ret = 0, fd;
++    uint32_t vid;
++
++    inode = (SheepdogInode *)g_malloc(sizeof(s->inode));
++
++    fd = connect_to_sdog(s);
++    if (fd < 0) {
++        ret = -EIO;
++        goto out;
++    }
++
++    ret = find_vdi_name(s, s->name, 0, "", &vid, false);
++    if (ret) {
++        goto out;
++    }
++
++    ret = read_object(fd, (char *)inode, vid_to_vdi_oid(vid),
++                      s->inode.nr_copies, sizeof(*inode), 0, s->cache_flags);
++    if (ret < 0) {
++        goto out;
++    }
++
++    if (inode->vdi_id != s->inode.vdi_id) {
++        memcpy(&s->inode, inode, sizeof(s->inode));
++    }
++
++out:
++    free(inode);
++    closesocket(fd);
++
++    return ret;
++}
++
++static int resend_aioreq(BDRVSheepdogState *s, AIOReq *aio_req)
++{
++    SheepdogAIOCB *acb = aio_req->aiocb;
++    bool create = false;
++    int ret;
++
++    ret = reload_vdi_object(s);
++    if (ret < 0) {
++        return ret;
++    }
++
++    aio_req->oid = vid_to_data_oid(s->inode.vdi_id,
++                                   data_oid_to_idx(aio_req->oid));
++
++    /* check whether this request becomes a CoW one */
++    if (acb->aiocb_type == AIOCB_WRITE_UDATA) {
++        int idx = data_oid_to_idx(aio_req->oid);
++        AIOReq *areq;
++
++        if (s->inode.data_vdi_id[idx] == 0) {
++            create = true;
++            goto out;
++        }
++        if (is_data_obj_writable(&s->inode, idx)) {
++            goto out;
++        }
++
++        /* link to the pendng list if there is another CoW request to
++         * the same object */
++        QLIST_FOREACH(areq, &s->inflight_aio_head, aio_siblings) {
++            if (areq != aio_req && areq->oid == aio_req->oid) {
++                dprintf("simultaneous CoW to %" PRIx64 "\n", aio_req->oid);
++                QLIST_REMOVE(aio_req, aio_siblings);
++                QLIST_INSERT_HEAD(&s->pending_aio_head, aio_req, aio_siblings);
++                return SD_RES_SUCCESS;
++            }
++        }
++
++        aio_req->base_oid = vid_to_data_oid(s->inode.data_vdi_id[idx], idx);
++        aio_req->flags |= SD_FLAG_CMD_COW;
++        create = true;
++    }
++out:
++    return add_aio_request(s, aio_req, acb->qiov->iov, acb->qiov->niov,
++                           create, acb->aiocb_type);
++}
++
++
+ /* TODO Convert to fine grained options */
+ static QemuOptsList runtime_opts = {
+     .name = "sheepdog",
+-- 
+1.7.2.5
+
+

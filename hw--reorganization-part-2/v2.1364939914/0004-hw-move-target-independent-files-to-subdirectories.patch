@@ -1,0 +1,1861 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: 
+Date: Tue,  2 Apr 2013 16:58:38 +0200
+Message-id: 1364914749-11141-5-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 04/35] hw: move target-independent files to subdirectories
+
+This patch tackles all files that are compiled once, moving
+them to subdirectories of hw/.
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ default-configs/i386-softmmu.mak             |   2 +-
+ default-configs/mips-softmmu.mak             |   2 +-
+ default-configs/mips64-softmmu.mak           |   2 +-
+ default-configs/mips64el-softmmu.mak         |   2 +-
+ default-configs/mipsel-softmmu.mak           |   2 +-
+ default-configs/ppc-softmmu.mak              |   2 +-
+ default-configs/ppc64-softmmu.mak            |   2 +-
+ default-configs/ppcemb-softmmu.mak           |   2 +-
+ default-configs/x86_64-softmmu.mak           |   2 +-
+ hw/Makefile.objs                             | 197 ---------------------------
+ hw/acpi/Makefile.objs                        |   2 +
+ hw/{acpi.c => acpi/core.c}                   |   0
+ hw/{acpi_ich9.c => acpi/ich9.c}              |   0
+ hw/{acpi_piix4.c => acpi/piix4.c}            |   0
+ hw/audio/Makefile.objs                       |  16 +++
+ hw/{ => audio}/ac97.c                        |   0
+ hw/{ => audio}/adlib.c                       |   0
+ hw/{ => audio}/cs4231a.c                     |   0
+ hw/{ => audio}/es1370.c                      |   0
+ hw/{ => audio}/fmopl.c                       |   0
+ hw/{ => audio}/gus.c                         |   0
+ hw/{ => audio}/gusemu_hal.c                  |   0
+ hw/{ => audio}/gusemu_mixer.c                |   0
+ hw/{hda-audio.c => audio/hda-codec.c}        |   0
+ hw/{ => audio}/intel-hda.c                   |   0
+ hw/{ => audio}/lm4549.c                      |   0
+ hw/{ => audio}/pcspk.c                       |   0
+ hw/{ => audio}/pl041.c                       |   0
+ hw/{ => audio}/pl041.hx                      |   0
+ hw/{ => audio}/sb16.c                        |   0
+ hw/{ => audio}/wm8750.c                      |   0
+ hw/block/Makefile.objs                       |   8 ++
+ hw/{block-common.c => block/block.c}         |   0
+ hw/{ => block}/cdrom.c                       |   0
+ hw/{ => block}/ecc.c                         |   0
+ hw/{ => block}/fdc.c                         |   0
+ hw/{ => block}/hd-geometry.c                 |   0
+ hw/{ => block}/m25p80.c                      |   0
+ hw/{ => block}/nand.c                        |   0
+ hw/{ => block}/pflash_cfi01.c                |   0
+ hw/{ => block}/pflash_cfi02.c                |   0
+ hw/{ => block}/xen_disk.c                    |   0
+ hw/bt/Makefile.objs                          |   3 +
+ hw/{bt.c => bt/core.c}                       |   0
+ hw/{bt-hci-csr.c => bt/hci-csr.c}            |   0
+ hw/{bt-hci.c => bt/hci.c}                    |   0
+ hw/{bt-hid.c => bt/hid.c}                    |   0
+ hw/{bt-l2cap.c => bt/l2cap.c}                |   0
+ hw/{bt-sdp.c => bt/sdp.c}                    |   0
+ hw/char/Makefile.objs                        |  10 ++
+ hw/{ => char}/cadence_uart.c                 |   0
+ hw/{ => char}/escc.c                         |   0
+ hw/{ => char}/ipack.c                        |   0
+ hw/{ => char}/ipoctal232.c                   |   0
+ hw/{ => char}/parallel.c                     |   0
+ hw/{ => char}/pl011.c                        |   0
+ hw/{ => char}/serial-isa.c                   |   0
+ hw/{ => char}/serial-pci.c                   |   0
+ hw/{ => char}/serial.c                       |   0
+ hw/{ => char}/tpci200.c                      |   0
+ hw/{ => char}/virtio-console.c               |   0
+ hw/{ => char}/xen_console.c                  |   0
+ hw/{ => char}/xilinx_uartlite.c              |   0
+ hw/core/Makefile.objs                        |  14 ++
+ hw/{ => core}/empty_slot.c                   |   0
+ hw/{ => core}/irq.c                          |   0
+ hw/{ => core}/loader.c                       |   0
+ hw/{ => core}/null-machine.c                 |   0
+ hw/{ => core}/ptimer.c                       |   0
+ hw/{ => core}/qdev-addr.c                    |   0
+ hw/{ => core}/qdev-properties-system.c       |   0
+ hw/{ => core}/qdev-properties.c              |   0
+ hw/{ => core}/qdev.c                         |   0
+ hw/{ => core}/stream.c                       |   0
+ hw/{ => core}/sysbus.c                       |   0
+ hw/display/Makefile.objs                     |  13 ++
+ hw/{ => display}/ads7846.c                   |   0
+ hw/{ => display}/cirrus_vga.c                |   0
+ hw/{ => display}/g364fb.c                    |   0
+ hw/{ => display}/jazz_led.c                  |   0
+ hw/{ => display}/pl110.c                     |   0
+ hw/{ => display}/ssd0303.c                   |   0
+ hw/{ => display}/ssd0323.c                   |   0
+ hw/{ => display}/vga-isa-mm.c                |   0
+ hw/{ => display}/vga-isa.c                   |   0
+ hw/{ => display}/vga-pci.c                   |   0
+ hw/{ => display}/vmware_vga.c                |   0
+ hw/{ => display}/xenfb.c                     |   0
+ hw/dma/Makefile.objs                         |   6 +
+ hw/{dma.c => dma/i8257.c}                    |   0
+ hw/{ => dma}/pl080.c                         |   0
+ hw/{ => dma}/pl330.c                         |   0
+ hw/{ => dma}/puv3_dma.c                      |   0
+ hw/{ => dma}/rc4030.c                        |   0
+ hw/{ => dma}/xilinx_axidma.c                 |   0
+ hw/gpio/Makefile.objs                        |   3 +
+ hw/{ => gpio}/max7310.c                      |   0
+ hw/{ => gpio}/pl061.c                        |   0
+ hw/{ => gpio}/puv3_gpio.c                    |   0
+ hw/i2c/Makefile.objs                         |   4 +
+ hw/{i2c.c => i2c/core.c}                     |   0
+ hw/{ => i2c}/pm_smbus.c                      |   0
+ hw/{ => i2c}/smbus.c                         |   0
+ hw/{ => i2c}/smbus_eeprom.c                  |   0
+ hw/{ => i2c}/smbus_ich9.c                    |   0
+ hw/{ => i2c}/versatile_i2c.c                 |   0
+ hw/input/Makefile.objs                       |   9 ++
+ hw/{ => input}/adb.c                         |   0
+ hw/{ => input}/hid.c                         |   0
+ hw/{ => input}/lm832x.c                      |   0
+ hw/{ => input}/pckbd.c                       |   0
+ hw/{ => input}/pl050.c                       |   0
+ hw/{ => input}/ps2.c                         |   0
+ hw/{ => input}/stellaris_input.c             |   0
+ hw/{ => input}/tsc2005.c                     |   0
+ hw/{ => input}/vmmouse.c                     |   0
+ hw/intc/Makefile.objs                        |   5 +
+ hw/{ => intc}/heathrow_pic.c                 |   0
+ hw/{ => intc}/i8259.c                        |   0
+ hw/{ => intc}/i8259_common.c                 |   0
+ hw/{ => intc}/pl190.c                        |   0
+ hw/{ => intc}/puv3_intc.c                    |   0
+ hw/{ => intc}/xilinx_intc.c                  |   0
+ hw/isa/Makefile.objs                         |   9 ++
+ hw/{ => isa}/apm.c                           |   0
+ hw/{ => isa}/applesmc.c                      |   0
+ hw/{ => isa}/i82374.c                        |   0
+ hw/{ => isa}/i82378.c                        |   0
+ hw/{ => isa}/isa-bus.c                       |   0
+ hw/{ => isa}/isa_mmio.c                      |   0
+ hw/{ => isa}/pc87312.c                       |   0
+ hw/{ => isa}/piix4.c                         |   0
+ hw/misc/Makefile.objs                        |  10 ++
+ hw/{ => misc}/arm_l2x0.c                     |   0
+ hw/misc/macio/Makefile.objs                  |   3 +
+ hw/{ => misc/macio}/cuda.c                   |   0
+ hw/{ => misc/macio}/mac_dbdma.c              |   0
+ hw/{ => misc/macio}/macio.c                  |   0
+ hw/{ => misc}/max111x.c                      |   0
+ hw/{ => misc}/puv3_pm.c                      |   0
+ hw/{ => misc}/tmp105.c                       |   0
+ hw/net/Makefile.objs                         |  22 +++
+ hw/{ => net}/cadence_gem.c                   |   0
+ hw/{ => net}/dp8393x.c                       |   0
+ hw/{ => net}/e1000.c                         |   0
+ hw/{ => net}/eepro100.c                      |   0
+ hw/{ => net}/lan9118.c                       |   0
+ hw/{ => net}/mipsnet.c                       |   0
+ hw/{ => net}/ne2000-isa.c                    |   0
+ hw/{ => net}/ne2000.c                        |   0
+ hw/{ => net}/opencores_eth.c                 |   0
+ hw/{ => net}/pcnet-pci.c                     |   0
+ hw/{ => net}/pcnet.c                         |   0
+ hw/{ => net}/rtl8139.c                       |   0
+ hw/{ => net}/smc91c111.c                     |   0
+ hw/{ => net}/vmware_utils.h                  |   0
+ hw/{ => net}/vmxnet3.c                       |   0
+ hw/{ => net}/vmxnet3.h                       |   0
+ hw/{ => net}/vmxnet_debug.h                  |   0
+ hw/{ => net}/vmxnet_rx_pkt.c                 |   0
+ hw/{ => net}/vmxnet_rx_pkt.h                 |   0
+ hw/{ => net}/vmxnet_tx_pkt.c                 |   0
+ hw/{ => net}/vmxnet_tx_pkt.h                 |   0
+ hw/{ => net}/xen_nic.c                       |   0
+ hw/{ => net}/xgmac.c                         |   0
+ hw/{ => net}/xilinx_axienet.c                |   0
+ hw/nvram/Makefile.objs                       |   4 +
+ hw/{ => nvram}/ds1225y.c                     |   0
+ hw/{ => nvram}/eeprom93xx.c                  |   0
+ hw/{ => nvram}/fw_cfg.c                      |   0
+ hw/{ => nvram}/mac_nvram.c                   |   0
+ hw/pci/Makefile.objs                         |  21 ++-
+ hw/{dec_pci.c => pci/host-dec.c}             |   0
+ hw/{grackle_pci.c => pci/host-grackle.c}     |   0
+ hw/{ppce500_pci.c => pci/host-ppce500.c}     |   0
+ hw/{prep_pci.c => pci/host-prep.c}           |   0
+ hw/{unin_pci.c => pci/host-uninorth.c}       |   0
+ hw/{versatile_pci.c => pci/host-versatile.c} |   0
+ hw/{ => pci}/i82801b11.c                     |   0
+ hw/{ => pci}/ioh3420.c                       |   0
+ hw/{ => pci}/pam.c                           |   0
+ hw/{ => pci}/pci_bridge_dev.c                |   0
+ hw/{ => pci}/xio3130_downstream.c            |   0
+ hw/{ => pci}/xio3130_upstream.c              |   0
+ hw/scsi/Makefile.objs                        |   6 +
+ hw/{ => scsi}/esp-pci.c                      |   0
+ hw/{ => scsi}/esp.c                          |   0
+ hw/{ => scsi}/lsi53c895a.c                   |   0
+ hw/{ => scsi}/megasas.c                      |   0
+ hw/{ => scsi}/scsi-bus.c                     |   0
+ hw/{ => scsi}/scsi-disk.c                    |   0
+ hw/{ => scsi}/scsi-generic.c                 |   0
+ hw/sd/Makefile.objs                          |   4 +
+ hw/{ => sd}/pl181.c                          |   0
+ hw/{ => sd}/sd.c                             |   0
+ hw/{ => sd}/sdhci.c                          |   0
+ hw/{ => sd}/ssi-sd.c                         |   0
+ hw/ssi/Makefile.objs                         |   2 +
+ hw/{ => ssi}/pl022.c                         |   0
+ hw/{ => ssi}/ssi.c                           |   0
+ hw/timer/Makefile.objs                       |  10 ++
+ hw/{ => timer}/arm_timer.c                   |   0
+ hw/{ => timer}/cadence_ttc.c                 |   0
+ hw/{ => timer}/ds1338.c                      |   0
+ hw/{ => timer}/hpet.c                        |   0
+ hw/{ => timer}/i8254.c                       |   0
+ hw/{ => timer}/i8254_common.c                |   0
+ hw/{ => timer}/m48t59.c                      |   0
+ hw/{ => timer}/pl031.c                       |   0
+ hw/{ => timer}/puv3_ost.c                    |   0
+ hw/{ => timer}/twl92230.c                    |   0
+ hw/{ => timer}/xilinx_timer.c                |   0
+ hw/usb/Makefile.objs                         |   7 +-
+ hw/{ => usb}/ccid-card-emulated.c            |   0
+ hw/{ => usb}/ccid-card-passthru.c            |   0
+ hw/virtio/Makefile.objs                      |   4 +
+ hw/{ => virtio}/virtio-bus.c                 |   0
+ hw/{ => virtio}/virtio-pci.c                 |   0
+ hw/{ => virtio}/virtio-rng.c                 |   0
+ hw/watchdog/Makefile.objs                    |   2 +
+ hw/{ => watchdog}/watchdog.c                 |   0
+ hw/{ => watchdog}/wdt_i6300esb.c             |   0
+ hw/xen/Makefile.objs                         |   2 +
+ hw/{ => xen}/xen_backend.c                   |   0
+ hw/{ => xen}/xen_devconfig.c                 |   0
+ 225 files changed, 206 insertions(+), 208 deletions(-)
+ rename hw/{acpi.c => acpi/core.c} (100%)
+ rename hw/{acpi_ich9.c => acpi/ich9.c} (100%)
+ rename hw/{acpi_piix4.c => acpi/piix4.c} (100%)
+ rename hw/{ => audio}/ac97.c (100%)
+ rename hw/{ => audio}/adlib.c (100%)
+ rename hw/{ => audio}/cs4231a.c (100%)
+ rename hw/{ => audio}/es1370.c (100%)
+ rename hw/{ => audio}/fmopl.c (100%)
+ rename hw/{ => audio}/gus.c (100%)
+ rename hw/{ => audio}/gusemu_hal.c (100%)
+ rename hw/{ => audio}/gusemu_mixer.c (100%)
+ rename hw/{hda-audio.c => audio/hda-codec.c} (100%)
+ rename hw/{ => audio}/intel-hda.c (100%)
+ rename hw/{ => audio}/lm4549.c (100%)
+ rename hw/{ => audio}/pcspk.c (100%)
+ rename hw/{ => audio}/pl041.c (100%)
+ rename hw/{ => audio}/pl041.hx (100%)
+ rename hw/{ => audio}/sb16.c (100%)
+ rename hw/{ => audio}/wm8750.c (100%)
+ rename hw/{block-common.c => block/block.c} (100%)
+ rename hw/{ => block}/cdrom.c (100%)
+ rename hw/{ => block}/ecc.c (100%)
+ rename hw/{ => block}/fdc.c (100%)
+ rename hw/{ => block}/hd-geometry.c (100%)
+ rename hw/{ => block}/m25p80.c (100%)
+ rename hw/{ => block}/nand.c (100%)
+ rename hw/{ => block}/pflash_cfi01.c (100%)
+ rename hw/{ => block}/pflash_cfi02.c (100%)
+ rename hw/{ => block}/xen_disk.c (100%)
+ rename hw/{bt.c => bt/core.c} (100%)
+ rename hw/{bt-hci-csr.c => bt/hci-csr.c} (100%)
+ rename hw/{bt-hci.c => bt/hci.c} (100%)
+ rename hw/{bt-hid.c => bt/hid.c} (100%)
+ rename hw/{bt-l2cap.c => bt/l2cap.c} (100%)
+ rename hw/{bt-sdp.c => bt/sdp.c} (100%)
+ rename hw/{ => char}/cadence_uart.c (100%)
+ rename hw/{ => char}/escc.c (100%)
+ rename hw/{ => char}/ipack.c (100%)
+ rename hw/{ => char}/ipoctal232.c (100%)
+ rename hw/{ => char}/parallel.c (100%)
+ rename hw/{ => char}/pl011.c (100%)
+ rename hw/{ => char}/serial-isa.c (100%)
+ rename hw/{ => char}/serial-pci.c (100%)
+ rename hw/{ => char}/serial.c (100%)
+ rename hw/{ => char}/tpci200.c (100%)
+ rename hw/{ => char}/virtio-console.c (100%)
+ rename hw/{ => char}/xen_console.c (100%)
+ rename hw/{ => char}/xilinx_uartlite.c (100%)
+ rename hw/{ => core}/empty_slot.c (100%)
+ rename hw/{ => core}/irq.c (100%)
+ rename hw/{ => core}/loader.c (100%)
+ rename hw/{ => core}/null-machine.c (100%)
+ rename hw/{ => core}/ptimer.c (100%)
+ rename hw/{ => core}/qdev-addr.c (100%)
+ rename hw/{ => core}/qdev-properties-system.c (100%)
+ rename hw/{ => core}/qdev-properties.c (100%)
+ rename hw/{ => core}/qdev.c (100%)
+ rename hw/{ => core}/stream.c (100%)
+ rename hw/{ => core}/sysbus.c (100%)
+ rename hw/{ => display}/ads7846.c (100%)
+ rename hw/{ => display}/cirrus_vga.c (100%)
+ rename hw/{ => display}/g364fb.c (100%)
+ rename hw/{ => display}/jazz_led.c (100%)
+ rename hw/{ => display}/pl110.c (100%)
+ rename hw/{ => display}/ssd0303.c (100%)
+ rename hw/{ => display}/ssd0323.c (100%)
+ rename hw/{ => display}/vga-isa-mm.c (100%)
+ rename hw/{ => display}/vga-isa.c (100%)
+ rename hw/{ => display}/vga-pci.c (100%)
+ rename hw/{ => display}/vmware_vga.c (100%)
+ rename hw/{ => display}/xenfb.c (100%)
+ rename hw/{dma.c => dma/i8257.c} (100%)
+ rename hw/{ => dma}/pl080.c (100%)
+ rename hw/{ => dma}/pl330.c (100%)
+ rename hw/{ => dma}/puv3_dma.c (100%)
+ rename hw/{ => dma}/rc4030.c (100%)
+ rename hw/{ => dma}/xilinx_axidma.c (100%)
+ rename hw/{ => gpio}/max7310.c (100%)
+ rename hw/{ => gpio}/pl061.c (100%)
+ rename hw/{ => gpio}/puv3_gpio.c (100%)
+ rename hw/{i2c.c => i2c/core.c} (100%)
+ rename hw/{ => i2c}/pm_smbus.c (100%)
+ rename hw/{ => i2c}/smbus.c (100%)
+ rename hw/{ => i2c}/smbus_eeprom.c (100%)
+ rename hw/{ => i2c}/smbus_ich9.c (100%)
+ rename hw/{ => i2c}/versatile_i2c.c (100%)
+ rename hw/{ => input}/adb.c (100%)
+ rename hw/{ => input}/hid.c (100%)
+ rename hw/{ => input}/lm832x.c (100%)
+ rename hw/{ => input}/pckbd.c (100%)
+ rename hw/{ => input}/pl050.c (100%)
+ rename hw/{ => input}/ps2.c (100%)
+ rename hw/{ => input}/stellaris_input.c (100%)
+ rename hw/{ => input}/tsc2005.c (100%)
+ rename hw/{ => input}/vmmouse.c (100%)
+ rename hw/{ => intc}/heathrow_pic.c (100%)
+ rename hw/{ => intc}/i8259.c (100%)
+ rename hw/{ => intc}/i8259_common.c (100%)
+ rename hw/{ => intc}/pl190.c (100%)
+ rename hw/{ => intc}/puv3_intc.c (100%)
+ rename hw/{ => intc}/xilinx_intc.c (100%)
+ rename hw/{ => isa}/apm.c (100%)
+ rename hw/{ => isa}/applesmc.c (100%)
+ rename hw/{ => isa}/i82374.c (100%)
+ rename hw/{ => isa}/i82378.c (100%)
+ rename hw/{ => isa}/isa-bus.c (100%)
+ rename hw/{ => isa}/isa_mmio.c (100%)
+ rename hw/{ => isa}/pc87312.c (100%)
+ rename hw/{ => isa}/piix4.c (100%)
+ rename hw/{ => misc}/arm_l2x0.c (100%)
+ create mode 100644 hw/misc/macio/Makefile.objs
+ rename hw/{ => misc/macio}/cuda.c (100%)
+ rename hw/{ => misc/macio}/mac_dbdma.c (100%)
+ rename hw/{ => misc/macio}/macio.c (100%)
+ rename hw/{ => misc}/max111x.c (100%)
+ rename hw/{ => misc}/puv3_pm.c (100%)
+ rename hw/{ => misc}/tmp105.c (100%)
+ rename hw/{ => net}/cadence_gem.c (100%)
+ rename hw/{ => net}/dp8393x.c (100%)
+ rename hw/{ => net}/e1000.c (100%)
+ rename hw/{ => net}/eepro100.c (100%)
+ rename hw/{ => net}/lan9118.c (100%)
+ rename hw/{ => net}/mipsnet.c (100%)
+ rename hw/{ => net}/ne2000-isa.c (100%)
+ rename hw/{ => net}/ne2000.c (100%)
+ rename hw/{ => net}/opencores_eth.c (100%)
+ rename hw/{ => net}/pcnet-pci.c (100%)
+ rename hw/{ => net}/pcnet.c (100%)
+ rename hw/{ => net}/rtl8139.c (100%)
+ rename hw/{ => net}/smc91c111.c (100%)
+ rename hw/{ => net}/vmware_utils.h (100%)
+ rename hw/{ => net}/vmxnet3.c (100%)
+ rename hw/{ => net}/vmxnet3.h (100%)
+ rename hw/{ => net}/vmxnet_debug.h (100%)
+ rename hw/{ => net}/vmxnet_rx_pkt.c (100%)
+ rename hw/{ => net}/vmxnet_rx_pkt.h (100%)
+ rename hw/{ => net}/vmxnet_tx_pkt.c (100%)
+ rename hw/{ => net}/vmxnet_tx_pkt.h (100%)
+ rename hw/{ => net}/xen_nic.c (100%)
+ rename hw/{ => net}/xgmac.c (100%)
+ rename hw/{ => net}/xilinx_axienet.c (100%)
+ rename hw/{ => nvram}/ds1225y.c (100%)
+ rename hw/{ => nvram}/eeprom93xx.c (100%)
+ rename hw/{ => nvram}/fw_cfg.c (100%)
+ rename hw/{ => nvram}/mac_nvram.c (100%)
+ rename hw/{dec_pci.c => pci/host-dec.c} (100%)
+ rename hw/{grackle_pci.c => pci/host-grackle.c} (100%)
+ rename hw/{ppce500_pci.c => pci/host-ppce500.c} (100%)
+ rename hw/{prep_pci.c => pci/host-prep.c} (100%)
+ rename hw/{unin_pci.c => pci/host-uninorth.c} (100%)
+ rename hw/{versatile_pci.c => pci/host-versatile.c} (100%)
+ rename hw/{ => pci}/i82801b11.c (100%)
+ rename hw/{ => pci}/ioh3420.c (100%)
+ rename hw/{ => pci}/pam.c (100%)
+ rename hw/{ => pci}/pci_bridge_dev.c (100%)
+ rename hw/{ => pci}/xio3130_downstream.c (100%)
+ rename hw/{ => pci}/xio3130_upstream.c (100%)
+ rename hw/{ => scsi}/esp-pci.c (100%)
+ rename hw/{ => scsi}/esp.c (100%)
+ rename hw/{ => scsi}/lsi53c895a.c (100%)
+ rename hw/{ => scsi}/megasas.c (100%)
+ rename hw/{ => scsi}/scsi-bus.c (100%)
+ rename hw/{ => scsi}/scsi-disk.c (100%)
+ rename hw/{ => scsi}/scsi-generic.c (100%)
+ rename hw/{ => sd}/pl181.c (100%)
+ rename hw/{ => sd}/sd.c (100%)
+ rename hw/{ => sd}/sdhci.c (100%)
+ rename hw/{ => sd}/ssi-sd.c (100%)
+ rename hw/{ => ssi}/pl022.c (100%)
+ rename hw/{ => ssi}/ssi.c (100%)
+ rename hw/{ => timer}/arm_timer.c (100%)
+ rename hw/{ => timer}/cadence_ttc.c (100%)
+ rename hw/{ => timer}/ds1338.c (100%)
+ rename hw/{ => timer}/hpet.c (100%)
+ rename hw/{ => timer}/i8254.c (100%)
+ rename hw/{ => timer}/i8254_common.c (100%)
+ rename hw/{ => timer}/m48t59.c (100%)
+ rename hw/{ => timer}/pl031.c (100%)
+ rename hw/{ => timer}/puv3_ost.c (100%)
+ rename hw/{ => timer}/twl92230.c (100%)
+ rename hw/{ => timer}/xilinx_timer.c (100%)
+ rename hw/{ => usb}/ccid-card-emulated.c (100%)
+ rename hw/{ => usb}/ccid-card-passthru.c (100%)
+ rename hw/{ => virtio}/virtio-bus.c (100%)
+ rename hw/{ => virtio}/virtio-pci.c (100%)
+ rename hw/{ => virtio}/virtio-rng.c (100%)
+ rename hw/{ => watchdog}/watchdog.c (100%)
+ rename hw/{ => watchdog}/wdt_i6300esb.c (100%)
+ rename hw/{ => xen}/xen_backend.c (100%)
+ rename hw/{ => xen}/xen_devconfig.c (100%)
+
+diff --git a/default-configs/i386-softmmu.mak b/default-configs/i386-softmmu.mak
+index df9e126..a2658cd 100644
+--- a/default-configs/i386-softmmu.mak
++++ b/default-configs/i386-softmmu.mak
+@@ -16,7 +16,7 @@ CONFIG_PCKBD=y
+ CONFIG_FDC=y
+ CONFIG_ACPI=y
+ CONFIG_APM=y
+-CONFIG_DMA=y
++CONFIG_I8257=y
+ CONFIG_IDE_ISA=y
+ CONFIG_IDE_PIIX=y
+ CONFIG_NE2000_ISA=y
+diff --git a/default-configs/mips-softmmu.mak b/default-configs/mips-softmmu.mak
+index 4f04a33..dff6fef 100644
+--- a/default-configs/mips-softmmu.mak
++++ b/default-configs/mips-softmmu.mak
+@@ -18,7 +18,7 @@ CONFIG_PCKBD=y
+ CONFIG_FDC=y
+ CONFIG_ACPI=y
+ CONFIG_APM=y
+-CONFIG_DMA=y
++CONFIG_I8257=y
+ CONFIG_PIIX4=y
+ CONFIG_IDE_ISA=y
+ CONFIG_IDE_PIIX=y
+diff --git a/default-configs/mips64-softmmu.mak b/default-configs/mips64-softmmu.mak
+index a5b6c3c..0968e5f 100644
+--- a/default-configs/mips64-softmmu.mak
++++ b/default-configs/mips64-softmmu.mak
+@@ -18,7 +18,7 @@ CONFIG_PCKBD=y
+ CONFIG_FDC=y
+ CONFIG_ACPI=y
+ CONFIG_APM=y
+-CONFIG_DMA=y
++CONFIG_I8257=y
+ CONFIG_PIIX4=y
+ CONFIG_IDE_ISA=y
+ CONFIG_IDE_PIIX=y
+diff --git a/default-configs/mips64el-softmmu.mak b/default-configs/mips64el-softmmu.mak
+index a0e6de8..6f115d4 100644
+--- a/default-configs/mips64el-softmmu.mak
++++ b/default-configs/mips64el-softmmu.mak
+@@ -18,7 +18,7 @@ CONFIG_PCKBD=y
+ CONFIG_FDC=y
+ CONFIG_ACPI=y
+ CONFIG_APM=y
+-CONFIG_DMA=y
++CONFIG_I8257=y
+ CONFIG_PIIX4=y
+ CONFIG_IDE_ISA=y
+ CONFIG_IDE_PIIX=y
+diff --git a/default-configs/mipsel-softmmu.mak b/default-configs/mipsel-softmmu.mak
+index 753dd76..e391cf7 100644
+--- a/default-configs/mipsel-softmmu.mak
++++ b/default-configs/mipsel-softmmu.mak
+@@ -18,7 +18,7 @@ CONFIG_PCKBD=y
+ CONFIG_FDC=y
+ CONFIG_ACPI=y
+ CONFIG_APM=y
+-CONFIG_DMA=y
++CONFIG_I8257=y
+ CONFIG_PIIX4=y
+ CONFIG_IDE_ISA=y
+ CONFIG_IDE_PIIX=y
+diff --git a/default-configs/ppc-softmmu.mak b/default-configs/ppc-softmmu.mak
+index c209a8d..cdf82b1 100644
+--- a/default-configs/ppc-softmmu.mak
++++ b/default-configs/ppc-softmmu.mak
+@@ -13,7 +13,7 @@ CONFIG_PARALLEL=y
+ CONFIG_I8254=y
+ CONFIG_PCKBD=y
+ CONFIG_FDC=y
+-CONFIG_DMA=y
++CONFIG_I8257=y
+ CONFIG_I82374=y
+ CONFIG_OPENPIC=y
+ CONFIG_PREP_PCI=y
+diff --git a/default-configs/ppc64-softmmu.mak b/default-configs/ppc64-softmmu.mak
+index 8d490bd..ee895e9 100644
+--- a/default-configs/ppc64-softmmu.mak
++++ b/default-configs/ppc64-softmmu.mak
+@@ -13,7 +13,7 @@ CONFIG_PARALLEL=y
+ CONFIG_I8254=y
+ CONFIG_PCKBD=y
+ CONFIG_FDC=y
+-CONFIG_DMA=y
++CONFIG_I8257=y
+ CONFIG_I82374=y
+ CONFIG_OPENPIC=y
+ CONFIG_PREP_PCI=y
+diff --git a/default-configs/ppcemb-softmmu.mak b/default-configs/ppcemb-softmmu.mak
+index 7f13421..806adfd 100644
+--- a/default-configs/ppcemb-softmmu.mak
++++ b/default-configs/ppcemb-softmmu.mak
+@@ -12,7 +12,7 @@ CONFIG_SERIAL=y
+ CONFIG_I8254=y
+ CONFIG_PCKBD=y
+ CONFIG_FDC=y
+-CONFIG_DMA=y
++CONFIG_I8257=y
+ CONFIG_OPENPIC=y
+ CONFIG_PREP_PCI=y
+ CONFIG_MACIO=y
+diff --git a/default-configs/x86_64-softmmu.mak b/default-configs/x86_64-softmmu.mak
+index ab3cd5f..fe4b70b 100644
+--- a/default-configs/x86_64-softmmu.mak
++++ b/default-configs/x86_64-softmmu.mak
+@@ -16,7 +16,7 @@ CONFIG_PCKBD=y
+ CONFIG_FDC=y
+ CONFIG_ACPI=y
+ CONFIG_APM=y
+-CONFIG_DMA=y
++CONFIG_I8257=y
+ CONFIG_IDE_ISA=y
+ CONFIG_IDE_PIIX=y
+ CONFIG_NE2000_ISA=y
+diff --git a/hw/Makefile.objs b/hw/Makefile.objs
+index 39d60ec..d208a5d 100644
+--- a/hw/Makefile.objs
++++ b/hw/Makefile.objs
+@@ -1,8 +1,3 @@
+-# core qdev-related obj files, also used by *-user:
+-common-obj-y += qdev.o qdev-properties.o
+-# irq.o needed for qdev GPIO handling:
+-common-obj-y += irq.o
+-
+ devices-dirs-$(CONFIG_REALLY_VIRTFS) += 9pfs/
+ devices-dirs-$(CONFIG_ACPI) += acpi/
+ devices-dirs-$(CONFIG_SOFTMMU) += audio/
+@@ -35,198 +30,6 @@ common-obj-y += $(devices-dirs-y)
+ obj-y += $(devices-dirs-y)
+ 
+ ifeq ($(CONFIG_SOFTMMU),y)
+-common-obj-y += loader.o
+-common-obj-$(CONFIG_VIRTIO) += virtio-console.o
+-common-obj-$(CONFIG_VIRTIO) += virtio-rng.o
+-common-obj-$(CONFIG_VIRTIO_PCI) += virtio-pci.o
+-common-obj-$(CONFIG_VIRTIO) += virtio-bus.o
+-common-obj-y += fw_cfg.o
+-common-obj-$(CONFIG_PCI) += pci_bridge_dev.o
+-common-obj-$(CONFIG_PCI) += ioh3420.o xio3130_upstream.o xio3130_downstream.o
+-common-obj-$(CONFIG_PCI) += i82801b11.o
+-common-obj-y += watchdog.o
+-common-obj-$(CONFIG_ISA_MMIO) += isa_mmio.o
+-common-obj-$(CONFIG_ECC) += ecc.o
+-common-obj-$(CONFIG_NAND) += nand.o
+-common-obj-$(CONFIG_PFLASH_CFI01) += pflash_cfi01.o
+-common-obj-$(CONFIG_PFLASH_CFI02) += pflash_cfi02.o
+-
+-common-obj-$(CONFIG_M48T59) += m48t59.o
+-common-obj-$(CONFIG_ESCC) += escc.o
+-common-obj-$(CONFIG_EMPTY_SLOT) += empty_slot.o
+-
+-common-obj-$(CONFIG_SERIAL) += serial.o serial-isa.o
+-common-obj-$(CONFIG_SERIAL_PCI) += serial-pci.o
+-common-obj-$(CONFIG_PARALLEL) += parallel.o
+-common-obj-$(CONFIG_I8254) += i8254_common.o i8254.o
+-common-obj-$(CONFIG_PCSPK) += pcspk.o
+-common-obj-$(CONFIG_PCKBD) += pckbd.o
+-common-obj-$(CONFIG_FDC) += fdc.o
+-common-obj-$(CONFIG_ACPI) += acpi.o acpi_piix4.o acpi_ich9.o smbus_ich9.o
+-common-obj-$(CONFIG_APM) += pm_smbus.o apm.o
+-common-obj-$(CONFIG_DMA) += dma.o
+-common-obj-$(CONFIG_I82374) += i82374.o
+-common-obj-$(CONFIG_HPET) += hpet.o
+-common-obj-$(CONFIG_APPLESMC) += applesmc.o
+-ifeq ($(CONFIG_USB_SMARTCARD),y)
+-common-obj-y += ccid-card-passthru.o
+-common-obj-$(CONFIG_SMARTCARD_NSS) += ccid-card-emulated.o
+-endif
+-common-obj-$(CONFIG_I8259) += i8259_common.o i8259.o
+-common-obj-$(CONFIG_SDHCI) += sdhci.o
+-common-obj-y += pam.o
+-
+-# PPC devices
+-common-obj-$(CONFIG_PREP_PCI) += prep_pci.o
+-common-obj-$(CONFIG_I82378) += i82378.o
+-common-obj-$(CONFIG_PC87312) += pc87312.o
+-# Mac shared devices
+-common-obj-$(CONFIG_MACIO) += macio.o
+-common-obj-$(CONFIG_CUDA) += cuda.o
+-common-obj-$(CONFIG_ADB) += adb.o
+-common-obj-$(CONFIG_MAC_NVRAM) += mac_nvram.o
+-common-obj-$(CONFIG_MAC_DBDMA) += mac_dbdma.o
+-# OldWorld PowerMac
+-common-obj-$(CONFIG_HEATHROW_PIC) += heathrow_pic.o
+-common-obj-$(CONFIG_GRACKLE_PCI) += grackle_pci.o
+-# NewWorld PowerMac
+-common-obj-$(CONFIG_UNIN_PCI) += unin_pci.o
+-common-obj-$(CONFIG_DEC_PCI) += dec_pci.o
+-# PowerPC E500 boards
+-common-obj-$(CONFIG_PPCE500_PCI) += ppce500_pci.o
+-
+-# MIPS devices
+-common-obj-$(CONFIG_PIIX4) += piix4.o
+-common-obj-$(CONFIG_G364FB) += g364fb.o
+-common-obj-$(CONFIG_JAZZ_LED) += jazz_led.o
+-
+-# Xilinx devices
+-common-obj-$(CONFIG_XILINX) += xilinx_intc.o
+-common-obj-$(CONFIG_XILINX) += xilinx_timer.o
+-common-obj-$(CONFIG_XILINX) += xilinx_uartlite.o
+-common-obj-$(CONFIG_XILINX_AXI) += xilinx_axidma.o
+-common-obj-$(CONFIG_XILINX_AXI) += xilinx_axienet.o
+-common-obj-$(CONFIG_XILINX_AXI) += stream.o
+-
+-# PKUnity SoC devices
+-common-obj-$(CONFIG_PUV3) += puv3_intc.o
+-common-obj-$(CONFIG_PUV3) += puv3_ost.o
+-common-obj-$(CONFIG_PUV3) += puv3_gpio.o
+-common-obj-$(CONFIG_PUV3) += puv3_pm.o
+-common-obj-$(CONFIG_PUV3) += puv3_dma.o
+-
+-# ARM devices
+-common-obj-$(CONFIG_ARM_TIMER) += arm_timer.o
+-common-obj-$(CONFIG_PL011) += pl011.o
+-common-obj-$(CONFIG_PL022) += pl022.o
+-common-obj-$(CONFIG_PL031) += pl031.o
+-common-obj-$(CONFIG_PL041) += pl041.o lm4549.o
+-common-obj-$(CONFIG_PL050) += pl050.o
+-common-obj-$(CONFIG_PL061) += pl061.o
+-common-obj-$(CONFIG_PL080) += pl080.o
+-common-obj-$(CONFIG_PL110) += pl110.o
+-common-obj-$(CONFIG_PL181) += pl181.o
+-common-obj-$(CONFIG_PL190) += pl190.o
+-common-obj-$(CONFIG_PL310) += arm_l2x0.o
+-common-obj-$(CONFIG_PL330) += pl330.o
+-common-obj-$(CONFIG_VERSATILE_PCI) += versatile_pci.o
+-common-obj-$(CONFIG_VERSATILE_I2C) += versatile_i2c.o
+-common-obj-$(CONFIG_CADENCE) += cadence_uart.o
+-common-obj-$(CONFIG_CADENCE) += cadence_ttc.o
+-common-obj-$(CONFIG_CADENCE) += cadence_gem.o
+-common-obj-$(CONFIG_XGMAC) += xgmac.o
+-
+-# PCI watchdog devices
+-common-obj-$(CONFIG_PCI) += wdt_i6300esb.o
+-
+-# IndustryPack
+-common-obj-$(CONFIG_IPACK) += tpci200.o ipoctal232.o ipack.o
+-
+-# PCI network cards
+-common-obj-$(CONFIG_NE2000_PCI) += ne2000.o
+-common-obj-$(CONFIG_EEPRO100_PCI) += eepro100.o
+-common-obj-$(CONFIG_PCNET_PCI) += pcnet-pci.o
+-common-obj-$(CONFIG_PCNET_COMMON) += pcnet.o
+-common-obj-$(CONFIG_E1000_PCI) += e1000.o
+-common-obj-$(CONFIG_RTL8139_PCI) += rtl8139.o
+-common-obj-$(CONFIG_VMXNET3_PCI) += vmxnet_tx_pkt.o vmxnet_rx_pkt.o
+-common-obj-$(CONFIG_VMXNET3_PCI) += vmxnet3.o
+-
+-common-obj-$(CONFIG_SMC91C111) += smc91c111.o
+-common-obj-$(CONFIG_LAN9118) += lan9118.o
+-common-obj-$(CONFIG_NE2000_ISA) += ne2000-isa.o
+-common-obj-$(CONFIG_OPENCORES_ETH) += opencores_eth.o
+-
+-# SCSI layer
+-common-obj-$(CONFIG_LSI_SCSI_PCI) += lsi53c895a.o
+-common-obj-$(CONFIG_MEGASAS_SCSI_PCI) += megasas.o
+-common-obj-$(CONFIG_ESP) += esp.o
+-common-obj-$(CONFIG_ESP_PCI) += esp-pci.o
+-
+-common-obj-y += sysbus.o isa-bus.o
+-common-obj-y += qdev-addr.o
+-
+-# VGA
+-common-obj-$(CONFIG_VGA_PCI) += vga-pci.o
+-common-obj-$(CONFIG_VGA_ISA) += vga-isa.o
+-common-obj-$(CONFIG_VGA_ISA_MM) += vga-isa-mm.o
+-common-obj-$(CONFIG_VMWARE_VGA) += vmware_vga.o
+-common-obj-$(CONFIG_VMMOUSE) += vmmouse.o
+-common-obj-$(CONFIG_VGA_CIRRUS) += cirrus_vga.o
+-
+-common-obj-$(CONFIG_RC4030) += rc4030.o
+-common-obj-$(CONFIG_DP8393X) += dp8393x.o
+-common-obj-$(CONFIG_DS1225Y) += ds1225y.o
+-common-obj-$(CONFIG_MIPSNET) += mipsnet.o
+-
+-common-obj-y += null-machine.o
+-
+-# Sound
+-sound-obj-y =
+-sound-obj-$(CONFIG_SB16) += sb16.o
+-sound-obj-$(CONFIG_ES1370) += es1370.o
+-sound-obj-$(CONFIG_AC97) += ac97.o
+-sound-obj-$(CONFIG_ADLIB) += fmopl.o adlib.o
+-sound-obj-$(CONFIG_GUS) += gus.o gusemu_hal.o gusemu_mixer.o
+-sound-obj-$(CONFIG_CS4231A) += cs4231a.o
+-sound-obj-$(CONFIG_HDA) += intel-hda.o hda-audio.o
+-
+-$(obj)/adlib.o $(obj)/fmopl.o: QEMU_CFLAGS += -DBUILD_Y8950=0
+-
+-common-obj-$(CONFIG_SOUND) += $(sound-obj-y)
+-
+-common-obj-$(CONFIG_REALLY_VIRTFS) += 9pfs/
+-
+-common-obj-$(CONFIG_PTIMER) += ptimer.o
+-common-obj-$(CONFIG_MAX7310) += max7310.o
+-common-obj-$(CONFIG_WM8750) += wm8750.o
+-common-obj-$(CONFIG_TWL92230) += twl92230.o
+-common-obj-$(CONFIG_TSC2005) += tsc2005.o
+-common-obj-$(CONFIG_LM832X) += lm832x.o
+-common-obj-$(CONFIG_TMP105) += tmp105.o
+-common-obj-$(CONFIG_STELLARIS_INPUT) += stellaris_input.o
+-common-obj-$(CONFIG_SSD0303) += ssd0303.o
+-common-obj-$(CONFIG_SSD0323) += ssd0323.o
+-common-obj-$(CONFIG_ADS7846) += ads7846.o
+-common-obj-$(CONFIG_MAX111X) += max111x.o
+-common-obj-$(CONFIG_DS1338) += ds1338.o
+-common-obj-y += i2c.o smbus.o smbus_eeprom.o
+-common-obj-y += eeprom93xx.o
+-common-obj-y += scsi-disk.o cdrom.o hd-geometry.o block-common.o
+-common-obj-y += scsi-generic.o scsi-bus.o
+-common-obj-y += hid.o
+-common-obj-$(CONFIG_SSI) += ssi.o
+-common-obj-$(CONFIG_SSI_M25P80) += m25p80.o
+-common-obj-$(CONFIG_SSI_SD) += ssi-sd.o
+-common-obj-$(CONFIG_SD) += sd.o
+-common-obj-y += bt.o bt-l2cap.o bt-sdp.o bt-hci.o bt-hid.o
+-common-obj-y += bt-hci-csr.o
+-common-obj-y += ps2.o
+-common-obj-y += qdev-properties-system.o
+-
+-# xen backend driver support
+-common-obj-$(CONFIG_XEN_BACKEND) += xen_backend.o xen_devconfig.o
+-common-obj-$(CONFIG_XEN_BACKEND) += xen_console.o xenfb.o xen_disk.o xen_nic.o
+ 
+ # Per-target files
+ # virtio has to be here due to weird dependency between PCI and virtio-net.
+diff --git a/hw/acpi/Makefile.objs b/hw/acpi/Makefile.objs
+index e69de29..a0b63b5 100644
+--- a/hw/acpi/Makefile.objs
++++ b/hw/acpi/Makefile.objs
+@@ -0,0 +1,2 @@
++common-obj-$(CONFIG_ACPI) += core.o piix4.o ich9.o
++
+diff --git a/hw/acpi.c b/hw/acpi/core.c
+similarity index 100%
+rename from hw/acpi.c
+rename to hw/acpi/core.c
+diff --git a/hw/acpi_ich9.c b/hw/acpi/ich9.c
+similarity index 100%
+rename from hw/acpi_ich9.c
+rename to hw/acpi/ich9.c
+diff --git a/hw/acpi_piix4.c b/hw/acpi/piix4.c
+similarity index 100%
+rename from hw/acpi_piix4.c
+rename to hw/acpi/piix4.c
+diff --git a/hw/audio/Makefile.objs b/hw/audio/Makefile.objs
+index e69de29..c50c367 100644
+--- a/hw/audio/Makefile.objs
++++ b/hw/audio/Makefile.objs
+@@ -0,0 +1,16 @@
++# Sound
++sound-obj-y =
++sound-obj-$(CONFIG_SB16) += sb16.o
++sound-obj-$(CONFIG_ES1370) += es1370.o
++sound-obj-$(CONFIG_AC97) += ac97.o
++sound-obj-$(CONFIG_ADLIB) += fmopl.o adlib.o
++sound-obj-$(CONFIG_GUS) += gus.o gusemu_hal.o gusemu_mixer.o
++sound-obj-$(CONFIG_CS4231A) += cs4231a.o
++sound-obj-$(CONFIG_HDA) += intel-hda.o hda-codec.o
++
++common-obj-$(CONFIG_SOUND) += $(sound-obj-y)
++common-obj-$(CONFIG_PCSPK) += pcspk.o
++common-obj-$(CONFIG_WM8750) += wm8750.o
++common-obj-$(CONFIG_PL041) += pl041.o lm4549.o
++
++$(obj)/adlib.o $(obj)/fmopl.o: QEMU_CFLAGS += -DBUILD_Y8950=0
+diff --git a/hw/ac97.c b/hw/audio/ac97.c
+similarity index 100%
+rename from hw/ac97.c
+rename to hw/audio/ac97.c
+diff --git a/hw/adlib.c b/hw/audio/adlib.c
+similarity index 100%
+rename from hw/adlib.c
+rename to hw/audio/adlib.c
+diff --git a/hw/cs4231a.c b/hw/audio/cs4231a.c
+similarity index 100%
+rename from hw/cs4231a.c
+rename to hw/audio/cs4231a.c
+diff --git a/hw/es1370.c b/hw/audio/es1370.c
+similarity index 100%
+rename from hw/es1370.c
+rename to hw/audio/es1370.c
+diff --git a/hw/fmopl.c b/hw/audio/fmopl.c
+similarity index 100%
+rename from hw/fmopl.c
+rename to hw/audio/fmopl.c
+diff --git a/hw/gus.c b/hw/audio/gus.c
+similarity index 100%
+rename from hw/gus.c
+rename to hw/audio/gus.c
+diff --git a/hw/gusemu_hal.c b/hw/audio/gusemu_hal.c
+similarity index 100%
+rename from hw/gusemu_hal.c
+rename to hw/audio/gusemu_hal.c
+diff --git a/hw/gusemu_mixer.c b/hw/audio/gusemu_mixer.c
+similarity index 100%
+rename from hw/gusemu_mixer.c
+rename to hw/audio/gusemu_mixer.c
+diff --git a/hw/hda-audio.c b/hw/audio/hda-codec.c
+similarity index 100%
+rename from hw/hda-audio.c
+rename to hw/audio/hda-codec.c
+diff --git a/hw/intel-hda.c b/hw/audio/intel-hda.c
+similarity index 100%
+rename from hw/intel-hda.c
+rename to hw/audio/intel-hda.c
+diff --git a/hw/lm4549.c b/hw/audio/lm4549.c
+similarity index 100%
+rename from hw/lm4549.c
+rename to hw/audio/lm4549.c
+diff --git a/hw/pcspk.c b/hw/audio/pcspk.c
+similarity index 100%
+rename from hw/pcspk.c
+rename to hw/audio/pcspk.c
+diff --git a/hw/pl041.c b/hw/audio/pl041.c
+similarity index 100%
+rename from hw/pl041.c
+rename to hw/audio/pl041.c
+diff --git a/hw/pl041.hx b/hw/audio/pl041.hx
+similarity index 100%
+rename from hw/pl041.hx
+rename to hw/audio/pl041.hx
+diff --git a/hw/sb16.c b/hw/audio/sb16.c
+similarity index 100%
+rename from hw/sb16.c
+rename to hw/audio/sb16.c
+diff --git a/hw/wm8750.c b/hw/audio/wm8750.c
+similarity index 100%
+rename from hw/wm8750.c
+rename to hw/audio/wm8750.c
+diff --git a/hw/block/Makefile.objs b/hw/block/Makefile.objs
+index e69de29..5fa5101 100644
+--- a/hw/block/Makefile.objs
++++ b/hw/block/Makefile.objs
+@@ -0,0 +1,8 @@
++common-obj-y += block.o cdrom.o hd-geometry.o
++common-obj-$(CONFIG_FDC) += fdc.o
++common-obj-$(CONFIG_SSI_M25P80) += m25p80.o
++common-obj-$(CONFIG_NAND) += nand.o
++common-obj-$(CONFIG_PFLASH_CFI01) += pflash_cfi01.o
++common-obj-$(CONFIG_PFLASH_CFI02) += pflash_cfi02.o
++common-obj-$(CONFIG_XEN_BACKEND) += xen_disk.o
++common-obj-$(CONFIG_ECC) += ecc.o
+diff --git a/hw/block-common.c b/hw/block/block.c
+similarity index 100%
+rename from hw/block-common.c
+rename to hw/block/block.c
+diff --git a/hw/cdrom.c b/hw/block/cdrom.c
+similarity index 100%
+rename from hw/cdrom.c
+rename to hw/block/cdrom.c
+diff --git a/hw/ecc.c b/hw/block/ecc.c
+similarity index 100%
+rename from hw/ecc.c
+rename to hw/block/ecc.c
+diff --git a/hw/fdc.c b/hw/block/fdc.c
+similarity index 100%
+rename from hw/fdc.c
+rename to hw/block/fdc.c
+diff --git a/hw/hd-geometry.c b/hw/block/hd-geometry.c
+similarity index 100%
+rename from hw/hd-geometry.c
+rename to hw/block/hd-geometry.c
+diff --git a/hw/m25p80.c b/hw/block/m25p80.c
+similarity index 100%
+rename from hw/m25p80.c
+rename to hw/block/m25p80.c
+diff --git a/hw/nand.c b/hw/block/nand.c
+similarity index 100%
+rename from hw/nand.c
+rename to hw/block/nand.c
+diff --git a/hw/pflash_cfi01.c b/hw/block/pflash_cfi01.c
+similarity index 100%
+rename from hw/pflash_cfi01.c
+rename to hw/block/pflash_cfi01.c
+diff --git a/hw/pflash_cfi02.c b/hw/block/pflash_cfi02.c
+similarity index 100%
+rename from hw/pflash_cfi02.c
+rename to hw/block/pflash_cfi02.c
+diff --git a/hw/xen_disk.c b/hw/block/xen_disk.c
+similarity index 100%
+rename from hw/xen_disk.c
+rename to hw/block/xen_disk.c
+diff --git a/hw/bt/Makefile.objs b/hw/bt/Makefile.objs
+index e69de29..867a7d2 100644
+--- a/hw/bt/Makefile.objs
++++ b/hw/bt/Makefile.objs
+@@ -0,0 +1,3 @@
++common-obj-y += core.o l2cap.o sdp.o hci.o hid.o
++common-obj-y += hci-csr.o
++
+diff --git a/hw/bt.c b/hw/bt/core.c
+similarity index 100%
+rename from hw/bt.c
+rename to hw/bt/core.c
+diff --git a/hw/bt-hci-csr.c b/hw/bt/hci-csr.c
+similarity index 100%
+rename from hw/bt-hci-csr.c
+rename to hw/bt/hci-csr.c
+diff --git a/hw/bt-hci.c b/hw/bt/hci.c
+similarity index 100%
+rename from hw/bt-hci.c
+rename to hw/bt/hci.c
+diff --git a/hw/bt-hid.c b/hw/bt/hid.c
+similarity index 100%
+rename from hw/bt-hid.c
+rename to hw/bt/hid.c
+diff --git a/hw/bt-l2cap.c b/hw/bt/l2cap.c
+similarity index 100%
+rename from hw/bt-l2cap.c
+rename to hw/bt/l2cap.c
+diff --git a/hw/bt-sdp.c b/hw/bt/sdp.c
+similarity index 100%
+rename from hw/bt-sdp.c
+rename to hw/bt/sdp.c
+diff --git a/hw/char/Makefile.objs b/hw/char/Makefile.objs
+index e69de29..eee23ff 100644
+--- a/hw/char/Makefile.objs
++++ b/hw/char/Makefile.objs
+@@ -0,0 +1,10 @@
++common-obj-$(CONFIG_IPACK) += tpci200.o ipoctal232.o ipack.o
++common-obj-$(CONFIG_ESCC) += escc.o
++common-obj-$(CONFIG_PARALLEL) += parallel.o
++common-obj-$(CONFIG_PL011) += pl011.o
++common-obj-$(CONFIG_SERIAL) += serial.o serial-isa.o
++common-obj-$(CONFIG_SERIAL_PCI) += serial-pci.o
++common-obj-$(CONFIG_VIRTIO) += virtio-console.o
++common-obj-$(CONFIG_XILINX) += xilinx_uartlite.o
++common-obj-$(CONFIG_XEN_BACKEND) += xen_console.o
++common-obj-$(CONFIG_CADENCE) += cadence_uart.o
+diff --git a/hw/cadence_uart.c b/hw/char/cadence_uart.c
+similarity index 100%
+rename from hw/cadence_uart.c
+rename to hw/char/cadence_uart.c
+diff --git a/hw/escc.c b/hw/char/escc.c
+similarity index 100%
+rename from hw/escc.c
+rename to hw/char/escc.c
+diff --git a/hw/ipack.c b/hw/char/ipack.c
+similarity index 100%
+rename from hw/ipack.c
+rename to hw/char/ipack.c
+diff --git a/hw/ipoctal232.c b/hw/char/ipoctal232.c
+similarity index 100%
+rename from hw/ipoctal232.c
+rename to hw/char/ipoctal232.c
+diff --git a/hw/parallel.c b/hw/char/parallel.c
+similarity index 100%
+rename from hw/parallel.c
+rename to hw/char/parallel.c
+diff --git a/hw/pl011.c b/hw/char/pl011.c
+similarity index 100%
+rename from hw/pl011.c
+rename to hw/char/pl011.c
+diff --git a/hw/serial-isa.c b/hw/char/serial-isa.c
+similarity index 100%
+rename from hw/serial-isa.c
+rename to hw/char/serial-isa.c
+diff --git a/hw/serial-pci.c b/hw/char/serial-pci.c
+similarity index 100%
+rename from hw/serial-pci.c
+rename to hw/char/serial-pci.c
+diff --git a/hw/serial.c b/hw/char/serial.c
+similarity index 100%
+rename from hw/serial.c
+rename to hw/char/serial.c
+diff --git a/hw/tpci200.c b/hw/char/tpci200.c
+similarity index 100%
+rename from hw/tpci200.c
+rename to hw/char/tpci200.c
+diff --git a/hw/virtio-console.c b/hw/char/virtio-console.c
+similarity index 100%
+rename from hw/virtio-console.c
+rename to hw/char/virtio-console.c
+diff --git a/hw/xen_console.c b/hw/char/xen_console.c
+similarity index 100%
+rename from hw/xen_console.c
+rename to hw/char/xen_console.c
+diff --git a/hw/xilinx_uartlite.c b/hw/char/xilinx_uartlite.c
+similarity index 100%
+rename from hw/xilinx_uartlite.c
+rename to hw/char/xilinx_uartlite.c
+diff --git a/hw/core/Makefile.objs b/hw/core/Makefile.objs
+index e69de29..94109f3 100644
+--- a/hw/core/Makefile.objs
++++ b/hw/core/Makefile.objs
+@@ -0,0 +1,14 @@
++# core qdev-related obj files, also used by *-user:
++common-obj-y += qdev.o qdev-properties.o
++# irq.o needed for qdev GPIO handling:
++common-obj-y += irq.o
++
++common-obj-$(CONFIG_EMPTY_SLOT) += empty_slot.o
++common-obj-$(CONFIG_XILINX_AXI) += stream.o
++common-obj-$(CONFIG_PTIMER) += ptimer.o
++common-obj-$(CONFIG_SOFTMMU) += sysbus.o
++common-obj-$(CONFIG_SOFTMMU) += null-machine.o
++common-obj-$(CONFIG_SOFTMMU) += loader.o
++common-obj-$(CONFIG_SOFTMMU) += qdev-addr.o
++common-obj-$(CONFIG_SOFTMMU) += qdev-properties-system.o
++
+diff --git a/hw/empty_slot.c b/hw/core/empty_slot.c
+similarity index 100%
+rename from hw/empty_slot.c
+rename to hw/core/empty_slot.c
+diff --git a/hw/irq.c b/hw/core/irq.c
+similarity index 100%
+rename from hw/irq.c
+rename to hw/core/irq.c
+diff --git a/hw/loader.c b/hw/core/loader.c
+similarity index 100%
+rename from hw/loader.c
+rename to hw/core/loader.c
+diff --git a/hw/null-machine.c b/hw/core/null-machine.c
+similarity index 100%
+rename from hw/null-machine.c
+rename to hw/core/null-machine.c
+diff --git a/hw/ptimer.c b/hw/core/ptimer.c
+similarity index 100%
+rename from hw/ptimer.c
+rename to hw/core/ptimer.c
+diff --git a/hw/qdev-addr.c b/hw/core/qdev-addr.c
+similarity index 100%
+rename from hw/qdev-addr.c
+rename to hw/core/qdev-addr.c
+diff --git a/hw/qdev-properties-system.c b/hw/core/qdev-properties-system.c
+similarity index 100%
+rename from hw/qdev-properties-system.c
+rename to hw/core/qdev-properties-system.c
+diff --git a/hw/qdev-properties.c b/hw/core/qdev-properties.c
+similarity index 100%
+rename from hw/qdev-properties.c
+rename to hw/core/qdev-properties.c
+diff --git a/hw/qdev.c b/hw/core/qdev.c
+similarity index 100%
+rename from hw/qdev.c
+rename to hw/core/qdev.c
+diff --git a/hw/stream.c b/hw/core/stream.c
+similarity index 100%
+rename from hw/stream.c
+rename to hw/core/stream.c
+diff --git a/hw/sysbus.c b/hw/core/sysbus.c
+similarity index 100%
+rename from hw/sysbus.c
+rename to hw/core/sysbus.c
+diff --git a/hw/display/Makefile.objs b/hw/display/Makefile.objs
+index e69de29..3ac154d 100644
+--- a/hw/display/Makefile.objs
++++ b/hw/display/Makefile.objs
+@@ -0,0 +1,13 @@
++common-obj-$(CONFIG_ADS7846) += ads7846.o
++common-obj-$(CONFIG_VGA_CIRRUS) += cirrus_vga.o
++common-obj-$(CONFIG_G364FB) += g364fb.o
++common-obj-$(CONFIG_JAZZ_LED) += jazz_led.o
++common-obj-$(CONFIG_PL110) += pl110.o
++common-obj-$(CONFIG_SSD0303) += ssd0303.o
++common-obj-$(CONFIG_SSD0323) += ssd0323.o
++common-obj-$(CONFIG_XEN_BACKEND) += xenfb.o
++
++common-obj-$(CONFIG_VGA_PCI) += vga-pci.o
++common-obj-$(CONFIG_VGA_ISA) += vga-isa.o
++common-obj-$(CONFIG_VGA_ISA_MM) += vga-isa-mm.o
++common-obj-$(CONFIG_VMWARE_VGA) += vmware_vga.o
+diff --git a/hw/ads7846.c b/hw/display/ads7846.c
+similarity index 100%
+rename from hw/ads7846.c
+rename to hw/display/ads7846.c
+diff --git a/hw/cirrus_vga.c b/hw/display/cirrus_vga.c
+similarity index 100%
+rename from hw/cirrus_vga.c
+rename to hw/display/cirrus_vga.c
+diff --git a/hw/g364fb.c b/hw/display/g364fb.c
+similarity index 100%
+rename from hw/g364fb.c
+rename to hw/display/g364fb.c
+diff --git a/hw/jazz_led.c b/hw/display/jazz_led.c
+similarity index 100%
+rename from hw/jazz_led.c
+rename to hw/display/jazz_led.c
+diff --git a/hw/pl110.c b/hw/display/pl110.c
+similarity index 100%
+rename from hw/pl110.c
+rename to hw/display/pl110.c
+diff --git a/hw/ssd0303.c b/hw/display/ssd0303.c
+similarity index 100%
+rename from hw/ssd0303.c
+rename to hw/display/ssd0303.c
+diff --git a/hw/ssd0323.c b/hw/display/ssd0323.c
+similarity index 100%
+rename from hw/ssd0323.c
+rename to hw/display/ssd0323.c
+diff --git a/hw/vga-isa-mm.c b/hw/display/vga-isa-mm.c
+similarity index 100%
+rename from hw/vga-isa-mm.c
+rename to hw/display/vga-isa-mm.c
+diff --git a/hw/vga-isa.c b/hw/display/vga-isa.c
+similarity index 100%
+rename from hw/vga-isa.c
+rename to hw/display/vga-isa.c
+diff --git a/hw/vga-pci.c b/hw/display/vga-pci.c
+similarity index 100%
+rename from hw/vga-pci.c
+rename to hw/display/vga-pci.c
+diff --git a/hw/vmware_vga.c b/hw/display/vmware_vga.c
+similarity index 100%
+rename from hw/vmware_vga.c
+rename to hw/display/vmware_vga.c
+diff --git a/hw/xenfb.c b/hw/display/xenfb.c
+similarity index 100%
+rename from hw/xenfb.c
+rename to hw/display/xenfb.c
+diff --git a/hw/dma/Makefile.objs b/hw/dma/Makefile.objs
+index e69de29..7a8ba56 100644
+--- a/hw/dma/Makefile.objs
++++ b/hw/dma/Makefile.objs
+@@ -0,0 +1,6 @@
++common-obj-$(CONFIG_PUV3) += puv3_dma.o
++common-obj-$(CONFIG_RC4030) += rc4030.o
++common-obj-$(CONFIG_PL080) += pl080.o
++common-obj-$(CONFIG_PL330) += pl330.o
++common-obj-$(CONFIG_I8257) += i8257.o
++common-obj-$(CONFIG_XILINX_AXI) += xilinx_axidma.o
+diff --git a/hw/dma.c b/hw/dma/i8257.c
+similarity index 100%
+rename from hw/dma.c
+rename to hw/dma/i8257.c
+diff --git a/hw/pl080.c b/hw/dma/pl080.c
+similarity index 100%
+rename from hw/pl080.c
+rename to hw/dma/pl080.c
+diff --git a/hw/pl330.c b/hw/dma/pl330.c
+similarity index 100%
+rename from hw/pl330.c
+rename to hw/dma/pl330.c
+diff --git a/hw/puv3_dma.c b/hw/dma/puv3_dma.c
+similarity index 100%
+rename from hw/puv3_dma.c
+rename to hw/dma/puv3_dma.c
+diff --git a/hw/rc4030.c b/hw/dma/rc4030.c
+similarity index 100%
+rename from hw/rc4030.c
+rename to hw/dma/rc4030.c
+diff --git a/hw/xilinx_axidma.c b/hw/dma/xilinx_axidma.c
+similarity index 100%
+rename from hw/xilinx_axidma.c
+rename to hw/dma/xilinx_axidma.c
+diff --git a/hw/gpio/Makefile.objs b/hw/gpio/Makefile.objs
+index e69de29..f8d8ee8 100644
+--- a/hw/gpio/Makefile.objs
++++ b/hw/gpio/Makefile.objs
+@@ -0,0 +1,3 @@
++common-obj-$(CONFIG_MAX7310) += max7310.o
++common-obj-$(CONFIG_PL061) += pl061.o
++common-obj-$(CONFIG_PUV3) += puv3_gpio.o
+diff --git a/hw/max7310.c b/hw/gpio/max7310.c
+similarity index 100%
+rename from hw/max7310.c
+rename to hw/gpio/max7310.c
+diff --git a/hw/pl061.c b/hw/gpio/pl061.c
+similarity index 100%
+rename from hw/pl061.c
+rename to hw/gpio/pl061.c
+diff --git a/hw/puv3_gpio.c b/hw/gpio/puv3_gpio.c
+similarity index 100%
+rename from hw/puv3_gpio.c
+rename to hw/gpio/puv3_gpio.c
+diff --git a/hw/i2c/Makefile.objs b/hw/i2c/Makefile.objs
+index e69de29..f6bd8fa 100644
+--- a/hw/i2c/Makefile.objs
++++ b/hw/i2c/Makefile.objs
+@@ -0,0 +1,4 @@
++common-obj-y += core.o smbus.o smbus_eeprom.o
++common-obj-$(CONFIG_VERSATILE_I2C) += versatile_i2c.o
++common-obj-$(CONFIG_ACPI) += smbus_ich9.o
++common-obj-$(CONFIG_APM) += pm_smbus.o
+diff --git a/hw/i2c.c b/hw/i2c/core.c
+similarity index 100%
+rename from hw/i2c.c
+rename to hw/i2c/core.c
+diff --git a/hw/pm_smbus.c b/hw/i2c/pm_smbus.c
+similarity index 100%
+rename from hw/pm_smbus.c
+rename to hw/i2c/pm_smbus.c
+diff --git a/hw/smbus.c b/hw/i2c/smbus.c
+similarity index 100%
+rename from hw/smbus.c
+rename to hw/i2c/smbus.c
+diff --git a/hw/smbus_eeprom.c b/hw/i2c/smbus_eeprom.c
+similarity index 100%
+rename from hw/smbus_eeprom.c
+rename to hw/i2c/smbus_eeprom.c
+diff --git a/hw/smbus_ich9.c b/hw/i2c/smbus_ich9.c
+similarity index 100%
+rename from hw/smbus_ich9.c
+rename to hw/i2c/smbus_ich9.c
+diff --git a/hw/versatile_i2c.c b/hw/i2c/versatile_i2c.c
+similarity index 100%
+rename from hw/versatile_i2c.c
+rename to hw/i2c/versatile_i2c.c
+diff --git a/hw/input/Makefile.objs b/hw/input/Makefile.objs
+index e69de29..824997e 100644
+--- a/hw/input/Makefile.objs
++++ b/hw/input/Makefile.objs
+@@ -0,0 +1,9 @@
++common-obj-$(CONFIG_ADB) += adb.o
++common-obj-y += hid.o
++common-obj-$(CONFIG_LM832X) += lm832x.o
++common-obj-$(CONFIG_PCKBD) += pckbd.o
++common-obj-$(CONFIG_PL050) += pl050.o
++common-obj-y += ps2.o
++common-obj-$(CONFIG_STELLARIS_INPUT) += stellaris_input.o
++common-obj-$(CONFIG_TSC2005) += tsc2005.o
++common-obj-$(CONFIG_VMMOUSE) += vmmouse.o
+diff --git a/hw/adb.c b/hw/input/adb.c
+similarity index 100%
+rename from hw/adb.c
+rename to hw/input/adb.c
+diff --git a/hw/hid.c b/hw/input/hid.c
+similarity index 100%
+rename from hw/hid.c
+rename to hw/input/hid.c
+diff --git a/hw/lm832x.c b/hw/input/lm832x.c
+similarity index 100%
+rename from hw/lm832x.c
+rename to hw/input/lm832x.c
+diff --git a/hw/pckbd.c b/hw/input/pckbd.c
+similarity index 100%
+rename from hw/pckbd.c
+rename to hw/input/pckbd.c
+diff --git a/hw/pl050.c b/hw/input/pl050.c
+similarity index 100%
+rename from hw/pl050.c
+rename to hw/input/pl050.c
+diff --git a/hw/ps2.c b/hw/input/ps2.c
+similarity index 100%
+rename from hw/ps2.c
+rename to hw/input/ps2.c
+diff --git a/hw/stellaris_input.c b/hw/input/stellaris_input.c
+similarity index 100%
+rename from hw/stellaris_input.c
+rename to hw/input/stellaris_input.c
+diff --git a/hw/tsc2005.c b/hw/input/tsc2005.c
+similarity index 100%
+rename from hw/tsc2005.c
+rename to hw/input/tsc2005.c
+diff --git a/hw/vmmouse.c b/hw/input/vmmouse.c
+similarity index 100%
+rename from hw/vmmouse.c
+rename to hw/input/vmmouse.c
+diff --git a/hw/intc/Makefile.objs b/hw/intc/Makefile.objs
+index e69de29..2813adb 100644
+--- a/hw/intc/Makefile.objs
++++ b/hw/intc/Makefile.objs
+@@ -0,0 +1,5 @@
++common-obj-$(CONFIG_HEATHROW_PIC) += heathrow_pic.o
++common-obj-$(CONFIG_I8259) += i8259_common.o i8259.o
++common-obj-$(CONFIG_PL190) += pl190.o
++common-obj-$(CONFIG_PUV3) += puv3_intc.o
++common-obj-$(CONFIG_XILINX) += xilinx_intc.o
+diff --git a/hw/heathrow_pic.c b/hw/intc/heathrow_pic.c
+similarity index 100%
+rename from hw/heathrow_pic.c
+rename to hw/intc/heathrow_pic.c
+diff --git a/hw/i8259.c b/hw/intc/i8259.c
+similarity index 100%
+rename from hw/i8259.c
+rename to hw/intc/i8259.c
+diff --git a/hw/i8259_common.c b/hw/intc/i8259_common.c
+similarity index 100%
+rename from hw/i8259_common.c
+rename to hw/intc/i8259_common.c
+diff --git a/hw/pl190.c b/hw/intc/pl190.c
+similarity index 100%
+rename from hw/pl190.c
+rename to hw/intc/pl190.c
+diff --git a/hw/puv3_intc.c b/hw/intc/puv3_intc.c
+similarity index 100%
+rename from hw/puv3_intc.c
+rename to hw/intc/puv3_intc.c
+diff --git a/hw/xilinx_intc.c b/hw/intc/xilinx_intc.c
+similarity index 100%
+rename from hw/xilinx_intc.c
+rename to hw/intc/xilinx_intc.c
+diff --git a/hw/isa/Makefile.objs b/hw/isa/Makefile.objs
+index e69de29..cbee381 100644
+--- a/hw/isa/Makefile.objs
++++ b/hw/isa/Makefile.objs
+@@ -0,0 +1,9 @@
++common-obj-y += isa-bus.o
++common-obj-$(CONFIG_APM) += apm.o
++common-obj-$(CONFIG_APPLESMC) += applesmc.o
++common-obj-$(CONFIG_I82378) += i82378.o
++common-obj-$(CONFIG_I82374) += i82374.o
++common-obj-$(CONFIG_ISA_MMIO) += isa_mmio.o
++common-obj-$(CONFIG_PC87312) += pc87312.o
++common-obj-$(CONFIG_PIIX4) += piix4.o
++
+diff --git a/hw/apm.c b/hw/isa/apm.c
+similarity index 100%
+rename from hw/apm.c
+rename to hw/isa/apm.c
+diff --git a/hw/applesmc.c b/hw/isa/applesmc.c
+similarity index 100%
+rename from hw/applesmc.c
+rename to hw/isa/applesmc.c
+diff --git a/hw/i82374.c b/hw/isa/i82374.c
+similarity index 100%
+rename from hw/i82374.c
+rename to hw/isa/i82374.c
+diff --git a/hw/i82378.c b/hw/isa/i82378.c
+similarity index 100%
+rename from hw/i82378.c
+rename to hw/isa/i82378.c
+diff --git a/hw/isa-bus.c b/hw/isa/isa-bus.c
+similarity index 100%
+rename from hw/isa-bus.c
+rename to hw/isa/isa-bus.c
+diff --git a/hw/isa_mmio.c b/hw/isa/isa_mmio.c
+similarity index 100%
+rename from hw/isa_mmio.c
+rename to hw/isa/isa_mmio.c
+diff --git a/hw/pc87312.c b/hw/isa/pc87312.c
+similarity index 100%
+rename from hw/pc87312.c
+rename to hw/isa/pc87312.c
+diff --git a/hw/piix4.c b/hw/isa/piix4.c
+similarity index 100%
+rename from hw/piix4.c
+rename to hw/isa/piix4.c
+diff --git a/hw/misc/Makefile.objs b/hw/misc/Makefile.objs
+index e69de29..d44458e 100644
+--- a/hw/misc/Makefile.objs
++++ b/hw/misc/Makefile.objs
+@@ -0,0 +1,10 @@
++common-obj-$(CONFIG_MAX111X) += max111x.o
++common-obj-$(CONFIG_TMP105) += tmp105.o
++
++# ARM devices
++common-obj-$(CONFIG_PL310) += arm_l2x0.o
++
++# PKUnity SoC devices
++common-obj-$(CONFIG_PUV3) += puv3_pm.o
++
++common-obj-$(CONFIG_MACIO) += macio/
+diff --git a/hw/arm_l2x0.c b/hw/misc/arm_l2x0.c
+similarity index 100%
+rename from hw/arm_l2x0.c
+rename to hw/misc/arm_l2x0.c
+diff --git a/hw/misc/macio/Makefile.objs b/hw/misc/macio/Makefile.objs
+new file mode 100644
+index 0000000..ef7ac24
+--- /dev/null
++++ b/hw/misc/macio/Makefile.objs
+@@ -0,0 +1,3 @@
++common-obj-y += macio.o
++common-obj-$(CONFIG_CUDA) += cuda.o
++common-obj-$(CONFIG_MAC_DBDMA) += mac_dbdma.o
+diff --git a/hw/cuda.c b/hw/misc/macio/cuda.c
+similarity index 100%
+rename from hw/cuda.c
+rename to hw/misc/macio/cuda.c
+diff --git a/hw/mac_dbdma.c b/hw/misc/macio/mac_dbdma.c
+similarity index 100%
+rename from hw/mac_dbdma.c
+rename to hw/misc/macio/mac_dbdma.c
+diff --git a/hw/macio.c b/hw/misc/macio/macio.c
+similarity index 100%
+rename from hw/macio.c
+rename to hw/misc/macio/macio.c
+diff --git a/hw/max111x.c b/hw/misc/max111x.c
+similarity index 100%
+rename from hw/max111x.c
+rename to hw/misc/max111x.c
+diff --git a/hw/puv3_pm.c b/hw/misc/puv3_pm.c
+similarity index 100%
+rename from hw/puv3_pm.c
+rename to hw/misc/puv3_pm.c
+diff --git a/hw/tmp105.c b/hw/misc/tmp105.c
+similarity index 100%
+rename from hw/tmp105.c
+rename to hw/misc/tmp105.c
+diff --git a/hw/net/Makefile.objs b/hw/net/Makefile.objs
+index e69de29..ad91293 100644
+--- a/hw/net/Makefile.objs
++++ b/hw/net/Makefile.objs
+@@ -0,0 +1,22 @@
++common-obj-$(CONFIG_DP8393X) += dp8393x.o
++common-obj-$(CONFIG_XEN_BACKEND) += xen_nic.o
++
++# PCI network cards
++common-obj-$(CONFIG_NE2000_PCI) += ne2000.o
++common-obj-$(CONFIG_EEPRO100_PCI) += eepro100.o
++common-obj-$(CONFIG_PCNET_PCI) += pcnet-pci.o
++common-obj-$(CONFIG_PCNET_COMMON) += pcnet.o
++common-obj-$(CONFIG_E1000_PCI) += e1000.o
++common-obj-$(CONFIG_RTL8139_PCI) += rtl8139.o
++common-obj-$(CONFIG_VMXNET3_PCI) += vmxnet_tx_pkt.o vmxnet_rx_pkt.o
++common-obj-$(CONFIG_VMXNET3_PCI) += vmxnet3.o
++
++common-obj-$(CONFIG_SMC91C111) += smc91c111.o
++common-obj-$(CONFIG_LAN9118) += lan9118.o
++common-obj-$(CONFIG_NE2000_ISA) += ne2000-isa.o
++common-obj-$(CONFIG_OPENCORES_ETH) += opencores_eth.o
++common-obj-$(CONFIG_XGMAC) += xgmac.o
++common-obj-$(CONFIG_MIPSNET) += mipsnet.o
++common-obj-$(CONFIG_XILINX_AXI) += xilinx_axienet.o
++
++common-obj-$(CONFIG_CADENCE) += cadence_gem.o
+diff --git a/hw/cadence_gem.c b/hw/net/cadence_gem.c
+similarity index 100%
+rename from hw/cadence_gem.c
+rename to hw/net/cadence_gem.c
+diff --git a/hw/dp8393x.c b/hw/net/dp8393x.c
+similarity index 100%
+rename from hw/dp8393x.c
+rename to hw/net/dp8393x.c
+diff --git a/hw/e1000.c b/hw/net/e1000.c
+similarity index 100%
+rename from hw/e1000.c
+rename to hw/net/e1000.c
+diff --git a/hw/eepro100.c b/hw/net/eepro100.c
+similarity index 100%
+rename from hw/eepro100.c
+rename to hw/net/eepro100.c
+diff --git a/hw/lan9118.c b/hw/net/lan9118.c
+similarity index 100%
+rename from hw/lan9118.c
+rename to hw/net/lan9118.c
+diff --git a/hw/mipsnet.c b/hw/net/mipsnet.c
+similarity index 100%
+rename from hw/mipsnet.c
+rename to hw/net/mipsnet.c
+diff --git a/hw/ne2000-isa.c b/hw/net/ne2000-isa.c
+similarity index 100%
+rename from hw/ne2000-isa.c
+rename to hw/net/ne2000-isa.c
+diff --git a/hw/ne2000.c b/hw/net/ne2000.c
+similarity index 100%
+rename from hw/ne2000.c
+rename to hw/net/ne2000.c
+diff --git a/hw/opencores_eth.c b/hw/net/opencores_eth.c
+similarity index 100%
+rename from hw/opencores_eth.c
+rename to hw/net/opencores_eth.c
+diff --git a/hw/pcnet-pci.c b/hw/net/pcnet-pci.c
+similarity index 100%
+rename from hw/pcnet-pci.c
+rename to hw/net/pcnet-pci.c
+diff --git a/hw/pcnet.c b/hw/net/pcnet.c
+similarity index 100%
+rename from hw/pcnet.c
+rename to hw/net/pcnet.c
+diff --git a/hw/rtl8139.c b/hw/net/rtl8139.c
+similarity index 100%
+rename from hw/rtl8139.c
+rename to hw/net/rtl8139.c
+diff --git a/hw/smc91c111.c b/hw/net/smc91c111.c
+similarity index 100%
+rename from hw/smc91c111.c
+rename to hw/net/smc91c111.c
+diff --git a/hw/vmware_utils.h b/hw/net/vmware_utils.h
+similarity index 100%
+rename from hw/vmware_utils.h
+rename to hw/net/vmware_utils.h
+diff --git a/hw/vmxnet3.c b/hw/net/vmxnet3.c
+similarity index 100%
+rename from hw/vmxnet3.c
+rename to hw/net/vmxnet3.c
+diff --git a/hw/vmxnet3.h b/hw/net/vmxnet3.h
+similarity index 100%
+rename from hw/vmxnet3.h
+rename to hw/net/vmxnet3.h
+diff --git a/hw/vmxnet_debug.h b/hw/net/vmxnet_debug.h
+similarity index 100%
+rename from hw/vmxnet_debug.h
+rename to hw/net/vmxnet_debug.h
+diff --git a/hw/vmxnet_rx_pkt.c b/hw/net/vmxnet_rx_pkt.c
+similarity index 100%
+rename from hw/vmxnet_rx_pkt.c
+rename to hw/net/vmxnet_rx_pkt.c
+diff --git a/hw/vmxnet_rx_pkt.h b/hw/net/vmxnet_rx_pkt.h
+similarity index 100%
+rename from hw/vmxnet_rx_pkt.h
+rename to hw/net/vmxnet_rx_pkt.h
+diff --git a/hw/vmxnet_tx_pkt.c b/hw/net/vmxnet_tx_pkt.c
+similarity index 100%
+rename from hw/vmxnet_tx_pkt.c
+rename to hw/net/vmxnet_tx_pkt.c
+diff --git a/hw/vmxnet_tx_pkt.h b/hw/net/vmxnet_tx_pkt.h
+similarity index 100%
+rename from hw/vmxnet_tx_pkt.h
+rename to hw/net/vmxnet_tx_pkt.h
+diff --git a/hw/xen_nic.c b/hw/net/xen_nic.c
+similarity index 100%
+rename from hw/xen_nic.c
+rename to hw/net/xen_nic.c
+diff --git a/hw/xgmac.c b/hw/net/xgmac.c
+similarity index 100%
+rename from hw/xgmac.c
+rename to hw/net/xgmac.c
+diff --git a/hw/xilinx_axienet.c b/hw/net/xilinx_axienet.c
+similarity index 100%
+rename from hw/xilinx_axienet.c
+rename to hw/net/xilinx_axienet.c
+diff --git a/hw/nvram/Makefile.objs b/hw/nvram/Makefile.objs
+index e69de29..80fb1b0 100644
+--- a/hw/nvram/Makefile.objs
++++ b/hw/nvram/Makefile.objs
+@@ -0,0 +1,4 @@
++common-obj-$(CONFIG_DS1225Y) += ds1225y.o
++common-obj-y += eeprom93xx.o
++common-obj-y += fw_cfg.o
++common-obj-$(CONFIG_MAC_NVRAM) += mac_nvram.o
+diff --git a/hw/ds1225y.c b/hw/nvram/ds1225y.c
+similarity index 100%
+rename from hw/ds1225y.c
+rename to hw/nvram/ds1225y.c
+diff --git a/hw/eeprom93xx.c b/hw/nvram/eeprom93xx.c
+similarity index 100%
+rename from hw/eeprom93xx.c
+rename to hw/nvram/eeprom93xx.c
+diff --git a/hw/fw_cfg.c b/hw/nvram/fw_cfg.c
+similarity index 100%
+rename from hw/fw_cfg.c
+rename to hw/nvram/fw_cfg.c
+diff --git a/hw/mac_nvram.c b/hw/nvram/mac_nvram.c
+similarity index 100%
+rename from hw/mac_nvram.c
+rename to hw/nvram/mac_nvram.c
+diff --git a/hw/pci/Makefile.objs b/hw/pci/Makefile.objs
+index 1cd6cde..44b2185 100644
+--- a/hw/pci/Makefile.objs
++++ b/hw/pci/Makefile.objs
+@@ -4,6 +4,25 @@ common-obj-$(CONFIG_PCI) += shpc.o
+ common-obj-$(CONFIG_PCI) += slotid_cap.o
+ common-obj-$(CONFIG_PCI) += pci_host.o pcie_host.o
+ common-obj-$(CONFIG_PCI) += pcie.o pcie_aer.o pcie_port.o
+-common-obj-$(CONFIG_NO_PCI) += pci-stub.o
+ 
++common-obj-$(CONFIG_NO_PCI) += pci-stub.o
+ common-obj-$(CONFIG_ALL) += pci-stub.o
++
++common-obj-$(CONFIG_PCI) += pci_bridge_dev.o
++common-obj-$(CONFIG_PCI) += ioh3420.o xio3130_upstream.o xio3130_downstream.o
++common-obj-$(CONFIG_PCI) += i82801b11.o
++
++common-obj-y += pam.o
++
++# PPC devices
++common-obj-$(CONFIG_PREP_PCI) += host-prep.o
++common-obj-$(CONFIG_GRACKLE_PCI) += host-grackle.o
++# NewWorld PowerMac
++common-obj-$(CONFIG_UNIN_PCI) += host-uninorth.o
++common-obj-$(CONFIG_DEC_PCI) += host-dec.o
++# PowerPC E500 boards
++common-obj-$(CONFIG_PPCE500_PCI) += host-ppce500.o
++
++# ARM devices
++common-obj-$(CONFIG_VERSATILE_PCI) += host-versatile.o
++
+diff --git a/hw/dec_pci.c b/hw/pci/host-dec.c
+similarity index 100%
+rename from hw/dec_pci.c
+rename to hw/pci/host-dec.c
+diff --git a/hw/grackle_pci.c b/hw/pci/host-grackle.c
+similarity index 100%
+rename from hw/grackle_pci.c
+rename to hw/pci/host-grackle.c
+diff --git a/hw/ppce500_pci.c b/hw/pci/host-ppce500.c
+similarity index 100%
+rename from hw/ppce500_pci.c
+rename to hw/pci/host-ppce500.c
+diff --git a/hw/prep_pci.c b/hw/pci/host-prep.c
+similarity index 100%
+rename from hw/prep_pci.c
+rename to hw/pci/host-prep.c
+diff --git a/hw/unin_pci.c b/hw/pci/host-uninorth.c
+similarity index 100%
+rename from hw/unin_pci.c
+rename to hw/pci/host-uninorth.c
+diff --git a/hw/versatile_pci.c b/hw/pci/host-versatile.c
+similarity index 100%
+rename from hw/versatile_pci.c
+rename to hw/pci/host-versatile.c
+diff --git a/hw/i82801b11.c b/hw/pci/i82801b11.c
+similarity index 100%
+rename from hw/i82801b11.c
+rename to hw/pci/i82801b11.c
+diff --git a/hw/ioh3420.c b/hw/pci/ioh3420.c
+similarity index 100%
+rename from hw/ioh3420.c
+rename to hw/pci/ioh3420.c
+diff --git a/hw/pam.c b/hw/pci/pam.c
+similarity index 100%
+rename from hw/pam.c
+rename to hw/pci/pam.c
+diff --git a/hw/pci_bridge_dev.c b/hw/pci/pci_bridge_dev.c
+similarity index 100%
+rename from hw/pci_bridge_dev.c
+rename to hw/pci/pci_bridge_dev.c
+diff --git a/hw/xio3130_downstream.c b/hw/pci/xio3130_downstream.c
+similarity index 100%
+rename from hw/xio3130_downstream.c
+rename to hw/pci/xio3130_downstream.c
+diff --git a/hw/xio3130_upstream.c b/hw/pci/xio3130_upstream.c
+similarity index 100%
+rename from hw/xio3130_upstream.c
+rename to hw/pci/xio3130_upstream.c
+diff --git a/hw/scsi/Makefile.objs b/hw/scsi/Makefile.objs
+index e69de29..6a56504 100644
+--- a/hw/scsi/Makefile.objs
++++ b/hw/scsi/Makefile.objs
+@@ -0,0 +1,6 @@
++common-obj-y += scsi-disk.o
++common-obj-y += scsi-generic.o scsi-bus.o
++common-obj-$(CONFIG_LSI_SCSI_PCI) += lsi53c895a.o
++common-obj-$(CONFIG_MEGASAS_SCSI_PCI) += megasas.o
++common-obj-$(CONFIG_ESP) += esp.o
++common-obj-$(CONFIG_ESP_PCI) += esp-pci.o
+diff --git a/hw/esp-pci.c b/hw/scsi/esp-pci.c
+similarity index 100%
+rename from hw/esp-pci.c
+rename to hw/scsi/esp-pci.c
+diff --git a/hw/esp.c b/hw/scsi/esp.c
+similarity index 100%
+rename from hw/esp.c
+rename to hw/scsi/esp.c
+diff --git a/hw/lsi53c895a.c b/hw/scsi/lsi53c895a.c
+similarity index 100%
+rename from hw/lsi53c895a.c
+rename to hw/scsi/lsi53c895a.c
+diff --git a/hw/megasas.c b/hw/scsi/megasas.c
+similarity index 100%
+rename from hw/megasas.c
+rename to hw/scsi/megasas.c
+diff --git a/hw/scsi-bus.c b/hw/scsi/scsi-bus.c
+similarity index 100%
+rename from hw/scsi-bus.c
+rename to hw/scsi/scsi-bus.c
+diff --git a/hw/scsi-disk.c b/hw/scsi/scsi-disk.c
+similarity index 100%
+rename from hw/scsi-disk.c
+rename to hw/scsi/scsi-disk.c
+diff --git a/hw/scsi-generic.c b/hw/scsi/scsi-generic.c
+similarity index 100%
+rename from hw/scsi-generic.c
+rename to hw/scsi/scsi-generic.c
+diff --git a/hw/sd/Makefile.objs b/hw/sd/Makefile.objs
+index e69de29..8acce02 100644
+--- a/hw/sd/Makefile.objs
++++ b/hw/sd/Makefile.objs
+@@ -0,0 +1,4 @@
++common-obj-$(CONFIG_PL181) += pl181.o
++common-obj-$(CONFIG_SSI_SD) += ssi-sd.o
++common-obj-$(CONFIG_SD) += sd.o
++common-obj-$(CONFIG_SDHCI) += sdhci.o
+diff --git a/hw/pl181.c b/hw/sd/pl181.c
+similarity index 100%
+rename from hw/pl181.c
+rename to hw/sd/pl181.c
+diff --git a/hw/sd.c b/hw/sd/sd.c
+similarity index 100%
+rename from hw/sd.c
+rename to hw/sd/sd.c
+diff --git a/hw/sdhci.c b/hw/sd/sdhci.c
+similarity index 100%
+rename from hw/sdhci.c
+rename to hw/sd/sdhci.c
+diff --git a/hw/ssi-sd.c b/hw/sd/ssi-sd.c
+similarity index 100%
+rename from hw/ssi-sd.c
+rename to hw/sd/ssi-sd.c
+diff --git a/hw/ssi/Makefile.objs b/hw/ssi/Makefile.objs
+index e69de29..daada5c 100644
+--- a/hw/ssi/Makefile.objs
++++ b/hw/ssi/Makefile.objs
+@@ -0,0 +1,2 @@
++common-obj-$(CONFIG_PL022) += pl022.o
++common-obj-$(CONFIG_SSI) += ssi.o
+diff --git a/hw/pl022.c b/hw/ssi/pl022.c
+similarity index 100%
+rename from hw/pl022.c
+rename to hw/ssi/pl022.c
+diff --git a/hw/ssi.c b/hw/ssi/ssi.c
+similarity index 100%
+rename from hw/ssi.c
+rename to hw/ssi/ssi.c
+diff --git a/hw/timer/Makefile.objs b/hw/timer/Makefile.objs
+index e69de29..12781dd 100644
+--- a/hw/timer/Makefile.objs
++++ b/hw/timer/Makefile.objs
+@@ -0,0 +1,10 @@
++common-obj-$(CONFIG_ARM_TIMER) += arm_timer.o
++common-obj-$(CONFIG_CADENCE) += cadence_ttc.o
++common-obj-$(CONFIG_DS1338) += ds1338.o
++common-obj-$(CONFIG_HPET) += hpet.o
++common-obj-$(CONFIG_I8254) += i8254_common.o i8254.o
++common-obj-$(CONFIG_M48T59) += m48t59.o
++common-obj-$(CONFIG_PL031) += pl031.o
++common-obj-$(CONFIG_PUV3) += puv3_ost.o
++common-obj-$(CONFIG_TWL92230) += twl92230.o
++common-obj-$(CONFIG_XILINX) += xilinx_timer.o
+diff --git a/hw/arm_timer.c b/hw/timer/arm_timer.c
+similarity index 100%
+rename from hw/arm_timer.c
+rename to hw/timer/arm_timer.c
+diff --git a/hw/cadence_ttc.c b/hw/timer/cadence_ttc.c
+similarity index 100%
+rename from hw/cadence_ttc.c
+rename to hw/timer/cadence_ttc.c
+diff --git a/hw/ds1338.c b/hw/timer/ds1338.c
+similarity index 100%
+rename from hw/ds1338.c
+rename to hw/timer/ds1338.c
+diff --git a/hw/hpet.c b/hw/timer/hpet.c
+similarity index 100%
+rename from hw/hpet.c
+rename to hw/timer/hpet.c
+diff --git a/hw/i8254.c b/hw/timer/i8254.c
+similarity index 100%
+rename from hw/i8254.c
+rename to hw/timer/i8254.c
+diff --git a/hw/i8254_common.c b/hw/timer/i8254_common.c
+similarity index 100%
+rename from hw/i8254_common.c
+rename to hw/timer/i8254_common.c
+diff --git a/hw/m48t59.c b/hw/timer/m48t59.c
+similarity index 100%
+rename from hw/m48t59.c
+rename to hw/timer/m48t59.c
+diff --git a/hw/pl031.c b/hw/timer/pl031.c
+similarity index 100%
+rename from hw/pl031.c
+rename to hw/timer/pl031.c
+diff --git a/hw/puv3_ost.c b/hw/timer/puv3_ost.c
+similarity index 100%
+rename from hw/puv3_ost.c
+rename to hw/timer/puv3_ost.c
+diff --git a/hw/twl92230.c b/hw/timer/twl92230.c
+similarity index 100%
+rename from hw/twl92230.c
+rename to hw/timer/twl92230.c
+diff --git a/hw/xilinx_timer.c b/hw/timer/xilinx_timer.c
+similarity index 100%
+rename from hw/xilinx_timer.c
+rename to hw/timer/xilinx_timer.c
+diff --git a/hw/usb/Makefile.objs b/hw/usb/Makefile.objs
+index e63e287..5c20644 100644
+--- a/hw/usb/Makefile.objs
++++ b/hw/usb/Makefile.objs
+@@ -21,7 +21,12 @@ common-obj-$(CONFIG_USB_NETWORK)      += dev-network.o
+ # FIXME: make configurable too
+ CONFIG_USB_BLUETOOTH := y
+ common-obj-$(CONFIG_USB_BLUETOOTH)    += dev-bluetooth.o
+-common-obj-$(CONFIG_USB_SMARTCARD)    += dev-smartcard-reader.o
++
++ifeq ($(CONFIG_USB_SMARTCARD),y)
++common-obj-y                          += dev-smartcard-reader.o
++common-obj-y                          += ccid-card-passthru.o
++common-obj-$(CONFIG_SMARTCARD_NSS)    += ccid-card-emulated.o
++endif
+ 
+ # usb redirection
+ common-obj-$(CONFIG_USB_REDIR) += redirect.o quirks.o
+diff --git a/hw/ccid-card-emulated.c b/hw/usb/ccid-card-emulated.c
+similarity index 100%
+rename from hw/ccid-card-emulated.c
+rename to hw/usb/ccid-card-emulated.c
+diff --git a/hw/ccid-card-passthru.c b/hw/usb/ccid-card-passthru.c
+similarity index 100%
+rename from hw/ccid-card-passthru.c
+rename to hw/usb/ccid-card-passthru.c
+diff --git a/hw/virtio/Makefile.objs b/hw/virtio/Makefile.objs
+index e69de29..ed63495 100644
+--- a/hw/virtio/Makefile.objs
++++ b/hw/virtio/Makefile.objs
+@@ -0,0 +1,4 @@
++common-obj-$(CONFIG_VIRTIO) += virtio-rng.o
++common-obj-$(CONFIG_VIRTIO_PCI) += virtio-pci.o
++common-obj-$(CONFIG_VIRTIO) += virtio-bus.o
++
+diff --git a/hw/virtio-bus.c b/hw/virtio/virtio-bus.c
+similarity index 100%
+rename from hw/virtio-bus.c
+rename to hw/virtio/virtio-bus.c
+diff --git a/hw/virtio-pci.c b/hw/virtio/virtio-pci.c
+similarity index 100%
+rename from hw/virtio-pci.c
+rename to hw/virtio/virtio-pci.c
+diff --git a/hw/virtio-rng.c b/hw/virtio/virtio-rng.c
+similarity index 100%
+rename from hw/virtio-rng.c
+rename to hw/virtio/virtio-rng.c
+diff --git a/hw/watchdog/Makefile.objs b/hw/watchdog/Makefile.objs
+index e69de29..f57133b 100644
+--- a/hw/watchdog/Makefile.objs
++++ b/hw/watchdog/Makefile.objs
+@@ -0,0 +1,2 @@
++common-obj-y += watchdog.o
++common-obj-$(CONFIG_PCI) += wdt_i6300esb.o
+diff --git a/hw/watchdog.c b/hw/watchdog/watchdog.c
+similarity index 100%
+rename from hw/watchdog.c
+rename to hw/watchdog/watchdog.c
+diff --git a/hw/wdt_i6300esb.c b/hw/watchdog/wdt_i6300esb.c
+similarity index 100%
+rename from hw/wdt_i6300esb.c
+rename to hw/watchdog/wdt_i6300esb.c
+diff --git a/hw/xen/Makefile.objs b/hw/xen/Makefile.objs
+index e69de29..4b209a7 100644
+--- a/hw/xen/Makefile.objs
++++ b/hw/xen/Makefile.objs
+@@ -0,0 +1,2 @@
++# xen backend driver support
++common-obj-$(CONFIG_XEN_BACKEND) += xen_backend.o xen_devconfig.o
+diff --git a/hw/xen_backend.c b/hw/xen/xen_backend.c
+similarity index 100%
+rename from hw/xen_backend.c
+rename to hw/xen/xen_backend.c
+diff --git a/hw/xen_devconfig.c b/hw/xen/xen_devconfig.c
+similarity index 100%
+rename from hw/xen_devconfig.c
+rename to hw/xen/xen_devconfig.c
+-- 
+1.8.1.4
+
+
+

@@ -1,0 +1,35 @@
+From patches Mon Sep 17 00:00:00 2001
+From: liguang <lig.fnst@cn.fujitsu.com>
+To: qemu-devel@nongnu.org
+Cc: liguang <lig.fnst@cn.fujitsu.com>
+Date: Thu, 11 Apr 2013 11:41:57 +0800
+Message-id: 1365651722-11241-11-git-send-email-lig.fnst@cn.fujitsu.com
+Subject: [PATCH 11/16] target-ppc/translate: mininally change
+ gen_intermediate_code_internal Signed-off-by: liguang
+ <lig.fnst@cn.fujitsu.com>
+
+---
+ target-ppc/translate.c |    6 +++---
+ 1 files changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/target-ppc/translate.c b/target-ppc/translate.c
+index 5e741d1..cbdcb84 100644
+--- a/target-ppc/translate.c
++++ b/target-ppc/translate.c
+@@ -9565,9 +9565,9 @@ static inline void gen_intermediate_code_internal(CPUPPCState *env,
+         if (unlikely(search_pc)) {
+             j = tcg_ctx.gen_opc_ptr - tcg_ctx.gen_opc_buf;
+             if (lj < j) {
+-                lj++;
+-                while (lj < j)
+-                    tcg_ctx.gen_opc_instr_start[lj++] = 0;
++                while (++lj < j) {
++                    tcg_ctx.gen_opc_instr_start[lj] = 0;
++                }
+             }
+             tcg_ctx.gen_opc_pc[lj] = ctx.nip;
+             tcg_ctx.gen_opc_instr_start[lj] = 1;
+-- 
+1.7.2.5
+
+

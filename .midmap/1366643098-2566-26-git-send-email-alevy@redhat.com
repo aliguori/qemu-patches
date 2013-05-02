@@ -1,0 +1,1 @@
+../ccid-and-libcacard-fixes-for-windows-mingw/v3.1366671870/0025-libcacard-vreader-add-debugging-messages-for-apdu.patch

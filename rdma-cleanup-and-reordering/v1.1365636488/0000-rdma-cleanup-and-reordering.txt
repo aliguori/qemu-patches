@@ -1,0 +1,24 @@
+From patches Mon Sep 17 00:00:00 2001
+From: mrhines@linux.vnet.ibm.com
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, mst@redhat.com,
+ Michael R Hines <mrhines@us.ibm.com>, Bulent Abali <abali@us.ibm.com>,
+ owasserm@redhat.com, pbonzini@redhat.com, Gokul B Kandiraju <gokul@us.ibm.com>
+Date: Wed, 10 Apr 2013 18:28:08 -0400
+Message-id: 1365632901-15470-1-git-send-email-mrhines@linux.vnet.ibm.com
+Subject: [PATCH 00/13] rdma cleanup and reordering
+
+From: "Michael R. Hines" <mrhines@us.ibm.com>
+
+Changes since v6:
+
+(Thanks, Paolo - things look much cleaner now.)
+
+- Try to get patch-ordering correct =)
+- Much cleaner use of QEMUFileOps
+- Much fewer header files changes
+- Convert zero check capability to QMP command instead
+- Updated documentation
+
+Wiki: http://wiki.qemu.org/Features/RDMALiveMigration
+Github: git@github.com:hinesmr/qemu.git

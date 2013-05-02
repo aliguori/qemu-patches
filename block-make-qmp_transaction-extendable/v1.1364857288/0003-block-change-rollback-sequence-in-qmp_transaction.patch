@@ -1,0 +1,36 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Wenchao Xia <xiawenc@linux.vnet.ibm.com>
+To: Eric Blake <eblake@redhat.com>, Kevin Wolf <kwolf@redhat.com>,
+ Wenchao Xia <xiawenc@linux.vnet.ibm.com>, qemu-devel@nongnu.org
+Cc: kwolf@redhat.com, Wenchao Xia <xiawenc@linux.vnet.ibm.com>,
+ stefanha@gmail.com, qemu-devel@nongnu.org, pbonzini@redhat.com,
+ dietmar@proxmox.com
+Date: Mon,  1 Apr 2013 18:01:31 +0800
+Message-id: 1364810491-21404-4-git-send-email-xiawenc@linux.vnet.ibm.com
+Subject: [PATCH 3/3] block: change rollback sequence in qmp_transaction
+
+  Last operaton should be cancelled first.
+
+Signed-off-by: Wenchao Xia <xiawenc@linux.vnet.ibm.com>
+---
+ blockdev.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+diff --git a/blockdev.c b/blockdev.c
+index 75416fb..a24d10e 100644
+--- a/blockdev.c
++++ b/blockdev.c
+@@ -954,7 +954,7 @@ void qmp_transaction(BlockdevActionList *dev_list, Error **errp)
+         dev_entry = dev_entry->next;
+ 
+         states = g_malloc0(sizeof(BlkTransactionStates));
+-        QSIMPLEQ_INSERT_TAIL(&snap_bdrv_states, states, entry);
++        QSIMPLEQ_INSERT_HEAD(&snap_bdrv_states, states, entry);
+ 
+         states->action = dev_info;
+         switch (dev_info->kind) {
+-- 
+1.7.1
+
+
+

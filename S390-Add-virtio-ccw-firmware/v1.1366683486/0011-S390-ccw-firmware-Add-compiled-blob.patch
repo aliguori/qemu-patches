@@ -1,0 +1,95 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Alexander Graf <agraf@suse.de>
+To: qemu-devel@nongnu.org
+Cc: Christian Borntraeger <borntraeger@de.ibm.com>,
+ Dominik Dingel <dingel@linux.vnet.ibm.com>
+Date: Mon, 22 Apr 2013 21:18:17 +0200
+Message-id: 1366658298-9275-12-git-send-email-agraf@suse.de
+Subject: [PATCH 11/12] S390: ccw firmware: Add compiled blob
+
+Now that we have all the source code ready, add a compiled blob into
+the QEMU source tree, so that people without access to an s390 compiler
+can run the s390-ccw firmware.
+
+Signed-off-by: Alexander Graf <agraf@suse.de>
+---
+ Makefile             |    1 +
+ pc-bios/s390-ccw.img |  Bin 0 -> 9432 bytes
+ 2 files changed, 1 insertions(+), 0 deletions(-)
+ create mode 100644 pc-bios/s390-ccw.img
+
+diff --git a/Makefile b/Makefile
+index 12c7662..abb069f 100644
+--- a/Makefile
++++ b/Makefile
+@@ -273,6 +273,7 @@ qemu-icon.bmp \
+ bamboo.dtb petalogix-s3adsp1800.dtb petalogix-ml605.dtb \
+ multiboot.bin linuxboot.bin kvmvapic.bin \
+ s390-zipl.rom \
++s390-ccw.img \
+ spapr-rtas.bin slof.bin \
+ palcode-clipper
+ else
+diff --git a/pc-bios/s390-ccw.img b/pc-bios/s390-ccw.img
+new file mode 100644
+index 0000000000000000000000000000000000000000..b549a86e55194bbf54e25f839e52b490ac308260
+GIT binary patch
+literal 9432
+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
+
+literal 0
+HcmV?d00001
+
+-- 
+1.6.0.2
+
+

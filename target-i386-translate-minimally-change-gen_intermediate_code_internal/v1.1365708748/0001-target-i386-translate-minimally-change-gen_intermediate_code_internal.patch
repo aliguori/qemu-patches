@@ -1,0 +1,48 @@
+From patches Mon Sep 17 00:00:00 2001
+From: liguang <lig.fnst@cn.fujitsu.com>
+To: qemu-devel@nongnu.org
+Cc: liguang <lig.fnst@cn.fujitsu.com>
+Date: Thu, 11 Apr 2013 14:32:28 +0800
+Message-id: 1365661963-15396-1-git-send-email-lig.fnst@cn.fujitsu.com
+Subject: [PATCH 01/16] target-i386/translate: minimally change
+ gen_intermediate_code_internal
+
+Signed-off-by: liguang <lig.fnst@cn.fujitsu.com>
+---
+ target-i386/translate.c |   12 ++++++------
+ 1 files changed, 6 insertions(+), 6 deletions(-)
+
+diff --git a/target-i386/translate.c b/target-i386/translate.c
+index 7596a90..f99aa69 100644
+--- a/target-i386/translate.c
++++ b/target-i386/translate.c
+@@ -8338,9 +8338,9 @@ static inline void gen_intermediate_code_internal(CPUX86State *env,
+         if (search_pc) {
+             j = tcg_ctx.gen_opc_ptr - tcg_ctx.gen_opc_buf;
+             if (lj < j) {
+-                lj++;
+-                while (lj < j)
+-                    tcg_ctx.gen_opc_instr_start[lj++] = 0;
++                while (++lj < j) {
++                    tcg_ctx.gen_opc_instr_start[lj] = 0;
++                }
+             }
+             tcg_ctx.gen_opc_pc[lj] = pc_ptr;
+             gen_opc_cc_op[lj] = dc->cc_op;
+@@ -8387,9 +8387,9 @@ static inline void gen_intermediate_code_internal(CPUX86State *env,
+     /* we don't forget to fill the last values */
+     if (search_pc) {
+         j = tcg_ctx.gen_opc_ptr - tcg_ctx.gen_opc_buf;
+-        lj++;
+-        while (lj <= j)
+-            tcg_ctx.gen_opc_instr_start[lj++] = 0;
++        while (++lj <= j) {
++            tcg_ctx.gen_opc_instr_start[lj] = 0;
++        }
+     }
+ 
+ #ifdef DEBUG_DISAS
+-- 
+1.7.2.5
+
+

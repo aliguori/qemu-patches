@@ -1,0 +1,1 @@
+../usb-redir-chardev-flowcontrol-patches-v4/v1.1365179418/0006-spice-qemu-char-vmc_write-Dont-write-more-bytes-then-were-asked-too.patch

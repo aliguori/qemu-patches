@@ -1,0 +1,139 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Petar Jovanovic <petar.jovanovic@rt-rk.com>
+To: Petar Jovanovic <petar.jovanovic@rt-rk.com>, qemu-devel@nongnu.org,
+ "qemu-devel@nongnu.org" <qemu-devel@nongnu.org>
+Cc: qemu-devel@nongnu.org, petar.jovanovic@imgtec.com, aurelien@aurel32.net,
+ "aurelien@aurel32.net" <aurelien@aurel32.net>
+Date: Mon, 15 Apr 2013 13:54:07 +0200
+Message-id: 1366026847-7712-1-git-send-email-petar.jovanovic@rt-rk.com
+Subject: [PATCH 1/1] target-mips: fix mipsdsp_mul_q15_q15 and tests for
+ MAQ_SA_Q_PHL/PHR
+
+From: Petar Jovanovic <petar.jovanovic@imgtec.com>
+
+The operands for MAQ_SA_W.PHL/MAQ_SA_W.PHR must in specified format.
+Otherwise, the results are unpredictable. Once the operands were corrected
+in the tests (part of this change), a bug in mipsdsp_mul_q15_q15 became
+visible.
+
+This change corrects the tests for MAQ_SA_W.PHL/MAQ_SA_W.PHR and fixes
+sign-related issue in mipsdsp_mul_q15_q15. It also removes unnecessary
+comment.
+
+Signed-off-by: Petar Jovanovic <petar.jovanovic@imgtec.com>
+---
+ target-mips/dsp_helper.c                 |   14 +-------------
+ tests/tcg/mips/mips32-dsp/maq_sa_w_phl.c |   12 ++++++------
+ tests/tcg/mips/mips32-dsp/maq_sa_w_phr.c |   24 ++++++++++++------------
+ 3 files changed, 19 insertions(+), 31 deletions(-)
+
+diff --git a/target-mips/dsp_helper.c b/target-mips/dsp_helper.c
+index c7df595..a368062 100644
+--- a/target-mips/dsp_helper.c
++++ b/target-mips/dsp_helper.c
+@@ -269,18 +269,6 @@ static inline int32_t mipsdsp_sat32_acc_q31(int32_t acc, int32_t a,
+     temp31 = (temp_sum >> 31) & 0x01;
+     result = temp_sum & 0xFFFFFFFF;
+ 
+-    /* FIXME
+-       This sat function may wrong, because user manual wrote:
+-       temp127..0 ← temp + ( (signA) || a31..0
+-       if ( temp32 ≠ temp31 ) then
+-           if ( temp32 = 0 ) then
+-               temp31..0 ← 0x80000000
+-           else
+-                temp31..0 ← 0x7FFFFFFF
+-           endif
+-           DSPControlouflag:16+acc ← 1
+-       endif
+-     */
+     if (temp32 != temp31) {
+         if (temp32 == 0) {
+             result = 0x7FFFFFFF;
+@@ -578,7 +566,7 @@ static inline int32_t mipsdsp_mul_q15_q15(int32_t ac, uint16_t a, uint16_t b,
+         temp = 0x7FFFFFFF;
+         set_DSPControl_overflow_flag(1, 16 + ac, env);
+     } else {
+-        temp = ((uint32_t)a * (uint32_t)b) << 1;
++         temp = ((int16_t)a * (int16_t)b) << 1;
+     }
+ 
+     return temp;
+diff --git a/tests/tcg/mips/mips32-dsp/maq_sa_w_phl.c b/tests/tcg/mips/mips32-dsp/maq_sa_w_phl.c
+index a756991..d83dce6 100644
+--- a/tests/tcg/mips/mips32-dsp/maq_sa_w_phl.c
++++ b/tests/tcg/mips/mips32-dsp/maq_sa_w_phl.c
+@@ -10,12 +10,12 @@ int main()
+     int resulth, resultl;
+     int resdsp;
+ 
+-    achi = 0x05;
+-    acli = 0xB4CB;
++    achi = 0x00000000;
++    acli = 0x0000B4CB;
+     rs = 0xFF060000;
+     rt = 0xCB000000;
+-    resulth = 0x00;
+-    resultl = 0x7FFFFFFF;
++    resulth = 0x00000000;
++    resultl = 0x006838CB;
+ 
+     __asm
+         ("mthi %2, $ac1\n\t"
+@@ -29,8 +29,8 @@ int main()
+     assert(resulth == acho);
+     assert(resultl == aclo);
+ 
+-    achi = 0x06;
+-    acli = 0xB4CB;
++    achi = 0x00000000;
++    acli = 0x0000B4CB;
+     rs  = 0x80000000;
+     rt  = 0x80000000;
+     resulth = 0x00;
+diff --git a/tests/tcg/mips/mips32-dsp/maq_sa_w_phr.c b/tests/tcg/mips/mips32-dsp/maq_sa_w_phr.c
+index d6498f8..d233111 100644
+--- a/tests/tcg/mips/mips32-dsp/maq_sa_w_phr.c
++++ b/tests/tcg/mips/mips32-dsp/maq_sa_w_phr.c
+@@ -10,12 +10,12 @@ int main()
+     int resulth, resultl;
+     int resdsp;
+ 
+-    achi = 0x05;
+-    acli = 0xB4CB;
+-    rs  = 0xFF06;
+-    rt  = 0xCB00;
+-    resulth = 0x00;
+-    resultl = 0x7FFFFFFF;
++    achi = 0x00000000;
++    acli = 0x0000B4CB;
++    rs  = 0x0000FF06;
++    rt  = 0x0000CB00;
++    resulth = 0x00000000;
++    resultl = 0x006838CB;
+ 
+     __asm
+         ("mthi %2, $ac1\n\t"
+@@ -29,12 +29,12 @@ int main()
+     assert(resulth == acho);
+     assert(resultl == aclo);
+ 
+-    achi = 0x06;
+-    acli = 0xB4CB;
+-    rs  = 0x8000;
+-    rt  = 0x8000;
+-    resulth = 0x00;
+-    resultl = 0x7fffffff;
++    achi = 0x00000000;
++    acli = 0x0000B4CB;
++    rs  = 0x00008000;
++    rt  = 0x00008000;
++    resulth = 0x00000000;
++    resultl = 0x7FFFFFFF;
+     resdsp = 0x01;
+ 
+     __asm
+-- 
+1.7.9.5
+
+

@@ -1,0 +1,49 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Stefan Hajnoczi <stefanha@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>,
+ Petar Jovanovic <petar.jovanovic@imgtec.com>,
+ Stefan Hajnoczi <stefanha@redhat.com>
+Date: Fri, 19 Apr 2013 13:33:58 +0200
+Message-id: 1366371241-23430-6-git-send-email-stefanha@redhat.com
+Subject: [PATCH 5/8] linux-user: change do_semop to return target errno when
+ unsuccessful
+
+From: Petar Jovanovic <petar.jovanovic@imgtec.com>
+
+do_semop() is called from two places, and one of these fails to convert
+return error to target errno when semop fails. This patch changes the
+function to always return target errno in case of an unsuccessful call.
+
+Signed-off-by: Petar Jovanovic <petar.jovanovic@imgtec.com>
+Reviewed-by: Peter Maydell <peter.maydell@linaro.org>
+Signed-off-by: Stefan Hajnoczi <stefanha@redhat.com>
+---
+ linux-user/syscall.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/linux-user/syscall.c b/linux-user/syscall.c
+index 1f07621..d6d2050 100644
+--- a/linux-user/syscall.c
++++ b/linux-user/syscall.c
+@@ -2764,7 +2764,7 @@ static inline abi_long do_semop(int semid, abi_long ptr, unsigned nsops)
+     if (target_to_host_sembuf(sops, ptr, nsops))
+         return -TARGET_EFAULT;
+ 
+-    return semop(semid, sops, nsops);
++    return get_errno(semop(semid, sops, nsops));
+ }
+ 
+ struct target_msqid_ds
+@@ -6957,7 +6957,7 @@ abi_long do_syscall(void *cpu_env, int num, abi_long arg1,
+ #endif
+ #ifdef TARGET_NR_semop
+     case TARGET_NR_semop:
+-        ret = get_errno(do_semop(arg1, arg2, arg3));
++        ret = do_semop(arg1, arg2, arg3);
+         break;
+ #endif
+ #ifdef TARGET_NR_semctl
+-- 
+1.8.1.4
+

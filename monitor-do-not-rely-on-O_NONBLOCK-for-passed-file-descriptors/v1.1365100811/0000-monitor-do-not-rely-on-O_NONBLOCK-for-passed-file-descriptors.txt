@@ -1,0 +1,44 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Stefan Hajnoczi <stefanha@redhat.com>
+To: Eric Blake <eblake@redhat.com>, Stefan Hajnoczi <stefanha@redhat.com>,
+ qemu-devel@nongnu.org
+Cc: Luiz Capitulino <lcapitulino@redhat.com>,
+ Stefan Hajnoczi <stefanha@redhat.com>, qemu-devel@nongnu.org,
+ Michael Roth <mdroth@linux.vnet.ibm.com>, qemu-devel <qemu-devel@nongnu.org>
+Date: Thu,  4 Apr 2013 13:40:11 +0200
+Message-id: 1365075615-14027-1-git-send-email-stefanha@redhat.com
+Subject: [PATCH 0/4] monitor: do not rely on O_NONBLOCK for passed file
+ descriptors
+
+Backported to QEMU 1.4 stable branch.
+
+Original series:
+http://lists.nongnu.org/archive/html/qemu-devel/2013-03/msg04756.html
+
+Stefan Hajnoczi (4):
+  oslib-posix: rename socket_set_nonblock() to qemu_set_nonblock()
+  net: ensure "socket" backend uses non-blocking fds
+  qemu-socket: set passed fd non-blocking in socket_connect()
+  chardev: clear O_NONBLOCK on SCM_RIGHTS file descriptors
+
+ block/nbd.c            |  2 +-
+ block/sheepdog.c       |  6 +++---
+ include/qemu/sockets.h |  4 ++--
+ migration-tcp.c        |  2 +-
+ migration-unix.c       |  2 +-
+ migration.c            |  2 +-
+ nbd.c                  |  8 ++++----
+ net/socket.c           | 13 +++++++++----
+ qemu-char.c            | 11 +++++++----
+ slirp/misc.c           |  2 +-
+ slirp/tcp_subr.c       |  4 ++--
+ ui/vnc.c               |  2 +-
+ util/oslib-posix.c     |  4 ++--
+ util/oslib-win32.c     |  4 ++--
+ util/qemu-sockets.c    |  5 +++--
+ 15 files changed, 40 insertions(+), 31 deletions(-)
+
+-- 
+1.8.1.4
+
+

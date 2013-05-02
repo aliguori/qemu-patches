@@ -1,0 +1,199 @@
+From patches Mon Sep 17 00:00:00 2001
+From: =?utf-8?q?Llu=C3=ADs_Vilanova_=3Cvilanova=40ac=2Eupc=2Eedu=3E?=
+To: Stefan Hajnoczi <stefanha@gmail.com>,
+ =?iso-8859-1?Q?Llu=EDs?= Vilanova <vilanova@ac.upc.edu>, qemu-devel@nongnu.org
+Cc: qemu-devel@nongnu.org
+Date: Sun, 21 Apr 2013 21:11:30 +0200
+Message-id: 20130421191129.8947.77964.stgit@fimbulvetr.bsc.es
+Subject: [PATCH 00/24] instrument: Let the user wrap/override specific event
+ tracing routines
+
+TODO: Operations 'instr_load' and 'instr_unload' are not thread safe.
+      (qemu_cpu_kick?)
+
+TODO: Do cmdline actions have to be implemented on top of QMP routines?
+
+TODO: HMP and QMP interfaces only accept one argument to "instr-load".
+
+TODO: Replace programmatic 'InstrLoadError' in favour of QAPI's 'InstrLoadCode'?
+      (harder to find using code navigation tools, as it's auto-generated; but
+      provides a single point to manage the enumeration values, which is less
+      error-prone)
+
+
+The whole set of patch series is available at:
+  https://projects.gso.ac.upc.edu/projects/qemu-dbi
+
+Adds the "instrument" event property to declare which tracing events in QEMU
+must be instrumentable. Still, in case the user only wants to wrap around the
+tracing events, the original tracing implementation is accessible through the
+appropriate routines.
+
+The instrumentation can be performed either through a dynamically-loaded library
+or through user-provided code that is compiled into QEMU itself (useful when
+instrumenting high-frequency events, as the fast-path of the instrumentation can
+be inlined into QEMU).
+
+As a side-effect this series adds an API for the instrumentation code to have
+some basic interaction with QEMU.
+
+See the documentation added in the first patch for more information.
+
+Signed-off-by: Lluís Vilanova <vilanova@ac.upc.edu>
+---
+
+Changes in v3:
+
+* Rename QAPI 'input' primitive to 'include' (Eric Blake).
+* Use 'error_setg' instead of 'errot_set' (Eric Blake).
+* Added copyright and fixed docs on "instrument/qapi-schema.json" (Eric Blake).
+* Rename internal 'args' variable in "qapi-commands.py" to 'args_'.
+* Rename argument 'iargs' in QAPI command 'instr-load' to 'args', and make it
+  optional (Eric Blake).
+* Fixed loop in 'qmp_instr_laod'.
+* Revamped QAPI commands "instr-load" and "instr-unload" to use a proper return
+  value.
+* Fixed QMP arguments for "instr-load".
+* Added 'instr_type' and 'instr_active'.
+* Use 'instr_type' instead of CONFIG_TRACE_INSTRUMENT* whenever possible.
+* Change QAPI interfaces to appear as if providing support for multiple
+  libraries (Eric Blake).
+* Reimplemented HMP commands on top of QMP commands.
+
+
+Changes in v2:
+
+* Rebased on latest master (e2ec3f9).
+* Added "libqemutools.a".
+* Have 'tracetool' forbid certain event argument names.
+* Fixed title in path for "linux-headers" include path (Peter Maydell).
+* Small fixes to qapi/qmp (Eric Blake).
+* Have 'qi_init' accept a list of strings as arguments (Eric Blake)
+
+Lluís Vilanova (24):
+      instrument: Add documentation
+      trace: [simple] Do not include "trace/simple.h" in generated tracer headers
+      trace: Let the user specify her own trace-events file
+      tracetool: Use method 'Event.api' to get the name of public routines
+      trace: Minimize inclusions of "qemu-common.h" to avoid inclusion loops
+      instrument: [none] Add null instrumentation
+      system: [linux] Use absolute include path for linux-headers
+      instrument: [static] Call statically linked user-provided routines
+      build: Add variable 'tools-obj-y' for tool-only files
+      instrument: [dynamic] Call dynamically linked user-provided routines
+      qapi: Add a primitive to include other files from a QAPI schema file
+      qapi: [trivial] Set the input root directory when parsing QAPI files
+      qapi: [trivial] Allow user to use 'args' as an argument name
+      instrument: Add internal control interface
+      instrument: [qmp, qapi] Add control interface
+      instrument: [hmp] Add control interface
+      Let makefiles add entries to the set of target architecture objects
+      instrument: Add commandline options to start with an instrumentation library
+      instrument: Add client-side API to enumerate events
+      instrument: Add client-side API to control tracing state of events
+      instrument: Add client-side API to control event instrumentation
+      build: Fix installation of target-dependant files
+      instrument: Install headers for dynamic instrumentation clients
+      trace: Do not use the word 'new' in event arguments
+
+
+ .gitignore                                  |    4 
+ Makefile                                    |   57 +++
+ Makefile.objs                               |    9 
+ Makefile.target                             |    7 
+ bsd-user/main.c                             |   22 +
+ bsd-user/syscall.c                          |    5 
+ configure                                   |   96 +++++
+ docs/instrumentation.txt                    |  496 +++++++++++++++++++++++++++
+ docs/tracing.txt                            |    9 
+ hmp-commands.hx                             |   42 ++
+ hw/virtio/virtio.c                          |    1 
+ include/trace.h                             |    2 
+ instrument/Makefile.objs                    |   87 +++++
+ instrument/api-control.c                    |   14 +
+ instrument/api-trace.c                      |   14 +
+ instrument/cmdline.c                        |   91 +++++
+ instrument/cmdline.h                        |   52 +++
+ instrument/control-internal.h               |   40 ++
+ instrument/control.c                        |  226 ++++++++++++
+ instrument/control.h                        |  152 ++++++++
+ instrument/hmp.c                            |   79 ++++
+ instrument/hmp.h                            |   21 +
+ instrument/qapi-schema.json                 |  150 ++++++++
+ instrument/qemu-instr/control-internal.h    |   69 ++++
+ instrument/qemu-instr/control.h             |  199 +++++++++++
+ instrument/qemu-instr/trace-internal.h      |   32 ++
+ instrument/qemu-instr/trace.h               |   91 +++++
+ instrument/qemu-instr/visibility-internal.h |   94 +++++
+ instrument/qmp.c                            |   78 ++++
+ libcacard/Makefile                          |    4 
+ linux-user/main.c                           |   31 ++
+ linux-user/syscall.c                        |    4 
+ monitor.c                                   |    5 
+ qapi-schema.json                            |    2 
+ qemu-options.hx                             |   18 +
+ qmp-commands.hx                             |   71 ++++
+ qmp.c                                       |    4 
+ rules.mak                                   |    3 
+ scripts/qapi-commands.py                    |   18 +
+ scripts/qapi-types.py                       |   10 -
+ scripts/qapi-visit.py                       |   10 -
+ scripts/qapi.py                             |   12 +
+ scripts/tracetool.py                        |   14 +
+ scripts/tracetool/__init__.py               |   44 ++
+ scripts/tracetool/backend/dtrace.py         |    6 
+ scripts/tracetool/backend/instr_dynamic.py  |   93 +++++
+ scripts/tracetool/backend/instr_none.py     |   44 ++
+ scripts/tracetool/backend/instr_static.py   |   82 ++++
+ scripts/tracetool/backend/simple.py         |   13 -
+ scripts/tracetool/backend/stderr.py         |    5 
+ scripts/tracetool/backend/ust.py            |    8 
+ scripts/tracetool/format/api_c.py           |   24 +
+ scripts/tracetool/format/api_events_h.py    |   56 +++
+ scripts/tracetool/format/api_h.py           |   39 ++
+ scripts/tracetool/format/events_c.py        |   42 ++
+ scripts/tracetool/format/h.py               |   15 +
+ scripts/tracetool/format/qemu_h.py          |   68 ++++
+ trace-events                                |    8 
+ trace/Makefile.objs                         |   10 -
+ trace/control-internal.h                    |    4 
+ trace/control.c                             |    4 
+ trace/control.h                             |    9 
+ trace/default.c                             |    4 
+ trace/event-internal.h                      |   17 +
+ trace/simple.c                              |    6 
+ trace/simple.h                              |    1 
+ trace/stderr.c                              |    4 
+ vl.c                                        |   41 ++
+ 68 files changed, 3016 insertions(+), 76 deletions(-)
+ create mode 100644 docs/instrumentation.txt
+ create mode 100644 instrument/Makefile.objs
+ create mode 100644 instrument/api-control.c
+ create mode 100644 instrument/api-trace.c
+ create mode 100644 instrument/cmdline.c
+ create mode 100644 instrument/cmdline.h
+ create mode 100644 instrument/control-internal.h
+ create mode 100644 instrument/control.c
+ create mode 100644 instrument/control.h
+ create mode 100644 instrument/hmp.c
+ create mode 100644 instrument/hmp.h
+ create mode 100644 instrument/qapi-schema.json
+ create mode 100644 instrument/qemu-instr/control-internal.h
+ create mode 100644 instrument/qemu-instr/control.h
+ create mode 100644 instrument/qemu-instr/trace-internal.h
+ create mode 100644 instrument/qemu-instr/trace.h
+ create mode 100644 instrument/qemu-instr/visibility-internal.h
+ create mode 100644 instrument/qmp.c
+ create mode 100644 scripts/tracetool/backend/instr_dynamic.py
+ create mode 100644 scripts/tracetool/backend/instr_none.py
+ create mode 100644 scripts/tracetool/backend/instr_static.py
+ create mode 100644 scripts/tracetool/format/api_c.py
+ create mode 100644 scripts/tracetool/format/api_events_h.py
+ create mode 100644 scripts/tracetool/format/api_h.py
+ create mode 100644 scripts/tracetool/format/qemu_h.py
+
+
+To: qemu-devel@nongnu.org
+Cc: Stefan Hajnoczi <stefanha@gmail.com>
+Cc: Eric Blake <eblake@redhat.com>
+

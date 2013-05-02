@@ -1,0 +1,1 @@
+../libqos-support/v1.1362491604/0003-i440fx-test-add-test-for-PAM-functionality.patch

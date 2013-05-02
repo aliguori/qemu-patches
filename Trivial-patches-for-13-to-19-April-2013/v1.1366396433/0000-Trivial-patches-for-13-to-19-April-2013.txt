@@ -1,0 +1,69 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Stefan Hajnoczi <stefanha@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>,
+ Stefan Hajnoczi <stefanha@redhat.com>
+Date: Fri, 19 Apr 2013 13:33:53 +0200
+Message-id: 1366371241-23430-1-git-send-email-stefanha@redhat.com
+Subject: [PATCH 0/8] Trivial patches for 13 to 19 April 2013
+
+The following changes since commit 09dada400328d75daf79e3eca1e48e024fec148d:
+
+  configure: remove duplicate test (2013-04-18 14:12:31 +0200)
+
+are available in the git repository at:
+
+  git://github.com/stefanha/qemu.git trivial-patches
+
+for you to fetch changes up to ad6b40f471cf8bf7b106032145b1b2ac105f99cf:
+
+  m25p80: Remove bogus include of devices.h (2013-04-19 11:45:58 +0200)
+
+----------------------------------------------------------------
+Alexey Kardashevskiy (1):
+      bswap: fix compiler warning
+
+Luiz Capitulino (1):
+      virtio.h: drop unused function prototypes
+
+Petar Jovanovic (1):
+      linux-user: change do_semop to return target errno when unsuccessful
+
+Peter Crosthwaite (1):
+      m25p80: Remove bogus include of devices.h
+
+Richard W.M. Jones (1):
+      ssh: Remove unnecessary use of strlen function.
+
+Stefan Weil (3):
+      Remove unneeded type casts
+      w64: Fix compiler warnings (wrong format specifier)
+      block/ssh: Add missing gcc format attributes
+
+ block/ssh.c                | 10 ++++------
+ cpus.c                     |  4 ++--
+ hw/arm/armv7m.c            | 12 ++++++------
+ hw/arm/boot.c              |  4 ++--
+ hw/arm/musicpal.c          |  8 ++++----
+ hw/arm/nseries.c           |  4 ++--
+ hw/arm/omap1.c             | 12 ++++++------
+ hw/audio/marvell_88w8618.c |  3 +--
+ hw/block/m25p80.c          |  1 -
+ hw/display/pxa2xx_lcd.c    |  2 +-
+ hw/dma/pxa2xx_dma.c        |  2 +-
+ hw/dma/xilinx_axidma.c     |  4 ++--
+ hw/gpio/zaurus.c           |  2 +-
+ hw/microblaze/boot.c       |  2 +-
+ hw/misc/macio/mac_dbdma.c  |  8 ++++----
+ hw/misc/milkymist-pfpu.c   |  4 ++--
+ hw/net/mcf_fec.c           |  4 ++--
+ hw/ppc/ppc405_boards.c     |  2 +-
+ hw/ppc/virtex_ml507.c      |  2 +-
+ include/hw/virtio/virtio.h |  2 --
+ include/qemu/bswap.h       |  1 +
+ linux-user/syscall.c       |  4 ++--
+ 22 files changed, 46 insertions(+), 51 deletions(-)
+
+-- 
+1.8.1.4
+

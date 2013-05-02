@@ -1,0 +1,326 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: Paolo Bonzini <pbonzini@redhat.com>, qemu-devel@nongnu.org
+Cc: peter.maydell@linaro.org, mst@redhat.com
+Date: Thu, 11 Apr 2013 18:10:21 +0200
+Message-id: 1365696633-30727-1-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 00/12] directory reorganization, final part
+
+This removes a few directories from include/, and removes references
+to include/exec/ from device model (from now on, most will only have to
+care about include/sysemu and include/hw).
+
+Hans de Goede (1):
+  virtio-9p: Fix virtio-9p no longer building after hw-dirs branch merge
+
+Hu Tao (1):
+  Fix failure to create q35 machine
+
+Jan Kiszka (1):
+  Add linux-headers to QEMU_INCLUDES
+
+Paolo Bonzini (8):
+  configure: fix TPM logic
+  tpm: reorganize headers and split hardware part
+  sysemu: avoid proliferation of include/ subdirectories
+  include: avoid useless includes of exec/ headers
+  memory: move core typedefs to qemu/typedefs.h
+  exec: remove useless declarations from memory-internal.h
+  hw: move memory API headers to hw/
+  hw: move memory API to hw/core
+
+Peter Maydell (1):
+  arm: fix location of some include files
+
+ Makefile.objs                                      |  2 +-
+ Makefile.target                                    |  4 +-
+ arch_init.c                                        |  3 +-
+ backends/baum.c                                    |  2 +-
+ backends/msmouse.c                                 |  2 +-
+ backends/rng-egd.c                                 |  4 +-
+ backends/rng-random.c                              |  4 +-
+ backends/rng.c                                     |  2 +-
+ backends/tpm.c                                     | 40 ++++++++++++++-
+ bt-host.c                                          |  2 +-
+ bt-vhci.c                                          |  2 +-
+ configure                                          | 29 +++++++----
+ cputlb.c                                           |  4 +-
+ default-configs/i386-softmmu.mak                   |  5 +-
+ default-configs/x86_64-softmmu.mak                 |  5 +-
+ dump.c                                             |  6 ++-
+ exec.c                                             |  4 +-
+ gdbstub.c                                          |  2 +-
+ hmp.c                                              |  2 +-
+ hw/9pfs/virtio-9p-device.c                         |  2 +-
+ hw/Makefile.objs                                   |  1 +
+ hw/acpi/ich9.c                                     |  2 +-
+ hw/acpi/piix4.c                                    |  4 +-
+ hw/alpha/typhoon.c                                 |  5 +-
+ hw/arm/armv7m.c                                    |  2 +-
+ hw/arm/boot.c                                      |  2 +-
+ hw/arm/collie.c                                    |  6 +--
+ hw/arm/exynos4210.c                                |  2 +-
+ hw/arm/exynos4_boards.c                            |  4 +-
+ hw/arm/gumstix.c                                   |  4 +-
+ hw/arm/highbank.c                                  |  6 +--
+ hw/arm/integratorcp.c                              |  6 +--
+ hw/arm/kzm.c                                       |  6 +--
+ hw/arm/mainstone.c                                 |  6 +--
+ hw/arm/musicpal.c                                  |  6 +--
+ hw/arm/nseries.c                                   |  6 +--
+ hw/arm/omap1.c                                     |  2 +-
+ hw/arm/omap2.c                                     |  4 +-
+ hw/arm/omap_sx1.c                                  |  4 +-
+ hw/arm/palm.c                                      |  6 +--
+ hw/arm/pic_cpu.c                                   |  2 +-
+ hw/arm/pxa2xx.c                                    |  2 +-
+ hw/arm/realview.c                                  |  6 +--
+ hw/arm/spitz.c                                     |  6 +--
+ hw/arm/stellaris.c                                 |  6 +--
+ hw/arm/strongarm.c                                 |  4 +-
+ hw/arm/strongarm.h                                 |  2 +-
+ hw/arm/tosa.c                                      |  6 +--
+ hw/arm/versatilepb.c                               |  6 +--
+ hw/arm/vexpress.c                                  |  6 +--
+ hw/arm/xilinx_zynq.c                               |  4 +-
+ hw/arm/z2.c                                        |  6 +--
+ hw/block/m25p80.c                                  |  2 +-
+ hw/block/onenand.c                                 |  4 +-
+ hw/block/pflash_cfi01.c                            |  2 +-
+ hw/block/pflash_cfi02.c                            |  2 +-
+ hw/bt/core.c                                       |  2 +-
+ hw/bt/hci-csr.c                                    |  4 +-
+ hw/bt/hci.c                                        |  2 +-
+ hw/char/cadence_uart.c                             |  2 +-
+ hw/char/debugcon.c                                 |  2 +-
+ hw/char/escc.c                                     |  2 +-
+ hw/char/etraxfs_ser.c                              |  2 +-
+ hw/char/exynos4210_uart.c                          |  2 +-
+ hw/char/grlib_apbuart.c                            |  2 +-
+ hw/char/imx_serial.c                               |  2 +-
+ hw/char/ipoctal232.c                               |  2 +-
+ hw/char/lm32_juart.c                               |  2 +-
+ hw/char/lm32_uart.c                                |  2 +-
+ hw/char/mcf_uart.c                                 |  4 +-
+ hw/char/milkymist-uart.c                           |  2 +-
+ hw/char/omap_uart.c                                |  4 +-
+ hw/char/parallel.c                                 |  2 +-
+ hw/char/pl011.c                                    |  2 +-
+ hw/char/sclpconsole.c                              |  2 +-
+ hw/char/serial.c                                   |  4 +-
+ hw/char/sh_serial.c                                |  4 +-
+ hw/char/spapr_vty.c                                |  2 +-
+ hw/char/virtio-console.c                           |  2 +-
+ hw/char/xen_console.c                              |  2 +-
+ hw/char/xilinx_uartlite.c                          |  2 +-
+ hw/core/Makefile.objs                              |  3 ++
+ ioport.c => hw/core/ioport.c                       |  4 +-
+ hw/core/loader.c                                   |  4 +-
+ memory.c => hw/core/memory.c                       |  6 +--
+ hw/core/qdev-properties-system.c                   |  2 +-
+ hw/core/qdev-properties.c                          |  2 +-
+ hw/core/sysbus.c                                   |  2 +-
+ hw/cris/axis_dev88.c                               |  2 +-
+ hw/display/blizzard.c                              |  2 +-
+ hw/display/framebuffer.h                           |  2 +-
+ hw/display/sm501.c                                 |  2 +-
+ hw/display/tc6393xb.c                              |  2 +-
+ hw/display/vga_int.h                               |  2 +-
+ hw/display/xenfb.c                                 |  2 +-
+ hw/dma/etraxfs_dma.c                               |  2 +-
+ hw/i386/pc.c                                       |  4 +-
+ hw/i386/pc_piix.c                                  |  4 +-
+ hw/i386/pc_q35.c                                   |  2 +-
+ hw/ide/ahci.c                                      |  1 -
+ hw/ide/internal.h                                  |  1 -
+ hw/input/stellaris_input.c                         |  2 +-
+ hw/input/tsc2005.c                                 |  2 +-
+ hw/input/tsc210x.c                                 |  2 +-
+ hw/intc/armv7m_nvic.c                              |  4 +-
+ hw/isa/isa-bus.c                                   |  2 +-
+ hw/isa/isa_mmio.c                                  |  2 +-
+ hw/isa/lpc_ich9.c                                  |  2 +-
+ hw/isa/pc87312.c                                   |  2 +-
+ hw/isa/vt82c686.c                                  |  2 +-
+ hw/lm32/lm32_boards.c                              |  4 +-
+ hw/lm32/milkymist.c                                |  4 +-
+ hw/m68k/an5206.c                                   |  2 +-
+ hw/m68k/dummy_m68k.c                               |  2 +-
+ hw/m68k/mcf5206.c                                  |  2 +-
+ hw/m68k/mcf5208.c                                  |  2 +-
+ hw/m68k/mcf_intc.c                                 |  2 +-
+ hw/microblaze/petalogix_ml605_mmu.c                |  4 +-
+ hw/microblaze/petalogix_s3adsp1800_mmu.c           |  4 +-
+ hw/mips/gt64xxx_pci.c                              |  2 +-
+ hw/mips/mips_fulong2e.c                            |  4 +-
+ hw/mips/mips_jazz.c                                |  2 +-
+ hw/mips/mips_malta.c                               |  4 +-
+ hw/mips/mips_mipssim.c                             |  2 +-
+ hw/mips/mips_r4k.c                                 |  2 +-
+ hw/misc/cbus.c                                     |  2 +-
+ hw/misc/ivshmem.c                                  |  2 +-
+ hw/misc/omap_gpmc.c                                |  4 +-
+ hw/misc/vfio.c                                     |  4 +-
+ hw/moxie/moxiesim.c                                |  2 +-
+ hw/net/lan9118.c                                   |  2 +-
+ hw/net/mcf_fec.c                                   |  2 +-
+ hw/net/ne2000-isa.c                                |  2 +-
+ hw/net/pcnet.h                                     |  2 +-
+ hw/net/smc91c111.c                                 |  2 +-
+ hw/net/vmxnet_tx_pkt.c                             |  2 +-
+ hw/net/xgmac.c                                     |  2 +-
+ hw/openrisc/openrisc_sim.c                         |  2 +-
+ hw/pci-bridge/pci_bridge_dev.c                     |  2 +-
+ hw/pci-host/apb.c                                  |  2 +-
+ hw/pci-host/bonito.c                               |  2 +-
+ hw/pci-host/ppce500.c                              |  2 +-
+ hw/pci-host/prep.c                                 |  2 +-
+ hw/pci-host/versatile.c                            |  2 +-
+ hw/pci/pci.c                                       |  2 +-
+ hw/pci/pcie_host.c                                 |  2 +-
+ hw/ppc/e500.c                                      |  2 +-
+ hw/ppc/mac.h                                       |  2 +-
+ hw/ppc/mac_newworld.c                              |  2 +-
+ hw/ppc/mac_oldworld.c                              |  2 +-
+ hw/ppc/ppc405_boards.c                             |  2 +-
+ hw/ppc/ppc405_uc.c                                 |  2 +-
+ hw/ppc/ppc440_bamboo.c                             |  2 +-
+ hw/ppc/ppc4xx_devs.c                               |  2 +-
+ hw/ppc/ppc4xx_pci.c                                |  2 +-
+ hw/ppc/prep.c                                      |  2 +-
+ hw/ppc/spapr.c                                     |  2 +-
+ hw/ppc/spapr_events.c                              |  2 +-
+ hw/ppc/spapr_iommu.c                               |  2 +-
+ hw/ppc/spapr_pci.c                                 |  2 +-
+ hw/ppc/spapr_rtas.c                                |  2 +-
+ hw/ppc/virtex_ml507.c                              |  4 +-
+ hw/s390x/s390-virtio-ccw.c                         |  2 +-
+ hw/s390x/s390-virtio.c                             |  2 +-
+ hw/s390x/sclp.c                                    |  2 +-
+ hw/sh4/r2d.c                                       |  4 +-
+ hw/sh4/sh7750.c                                    |  2 +-
+ hw/sh4/sh_pci.c                                    |  2 +-
+ hw/sh4/shix.c                                      |  2 +-
+ hw/sparc/leon3.c                                   |  4 +-
+ hw/sparc64/sun4u.c                                 |  2 +-
+ hw/timer/m48t59.c                                  |  2 +-
+ hw/timer/sh_timer.c                                |  2 +-
+ hw/timer/tusb6010.c                                |  2 +-
+ {tpm => hw/tpm}/Makefile.objs                      |  4 --
+ {tpm => hw/tpm}/tpm_int.h                          | 39 +--------------
+ {tpm => hw/tpm}/tpm_passthrough.c                  | 22 ++++++--
+ {tpm => hw/tpm}/tpm_tis.c                          |  6 +--
+ {tpm => hw/tpm}/tpm_tis.h                          |  5 --
+ hw/unicore32/puv3.c                                |  2 +-
+ hw/usb/ccid-card-emulated.c                        |  2 +-
+ hw/usb/ccid-card-passthru.c                        |  2 +-
+ hw/usb/dev-bluetooth.c                             |  2 +-
+ hw/usb/dev-serial.c                                |  2 +-
+ hw/usb/libhw.c                                     |  2 +-
+ hw/usb/redirect.c                                  |  2 +-
+ hw/virtio/dataplane/hostmem.c                      |  2 +-
+ hw/virtio/vhost.c                                  |  2 +-
+ hw/virtio/virtio-balloon.c                         |  2 +-
+ hw/virtio/virtio-rng.c                             |  2 +-
+ hw/xen/xen_backend.c                               |  2 +-
+ hw/xen/xen_platform.c                              |  2 +-
+ hw/xen/xen_pt.c                                    |  2 +-
+ hw/xtensa/xtensa_lx60.c                            |  6 +--
+ hw/xtensa/xtensa_sim.c                             |  4 +-
+ include/exec/memory-internal.h                     |  6 ---
+ include/exec/softmmu_template.h                    |  2 +-
+ include/{exec => hw}/address-spaces.h              |  2 +-
+ include/hw/{ => arm}/arm.h                         |  2 +-
+ include/hw/arm/exynos4210.h                        |  2 +-
+ include/hw/arm/omap.h                              |  2 +-
+ include/hw/arm/pxa.h                               |  2 +-
+ include/hw/arm/soc_dma.h                           |  2 +-
+ include/hw/block/flash.h                           |  2 +-
+ include/hw/char/serial.h                           |  2 +-
+ include/hw/{arm => }/devices.h                     |  0
+ include/hw/hw.h                                    |  2 +-
+ include/hw/i386/apic_internal.h                    |  2 +-
+ include/hw/i386/ioapic_internal.h                  |  2 +-
+ include/hw/i386/pc.h                               |  6 +--
+ include/hw/ide.h                                   |  2 +-
+ include/{exec => hw}/ioport.h                      |  2 +-
+ include/{exec => hw}/iorange.h                     |  0
+ include/hw/isa/apm.h                               |  2 +-
+ include/hw/isa/isa.h                               |  4 +-
+ include/{exec => hw}/memory.h                      |  9 +---
+ include/hw/mips/mips.h                             |  2 +-
+ include/hw/pci-host/pam.h                          |  2 +-
+ include/hw/pci/pci.h                               |  2 +-
+ include/hw/pci/pcie_host.h                         |  2 +-
+ include/hw/pci/shpc.h                              |  2 +-
+ include/hw/ppc/mac_dbdma.h                         |  2 +-
+ include/hw/sh4/sh_intc.h                           |  2 +-
+ include/hw/sysbus.h                                |  2 +-
+ include/hw/virtio/dataplane/hostmem.h              |  2 +-
+ include/hw/virtio/vhost.h                          |  2 +-
+ include/hw/virtio/virtio-rng.h                     |  4 +-
+ include/qemu/typedefs.h                            |  4 ++
+ include/{bt => sysemu}/bt.h                        |  0
+ include/{char => sysemu}/char.h                    |  0
+ include/sysemu/dma.h                               |  2 +-
+ include/{qemu => sysemu}/rng-random.h              |  0
+ include/{qemu => sysemu}/rng.h                     |  0
+ include/{tpm => sysemu}/tpm.h                      |  2 -
+ include/{backends/tpm.h => sysemu/tpm_backend.h}   | 42 +++++++++++++++-
+ .../sysemu/tpm_backend_int.h                       |  0
+ kvm-all.c                                          |  4 +-
+ kvm-stub.c                                         |  1 -
+ monitor.c                                          |  6 +--
+ net/slirp.c                                        |  2 +-
+ qemu-char.c                                        |  2 +-
+ qmp.c                                              |  2 +-
+ qtest.c                                            |  6 +--
+ savevm.c                                           |  2 +-
+ slirp/slirp.c                                      |  2 +-
+ spice-qemu-char.c                                  |  2 +-
+ target-arm/arm-semi.c                              |  2 +-
+ target-arm/kvm.c                                   |  2 +-
+ target-arm/kvm_arm.h                               |  2 +-
+ target-i386/ioport-user.c                          |  2 +-
+ target-i386/kvm.c                                  |  2 +-
+ target-i386/misc_helper.c                          |  2 +-
+ target-ppc/kvm_ppc.h                               |  2 -
+ target-s390x/misc_helper.c                         |  2 +-
+ target-sparc/mmu_helper.c                          |  2 +-
+ tpm/tpm.c => tpm.c                                 | 21 ++------
+ tpm/tpm_backend.c                                  | 58 ----------------------
+ translate-all.c                                    |  5 +-
+ ui/console.c                                       |  2 +-
+ ui/gtk.c                                           |  2 +-
+ util/event_notifier-posix.c                        |  2 +-
+ vl.c                                               |  6 +--
+ xen-all.c                                          |  4 +-
+ xen-stub.c                                         |  2 +-
+ 264 files changed, 461 insertions(+), 488 deletions(-)
+ rename ioport.c => hw/core/ioport.c (99%)
+ rename memory.c => hw/core/memory.c (99%)
+ rename {tpm => hw/tpm}/Makefile.objs (55%)
+ rename {tpm => hw/tpm}/tpm_int.h (49%)
+ rename {tpm => hw/tpm}/tpm_passthrough.c (96%)
+ rename {tpm => hw/tpm}/tpm_tis.c (99%)
+ rename {tpm => hw/tpm}/tpm_tis.h (96%)
+ rename include/{exec => hw}/address-spaces.h (97%)
+ rename include/hw/{ => arm}/arm.h (98%)
+ rename include/hw/{arm => }/devices.h (100%)
+ rename include/{exec => hw}/ioport.h (99%)
+ rename include/{exec => hw}/iorange.h (100%)
+ rename include/{exec => hw}/memory.h (99%)
+ rename include/{bt => sysemu}/bt.h (100%)
+ rename include/{char => sysemu}/char.h (100%)
+ rename include/{qemu => sysemu}/rng-random.h (100%)
+ rename include/{qemu => sysemu}/rng.h (100%)
+ rename include/{tpm => sysemu}/tpm.h (82%)
+ rename include/{backends/tpm.h => sysemu/tpm_backend.h} (77%)
+ rename tpm/tpm_backend.h => include/sysemu/tpm_backend_int.h (100%)
+ rename tpm/tpm.c => tpm.c (93%)
+ delete mode 100644 tpm/tpm_backend.c
+
+-- 
+1.8.1.4
+
+

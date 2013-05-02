@@ -1,0 +1,1 @@
+../hw--reorganization-part-2/v2.1364939914/0027-hw-move-GPIO-interfaces-to-hw-gpio--configure-with-default-configs-.patch

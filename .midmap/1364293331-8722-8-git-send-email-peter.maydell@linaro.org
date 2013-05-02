@@ -1,0 +1,1 @@
+../Fix-versatile_pci-now-without-breaking-linux/v2.1364311320/0007-versatile_pci-Implement-the-correct-PCI-IRQ-mapping.patch

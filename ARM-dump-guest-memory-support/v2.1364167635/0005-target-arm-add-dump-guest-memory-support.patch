@@ -1,0 +1,116 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Rabin Vincent <rabin@rab.in>
+To: Peter Maydell <peter.maydell@linaro.org>, Rabin Vincent <rabin@rab.in>,
+ qemu-devel@nongnu.org, Paolo Bonzini <pbonzini@redhat.com>
+Cc: Peter Maydell <peter.maydell@linaro.org>, Rabin Vincent <rabin@rab.in>,
+ qemu-devel@nongnu.org
+Date: Sun, 24 Mar 2013 18:27:20 +0100
+Message-id: 1364146041-27041-6-git-send-email-rabin@rab.in
+Subject: [PATCH 5/6] target-arm: add dump-guest-memory support
+
+Enable support for the dump-guest-memory monitor command for ARM.
+
+Cc: Peter Maydell <peter.maydell@linaro.org>
+Signed-off-by: Rabin Vincent <rabin@rab.in>
+---
+ configure                |    2 +-
+ target-arm/Makefile.objs |    2 +-
+ target-arm/arch_dump.c   |   61 ++++++++++++++++++++++++++++++++++++++++++++++
+ 3 files changed, 63 insertions(+), 2 deletions(-)
+ create mode 100644 target-arm/arch_dump.c
+
+diff --git a/configure b/configure
+index 46a7594..f35786d 100755
+--- a/configure
++++ b/configure
+@@ -4184,7 +4184,7 @@ if test "$target_softmmu" = "yes" ; then
+   echo "CONFIG_SOFTMMU=y" >> $config_target_mak
+   echo "LIBS+=$libs_softmmu $target_libs_softmmu" >> $config_target_mak
+   case "$target_arch2" in
+-    i386|x86_64)
++    arm|i386|x86_64)
+       echo "CONFIG_HAVE_CORE_DUMP=y" >> $config_target_mak
+   esac
+ fi
+diff --git a/target-arm/Makefile.objs b/target-arm/Makefile.objs
+index d89b57c..93baa12 100644
+--- a/target-arm/Makefile.objs
++++ b/target-arm/Makefile.objs
+@@ -1,5 +1,5 @@
+ obj-y += arm-semi.o
+-obj-$(CONFIG_SOFTMMU) += machine.o
++obj-$(CONFIG_SOFTMMU) += machine.o arch_dump.o
+ obj-$(CONFIG_KVM) += kvm.o
+ obj-y += translate.o op_helper.o helper.o cpu.o
+ obj-y += neon_helper.o iwmmxt_helper.o
+diff --git a/target-arm/arch_dump.c b/target-arm/arch_dump.c
+new file mode 100644
+index 0000000..e568ffb
+--- /dev/null
++++ b/target-arm/arch_dump.c
+@@ -0,0 +1,61 @@
++#include "cpu.h"
++#include "sysemu/dump.h"
++#include "elf.h"
++
++typedef struct {
++    char pad1[24];
++    uint32_t pid;
++    char pad2[44];
++    uint32_t regs[18];
++    char pad3[4];
++} arm_elf_prstatus;
++
++int cpu_write_elf64_note(write_core_dump_function f, CPUArchState *env,
++                         int cpuid, void *opaque)
++{
++    return -1;
++}
++
++int cpu_write_elf32_note(write_core_dump_function f, CPUArchState *env,
++                         int cpuid, void *opaque)
++{
++    arm_elf_prstatus prstatus = {.pid = cpuid};
++
++    memcpy(&(prstatus.regs), env->regs, sizeof(env->regs));
++    prstatus.regs[16] = cpsr_read(env);
++
++    return dump_write_elf_note(ELFCLASS32, "CORE", NT_PRSTATUS,
++                               &prstatus, sizeof(prstatus),
++                               f, opaque);
++}
++
++int cpu_write_elf64_qemunote(write_core_dump_function f, CPUArchState *env,
++                             void *opaque)
++{
++    return -1;
++}
++
++int cpu_write_elf32_qemunote(write_core_dump_function f, CPUArchState *env,
++                             void *opaque)
++{
++    return 0;
++}
++
++int cpu_get_dump_info(ArchDumpInfo *info)
++{
++    info->d_machine = EM_ARM;
++#ifdef TARGET_WORDS_BIGENDIAN
++    info->d_endian = ELFDATA2MSB;
++#else
++    info->d_endian = ELFDATA2LSB;
++#endif
++    info->d_class = ELFCLASS32;
++
++    return 0;
++}
++
++ssize_t cpu_get_note_size(int class, int machine, int nr_cpus)
++{
++    return nr_cpus * dump_get_note_size(ELFCLASS32, "CORE",
++                                        sizeof(arm_elf_prstatus));
++}
+-- 
+1.7.10.4
+
+

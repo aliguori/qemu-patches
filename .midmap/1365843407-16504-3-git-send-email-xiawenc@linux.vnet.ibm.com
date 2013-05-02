@@ -1,0 +1,1 @@
+../qmp-hmp-interfaces-for-internal-snapshot-info/v12.1365890189/0002-block-distinguish-id-and-name-in-bdrv_find_snapshot.patch

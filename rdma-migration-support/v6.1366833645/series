@@ -1,0 +1,12 @@
+0000-rdma-migration-support.txt
+0001-rdma-add-documentation.patch
+0002-rdma-export-yield_until_fd_readable.patch
+0003-rdma-export-throughput-w--MigrationStats-QMP.patch
+0004-rdma-introduce-qemu_file_mode_is_not_valid.patch
+0005-rdma-export-qemu_fflush.patch
+0006-rdma-introduce--ram_handle_compressed.patch
+0007-rdma-introduce-qemu_ram_foreach_block.patch
+0008-rdma-new-QEMUFileOps-hooks.patch
+0009-rdma-introduce-capability-x-rdma-pin-all.patch
+0010-rdma-core-logic.patch
+0011-rdma-send-pcram.patch

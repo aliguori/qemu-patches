@@ -1,0 +1,1 @@
+../qemu-kvmgit-uq-master-queue/v1.1366260501/0002-vmxcap-Augment-reported-information.patch

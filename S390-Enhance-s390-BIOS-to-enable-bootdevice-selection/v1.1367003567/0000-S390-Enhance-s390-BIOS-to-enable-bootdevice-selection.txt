@@ -1,0 +1,56 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Dominik Dingel <dingel@linux.vnet.ibm.com>
+To: Dominik Dingel <dingel@linux.vnet.ibm.com>, Alexander Graf <agraf@suse.de>,
+ qemu-devel@nongnu.org
+Cc: Christian Borntraeger <borntraeger@de.ibm.com>,
+ Alexander Graf <agraf@suse.de>, qemu-devel@nongnu.org,
+ Dominik Dingel <dingel@linux.vnet.ibm.com>
+Date: Fri, 26 Apr 2013 14:12:47 +0200
+Message-id: 1366978377-16823-1-git-send-email-dingel@linux.vnet.ibm.com
+Subject: [PATCH 00/10] S390: Enhance s390 BIOS to enable bootdevice selection
+
+Ths patchset enhance the common code to assign every device a bootindex,
+and provide a function to return the device.
+The device will be then used in the ipl code to provide the s390-ccw bios
+explicit information from which device the user wants to boot from.
+It will also return a load_parm to specify which boot entry it should use.
+It also includes the working s390-ccw.img fixes from Cornelia.
+
+In case there is some hesitation against the program selection code,
+I can provide a patchset excluding this function.
+
+Christian Paro (1):
+  S390: Pass per-device loadparm values for CCW blk and net devs.
+
+Cornelia Huck (4):
+  s390-ccw.img: Detect devices with stsch.
+  s390-ccw.img: Enhance drain_irqs().
+  s390-ccw.img: Rudimentary error checking.
+  s390-ccw.img: Get queue config from host.
+
+Dominik Dingel (5):
+  Common: Add a default bootindex for all applicable devices
+  Common: Add quick access to first boot device
+  S390: Check Bootdevice Type
+  S390: check if BIOS is available and create links
+  S390: Enabling device and program selection
+
+ configure                   |    1 +
+ hw/s390x/ipl.c              |   36 +++++++++++++++++++++++++++++++++--
+ hw/s390x/virtio-ccw.c       |    2 ++
+ hw/s390x/virtio-ccw.h       |    1 +
+ include/sysemu/sysemu.h     |    2 ++
+ pc-bios/s390-ccw.img        |  Bin 9432 -> 17528 bytes
+ pc-bios/s390-ccw/Makefile   |    1 +
+ pc-bios/s390-ccw/bootmap.c  |    4 ++--
+ pc-bios/s390-ccw/main.c     |   29 ++++++++++++++++++++++------
+ pc-bios/s390-ccw/s390-ccw.h |    2 +-
+ pc-bios/s390-ccw/virtio.c   |   44 ++++++++++++++++++++++++++++++++-----------
+ pc-bios/s390-ccw/virtio.h   |    5 +++++
+ vl.c                        |   35 +++++++++++++++++++++++++++++++---
+ 13 files changed, 137 insertions(+), 25 deletions(-)
+
+-- 
+1.7.9.5
+
+

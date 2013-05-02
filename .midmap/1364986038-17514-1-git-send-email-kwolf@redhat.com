@@ -1,0 +1,1 @@
+../usb-storage-Forward-serial-number-to-scsi-disk/v1.1365011238/0001-usb-storage-Forward-serial-number-to-scsi-disk.patch

@@ -1,0 +1,109 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Scott Wood <scottwood@freescale.com>
+To: Peter Maydell <peter.maydell@linaro.org>, Alexander Graf <agraf@suse.de>,
+ Scott Wood <scottwood@freescale.com>
+Cc: "qemu-ppc@nongnu.org
+ list:PowerPC" <qemu-ppc@nongnu.org>, Alexander Graf <agraf@suse.de>,
+ qemu-devel@nongnu.org, Scott Wood <scottwood@freescale.com>,
+ qemu-ppc@nongnu.org, qemu-devel qemu-devel <qemu-devel@nongnu.org>,
+ Peter Maydell <peter.maydell@linaro.org>,
+ "qemu-ppc@nongnu.org list:PowerPC" <qemu-ppc@nongnu.org>
+Date: Thu, 14 Feb 2013 00:31:58 -0600
+Message-id: 1360823521-32306-4-git-send-email-scottwood@freescale.com
+Subject: [PATCH 3/6] memory: add memory_region_to_address()
+
+This is useful for when a user of the memory region API needs to
+communicate the absolute bus address to something outside QEMU
+(in particular, KVM).
+
+Signed-off-by: Scott Wood <scottwood@freescale.com>
+---
+ include/exec/memory.h |    9 +++++++++
+ memory.c              |   38 ++++++++++++++++++++++++++++++++++----
+ 2 files changed, 43 insertions(+), 4 deletions(-)
+
+diff --git a/include/exec/memory.h b/include/exec/memory.h
+index 2322732..b800391 100644
+--- a/include/exec/memory.h
++++ b/include/exec/memory.h
+@@ -892,6 +892,15 @@ void *address_space_map(AddressSpace *as, hwaddr addr,
+ void address_space_unmap(AddressSpace *as, void *buffer, hwaddr len,
+                          int is_write, hwaddr access_len);
+ 
++/* memory_region_to_address: Find the full address of the start of the
++ *      given #MemoryRegion, ignoring aliases.  There is no guarantee
++ *      that the #MemoryRegion is actually visible at this address, if
++ *      there are overlapping regions.
++ *
++ * @mr: #MemoryRegion being queried
++ * @asp: if non-NULL, returns the #AddressSpace @mr is mapped in, if any
++ */
++hwaddr memory_region_to_address(MemoryRegion *mr, AddressSpace **asp);
+ 
+ #endif
+ 
+diff --git a/memory.c b/memory.c
+index cd7d5e0..0099f12 100644
+--- a/memory.c
++++ b/memory.c
+@@ -453,21 +453,51 @@ const IORangeOps memory_region_iorange_ops = {
+     .destructor = memory_region_iorange_destructor,
+ };
+ 
+-static AddressSpace *memory_region_to_address_space(MemoryRegion *mr)
++static AddressSpace *memory_region_root_to_address_space(MemoryRegion *mr)
+ {
+     AddressSpace *as;
+ 
+-    while (mr->parent) {
+-        mr = mr->parent;
+-    }
+     QTAILQ_FOREACH(as, &address_spaces, address_spaces_link) {
+         if (mr == as->root) {
+             return as;
+         }
+     }
++
++    return NULL;
++}
++
++static AddressSpace *memory_region_to_address_space(MemoryRegion *mr)
++{
++    AddressSpace *as;
++
++    while (mr->parent) {
++        mr = mr->parent;
++    }
++
++    as = memory_region_root_to_address_space(mr);
++    if (as) {
++        return as;
++    }
++
+     abort();
+ }
+ 
++hwaddr memory_region_to_address(MemoryRegion *mr, AddressSpace **asp)
++{
++    hwaddr addr = mr->addr;
++
++    while (mr->parent) {
++        mr = mr->parent;
++        addr += mr->addr;
++    }
++
++    if (asp) {
++        *asp = memory_region_root_to_address_space(mr);
++    }
++
++    return addr;
++}
++
+ /* Render a memory region into the global view.  Ranges in @view obscure
+  * ranges in @mr.
+  */
+-- 
+1.7.9.5
+
+
+

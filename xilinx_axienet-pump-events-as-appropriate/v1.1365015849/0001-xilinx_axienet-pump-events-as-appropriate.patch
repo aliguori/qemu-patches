@@ -1,0 +1,35 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+To: edgar.iglesias@gmail.com, qemu-devel@nongnu.org,
+ Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+Cc: qemu-devel@nongnu.org, Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+Date: Wed,  3 Apr 2013 14:04:09 +1000
+Message-id: 1364961849-29407-1-git-send-email-peter.crosthwaite@xilinx.com
+Subject: [PATCH 1/1] xilinx_axienet: pump events as appropriate
+
+When the conditions blocking receiving are cleared, check for buffered rx
+packets.
+
+Signed-off-by: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+Acked-by: Edgar E. Iglesias <edgar.iglesias@gmail.com>
+---
+ hw/xilinx_axienet.c |    2 ++
+ 1 files changed, 2 insertions(+), 0 deletions(-)
+
+diff --git a/hw/xilinx_axienet.c b/hw/xilinx_axienet.c
+index 5785290..07c4bad 100644
+--- a/hw/xilinx_axienet.c
++++ b/hw/xilinx_axienet.c
+@@ -516,6 +516,8 @@ static void enet_write(void *opaque, hwaddr addr,
+             s->rcw[addr & 1] = value;
+             if ((addr & 1) && value & RCW1_RST) {
+                 axienet_rx_reset(s);
++            } else {
++                qemu_flush_queued_packets(qemu_get_queue(s->nic));
+             }
+             break;
+ 
+-- 
+1.7.0.4
+
+

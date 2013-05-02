@@ -1,0 +1,43 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Benjamin Herrenschmidt <benh@kernel.crashing.org>
+To: Benjamin Herrenschmidt <benh@kernel.crashing.org>,
+ Alexander Graf <agraf@suse.de>
+Cc: qemu-ppc List <qemu-ppc@nongnu.org>, David Gibson <dwg@au1.ibm.com>,
+ qemu-devel <qemu-devel@nongnu.org>
+Date: Sat, 27 Apr 2013 07:21:20 +1000
+Message-id: 1367011280.17497.24.camel@pasglop
+Subject: [PATCH 1/1] ppc/spapr: Fix cache related properties
+
+The properties in the CPU nodes for expressing the cache block size
+are spelled {d,i}-cache... not {d,i}cache...
+
+Also add the "line" variants in addition to the "block" variants for
+completeness (some OSes might require them).
+
+Signed-off-by: Benjamin Herrenschmidt <benh@kernel.crashing.org>
+---
+
+diff --git a/hw/ppc/spapr.c b/hw/ppc/spapr.c
+index 7a42501..7582a05 100644
+--- a/hw/ppc/spapr.c
++++ b/hw/ppc/spapr.c
+@@ -333,9 +333,13 @@ static void *spapr_create_fdt_skel(const char *cpu_model,
+         _FDT((fdt_property_string(fdt, "device_type", "cpu")));
+ 
+         _FDT((fdt_property_cell(fdt, "cpu-version", env->spr[SPR_PVR])));
+-        _FDT((fdt_property_cell(fdt, "dcache-block-size",
++        _FDT((fdt_property_cell(fdt, "d-cache-block-size",
+                                 env->dcache_line_size)));
+-        _FDT((fdt_property_cell(fdt, "icache-block-size",
++        _FDT((fdt_property_cell(fdt, "i-cache-block-size",
++                                env->icache_line_size)));
++        _FDT((fdt_property_cell(fdt, "d-cache-line-size",
++                                env->dcache_line_size)));
++        _FDT((fdt_property_cell(fdt, "i-cache-line-size",
+                                 env->icache_line_size)));
+         _FDT((fdt_property_cell(fdt, "timebase-frequency", tbfreq)));
+         _FDT((fdt_property_cell(fdt, "clock-frequency", cpufreq)));
+
+
+
+

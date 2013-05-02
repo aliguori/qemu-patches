@@ -1,0 +1,7 @@
+0000-add-cow-file-format.txt
+0001-docs-document-for-add-cow-file-format.patch
+0002-make-path_has_protocol-non-static.patch
+0003-qed_read_string-to-bdrv_read_string.patch
+0004-rename-qcow2-cachec-to-block-cachec.patch
+0005-add-cow-file-format-core-code.patch
+0006-qemu-iotests-add-add-cow-iotests-support.patch

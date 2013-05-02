@@ -1,0 +1,46 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Liu Ping Fan <qemulist@gmail.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <anthony@codemonkey.ws>,
+ Paolo Bonzini <pbonzini@redhat.com>, Jan Kiszka <jan.kiszka@siemens.com>,
+ Stefan Hajnoczi <stefanha@redhat.com>, mdroth <mdroth@linux.vnet.ibm.com>
+Date: Fri, 26 Apr 2013 10:47:23 +0800
+Message-id: 1366944455-14239-3-git-send-email-qemulist@gmail.com
+Subject: [PATCH 02/14] net: introduce bind_ctx to NetClientInfo
+
+From: Liu Ping Fan <pingfank@linux.vnet.ibm.com>
+
+Introduce bind_ctx interface for NetClientState. It will help to
+bind NetClientState with a GSource. Currently, these GSource attached
+with default context, but in future, after resolving all the race
+condition in network layer, NetClientStates can run on different
+threads
+
+Signed-off-by: Liu Ping Fan <pingfank@linux.vnet.ibm.com>
+---
+ include/net/net.h |    2 ++
+ 1 files changed, 2 insertions(+), 0 deletions(-)
+
+diff --git a/include/net/net.h b/include/net/net.h
+index cb049a1..88332d2 100644
+--- a/include/net/net.h
++++ b/include/net/net.h
+@@ -44,6 +44,7 @@ typedef ssize_t (NetReceiveIOV)(NetClientState *, const struct iovec *, int);
+ typedef void (NetCleanup) (NetClientState *);
+ typedef void (LinkStatusChanged)(NetClientState *);
+ typedef void (NetClientDestructor)(NetClientState *);
++typedef void (NetClientBindCtx)(NetClientState *, GMainContext *);
+ 
+ typedef struct NetClientInfo {
+     NetClientOptionsKind type;
+@@ -55,6 +56,7 @@ typedef struct NetClientInfo {
+     NetCleanup *cleanup;
+     LinkStatusChanged *link_status_changed;
+     NetPoll *poll;
++    NetClientBindCtx *bind_ctx;
+ } NetClientInfo;
+ 
+ struct NetClientState {
+-- 
+1.7.4.4
+

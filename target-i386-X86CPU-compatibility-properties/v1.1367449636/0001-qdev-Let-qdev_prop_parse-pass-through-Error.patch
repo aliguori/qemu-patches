@@ -1,0 +1,148 @@
+From patches Mon Sep 17 00:00:00 2001
+From: =?utf-8?q?Andreas_F=C3=A4rber_=3Cafaerber=40suse=2Ede=3E?=
+To: qemu-devel@nongnu.org, Andreas =?iso-8859-1?Q?F=E4rber?= <afaerber@suse.de>
+Cc: ehabkost@redhat.com, qemu-devel@nongnu.org,
+ =?UTF-8?q?Andreas=20F=C3=A4rber?= <afaerber@suse.de>, anthony@codemonkey.ws,
+ pbonzini@redhat.com, imammedo@redhat.com
+Date: Wed,  1 May 2013 18:07:17 +0200
+Message-id: 1367424440-16687-2-git-send-email-afaerber@suse.de
+Subject: [PATCH 1/4] qdev: Let qdev_prop_parse() pass through Error
+
+Move error reporting to callers.
+
+Signed-off-by: Andreas Färber <afaerber@suse.de>
+Reviewed-by: Eduardo Habkost <ehabkost@redhat.com>
+---
+ hw/core/qdev-properties.c    | 25 +++++++++++--------------
+ hw/core/qdev.c               |  7 ++++++-
+ include/hw/qdev-properties.h |  5 +++--
+ qdev-monitor.c               |  6 +++++-
+ 4 files changed, 25 insertions(+), 18 deletions(-)
+
+diff --git a/hw/core/qdev-properties.c b/hw/core/qdev-properties.c
+index ca1739e..716ba19 100644
+--- a/hw/core/qdev-properties.c
++++ b/hw/core/qdev-properties.c
+@@ -986,25 +986,18 @@ void error_set_from_qdev_prop_error(Error **errp, int ret, DeviceState *dev,
+     }
+ }
+ 
+-int qdev_prop_parse(DeviceState *dev, const char *name, const char *value)
++void qdev_prop_parse(DeviceState *dev, const char *name, const char *value,
++                     Error **errp)
+ {
+     char *legacy_name;
+-    Error *err = NULL;
+ 
+     legacy_name = g_strdup_printf("legacy-%s", name);
+     if (object_property_get_type(OBJECT(dev), legacy_name, NULL)) {
+-        object_property_parse(OBJECT(dev), value, legacy_name, &err);
++        object_property_parse(OBJECT(dev), value, legacy_name, errp);
+     } else {
+-        object_property_parse(OBJECT(dev), value, name, &err);
++        object_property_parse(OBJECT(dev), value, name, errp);
+     }
+     g_free(legacy_name);
+-
+-    if (err) {
+-        qerror_report_err(err);
+-        error_free(err);
+-        return -1;
+-    }
+-    return 0;
+ }
+ 
+ void qdev_prop_set_bit(DeviceState *dev, const char *name, bool value)
+@@ -1106,18 +1099,22 @@ void qdev_prop_register_global_list(GlobalProperty *props)
+     }
+ }
+ 
+-void qdev_prop_set_globals(DeviceState *dev)
++void qdev_prop_set_globals(DeviceState *dev, Error **errp)
+ {
+     ObjectClass *class = object_get_class(OBJECT(dev));
+ 
+     do {
+         GlobalProperty *prop;
+         QTAILQ_FOREACH(prop, &global_props, next) {
++            Error *err = NULL;
++
+             if (strcmp(object_class_get_name(class), prop->driver) != 0) {
+                 continue;
+             }
+-            if (qdev_prop_parse(dev, prop->property, prop->value) != 0) {
+-                exit(1);
++            qdev_prop_parse(dev, prop->property, prop->value, &err);
++            if (err != NULL) {
++                error_propagate(errp, err);
++                return;
+             }
+         }
+         class = object_class_get_parent(class);
+diff --git a/hw/core/qdev.c b/hw/core/qdev.c
+index ab1d8f5..7167c90 100644
+--- a/hw/core/qdev.c
++++ b/hw/core/qdev.c
+@@ -752,7 +752,12 @@ static void device_initfn(Object *obj)
+         }
+         class = object_class_get_parent(class);
+     } while (class != object_class_by_name(TYPE_DEVICE));
+-    qdev_prop_set_globals(dev);
++    qdev_prop_set_globals(dev, &err);
++    if (err != NULL) {
++        qerror_report_err(err);
++        error_free(err);
++        exit(1);
++    }
+ 
+     object_property_add_link(OBJECT(dev), "parent_bus", TYPE_BUS,
+                              (Object **)&dev->parent_bus, &err);
+diff --git a/include/hw/qdev-properties.h b/include/hw/qdev-properties.h
+index 25dd1bb..38469d4 100644
+--- a/include/hw/qdev-properties.h
++++ b/include/hw/qdev-properties.h
+@@ -148,7 +148,8 @@ extern PropertyInfo qdev_prop_arraylen;
+ 
+ /* Set properties between creation and init.  */
+ void *qdev_get_prop_ptr(DeviceState *dev, Property *prop);
+-int qdev_prop_parse(DeviceState *dev, const char *name, const char *value);
++void qdev_prop_parse(DeviceState *dev, const char *name, const char *value,
++                     Error **errp);
+ void qdev_prop_set_bit(DeviceState *dev, const char *name, bool value);
+ void qdev_prop_set_uint8(DeviceState *dev, const char *name, uint8_t value);
+ void qdev_prop_set_uint16(DeviceState *dev, const char *name, uint16_t value);
+@@ -167,7 +168,7 @@ void qdev_prop_set_ptr(DeviceState *dev, const char *name, void *value);
+ 
+ void qdev_prop_register_global(GlobalProperty *prop);
+ void qdev_prop_register_global_list(GlobalProperty *props);
+-void qdev_prop_set_globals(DeviceState *dev);
++void qdev_prop_set_globals(DeviceState *dev, Error **errp);
+ void error_set_from_qdev_prop_error(Error **errp, int ret, DeviceState *dev,
+                                     Property *prop, const char *value);
+ 
+diff --git a/qdev-monitor.c b/qdev-monitor.c
+index 2cb5600..e54dbc2 100644
+--- a/qdev-monitor.c
++++ b/qdev-monitor.c
+@@ -105,13 +105,17 @@ static void qdev_print_devinfo(ObjectClass *klass, void *opaque)
+ static int set_property(const char *name, const char *value, void *opaque)
+ {
+     DeviceState *dev = opaque;
++    Error *err = NULL;
+ 
+     if (strcmp(name, "driver") == 0)
+         return 0;
+     if (strcmp(name, "bus") == 0)
+         return 0;
+ 
+-    if (qdev_prop_parse(dev, name, value) == -1) {
++    qdev_prop_parse(dev, name, value, &err);
++    if (err != NULL) {
++        qerror_report_err(err);
++        error_free(err);
+         return -1;
+     }
+     return 0;
+-- 
+1.8.1.4
+

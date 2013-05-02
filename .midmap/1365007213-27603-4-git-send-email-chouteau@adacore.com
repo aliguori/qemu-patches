@@ -1,0 +1,1 @@
+../PPC-PReP-Use-ElF-kernel-on-PReP/v1.1365032410/0003-PPC-PReP-can-run-without-bios-image.patch

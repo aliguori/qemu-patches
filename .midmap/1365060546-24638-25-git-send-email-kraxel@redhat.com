@@ -1,0 +1,1 @@
+../console-console-overhaul-continued/v3.1365085722/0024-qxl-register-QemuConsole-for-secondary-cards.patch

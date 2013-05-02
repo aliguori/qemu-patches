@@ -1,0 +1,1 @@
+../Data-Driven-device-registers--Zynq-DEVCFG/v2.1365205419/0005-xilinx_zynq-added-devcfg-to-machine-model.patch

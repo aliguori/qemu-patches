@@ -1,0 +1,2 @@
+0001-cpu-exec-rid-cs_base-of-TranslationBlock.patch
+0002-target--cpuh-remove-cs_base-for-other-targets.patch

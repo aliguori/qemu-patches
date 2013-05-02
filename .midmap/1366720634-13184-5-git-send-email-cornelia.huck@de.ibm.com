@@ -1,0 +1,1 @@
+../s390-ccwimg-Some-more-updates/v1.1366745830/0004-s390-ccwimg-Get-queue-config-from-host.patch

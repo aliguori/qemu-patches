@@ -1,0 +1,116 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Liu Ping Fan <qemulist@gmail.com>
+To: Liu Ping Fan <qemulist@gmail.com>, qemu-devel@nongnu.org
+Cc: Paolo Bonzini <pbonzini@redhat.com>,
+ Anthony Liguori <anthony@codemonkey.ws>, qemu-devel@nongnu.org,
+ mdroth <mdroth@linux.vnet.ibm.com>, Jan Kiszka <jan.kiszka@siemens.com>,
+ Stefan Hajnoczi <stefanha@redhat.com>
+Date: Wed, 17 Apr 2013 16:39:21 +0800
+Message-id: 1366187964-14265-13-git-send-email-qemulist@gmail.com
+Subject: [PATCH 12/15] slirp: make timeout local
+
+From: Liu Ping Fan <pingfank@linux.vnet.ibm.com>
+
+Each slirp has its own time to caculate timeout.
+
+Signed-off-by: Liu Ping Fan <pingfank@linux.vnet.ibm.com>
+---
+ slirp/slirp.c |   22 ++++++++++------------
+ slirp/slirp.h |    3 +++
+ 2 files changed, 13 insertions(+), 12 deletions(-)
+
+diff --git a/slirp/slirp.c b/slirp/slirp.c
+index bd9b7cb..5f1c5e8 100644
+--- a/slirp/slirp.c
++++ b/slirp/slirp.c
+@@ -40,8 +40,6 @@ static const uint8_t special_ethaddr[ETH_ALEN] = {
+ static const uint8_t zero_ethaddr[ETH_ALEN] = { 0, 0, 0, 0, 0, 0 };
+ 
+ u_int curtime;
+-static u_int time_fasttimo, last_slowtimo;
+-static int do_slowtimo;
+ 
+ static QTAILQ_HEAD(slirp_instances, Slirp) slirp_instances =
+     QTAILQ_HEAD_INITIALIZER(slirp_instances);
+@@ -278,14 +276,14 @@ void slirp_pollfds_fill(GArray *pollfds)
+     /*
+      * First, TCP sockets
+      */
+-    do_slowtimo = 0;
+ 
+     QTAILQ_FOREACH(slirp, &slirp_instances, entry) {
+         /*
+          * *_slowtimo needs calling if there are IP fragments
+          * in the fragment queue, or there are TCP connections active
+          */
+-        do_slowtimo |= ((slirp->tcb.so_next != &slirp->tcb) ||
++        slirp->do_slowtimo = 0;
++        slirp->do_slowtimo |= ((slirp->tcb.so_next != &slirp->tcb) ||
+                 (&slirp->ipq.ip_link != slirp->ipq.ip_link.next));
+ 
+         for (so = slirp->tcb.so_next; so != &slirp->tcb;
+@@ -299,8 +297,8 @@ void slirp_pollfds_fill(GArray *pollfds)
+             /*
+              * See if we need a tcp_fasttimo
+              */
+-            if (time_fasttimo == 0 && so->so_tcpcb->t_flags & TF_DELACK) {
+-                time_fasttimo = curtime; /* Flag when we want a fasttimo */
++            if (slirp->time_fasttimo == 0 && so->so_tcpcb->t_flags & TF_DELACK) {
++                slirp->time_fasttimo = curtime; /* Flag when we want a fasttimo */
+             }
+ 
+             /*
+@@ -381,7 +379,7 @@ void slirp_pollfds_fill(GArray *pollfds)
+                     udp_detach(so);
+                     continue;
+                 } else {
+-                    do_slowtimo = 1; /* Let socket expire */
++                    slirp->do_slowtimo = 1; /* Let socket expire */
+                 }
+             }
+ 
+@@ -422,7 +420,7 @@ void slirp_pollfds_fill(GArray *pollfds)
+                     icmp_detach(so);
+                     continue;
+                 } else {
+-                    do_slowtimo = 1; /* Let socket expire */
++                    slirp->do_slowtimo = 1; /* Let socket expire */
+                 }
+             }
+ 
+@@ -454,14 +452,14 @@ void slirp_pollfds_poll(GArray *pollfds, int select_error)
+         /*
+          * See if anything has timed out
+          */
+-        if (time_fasttimo && ((curtime - time_fasttimo) >= 2)) {
++        if (slirp->time_fasttimo && ((curtime - slirp->time_fasttimo) >= 2)) {
+             tcp_fasttimo(slirp);
+-            time_fasttimo = 0;
++            slirp->time_fasttimo = 0;
+         }
+-        if (do_slowtimo && ((curtime - last_slowtimo) >= 499)) {
++        if (slirp->do_slowtimo && ((curtime - slirp->last_slowtimo) >= 499)) {
+             ip_slowtimo(slirp);
+             tcp_slowtimo(slirp);
+-            last_slowtimo = curtime;
++            slirp->last_slowtimo = curtime;
+         }
+ 
+         /*
+diff --git a/slirp/slirp.h b/slirp/slirp.h
+index fe0e65d..008360e 100644
+--- a/slirp/slirp.h
++++ b/slirp/slirp.h
+@@ -203,6 +203,9 @@ bool arp_table_search(Slirp *slirp, uint32_t ip_addr,
+ 
+ struct Slirp {
+     QTAILQ_ENTRY(Slirp) entry;
++    u_int time_fasttimo;
++    u_int last_slowtimo;
++    int do_slowtimo;
+ 
+     /* virtual network configuration */
+     struct in_addr vnetwork_addr;
+-- 
+1.7.4.4
+

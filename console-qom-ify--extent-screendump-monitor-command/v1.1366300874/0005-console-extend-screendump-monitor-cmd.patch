@@ -1,0 +1,130 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Gerd Hoffmann <kraxel@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, Gerd Hoffmann <kraxel@redhat.com>,
+ eblake@redhat.com, lcapitulino@redhat.com
+Date: Thu, 18 Apr 2013 11:01:19 +0200
+Message-id: 1366275680-15416-6-git-send-email-kraxel@redhat.com
+Subject: [PATCH 5/5] console: extend screendump monitor cmd
+
+Add an optional device parameter to the screendump command.
+
+https://bugzilla.redhat.com/show_bug.cgi?id=903910
+
+Signed-off-by: Gerd Hoffmann <kraxel@redhat.com>
+---
+ hmp-commands.hx  |    6 +++---
+ hmp.c            |    3 ++-
+ qapi-schema.json |    4 +++-
+ qmp-commands.hx  |    3 ++-
+ ui/console.c     |   17 ++++++++++++++++-
+ 5 files changed, 26 insertions(+), 7 deletions(-)
+
+diff --git a/hmp-commands.hx b/hmp-commands.hx
+index df44906..c6ca7c7 100644
+--- a/hmp-commands.hx
++++ b/hmp-commands.hx
+@@ -235,9 +235,9 @@ ETEXI
+ 
+     {
+         .name       = "screendump",
+-        .args_type  = "filename:F",
+-        .params     = "filename",
+-        .help       = "save screen into PPM image 'filename'",
++        .args_type  = "filename:F,device:B?",
++        .params     = "filename [device]",
++        .help       = "save screen from device into PPM image 'filename'",
+         .mhandler.cmd = hmp_screen_dump,
+     },
+ 
+diff --git a/hmp.c b/hmp.c
+index 4fb76ec..a29e241 100644
+--- a/hmp.c
++++ b/hmp.c
+@@ -1322,9 +1322,10 @@ err_out:
+ void hmp_screen_dump(Monitor *mon, const QDict *qdict)
+ {
+     const char *filename = qdict_get_str(qdict, "filename");
++    const char *device = qdict_get_try_str(qdict, "device");
+     Error *err = NULL;
+ 
+-    qmp_screendump(filename, &err);
++    qmp_screendump(filename, device != NULL, device, &err);
+     hmp_handle_error(mon, &err);
+ }
+ 
+diff --git a/qapi-schema.json b/qapi-schema.json
+index 751d3c2..40f3b49 100644
+--- a/qapi-schema.json
++++ b/qapi-schema.json
+@@ -3096,12 +3096,14 @@
+ # Write a PPM of the VGA screen to a file.
+ #
+ # @filename: the path of a new PPM file to store the image
++# @device: #optional device to take the screenshot from
+ #
+ # Returns: Nothing on success
+ #
+ # Since: 0.14.0
+ ##
+-{ 'command': 'screendump', 'data': {'filename': 'str'} }
++{ 'command': 'screendump', 'data': {'filename': 'str',
++                                    '*device' : 'str'} }
+ 
+ ##
+ # @nbd-server-start:
+diff --git a/qmp-commands.hx b/qmp-commands.hx
+index 4d65422..32642ef 100644
+--- a/qmp-commands.hx
++++ b/qmp-commands.hx
+@@ -145,7 +145,7 @@ EQMP
+ 
+     {
+         .name       = "screendump",
+-        .args_type  = "filename:F",
++        .args_type  = "filename:F,device:B?",
+         .mhandler.cmd_new = qmp_marshal_input_screendump,
+     },
+ 
+@@ -158,6 +158,7 @@ Save screen into PPM image.
+ Arguments:
+ 
+ - "filename": file path (json-string)
++- "device": video device (json-string, optional)
+ 
+ Example:
+ 
+diff --git a/ui/console.c b/ui/console.c
+index 7c3f2f9..6d49ba2 100644
+--- a/ui/console.c
++++ b/ui/console.c
+@@ -310,10 +310,25 @@ write_err:
+     goto out;
+ }
+ 
+-void qmp_screendump(const char *filename, Error **errp)
++void qmp_screendump(const char *filename,
++                    bool has_device, const char *device, Error **errp)
+ {
+     QemuConsole *con = qemu_console_lookup_by_index(0);
+     DisplaySurface *surface;
++    DeviceState *dev;
++
++    if (has_device) {
++        dev = qdev_find_recursive(sysbus_get_default(), device);
++        if (NULL == dev) {
++            error_set(errp, QERR_DEVICE_NOT_FOUND, device);
++            return;
++        }
++        con = qemu_console_lookup_by_device(dev);
++        if (NULL == con) {
++            error_setg(errp, "There is no QemuConsole linked to %s", device);
++            return;
++        }
++    }
+ 
+     if (con == NULL) {
+         error_setg(errp, "There is no QemuConsole I can screendump from.");
+-- 
+1.7.9.7
+

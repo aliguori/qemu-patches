@@ -1,0 +1,1 @@
+../covert-savevm-loadvm-and-delvm-into-qapi/v2.1366842718/0002-block-update-error-reporting-for-bdrv_snapshot_delete-and-related-functions.patch

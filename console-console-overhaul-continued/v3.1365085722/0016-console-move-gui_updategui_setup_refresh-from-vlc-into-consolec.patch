@@ -1,0 +1,155 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Gerd Hoffmann <kraxel@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, Gerd Hoffmann <kraxel@redhat.com>
+Date: Thu, 4 Apr 2013 09:28:58 +0200
+Message-id: 1365060546-24638-17-git-send-email-kraxel@redhat.com
+Subject: [PATCH 16/24] console: move gui_update+gui_setup_refresh from vl.c
+ into console.c
+
+Pure code motion, no functional changes.
+
+Signed-off-by: Gerd Hoffmann <kraxel@redhat.com>
+---
+ include/ui/console.h |    2 --
+ ui/console.c         |   50 ++++++++++++++++++++++++++++++++++++++++++++++++++
+ vl.c                 |   49 -------------------------------------------------
+ 3 files changed, 50 insertions(+), 51 deletions(-)
+
+diff --git a/include/ui/console.h b/include/ui/console.h
+index d6e3e92..d92626b 100644
+--- a/include/ui/console.h
++++ b/include/ui/console.h
+@@ -213,8 +213,6 @@ static inline int is_buffer_shared(DisplaySurface *surface)
+     return !(surface->flags & QEMU_ALLOCATED_FLAG);
+ }
+ 
+-void gui_setup_refresh(DisplayState *ds);
+-
+ void register_displaychangelistener(DisplayState *ds,
+                                     DisplayChangeListener *dcl);
+ void unregister_displaychangelistener(DisplayChangeListener *dcl);
+diff --git a/ui/console.c b/ui/console.c
+index 29e9f43..1ca50fc 100644
+--- a/ui/console.c
++++ b/ui/console.c
+@@ -166,6 +166,56 @@ static void text_console_do_init(CharDriverState *chr, DisplayState *ds);
+ static void dpy_gfx_switch_surface(DisplayState *ds,
+                                    DisplaySurface *surface);
+ 
++static void gui_update(void *opaque)
++{
++    uint64_t interval = GUI_REFRESH_INTERVAL;
++    DisplayState *ds = opaque;
++    DisplayChangeListener *dcl;
++
++    dpy_refresh(ds);
++
++    QLIST_FOREACH(dcl, &ds->listeners, next) {
++        if (dcl->gui_timer_interval &&
++            dcl->gui_timer_interval < interval) {
++            interval = dcl->gui_timer_interval;
++        }
++    }
++    qemu_mod_timer(ds->gui_timer, interval + qemu_get_clock_ms(rt_clock));
++}
++
++static void gui_setup_refresh(DisplayState *ds)
++{
++    DisplayChangeListener *dcl;
++    bool need_timer = false;
++    bool have_gfx = false;
++    bool have_text = false;
++
++    QLIST_FOREACH(dcl, &ds->listeners, next) {
++        if (dcl->ops->dpy_refresh != NULL) {
++            need_timer = true;
++        }
++        if (dcl->ops->dpy_gfx_update != NULL) {
++            have_gfx = true;
++        }
++        if (dcl->ops->dpy_text_update != NULL) {
++            have_text = true;
++        }
++    }
++
++    if (need_timer && ds->gui_timer == NULL) {
++        ds->gui_timer = qemu_new_timer_ms(rt_clock, gui_update, ds);
++        qemu_mod_timer(ds->gui_timer, qemu_get_clock_ms(rt_clock));
++    }
++    if (!need_timer && ds->gui_timer != NULL) {
++        qemu_del_timer(ds->gui_timer);
++        qemu_free_timer(ds->gui_timer);
++        ds->gui_timer = NULL;
++    }
++
++    ds->have_gfx = have_gfx;
++    ds->have_text = have_text;
++}
++
+ void graphic_hw_update(QemuConsole *con)
+ {
+     if (!con) {
+diff --git a/vl.c b/vl.c
+index b05c289..ebba472 100644
+--- a/vl.c
++++ b/vl.c
+@@ -1630,55 +1630,6 @@ MachineInfoList *qmp_query_machines(Error **errp)
+ /***********************************************************/
+ /* main execution loop */
+ 
+-static void gui_update(void *opaque)
+-{
+-    uint64_t interval = GUI_REFRESH_INTERVAL;
+-    DisplayState *ds = opaque;
+-    DisplayChangeListener *dcl;
+-
+-    dpy_refresh(ds);
+-
+-    QLIST_FOREACH(dcl, &ds->listeners, next) {
+-        if (dcl->gui_timer_interval &&
+-            dcl->gui_timer_interval < interval)
+-            interval = dcl->gui_timer_interval;
+-    }
+-    qemu_mod_timer(ds->gui_timer, interval + qemu_get_clock_ms(rt_clock));
+-}
+-
+-void gui_setup_refresh(DisplayState *ds)
+-{
+-    DisplayChangeListener *dcl;
+-    bool need_timer = false;
+-    bool have_gfx = false;
+-    bool have_text = false;
+-
+-    QLIST_FOREACH(dcl, &ds->listeners, next) {
+-        if (dcl->ops->dpy_refresh != NULL) {
+-            need_timer = true;
+-        }
+-        if (dcl->ops->dpy_gfx_update != NULL) {
+-            have_gfx = true;
+-        }
+-        if (dcl->ops->dpy_text_update != NULL) {
+-            have_text = true;
+-        }
+-    }
+-
+-    if (need_timer && ds->gui_timer == NULL) {
+-        ds->gui_timer = qemu_new_timer_ms(rt_clock, gui_update, ds);
+-        qemu_mod_timer(ds->gui_timer, qemu_get_clock_ms(rt_clock));
+-    }
+-    if (!need_timer && ds->gui_timer != NULL) {
+-        qemu_del_timer(ds->gui_timer);
+-        qemu_free_timer(ds->gui_timer);
+-        ds->gui_timer = NULL;
+-    }
+-
+-    ds->have_gfx = have_gfx;
+-    ds->have_text = have_text;
+-}
+-
+ struct vm_change_state_entry {
+     VMChangeStateHandler *cb;
+     void *opaque;
+-- 
+1.7.9.7
+

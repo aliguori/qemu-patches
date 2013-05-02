@@ -1,0 +1,75 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Anthony Liguori <aliguori@us.ibm.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>,
+ Stefan Hajnoczi <stefanha@redhat.com>, Kevin Wolf <kwolf@redhat.com>
+Date: Tue, 5 Mar 2013 07:53:28 -0600
+Message-id: 1362491612-19226-5-git-send-email-aliguori@us.ibm.com
+Subject: [PATCH 4/8] pci: foreach
+
+Signed-off-by: Anthony Liguori <aliguori@us.ibm.com>
+---
+ tests/libqos/pci.c | 32 ++++++++++++++++++++++++++++++++
+ tests/libqos/pci.h |  3 +++
+ 2 files changed, 35 insertions(+)
+
+diff --git a/tests/libqos/pci.c b/tests/libqos/pci.c
+index 78d0bc0..57caf3a 100644
+--- a/tests/libqos/pci.c
++++ b/tests/libqos/pci.c
+@@ -5,6 +5,38 @@
+ 
+ #include <stdio.h>
+ 
++void qpci_device_foreach(QPCIBus *bus, int vendor_id, int device_id,
++                         void (*func)(QPCIDevice *dev, int devfn, void *data),
++                         void *data)
++{
++    int slot;
++
++    for (slot = 0; slot < 32; slot++) {
++        int fn;
++
++        for (fn = 0; fn < 8; fn++) {
++            QPCIDevice *dev;
++
++            dev = qpci_device_find(bus, QPCI_DEVFN(slot, fn));
++            if (!dev) {
++                continue;
++            }
++
++            if (vendor_id != -1 &&
++                qpci_config_readw(dev, PCI_VENDOR_ID) != vendor_id) {
++                continue;
++            }
++
++            if (device_id != -1 &&
++                qpci_config_readw(dev, PCI_DEVICE_ID) != device_id) {
++                continue;
++            }
++
++            func(dev, QPCI_DEVFN(slot, fn), data);
++        }
++    }
++}
++
+ QPCIDevice *qpci_device_find(QPCIBus *bus, int devfn)
+ {
+     QPCIDevice *dev;
+diff --git a/tests/libqos/pci.h b/tests/libqos/pci.h
+index 5162a79..355ef40 100644
+--- a/tests/libqos/pci.h
++++ b/tests/libqos/pci.h
+@@ -39,6 +39,9 @@ struct QPCIDevice
+     int devfn;
+ };
+ 
++void qpci_device_foreach(QPCIBus *bus, int vendor_id, int device_id,
++                         void (*func)(QPCIDevice *dev, int devfn, void *data),
++                         void *data);
+ QPCIDevice *qpci_device_find(QPCIBus *bus, int devfn);
+ 
+ void qpci_device_enable(QPCIDevice *dev);
+-- 
+1.8.0
+

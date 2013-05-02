@@ -1,0 +1,55 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: blauwirbel@gmail.com, sw@weilnetz.de
+Date: Sat, 27 Apr 2013 13:48:37 +0200
+Message-id: 1367063321-19196-2-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 1/5] win32: add generic RC rules to rules.mak
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ Makefile  | 2 --
+ rules.mak | 4 ++++
+ 2 files changed, 4 insertions(+), 2 deletions(-)
+
+diff --git a/Makefile b/Makefile
+index 8aca92f..58e3527 100644
+--- a/Makefile
++++ b/Makefile
+@@ -167,9 +167,7 @@ recurse-all: $(SUBDIR_RULES) $(ROMSUBDIR_RULES)
+ bt-host.o: QEMU_CFLAGS += $(BLUEZ_CFLAGS)
+ 
+ version.o: $(SRC_PATH)/version.rc config-host.h | version.lo
+-	$(call quiet-command,$(WINDRES) -I. -o $@ $<,"  RC    $(TARGET_DIR)$@")
+ version.lo: $(SRC_PATH)/version.rc config-host.h
+-	$(call quiet-command,$(LIBTOOL) --mode=compile --tag=RC $(WINDRES) -I. -o $@ $<,"lt RC   $(TARGET_DIR)$@")
+ 
+ version-obj-$(CONFIG_WIN32) += version.o
+ version-lobj-$(CONFIG_WIN32) += $(if $(LIBTOOL),version.lo)
+diff --git a/rules.mak b/rules.mak
+index 292a422..279525d 100644
+--- a/rules.mak
++++ b/rules.mak
+@@ -19,6 +19,8 @@ QEMU_CFLAGS += -I$(<D) -I$(@D)
+ 
+ %.o: %.c
+ 	$(call quiet-command,$(CC) $(QEMU_INCLUDES) $(QEMU_CFLAGS) $(QEMU_DGFLAGS) $(CFLAGS) -c -o $@ $<,"  CC    $(TARGET_DIR)$@")
++%.o: %.rc
++	$(call quiet-command,$(WINDRES) -I. -o $@ $<,"  RC    $(TARGET_DIR)$@")
+ 
+ ifeq ($(LIBTOOL),)
+ LIBTOOL = /bin/false
+@@ -29,6 +31,8 @@ else
+ LIBTOOL += $(if $(V),,--quiet)
+ %.lo: %.c
+ 	$(call quiet-command,$(LIBTOOL) --mode=compile --tag=CC $(CC) $(QEMU_INCLUDES) $(QEMU_CFLAGS) $(QEMU_DGFLAGS) $(CFLAGS) -c -o $@ $<,"  lt CC $@")
++%.lo: %.rc
++	$(call quiet-command,$(LIBTOOL) --mode=compile --tag=RC $(WINDRES) -I. -o $@ $<,"lt RC   $(TARGET_DIR)$@")
+ %.lo: %.dtrace
+ 	$(call quiet-command,$(LIBTOOL) --mode=compile --tag=CC dtrace -o $@ -G -s $<, " lt GEN $(TARGET_DIR)$@")
+ 
+-- 
+1.8.2
+
+
+

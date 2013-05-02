@@ -1,0 +1,39 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Alexander Graf <agraf@suse.de>
+To: qemu-ppc@nongnu.org
+Cc: Blue Swirl <blauwirbel@gmail.com>,
+ Christian Borntraeger <borntraeger@de.ibm.com>,
+ Aurelien Jarno <aurelien@aurel32.net>, qemu-devel@nongnu.org
+Date: Fri, 26 Apr 2013 20:19:22 +0200
+Message-id: 1367000373-7972-14-git-send-email-agraf@suse.de
+Subject: [PATCH 13/24] s390-ccw.img: Take care of the elf->img transition
+
+From: Christian Borntraeger <borntraeger@de.ibm.com>
+
+We have to call strip with s390-ccw.elf as input and
+s390-ccw.img as output
+
+Signed-off-by: Christian Borntraeger <borntraeger@de.ibm.com>
+Signed-off-by: Alexander Graf <agraf@suse.de>
+---
+ pc-bios/s390-ccw/Makefile |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/pc-bios/s390-ccw/Makefile b/pc-bios/s390-ccw/Makefile
+index c126194..ad55a14 100644
+--- a/pc-bios/s390-ccw/Makefile
++++ b/pc-bios/s390-ccw/Makefile
+@@ -20,7 +20,7 @@ s390-ccw.elf: $(OBJECTS)
+ 	$(call quiet-command,$(CC) $(LDFLAGS) -o $@ $(OBJECTS),"  Building $(TARGET_DIR)$@")
+ 
+ s390-ccw.img: s390-ccw.elf
+-	$(call quiet-command,strip $@,"  Stripping $(TARGET_DIR)$@")
++	$(call quiet-command,strip $< -o $@,"  Stripping $(TARGET_DIR)$@")
+ 
+ clean:
+-	rm -f *.o *.d *.img *~
++	rm -f *.o *.d *.img *.elf *~
+-- 
+1.6.0.2
+
+

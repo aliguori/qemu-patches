@@ -1,0 +1,304 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Wenchao Xia <xiawenc@linux.vnet.ibm.com>
+To: Markus Armbruster <armbru@redhat.com>,
+ Wenchao Xia <xiawenc@linux.vnet.ibm.com>, qemu-devel@nongnu.org
+Cc: kwolf@redhat.com, Wenchao Xia <xiawenc@linux.vnet.ibm.com>,
+ qemu-devel@nongnu.org, stefanha@gmail.com, armbru@redhat.com,
+ lcapitulino@redhat.com, pbonzini@redhat.com
+Date: Tue,  2 Apr 2013 19:47:25 +0800
+Message-id: 1364903250-10429-13-git-send-email-xiawenc@linux.vnet.ibm.com
+Subject: [PATCH 12/17] block: move bdrv_snapshot_dump() and
+ dump_human_image_info() to block/qapi.c
+
+  They are needed later in hmp command, dump_human_image_info()
+is renamed to bdrv_image_info_dump().
+
+Signed-off-by: Wenchao Xia <xiawenc@linux.vnet.ibm.com>
+---
+ block.c               |   33 ----------------
+ block/qapi.c          |  100 +++++++++++++++++++++++++++++++++++++++++++++++++
+ include/block/block.h |    1 -
+ include/block/qapi.h  |    2 +
+ qemu-img.c            |   69 +---------------------------------
+ savevm.c              |    1 +
+ 6 files changed, 104 insertions(+), 102 deletions(-)
+
+diff --git a/block.c b/block.c
+index 288cacd..cd4bc7e 100644
+--- a/block.c
++++ b/block.c
+@@ -3433,39 +3433,6 @@ char *get_human_readable_size(char *buf, int buf_size, int64_t size)
+     return buf;
+ }
+ 
+-char *bdrv_snapshot_dump(char *buf, int buf_size, QEMUSnapshotInfo *sn)
+-{
+-    char buf1[128], date_buf[128], clock_buf[128];
+-    struct tm tm;
+-    time_t ti;
+-    int64_t secs;
+-
+-    if (!sn) {
+-        snprintf(buf, buf_size,
+-                 "%-10s%-20s%7s%20s%15s",
+-                 "ID", "TAG", "VM SIZE", "DATE", "VM CLOCK");
+-    } else {
+-        ti = sn->date_sec;
+-        localtime_r(&ti, &tm);
+-        strftime(date_buf, sizeof(date_buf),
+-                 "%Y-%m-%d %H:%M:%S", &tm);
+-        secs = sn->vm_clock_nsec / 1000000000;
+-        snprintf(clock_buf, sizeof(clock_buf),
+-                 "%02d:%02d:%02d.%03d",
+-                 (int)(secs / 3600),
+-                 (int)((secs / 60) % 60),
+-                 (int)(secs % 60),
+-                 (int)((sn->vm_clock_nsec / 1000000) % 1000));
+-        snprintf(buf, buf_size,
+-                 "%-10s%-20s%7s%20s%15s",
+-                 sn->id_str, sn->name,
+-                 get_human_readable_size(buf1, sizeof(buf1), sn->vm_state_size),
+-                 date_buf,
+-                 clock_buf);
+-    }
+-    return buf;
+-}
+-
+ /**************************************************************/
+ /* async I/Os */
+ 
+diff --git a/block/qapi.c b/block/qapi.c
+index e98a028..df63c97 100644
+--- a/block/qapi.c
++++ b/block/qapi.c
+@@ -326,3 +326,103 @@ BlockInfoList *qmp_query_block(Error **errp)
+     qapi_free_BlockInfoList(head);
+     return NULL;
+ }
++
++char *bdrv_snapshot_dump(char *buf, int buf_size, QEMUSnapshotInfo *sn)
++{
++    char buf1[128], date_buf[128], clock_buf[128];
++    struct tm tm;
++    time_t ti;
++    int64_t secs;
++
++    if (!sn) {
++        snprintf(buf, buf_size,
++                 "%-10s%-20s%7s%20s%15s",
++                 "ID", "TAG", "VM SIZE", "DATE", "VM CLOCK");
++    } else {
++        ti = sn->date_sec;
++        localtime_r(&ti, &tm);
++        strftime(date_buf, sizeof(date_buf),
++                 "%Y-%m-%d %H:%M:%S", &tm);
++        secs = sn->vm_clock_nsec / 1000000000;
++        snprintf(clock_buf, sizeof(clock_buf),
++                 "%02d:%02d:%02d.%03d",
++                 (int)(secs / 3600),
++                 (int)((secs / 60) % 60),
++                 (int)(secs % 60),
++                 (int)((sn->vm_clock_nsec / 1000000) % 1000));
++        snprintf(buf, buf_size,
++                 "%-10s%-20s%7s%20s%15s",
++                 sn->id_str, sn->name,
++                 get_human_readable_size(buf1, sizeof(buf1), sn->vm_state_size),
++                 date_buf,
++                 clock_buf);
++    }
++    return buf;
++}
++
++void bdrv_image_info_dump(ImageInfo *info)
++{
++    char size_buf[128], dsize_buf[128];
++    if (!info->has_actual_size) {
++        snprintf(dsize_buf, sizeof(dsize_buf), "unavailable");
++    } else {
++        get_human_readable_size(dsize_buf, sizeof(dsize_buf),
++                                info->actual_size);
++    }
++    get_human_readable_size(size_buf, sizeof(size_buf), info->virtual_size);
++    printf("image: %s\n"
++           "file format: %s\n"
++           "virtual size: %s (%" PRId64 " bytes)\n"
++           "disk size: %s\n",
++           info->filename, info->format, size_buf,
++           info->virtual_size,
++           dsize_buf);
++
++    if (info->has_encrypted && info->encrypted) {
++        printf("encrypted: yes\n");
++    }
++
++    if (info->has_cluster_size) {
++        printf("cluster_size: %" PRId64 "\n", info->cluster_size);
++    }
++
++    if (info->has_dirty_flag && info->dirty_flag) {
++        printf("cleanly shut down: no\n");
++    }
++
++    if (info->has_backing_filename) {
++        printf("backing file: %s", info->backing_filename);
++        if (info->has_full_backing_filename) {
++            printf(" (actual path: %s)", info->full_backing_filename);
++        }
++        putchar('\n');
++        if (info->has_backing_filename_format) {
++            printf("backing file format: %s\n", info->backing_filename_format);
++        }
++    }
++
++    if (info->has_snapshots) {
++        SnapshotInfoList *elem;
++        char buf[256];
++
++        printf("Snapshot list:\n");
++        printf("%s\n", bdrv_snapshot_dump(buf, sizeof(buf), NULL));
++
++        /* Ideally bdrv_snapshot_dump() would operate on SnapshotInfoList but
++         * we convert to the block layer's native QEMUSnapshotInfo for now.
++         */
++        for (elem = info->snapshots; elem; elem = elem->next) {
++            QEMUSnapshotInfo sn = {
++                .vm_state_size = elem->value->vm_state_size,
++                .date_sec = elem->value->date_sec,
++                .date_nsec = elem->value->date_nsec,
++                .vm_clock_nsec = elem->value->vm_clock_sec * 1000000000ULL +
++                                 elem->value->vm_clock_nsec,
++            };
++
++            pstrcpy(sn.id_str, sizeof(sn.id_str), elem->value->id);
++            pstrcpy(sn.name, sizeof(sn.name), elem->value->name);
++            printf("%s\n", bdrv_snapshot_dump(buf, sizeof(buf), &sn));
++        }
++    }
++}
+diff --git a/include/block/block.h b/include/block/block.h
+index a319f0a..ce28241 100644
+--- a/include/block/block.h
++++ b/include/block/block.h
+@@ -339,7 +339,6 @@ int bdrv_snapshot_list(BlockDriverState *bs,
+                        QEMUSnapshotInfo **psn_info);
+ int bdrv_snapshot_load_tmp(BlockDriverState *bs,
+                            const char *snapshot_name);
+-char *bdrv_snapshot_dump(char *buf, int buf_size, QEMUSnapshotInfo *sn);
+ 
+ char *get_human_readable_size(char *buf, int buf_size, int64_t size);
+ int path_is_absolute(const char *path);
+diff --git a/include/block/qapi.h b/include/block/qapi.h
+index e0fd0a5..237660f 100644
+--- a/include/block/qapi.h
++++ b/include/block/qapi.h
+@@ -38,4 +38,6 @@ int bdrv_query_image_info(BlockDriverState *bs,
+ void bdrv_query_info(BlockDriverState *bs,
+                      BlockInfo **p_info,
+                      Error **errp);
++char *bdrv_snapshot_dump(char *buf, int buf_size, QEMUSnapshotInfo *sn);
++void bdrv_image_info_dump(ImageInfo *info);
+ #endif
+diff --git a/qemu-img.c b/qemu-img.c
+index 1dd0a60..5b229a9 100644
+--- a/qemu-img.c
++++ b/qemu-img.c
+@@ -1606,73 +1606,6 @@ static void dump_json_image_info(ImageInfo *info)
+     QDECREF(str);
+ }
+ 
+-static void dump_human_image_info(ImageInfo *info)
+-{
+-    char size_buf[128], dsize_buf[128];
+-    if (!info->has_actual_size) {
+-        snprintf(dsize_buf, sizeof(dsize_buf), "unavailable");
+-    } else {
+-        get_human_readable_size(dsize_buf, sizeof(dsize_buf),
+-                                info->actual_size);
+-    }
+-    get_human_readable_size(size_buf, sizeof(size_buf), info->virtual_size);
+-    printf("image: %s\n"
+-           "file format: %s\n"
+-           "virtual size: %s (%" PRId64 " bytes)\n"
+-           "disk size: %s\n",
+-           info->filename, info->format, size_buf,
+-           info->virtual_size,
+-           dsize_buf);
+-
+-    if (info->has_encrypted && info->encrypted) {
+-        printf("encrypted: yes\n");
+-    }
+-
+-    if (info->has_cluster_size) {
+-        printf("cluster_size: %" PRId64 "\n", info->cluster_size);
+-    }
+-
+-    if (info->has_dirty_flag && info->dirty_flag) {
+-        printf("cleanly shut down: no\n");
+-    }
+-
+-    if (info->has_backing_filename) {
+-        printf("backing file: %s", info->backing_filename);
+-        if (info->has_full_backing_filename) {
+-            printf(" (actual path: %s)", info->full_backing_filename);
+-        }
+-        putchar('\n');
+-        if (info->has_backing_filename_format) {
+-            printf("backing file format: %s\n", info->backing_filename_format);
+-        }
+-    }
+-
+-    if (info->has_snapshots) {
+-        SnapshotInfoList *elem;
+-        char buf[256];
+-
+-        printf("Snapshot list:\n");
+-        printf("%s\n", bdrv_snapshot_dump(buf, sizeof(buf), NULL));
+-
+-        /* Ideally bdrv_snapshot_dump() would operate on SnapshotInfoList but
+-         * we convert to the block layer's native QEMUSnapshotInfo for now.
+-         */
+-        for (elem = info->snapshots; elem; elem = elem->next) {
+-            QEMUSnapshotInfo sn = {
+-                .vm_state_size = elem->value->vm_state_size,
+-                .date_sec = elem->value->date_sec,
+-                .date_nsec = elem->value->date_nsec,
+-                .vm_clock_nsec = elem->value->vm_clock_sec * 1000000000ULL +
+-                                 elem->value->vm_clock_nsec,
+-            };
+-
+-            pstrcpy(sn.id_str, sizeof(sn.id_str), elem->value->id);
+-            pstrcpy(sn.name, sizeof(sn.name), elem->value->name);
+-            printf("%s\n", bdrv_snapshot_dump(buf, sizeof(buf), &sn));
+-        }
+-    }
+-}
+-
+ static void dump_human_image_info_list(ImageInfoList *list)
+ {
+     ImageInfoList *elem;
+@@ -1684,7 +1617,7 @@ static void dump_human_image_info_list(ImageInfoList *list)
+         }
+         delim = true;
+ 
+-        dump_human_image_info(elem->value);
++        bdrv_image_info_dump(elem->value);
+     }
+ }
+ 
+diff --git a/savevm.c b/savevm.c
+index 1d2da99..e4e0008 100644
+--- a/savevm.c
++++ b/savevm.c
+@@ -41,6 +41,7 @@
+ #include "qemu/bitops.h"
+ #include "qemu/iov.h"
+ #include "block/snapshot.h"
++#include "block/qapi.h"
+ 
+ #define SELF_ANNOUNCE_ROUNDS 5
+ 
+-- 
+1.7.1
+
+
+

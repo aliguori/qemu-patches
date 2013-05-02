@@ -1,0 +1,158 @@
+From patches Mon Sep 17 00:00:00 2001
+From: fred.konrad@greensocs.com
+To: Anthony Liguori <aliguori@us.ibm.com>, qemu-devel@nongnu.org
+Cc: peter.maydell@linaro.org,
+ "Aneesh Kumar K.V" <aneesh.kumar@linux.vnet.ibm.com>,
+ mark.burton@greensocs.com, fred.konrad@greensocs.com
+Date: Tue, 23 Apr 2013 11:08:40 +0200
+Message-id: 1366708123-19626-2-git-send-email-fred.konrad@greensocs.com
+Subject: [PATCH 1/4] virtio-9p: add the virtio-9p device.
+
+From: KONRAD Frederic <fred.konrad@greensocs.com>
+
+Create virtio-9p-device which extends virtio-device, so it can be connected on
+virtio-bus.
+
+Signed-off-by: KONRAD Frederic <fred.konrad@greensocs.com>
+---
+ hw/9pfs/virtio-9p-device.c | 73 +++++++++++++++++++++++++++++++++++++++++-----
+ hw/9pfs/virtio-9p.h        |  9 ++++++
+ hw/virtio/virtio-pci.c     |  3 +-
+ 3 files changed, 76 insertions(+), 9 deletions(-)
+
+diff --git a/hw/9pfs/virtio-9p-device.c b/hw/9pfs/virtio-9p-device.c
+index b476b81..7f00a45 100644
+--- a/hw/9pfs/virtio-9p-device.c
++++ b/hw/9pfs/virtio-9p-device.c
+@@ -46,19 +46,30 @@ static void virtio_9p_get_config(VirtIODevice *vdev, uint8_t *config)
+     g_free(cfg);
+ }
+ 
+-VirtIODevice *virtio_9p_init(DeviceState *dev, V9fsConf *conf)
++static VirtIODevice *virtio_9p_common_init(DeviceState *dev, V9fsConf *conf,
++                                           V9fsState **ps)
+ {
+-    V9fsState *s;
++    V9fsState *s = *ps;
+     int i, len;
+     struct stat stat;
+     FsDriverEntry *fse;
+     V9fsPath path;
+ 
+-    s = (V9fsState *)virtio_common_init("virtio-9p",
+-                                    VIRTIO_ID_9P,
+-                                    sizeof(struct virtio_9p_config)+
+-                                    MAX_TAG_LEN,
+-                                    sizeof(V9fsState));
++    /*
++     * We have two cases here: the old virtio-9p-pci device, and the
++     * refactored virtio-9p.
++     */
++
++    if (s == NULL) {
++        s = (V9fsState *)virtio_common_init("virtio-9p",
++                                        VIRTIO_ID_9P,
++                                        sizeof(struct virtio_9p_config)+
++                                        MAX_TAG_LEN,
++                                        sizeof(V9fsState));
++    } else {
++        virtio_init(VIRTIO_DEVICE(s), "virtio-9p", VIRTIO_ID_9P,
++                    sizeof(struct virtio_9p_config) + MAX_TAG_LEN);
++    }
+     /* initialize pdu allocator */
+     QLIST_INIT(&s->free_list);
+     QLIST_INIT(&s->active_list);
+@@ -136,3 +147,51 @@ VirtIODevice *virtio_9p_init(DeviceState *dev, V9fsConf *conf)
+ 
+     return &s->vdev;
+ }
++
++VirtIODevice *virtio_9p_init(DeviceState *dev, V9fsConf *conf)
++{
++    V9fsState *s = NULL;
++    return virtio_9p_common_init(dev, conf, &s);
++}
++
++/* virtio-9p device */
++
++static int virtio_9p_device_init(VirtIODevice *vdev)
++{
++    DeviceState *qdev = DEVICE(vdev);
++    V9fsState *s = VIRTIO_9P(vdev);
++    V9fsConf *fsconf = &(s->fsconf);
++    if (virtio_9p_common_init(qdev, fsconf, &s) == NULL) {
++        return -1;
++    }
++    return 0;
++}
++
++static Property virtio_9p_properties[] = {
++    DEFINE_VIRTIO_9P_PROPERTIES(V9fsState, fsconf),
++    DEFINE_PROP_END_OF_LIST(),
++};
++
++static void virtio_9p_class_init(ObjectClass *klass, void *data)
++{
++    DeviceClass *dc = DEVICE_CLASS(klass);
++    VirtioDeviceClass *vdc = VIRTIO_DEVICE_CLASS(klass);
++    dc->props = virtio_9p_properties;
++    vdc->init = virtio_9p_device_init;
++    vdc->get_features = virtio_9p_get_features;
++    vdc->get_config = virtio_9p_get_config;
++}
++
++static const TypeInfo virtio_device_info = {
++    .name = TYPE_VIRTIO_9P,
++    .parent = TYPE_VIRTIO_DEVICE,
++    .instance_size = sizeof(V9fsState),
++    .class_init = virtio_9p_class_init,
++};
++
++static void virtio_9p_register_types(void)
++{
++    type_register_static(&virtio_device_info);
++}
++
++type_init(virtio_9p_register_types)
+diff --git a/hw/9pfs/virtio-9p.h b/hw/9pfs/virtio-9p.h
+index 95a8ec3..767f7e6 100644
+--- a/hw/9pfs/virtio-9p.h
++++ b/hw/9pfs/virtio-9p.h
+@@ -225,6 +225,7 @@ typedef struct V9fsState
+     CoRwlock rename_lock;
+     int32_t root_fid;
+     Error *migration_blocker;
++    V9fsConf fsconf;
+ } V9fsState;
+ 
+ typedef struct V9fsStatState {
+@@ -401,4 +402,12 @@ extern int v9fs_name_to_path(V9fsState *s, V9fsPath *dirpath,
+ #define pdu_unmarshal(pdu, offset, fmt, args...)  \
+     v9fs_unmarshal(pdu->elem.out_sg, pdu->elem.out_num, offset, 1, fmt, ##args)
+ 
++#define TYPE_VIRTIO_9P "virtio-9p-device"
++#define VIRTIO_9P(obj) \
++        OBJECT_CHECK(V9fsState, (obj), TYPE_VIRTIO_9P)
++
++#define DEFINE_VIRTIO_9P_PROPERTIES(_state, _field)             \
++        DEFINE_PROP_STRING("mount_tag", _state, _field.tag),    \
++        DEFINE_PROP_STRING("fsdev", _state, _field.fsdev_id)
++
+ #endif
+diff --git a/hw/virtio/virtio-pci.c b/hw/virtio/virtio-pci.c
+index c1e9a60..787f5fd 100644
+--- a/hw/virtio/virtio-pci.c
++++ b/hw/virtio/virtio-pci.c
+@@ -1040,8 +1040,7 @@ static Property virtio_9p_properties[] = {
+     DEFINE_PROP_BIT("ioeventfd", VirtIOPCIProxy, flags, VIRTIO_PCI_FLAG_USE_IOEVENTFD_BIT, true),
+     DEFINE_PROP_UINT32("vectors", VirtIOPCIProxy, nvectors, 2),
+     DEFINE_VIRTIO_COMMON_FEATURES(VirtIOPCIProxy, host_features),
+-    DEFINE_PROP_STRING("mount_tag", VirtIOPCIProxy, fsconf.tag),
+-    DEFINE_PROP_STRING("fsdev", VirtIOPCIProxy, fsconf.fsdev_id),
++    DEFINE_VIRTIO_9P_PROPERTIES(VirtIOPCIProxy, fsconf),
+     DEFINE_PROP_END_OF_LIST(),
+ };
+ 
+-- 
+1.7.11.7
+

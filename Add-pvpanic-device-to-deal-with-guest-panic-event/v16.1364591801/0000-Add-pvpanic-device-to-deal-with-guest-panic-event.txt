@@ -1,0 +1,70 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Hu Tao <hutao@cn.fujitsu.com>
+To: Paolo Bonzini <pbonzini@redhat.com>, qemu-devel <qemu-devel@nongnu.org>,
+ Luiz Capitulino <lcapitulino@redhat.com>, Wen Congyang <wency@cn.fujitsu.com>,
+ Jan Kiszka <jan.kiszka@siemens.com>,
+ KAMEZAWA Hiroyuki <kamezawa.hiroyu@jp.fujitsu.com>,
+ Anthony Liguori <aliguori@us.ibm.com>, "Michael S. Tsirkin" <mst@redhat.com>,
+ Gleb Natapov <gleb@redhat.com>, Peter Maydell <peter.maydell@linaro.org>,
+ Blue Swirl <blauwirbel@gmail.com>, Alexander Graf <agraf@suse.de>,
+ Christian Borntraeger <borntraeger@de.ibm.com>,
+ Sasha Levin <levinsasha928@gmail.com>, Orit Wasserman <owasserm@redhat.com>,
+ Andrew Jones <drjones@redhat.com>, Markus Armbruster <armbru@redhat.com>,
+ Stefan Hajnoczi <stefanha@redhat.com>, Eric Blake <eblake@redhat.com>,
+ Juan Quintela <quintela@redhat.com>,
+ "Daniel P. Berrange" <berrange@redhat.com>,
+ Marcelo Tosatti <mtosatti@redhat.com>,
+ Alex Williamson <alex.williamson@redhat.com>
+Cc: 
+Date: Fri, 29 Mar 2013 16:16:41 +0800
+Message-id: cover.1364541739.git.hutao@cn.fujitsu.com
+Subject: [PATCH 0/6] Add pvpanic device to deal with guest panic event
+
+This series introduces a new simulated device, pvpanic, to notify
+qemu when guest panic event happens.
+
+Along with this series, there are two patches to add seabios ACPI
+driver and kernel ACPI driver for the device, respectively.
+
+Tested with:
+
+  - qemu(kvm)/qemu(tcg)
+  - qemu piix/q35
+  - default ioport/custom ioport
+
+Changes from v15:
+
+  - document improvements
+  - use SSDT to patch pvpanic ioport
+
+v15: http://lists.nongnu.org/archive/html/qemu-devel/2013-03/msg03630.html
+
+Hu Tao (6):
+  add a new runstate: RUN_STATE_GUEST_PANICKED
+  add a new qevent: QEVENT_GUEST_PANICKED
+  introduce a new qom device to deal with panicked event
+  pvpanic: add document of pvpanic
+  pc_piix, pc_q35: export fw_cfg
+  pvpanic: pass configurable ioport to seabios
+
+ QMP/qmp-events.txt        |  14 +++++
+ docs/specs/pvpanic.txt    |  37 +++++++++++++
+ hw/Makefile.objs          |   1 +
+ hw/fw_cfg.h               |   2 +
+ hw/i386/pc_piix.c         |   7 +--
+ hw/i386/pc_q35.c          |   9 ++--
+ hw/pc.h                   |   6 +++
+ hw/pvpanic.c              | 130 ++++++++++++++++++++++++++++++++++++++++++++++
+ include/monitor/monitor.h |   1 +
+ include/sysemu/sysemu.h   |   1 +
+ monitor.c                 |   1 +
+ qapi-schema.json          |   5 +-
+ qmp.c                     |   3 +-
+ vl.c                      |  13 ++++-
+ 14 files changed, 219 insertions(+), 11 deletions(-)
+ create mode 100644 docs/specs/pvpanic.txt
+ create mode 100644 hw/pvpanic.c
+
+-- 
+1.8.1.4
+

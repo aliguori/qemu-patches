@@ -1,0 +1,114 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Jason Wang <jasowang@redhat.com>
+To: aliguori@us.ibm.com, shajnocz@redhat.com, qemu-devel@nongnu.org,
+ mst@redhat.com
+Cc: krkumar2@in.ibm.com, kvm@vger.kernel.org, mprivozn@redhat.com,
+ rusty@rustcorp.com.au, Jason Wang <jasowang@redhat.com>,
+ gaowanlong@cn.fujitsu.com, jwhan@filewood.snu.ac.kr, shiyer@redhat.com
+Date: Fri, 25 Jan 2013 18:35:42 +0800
+Message-id: 1359110143-42984-20-git-send-email-jasowang@redhat.com
+Subject: [PATCH 19/20] virtio-net: migration support for multiqueue
+
+This patch add migration support for multiqueue virtio-net. Instead of bumping
+the version, we conditionally send the info of multiqueue only when the device
+support more than one queue to maintain the backward compatibility.
+
+Signed-off-by: Jason Wang <jasowang@redhat.com>
+---
+ hw/virtio-net.c |   35 +++++++++++++++++++++++++++++------
+ 1 files changed, 29 insertions(+), 6 deletions(-)
+
+diff --git a/hw/virtio-net.c b/hw/virtio-net.c
+index cec91a7..4eb191f 100644
+--- a/hw/virtio-net.c
++++ b/hw/virtio-net.c
+@@ -1069,8 +1069,8 @@ static void virtio_net_set_multiqueue(VirtIONet *n, int multiqueue, int ctrl)
+ 
+ static void virtio_net_save(QEMUFile *f, void *opaque)
+ {
++    int i;
+     VirtIONet *n = opaque;
+-    VirtIONetQueue *q = &n->vqs[0];
+ 
+     /* At this point, backend must be stopped, otherwise
+      * it might keep writing to memory. */
+@@ -1078,7 +1078,7 @@ static void virtio_net_save(QEMUFile *f, void *opaque)
+     virtio_save(&n->vdev, f);
+ 
+     qemu_put_buffer(f, n->mac, ETH_ALEN);
+-    qemu_put_be32(f, q->tx_waiting);
++    qemu_put_be32(f, n->vqs[0].tx_waiting);
+     qemu_put_be32(f, n->mergeable_rx_bufs);
+     qemu_put_be16(f, n->status);
+     qemu_put_byte(f, n->promisc);
+@@ -1094,13 +1094,19 @@ static void virtio_net_save(QEMUFile *f, void *opaque)
+     qemu_put_byte(f, n->nouni);
+     qemu_put_byte(f, n->nobcast);
+     qemu_put_byte(f, n->has_ufo);
++    if (n->max_queues > 1) {
++        qemu_put_be16(f, n->max_queues);
++        qemu_put_be16(f, n->curr_queues);
++        for (i = 1; i < n->curr_queues; i++) {
++            qemu_put_be32(f, n->vqs[i].tx_waiting);
++        }
++    }
+ }
+ 
+ static int virtio_net_load(QEMUFile *f, void *opaque, int version_id)
+ {
+     VirtIONet *n = opaque;
+-    VirtIONetQueue *q = &n->vqs[0];
+-    int ret, i;
++    int ret, i, link_down;
+ 
+     if (version_id < 2 || version_id > VIRTIO_NET_VM_VERSION)
+         return -EINVAL;
+@@ -1111,7 +1117,7 @@ static int virtio_net_load(QEMUFile *f, void *opaque, int version_id)
+     }
+ 
+     qemu_get_buffer(f, n->mac, ETH_ALEN);
+-    q->tx_waiting = qemu_get_be32(f);
++    n->vqs[0].tx_waiting = qemu_get_be32(f);
+ 
+     virtio_net_set_mrg_rx_bufs(n, qemu_get_be32(f));
+ 
+@@ -1181,6 +1187,20 @@ static int virtio_net_load(QEMUFile *f, void *opaque, int version_id)
+         }
+     }
+ 
++    if (n->max_queues > 1) {
++        if (n->max_queues != qemu_get_be16(f)) {
++            error_report("virtio-net: different max_queues ");
++            return -1;
++        }
++
++        n->curr_queues = qemu_get_be16(f);
++        for (i = 1; i < n->curr_queues; i++) {
++            n->vqs[i].tx_waiting = qemu_get_be32(f);
++        }
++    }
++
++    virtio_net_set_queues(n);
++
+     /* Find the first multicast entry in the saved MAC filter */
+     for (i = 0; i < n->mac_table.in_use; i++) {
+         if (n->mac_table.macs[i * ETH_ALEN] & 1) {
+@@ -1191,7 +1211,10 @@ static int virtio_net_load(QEMUFile *f, void *opaque, int version_id)
+ 
+     /* nc.link_down can't be migrated, so infer link_down according
+      * to link status bit in n->status */
+-    qemu_get_queue(n->nic)->link_down = (n->status & VIRTIO_NET_S_LINK_UP) == 0;
++    link_down = (n->status & VIRTIO_NET_S_LINK_UP) == 0;
++    for (i = 0; i < n->max_queues; i++) {
++        qemu_get_subqueue(n->nic, i)->link_down = link_down;
++    }
+ 
+     return 0;
+ }
+-- 
+1.7.1
+
+--
+To unsubscribe from this list: send the line "unsubscribe kvm" in
+the body of a message to majordomo@vger.kernel.org
+More majordomo info at  http://vger.kernel.org/majordomo-info.html

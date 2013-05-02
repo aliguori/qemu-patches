@@ -1,0 +1,1 @@
+../Fix-versatile_pci-without-breaking-linux/v3.1365101902/0010-versatile_pci-Expose-PCI-memory-space-to-system.patch

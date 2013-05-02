@@ -1,0 +1,5 @@
+0000-target-i386-CPU-hot-add-with-cpu-add-QMP-command.txt
+0001-add-hot_add_cpu-hook-to-QEMUMachine.patch
+0002-QMP-add-cpu-add-command.patch
+0003-add-cpu-model-option-to--machine.patch
+0004-target-i386-implement-machine-hot_add_cpu-hook.patch

@@ -1,0 +1,81 @@
+From patches Mon Sep 17 00:00:00 2001
+From: mrhines@linux.vnet.ibm.com
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, mst@redhat.com,
+ Michael R Hines <mrhines@us.ibm.com>, Bulent Abali <abali@us.ibm.com>,
+ owasserm@redhat.com, pbonzini@redhat.com, Gokul B Kandiraju <gokul@us.ibm.com>
+Date: Sun, 17 Mar 2013 23:19:03 -0400
+Message-id: 1363576743-6146-11-git-send-email-mrhines@linux.vnet.ibm.com
+Subject: [PATCH 10/10] send pc.ram over RDMA
+
+From: "Michael R. Hines" <mrhines@us.ibm.com>
+
+
+Signed-off-by: Michael R. Hines <mrhines@us.ibm.com>
+---
+ arch_init.c |   28 +++++++++++++++++++++++++++-
+ 1 file changed, 27 insertions(+), 1 deletion(-)
+
+diff --git a/arch_init.c b/arch_init.c
+index 98e2bc6..b013cc8 100644
+--- a/arch_init.c
++++ b/arch_init.c
+@@ -45,6 +45,7 @@
+ #include "exec/address-spaces.h"
+ #include "hw/pcspk.h"
+ #include "migration/page_cache.h"
++#include "migration/rdma.h"
+ #include "qemu/config-file.h"
+ #include "qmp-commands.h"
+ #include "trace.h"
+@@ -225,6 +226,18 @@ static void acct_clear(void)
+     memset(&acct_info, 0, sizeof(acct_info));
+ }
+ 
++/*
++ * RDMA pc.ram doesn't go through QEMUFile directly,
++ * but still needs to be accounted for...
++ */
++uint64_t delta_norm_mig_bytes_transferred(void)
++{
++    static uint64_t last_norm_pages = 0;
++    uint64_t delta_bytes = (acct_info.norm_pages - last_norm_pages) * TARGET_PAGE_SIZE;
++    last_norm_pages = acct_info.norm_pages; 
++    return delta_bytes;
++}
++
+ uint64_t dup_mig_bytes_transferred(void)
+ {
+     return acct_info.dup_pages * TARGET_PAGE_SIZE;
+@@ -463,7 +476,11 @@ static int ram_save_block(QEMUFile *f, bool last_stage)
+ 
+             /* In doubt sent page as normal */
+             bytes_sent = -1;
+-            if (is_dup_page(p)) {
++            if (migrate_use_rdma(f)) {
++                /* for now, mapping the page is slower than RDMA */
++                acct_info.norm_pages++;
++                bytes_sent = save_rdma_page(f, block->offset, offset, cont, TARGET_PAGE_SIZE);
++            } else if (is_dup_page(p)) {
+                 acct_info.dup_pages++;
+                 bytes_sent = save_block_hdr(f, block, offset, cont,
+                                             RAM_SAVE_FLAG_COMPRESS);
+@@ -648,6 +665,15 @@ static int ram_save_iterate(QEMUFile *f, void *opaque)
+ 
+     qemu_mutex_unlock_ramlist();
+ 
++    /*
++     * Don't go to the next iteration without
++     * ensuring RDMA transfers have completed.
++     */
++    if ((ret = qemu_drain(f)) < 0) {
++        fprintf(stderr, "failed to drain RDMA first!\n");
++        return ret;
++    }
++
+     if (ret < 0) {
+         bytes_transferred += total_sent;
+         return ret;
+-- 
+1.7.10.4
+

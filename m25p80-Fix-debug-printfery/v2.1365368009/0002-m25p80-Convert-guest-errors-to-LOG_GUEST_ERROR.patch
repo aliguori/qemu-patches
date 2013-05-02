@@ -1,0 +1,66 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+To: qemu-trivial@nongnu.org, qemu-devel@nongnu.org
+Cc: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+Date: Sun,  7 Apr 2013 15:53:31 +1000
+Message-id: a529715d1059b142a28ec277720da9e1f1fb32fd.1365313801.git.peter.crosthwaite@xilinx.com
+Subject: [PATCH 2/4] m25p80: Convert guest errors to LOG_GUEST_ERROR
+
+Some of the debug printfs in m25p80 are really guest errors.
+Changed over to qemu_log_mask(LOG_GUEST_ERROR accordingly.
+
+Signed-off-by: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+---
+
+ hw/m25p80.c |   12 +++++++-----
+ 1 files changed, 7 insertions(+), 5 deletions(-)
+
+diff --git a/hw/m25p80.c b/hw/m25p80.c
+index c395e98..44fc428 100644
+--- a/hw/m25p80.c
++++ b/hw/m25p80.c
+@@ -319,11 +319,12 @@ static void flash_erase(Flash *s, int offset, FlashCMD cmd)
+ 
+     DB_PRINT("offset = %#x, len = %d\n", offset, len);
+     if ((s->pi->flags & capa_to_assert) != capa_to_assert) {
+-        hw_error("m25p80: %d erase size not supported by device\n", len);
++        qemu_log_mask(LOG_GUEST_ERROR, "M25P80: %d erase size not supported by"
++                      " device\n", len);
+     }
+ 
+     if (!s->write_enable) {
+-        DB_PRINT("erase with write protect!\n");
++        qemu_log_mask(LOG_GUEST_ERROR, "M25P80: erase with write protect!\n");
+         return;
+     }
+     memset(s->storage + offset, 0xff, len);
+@@ -345,7 +346,7 @@ void flash_write8(Flash *s, uint64_t addr, uint8_t data)
+     uint8_t prev = s->storage[s->cur_addr];
+ 
+     if (!s->write_enable) {
+-        DB_PRINT("write with write protect!\n");
++        qemu_log_mask(LOG_GUEST_ERROR, "M25P80: write with write protect!\n");
+     }
+ 
+     if ((prev ^ data) & data) {
+@@ -503,13 +504,14 @@ static void decode_new_cmd(Flash *s, uint32_t value)
+             DB_PRINT("chip erase\n");
+             flash_erase(s, 0, BULK_ERASE);
+         } else {
+-            DB_PRINT("chip erase with write protect!\n");
++            qemu_log_mask(LOG_GUEST_ERROR, "M25P80: chip erase with write "
++                          "protect!\n");
+         }
+         break;
+     case NOP:
+         break;
+     default:
+-        DB_PRINT("Unknown cmd %x\n", value);
++        qemu_log_mask(LOG_GUEST_ERROR, "M25P80: Unknown cmd %x\n", value);
+         break;
+     }
+ }
+-- 
+1.7.0.4
+
+

@@ -1,0 +1,256 @@
+From patches Mon Sep 17 00:00:00 2001
+From: "Seiji Aguchi" <saguchi@redhat.com>
+To: Eric Blake <eblake@redhat.com>, qemu-devel@nongnu.org,
+ "Daniel P. Berrange" <berrange@redhat.com>, Seiji Aguchi <saguchi@redhat.com>
+Cc: kwolf@redhat.com, Anthony Liguori <aliguori@us.ibm.com>,
+ aliguori@us.ibm.com, stefanha@redhat.com, mst@redhat.com,
+ qemu-devel@nongnu.org, Seiji Aguchi <seiji.aguchi@hds.com>,
+ Stefan Hajnoczi <stefanha@gmail.com>, mtosatti@redhat.com, armbru@redhat.com,
+ lcapitulino@redhat.com, dle-develop@lists.sourceforge.net, av1474@comtv.ru,
+ tomoki.sekiyama@hds.com, pbonzini@redhat.com,
+ Seiji Aguchi <saguchi@redhat.com>
+Date: Mon, 29 Apr 2013 15:57:25 -0400
+Message-id: 1367265445-27365-1-git-send-email-saguchi@redhat.com
+Subject: [PATCH 1/1] Add timestamp to error message
+
+From: Seiji Aguchi <seiji.aguchi@hds.com>
+
+[Issue]
+When we offer a customer support service and a problem happens 
+in a customer's system, we try to understand the problem by 
+comparing what the customer reports with message logs of the 
+customer's system.
+
+In this case, we often need to know when the problem happens.
+
+But, currently, there is no timestamp in qemu's error messages.
+Therefore, we may not be able to understand the problem based on
+error messages.
+
+[Solution]
+This patch adds a timestamp to qemu's error message logged by
+error_report().
+
+A logic calculating a time is copied from libvirt, src/util/virtime.c.
+* http://libvirt.org/git/?p=libvirt.git;a=commit;h=3ec128989606278635a7c5dfbeee959692d12e15
+
+[TODO]
+Add timestamp Messages with monitor_printf() and fprintf().
+
+Signed-off-by: Seiji Aguchi <seiji.aguchi@hds.com>
+---
+Changelog v1 -> v2
+
+ - add an option, -msg timestamp={on|off}, to enable output message with
+   timestamp
+---
+ include/monitor/monitor.h |    2 +
+ qemu-options.hx           |   12 ++++++
+ util/qemu-error.c         |   93 +++++++++++++++++++++++++++++++++++++++++++++
+ vl.c                      |   26 ++++++++++++
+ 4 files changed, 133 insertions(+), 0 deletions(-)
+
+diff --git a/include/monitor/monitor.h b/include/monitor/monitor.h
+index b868760..6cbb0ff 100644
+--- a/include/monitor/monitor.h
++++ b/include/monitor/monitor.h
+@@ -99,4 +99,6 @@ int monitor_fdset_dup_fd_add(int64_t fdset_id, int dup_fd);
+ int monitor_fdset_dup_fd_remove(int dup_fd);
+ int monitor_fdset_dup_fd_find(int dup_fd);
+ 
++extern bool enable_timestamp_msg;
++
+ #endif /* !MONITOR_H */
+diff --git a/qemu-options.hx b/qemu-options.hx
+index e86cc24..a421261 100644
+--- a/qemu-options.hx
++++ b/qemu-options.hx
+@@ -3097,3 +3097,15 @@ HXCOMM This is the last statement. Insert new options before this line!
+ STEXI
+ @end table
+ ETEXI
++
++DEF("msg", HAS_ARG, QEMU_OPTION_msg,
++    "-msg [timestamp=on|off]\n"
++    "                output message with timestamp (default: off)\n",
++    QEMU_ARCH_ALL)
++STEXI
++@item -msg timestamp=on|off
++@findex - msg
++Output message with timestamp.
++Adding timestamp to messages with @option{timestamp=on}
++(disabled by default).
++ETEXI
+diff --git a/util/qemu-error.c b/util/qemu-error.c
+index 08a36f4..35ef9ab 100644
+--- a/util/qemu-error.c
++++ b/util/qemu-error.c
+@@ -196,6 +196,96 @@ void error_print_loc(void)
+     }
+ }
+ 
++
++#define SECS_PER_HOUR   (60 * 60)
++#define SECS_PER_DAY    (SECS_PER_HOUR * 24)
++#define DIV(a, b) ((a) / (b) - ((a) % (b) < 0))
++#define LEAPS_THRU_END_OF(y) (DIV(y, 4) - DIV(y, 100) + DIV(y, 400))
++
++const unsigned short int __mon_yday[2][13] = {
++    /* Normal years.  */
++    { 0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334, 365 },
++    /* Leap years.  */
++    { 0, 31, 60, 91, 121, 152, 182, 213, 244, 274, 305, 335, 366 }
++};
++
++#define is_leap_year(y) \
++    ((y) % 4 == 0 && ((y) % 100 != 0 || (y) % 400 == 0))
++
++static void error_print_timestamp(void)
++{
++    struct timespec ts;
++    unsigned long long now;
++
++    struct tm fields;
++    long int days, rem, y;
++    const unsigned short int *ip;
++    unsigned long long whenSecs;
++    unsigned int offset = 0; /* We hardcoded GMT */
++
++    if (clock_gettime(CLOCK_REALTIME, &ts) < 0) {
++        return;
++    }
++
++    now = (ts.tv_sec * 1000ull) + (ts.tv_nsec / (1000ull * 1000ull));
++    /* This code is taken from GLibC under terms of LGPLv2+ */
++
++    whenSecs = now / 1000ull;
++
++    days = whenSecs / SECS_PER_DAY;
++    rem = whenSecs % SECS_PER_DAY;
++    rem += offset;
++    while (rem < 0) {
++        rem += SECS_PER_DAY;
++        --days;
++    }
++    while (rem >= SECS_PER_DAY) {
++        rem -= SECS_PER_DAY;
++        ++days;
++    }
++    fields.tm_hour = rem / SECS_PER_HOUR;
++    rem %= SECS_PER_HOUR;
++    fields.tm_min = rem / 60;
++    fields.tm_sec = rem % 60;
++    /* January 1, 1970 was a Thursday.  */
++    fields.tm_wday = (4 + days) % 7;
++    if (fields.tm_wday < 0) {
++        fields.tm_wday += 7;
++    }
++    y = 1970;
++
++    while (days < 0 || days >= (is_leap_year(y) ? 366 : 365)) {
++        /* Guess a corrected year, assuming 365 days per year.  */
++        long int yg = y + days / 365 - (days % 365 < 0);
++
++      /* Adjust DAYS and Y to match the guessed year.  */
++      days -= ((yg - y) * 365
++               + LEAPS_THRU_END_OF(yg - 1)
++               - LEAPS_THRU_END_OF(y - 1));
++      y = yg;
++    }
++    fields.tm_year = y - 1900;
++
++    fields.tm_yday = days;
++    ip = __mon_yday[is_leap_year(y)];
++    for (y = 11; days < (long int) ip[y]; --y) {
++        continue;
++    }
++
++    days -= ip[y];
++    fields.tm_mon = y;
++    fields.tm_mday = days + 1;
++
++    error_printf(
++           "%4d-%02d-%02d %02d:%02d:%02d.%03lld+0000 ",
++           fields.tm_year + 1900, fields.tm_mon + 1, fields.tm_mday,
++           fields.tm_hour, fields.tm_min, fields.tm_sec,
++           now % 1000);
++
++    return;
++}
++
++bool enable_timestamp_msg;
+ /*
+  * Print an error message to current monitor if we have one, else to stderr.
+  * Format arguments like sprintf().  The result should not contain
+@@ -207,6 +297,9 @@ void error_report(const char *fmt, ...)
+ {
+     va_list ap;
+ 
++    if (enable_timestamp_msg) {
++        error_print_timestamp();
++    }
+     error_print_loc();
+     va_start(ap, fmt);
+     error_vprintf(fmt, ap);
+diff --git a/vl.c b/vl.c
+index 6caa5f4..f1286a3 100644
+--- a/vl.c
++++ b/vl.c
+@@ -533,6 +533,18 @@ static QemuOptsList qemu_realtime_opts = {
+     },
+ };
+ 
++static QemuOptsList qemu_msg_opts = {
++    .name = "msg",
++    .head = QTAILQ_HEAD_INITIALIZER(qemu_msg_opts.head),
++    .desc = {
++        {
++            .name = "timestamp",
++            .type = QEMU_OPT_BOOL,
++        },
++        { /* end of list */ }
++    },
++};
++
+ const char *qemu_get_vm_name(void)
+ {
+     return qemu_name;
+@@ -1446,6 +1458,12 @@ static void configure_realtime(QemuOpts *opts)
+     }
+ }
+ 
++
++static void configure_msg(QemuOpts *opts)
++{
++    enable_timestamp_msg = qemu_opt_get_bool(opts, "timestamp", true);
++}
++
+ /***********************************************************/
+ /* USB devices */
+ 
+@@ -2889,6 +2907,7 @@ int main(int argc, char **argv, char **envp)
+     qemu_add_opts(&qemu_object_opts);
+     qemu_add_opts(&qemu_tpmdev_opts);
+     qemu_add_opts(&qemu_realtime_opts);
++    qemu_add_opts(&qemu_msg_opts);
+ 
+     runstate_init();
+ 
+@@ -3869,6 +3888,13 @@ int main(int argc, char **argv, char **envp)
+                 }
+                 configure_realtime(opts);
+                 break;
++            case QEMU_OPTION_msg:
++                opts = qemu_opts_parse(qemu_find_opts("msg"), optarg, 0);
++                if (!opts) {
++                    exit(1);
++                }
++                configure_msg(opts);
++                break;
+             default:
+                 os_parse_cmd_args(popt->index, optarg);
+             }
+-- 
+1.7.1
+
+

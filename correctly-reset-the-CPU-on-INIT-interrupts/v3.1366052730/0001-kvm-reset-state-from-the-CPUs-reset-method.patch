@@ -1,0 +1,176 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: Paolo Bonzini <pbonzini@redhat.com>, Gleb Natapov <gleb@redhat.com>,
+ qemu-devel@nongnu.org, =?ISO-8859-15?Q?Andreas_F=E4rber?= <afaerber@suse.de>
+Cc: gnatapov@redhat.com, agraf@suse.de, qemu-devel@nongnu.org
+Date: Mon, 15 Apr 2013 14:05:31 +0200
+Message-id: 1366027532-1120-2-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 1/2] kvm: reset state from the CPU's reset method
+
+Now that we have a CPU object with a reset method, it is better to
+keep the KVM reset close to the CPU reset.  Using qemu_register_reset
+as we do now keeps them far apart.
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+Reviewed-by: Andreas Färber <afaerber@suse.de>
+---
+	v2->v3: add stub kvm_arch_reset_vcpu for s390
+
+ include/sysemu/kvm.h   |  2 --
+ kvm-all.c              | 11 -----------
+ target-arm/kvm.c       |  4 ----
+ target-i386/cpu.c      |  5 +++++
+ target-i386/kvm_i386.h |  1 +
+ target-ppc/kvm.c       |  4 ----
+ target-s390x/cpu.c     |  4 ++++
+ target-s390x/cpu.h     |  5 +++++
+ 8 files changed, 15 insertions(+), 21 deletions(-)
+
+diff --git a/include/sysemu/kvm.h b/include/sysemu/kvm.h
+index f2d97b5..50072c5 100644
+--- a/include/sysemu/kvm.h
++++ b/include/sysemu/kvm.h
+@@ -199,8 +199,6 @@ int kvm_arch_init_vcpu(CPUState *cpu);
+ /* Returns VCPU ID to be used on KVM_CREATE_VCPU ioctl() */
+ unsigned long kvm_arch_vcpu_id(CPUState *cpu);
+ 
+-void kvm_arch_reset_vcpu(CPUState *cpu);
+-
+ int kvm_arch_on_sigbus_vcpu(CPUState *cpu, int code, void *addr);
+ int kvm_arch_on_sigbus(int code, void *addr);
+ 
+diff --git a/kvm-all.c b/kvm-all.c
+index 9b433d3..57616ef 100644
+--- a/kvm-all.c
++++ b/kvm-all.c
+@@ -207,13 +207,6 @@ static int kvm_set_user_memory_region(KVMState *s, KVMSlot *slot)
+     return kvm_vm_ioctl(s, KVM_SET_USER_MEMORY_REGION, &mem);
+ }
+ 
+-static void kvm_reset_vcpu(void *opaque)
+-{
+-    CPUState *cpu = opaque;
+-
+-    kvm_arch_reset_vcpu(cpu);
+-}
+-
+ int kvm_init_vcpu(CPUState *cpu)
+ {
+     KVMState *s = kvm_state;
+@@ -253,10 +246,6 @@ int kvm_init_vcpu(CPUState *cpu)
+     }
+ 
+     ret = kvm_arch_init_vcpu(cpu);
+-    if (ret == 0) {
+-        qemu_register_reset(kvm_reset_vcpu, cpu);
+-        kvm_arch_reset_vcpu(cpu);
+-    }
+ err:
+     return ret;
+ }
+diff --git a/target-arm/kvm.c b/target-arm/kvm.c
+index 6bfb103..f45a63d 100644
+--- a/target-arm/kvm.c
++++ b/target-arm/kvm.c
+@@ -430,10 +430,6 @@ int kvm_arch_handle_exit(CPUState *cs, struct kvm_run *run)
+     return 0;
+ }
+ 
+-void kvm_arch_reset_vcpu(CPUState *cs)
+-{
+-}
+-
+ bool kvm_arch_stop_on_emulation_error(CPUState *cs)
+ {
+     return true;
+diff --git a/target-i386/cpu.c b/target-i386/cpu.c
+index 6dd993f..1754225 100644
+--- a/target-i386/cpu.c
++++ b/target-i386/cpu.c
+@@ -24,6 +24,7 @@
+ #include "cpu.h"
+ #include "sysemu/kvm.h"
+ #include "sysemu/cpus.h"
++#include "kvm_i386.h"
+ #include "topology.h"
+ 
+ #include "qemu/option.h"
+@@ -2015,6 +2016,10 @@ static void x86_cpu_reset(CPUState *s)
+     }
+ 
+     s->halted = !cpu_is_bsp(cpu);
++
++    if (kvm_enabled()) {
++        kvm_arch_reset_vcpu(s);
++    }
+ #endif
+ }
+ 
+diff --git a/target-i386/kvm_i386.h b/target-i386/kvm_i386.h
+index 4392ab4..3accc2d 100644
+--- a/target-i386/kvm_i386.h
++++ b/target-i386/kvm_i386.h
+@@ -14,6 +14,7 @@
+ #include "sysemu/kvm.h"
+ 
+ bool kvm_allows_irq0_override(void);
++void kvm_arch_reset_vcpu(CPUState *cs);
+ 
+ int kvm_device_pci_assign(KVMState *s, PCIHostDeviceAddress *dev_addr,
+                           uint32_t flags, uint32_t *dev_id);
+diff --git a/target-ppc/kvm.c b/target-ppc/kvm.c
+index 5e9dddb..1e8b01d 100644
+--- a/target-ppc/kvm.c
++++ b/target-ppc/kvm.c
+@@ -425,10 +425,6 @@ int kvm_arch_init_vcpu(CPUState *cs)
+     return ret;
+ }
+ 
+-void kvm_arch_reset_vcpu(CPUState *cpu)
+-{
+-}
+-
+ static void kvm_sw_tlb_put(PowerPCCPU *cpu)
+ {
+     CPUPPCState *env = &cpu->env;
+diff --git a/target-s390x/cpu.c b/target-s390x/cpu.c
+index 23fe51f..6321384 100644
+--- a/target-s390x/cpu.c
++++ b/target-s390x/cpu.c
+@@ -84,6 +84,10 @@ static void s390_cpu_reset(CPUState *s)
+      * after incrementing the cpu counter */
+ #if !defined(CONFIG_USER_ONLY)
+     s->halted = 1;
++
++    if (kvm_enabled()) {
++        kvm_arch_reset_vcpu(s);
++    }
+ #endif
+     tlb_flush(env, 1);
+ }
+diff --git a/target-s390x/cpu.h b/target-s390x/cpu.h
+index e351005..cc51de5 100644
+--- a/target-s390x/cpu.h
++++ b/target-s390x/cpu.h
+@@ -352,11 +352,16 @@ void s390x_cpu_timer(void *opaque);
+ int s390_virtio_hypercall(CPUS390XState *env);
+ 
+ #ifdef CONFIG_KVM
++void kvm_arch_reset_vcpu(CPUState *cs);
+ void kvm_s390_interrupt(S390CPU *cpu, int type, uint32_t code);
+ void kvm_s390_virtio_irq(S390CPU *cpu, int config_change, uint64_t token);
+ void kvm_s390_interrupt_internal(S390CPU *cpu, int type, uint32_t parm,
+                                  uint64_t parm64, int vm);
+ #else
++static inline void kvm_arch_reset_vcpu(CPUState *cs)
++{
++}
++
+ static inline void kvm_s390_interrupt(S390CPU *cpu, int type, uint32_t code)
+ {
+ }
+-- 
+1.8.1.4
+
+
+

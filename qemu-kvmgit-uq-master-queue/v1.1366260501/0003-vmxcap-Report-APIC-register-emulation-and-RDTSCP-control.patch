@@ -1,0 +1,38 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Marcelo Tosatti <mtosatti@redhat.com>
+To: Anthony Liguori <aliguori@us.ibm.com>
+Cc: Marcelo Tosatti <mtosatti@redhat.com>, Jan Kiszka <jan.kiszka@siemens.com>,
+ qemu-devel@nongnu.org, kvm@vger.kernel.org
+Date: Wed, 17 Apr 2013 23:48:24 -0300
+Message-id: 614413f7f9a88d97ab40ecabd1c7920fb288f820.1366253306.git.mtosatti@redhat.com
+Subject: [PATCH 3/5] vmxcap: Report APIC register emulation and RDTSCP control
+
+From: Jan Kiszka <jan.kiszka@siemens.com>
+
+Signed-off-by: Jan Kiszka <jan.kiszka@siemens.com>
+Signed-off-by: Marcelo Tosatti <mtosatti@redhat.com>
+---
+ scripts/kvm/vmxcap | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/scripts/kvm/vmxcap b/scripts/kvm/vmxcap
+index a1a44a0..a79f816 100755
+--- a/scripts/kvm/vmxcap
++++ b/scripts/kvm/vmxcap
+@@ -157,10 +157,12 @@ controls = [
+             0: 'Virtualize APIC accesses',
+             1: 'Enable EPT',
+             2: 'Descriptor-table exiting',
++            3: 'Enable RDTSCP',
+             4: 'Virtualize x2APIC mode',
+             5: 'Enable VPID',
+             6: 'WBINVD exiting',
+             7: 'Unrestricted guest',
++            8: 'APIC register emulation',
+             9: 'Virtual interrupt delivery',
+             10: 'PAUSE-loop exiting',
+             11: 'RDRAND exiting',
+-- 
+1.8.1.4
+
+

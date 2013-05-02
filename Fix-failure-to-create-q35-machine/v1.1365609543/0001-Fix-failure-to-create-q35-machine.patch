@@ -1,0 +1,47 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Hu Tao <hutao@cn.fujitsu.com>
+To: Markus Armbruster <armbru@redhat.com>, Hu Tao <hutao@cn.fujitsu.com>,
+ qemu-devel@nongnu.org
+Cc: Paolo Bonzini <pbonzini@redhat.com>, qemu-devel@nongnu.org
+Date: Wed, 10 Apr 2013 10:59:03 +0800
+Message-id: 1365562743-6831-1-git-send-email-hutao@cn.fujitsu.com
+Subject: [PATCH 1/1] Fix failure to create q35 machine
+
+This is a regression introduced by c0907c9e6417c.  -M q35
+to reproduce the problem.
+
+Signed-off-by: Hu Tao <hutao@cn.fujitsu.com>
+Tested-by: Markus Armbruster <armbru@redhat.com>
+---
+ default-configs/i386-softmmu.mak   | 2 +-
+ default-configs/x86_64-softmmu.mak | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/default-configs/i386-softmmu.mak b/default-configs/i386-softmmu.mak
+index 4ac0694..6d9d364 100644
+--- a/default-configs/i386-softmmu.mak
++++ b/default-configs/i386-softmmu.mak
+@@ -42,6 +42,6 @@ CONFIG_ISA_TESTDEV=y
+ CONFIG_VMPORT=y
+ CONFIG_SGA=y
+ CONFIG_LPC_ICH9=y
+-CONFIG_Q35=y
++CONFIG_PCI_Q35=y
+ CONFIG_APIC=y
+ CONFIG_IOAPIC=y
+diff --git a/default-configs/x86_64-softmmu.mak b/default-configs/x86_64-softmmu.mak
+index bf4091c..3b06310 100644
+--- a/default-configs/x86_64-softmmu.mak
++++ b/default-configs/x86_64-softmmu.mak
+@@ -42,6 +42,6 @@ CONFIG_ISA_TESTDEV=y
+ CONFIG_VMPORT=y
+ CONFIG_SGA=y
+ CONFIG_LPC_ICH9=y
+-CONFIG_Q35=y
++CONFIG_PCI_Q35=y
+ CONFIG_APIC=y
+ CONFIG_IOAPIC=y
+-- 
+1.8.1.4
+
+

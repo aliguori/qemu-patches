@@ -1,0 +1,34 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Aurelien Jarno <aurelien@aurel32.net>
+To: qemu-devel@nongnu.org
+Cc: Aurelien Jarno <aurelien@aurel32.net>
+Date: Sun, 31 Mar 2013 13:02:22 +0200
+Message-id: 1364727746-2686-4-git-send-email-aurelien@aurel32.net
+Subject: [PATCH 3/7] target-i386: enable PCLMULQDQ on Westmere CPU
+
+The PCLMULQDQ instruction has been introduced on the Westmere CPU.
+
+Reviewed-by: Richard Henderson <rth@twiddle.net>
+Reviewed-by: Edgar E. Iglesias <edgar.iglesias@gmail.com>
+Signed-off-by: Aurelien Jarno <aurelien@aurel32.net>
+---
+ target-i386/cpu.c |    2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/target-i386/cpu.c b/target-i386/cpu.c
+index 41382c5..5941d40 100644
+--- a/target-i386/cpu.c
++++ b/target-i386/cpu.c
+@@ -687,7 +687,7 @@ static x86_def_t builtin_x86_defs[] = {
+              CPUID_DE | CPUID_FP87,
+         .ext_features = CPUID_EXT_AES | CPUID_EXT_POPCNT | CPUID_EXT_SSE42 |
+              CPUID_EXT_SSE41 | CPUID_EXT_CX16 | CPUID_EXT_SSSE3 |
+-             CPUID_EXT_SSE3,
++             CPUID_EXT_PCLMULQDQ | CPUID_EXT_SSE3,
+         .ext2_features = CPUID_EXT2_LM | CPUID_EXT2_SYSCALL | CPUID_EXT2_NX,
+         .ext3_features = CPUID_EXT3_LAHF_LM,
+         .xlevel = 0x8000000A,
+-- 
+1.7.10.4
+
+

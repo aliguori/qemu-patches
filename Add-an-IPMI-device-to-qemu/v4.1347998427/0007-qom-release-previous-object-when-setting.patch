@@ -1,0 +1,39 @@
+From patches Mon Sep 17 00:00:00 2001
+From: minyard@acm.org
+To: qemu-devel@nongnu.org
+Cc: Corey Minyard <cminyard@mvista.com>
+Date: Tue, 18 Sep 2012 15:00:34 -0500
+Message-id: 1347998443-20599-8-git-send-email-minyard@acm.org
+Subject: [PATCH 07/16] qom: release previous object when setting
+
+From: Corey Minyard <cminyard@mvista.com>
+
+When setting an object, if you don't release the previous object
+that was there, it may become unusable.  This change allows a
+chardev to be removed from one object's properties and added to
+another's.
+
+Signed-off-by: Corey Minyard <cminyard@mvista.com>
+Acked-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ qom/object.c |    3 +++
+ 1 files changed, 3 insertions(+), 0 deletions(-)
+
+diff --git a/qom/object.c b/qom/object.c
+index e3e9242..6bbb6a8 100644
+--- a/qom/object.c
++++ b/qom/object.c
+@@ -692,6 +692,9 @@ void object_property_set(Object *obj, Visitor *v, const char *name,
+     if (!prop->set) {
+         error_set(errp, QERR_PERMISSION_DENIED);
+     } else {
++        if (prop->release) {
++            prop->release(obj, name, prop->opaque);
++        }
+         prop->set(obj, v, prop->opaque, name, errp);
+     }
+ }
+-- 
+1.7.4.1
+
+

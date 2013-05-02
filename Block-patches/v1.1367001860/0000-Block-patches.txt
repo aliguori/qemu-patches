@@ -1,0 +1,51 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Stefan Hajnoczi <stefanha@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>,
+ Stefan Hajnoczi <stefanha@redhat.com>
+Date: Fri, 26 Apr 2013 13:44:20 +0200
+Message-id: 1366976682-10251-1-git-send-email-stefanha@redhat.com
+Subject: [PATCH 00/11] Block patches
+
+The following changes since commit e3351000cd682200835763caca87adf708ed1c65:
+
+  Makefile: Use QEMU_FLAGS for DTC compilation (2013-04-26 02:48:10 +0200)
+
+are available in the git repository at:
+
+  git://github.com/stefanha/qemu.git block
+
+for you to fetch changes up to 859e5553a428225de6b8ef302cdcfd68d140b926:
+
+  sheepdog: fix loadvm operation (2013-04-26 13:37:51 +0200)
+
+----------------------------------------------------------------
+Kevin Wolf (2):
+      block: Disable driver-specific options for 1.5
+      rbd: Fix use after free in rbd_open()
+
+Liu Yuan (4):
+      sheepdog: add discard/trim support for sheepdog
+      sheepdog: use BDRV_SECTOR_SIZE
+      sheepdog: implement .bdrv_co_is_allocated()
+      sheepdog: fix loadvm operation
+
+MORITA Kazutaka (4):
+      sheepdog: cleanup find_vdi_name
+      sheepdog: add SD_RES_READONLY result code
+      sheepdog: add helper function to reload inode
+      sheepdog: resend write requests when SD_RES_READONLY is received
+
+Richard W.M. Jones (1):
+      block/ssh: Require libssh2 >= 1.2.8.
+
+ block/rbd.c              |   9 +-
+ block/sheepdog.c         | 308 ++++++++++++++++++++++++++++++++++++++++-------
+ blockdev.c               | 118 +++++++++++++++++-
+ configure                |  24 +---
+ tests/qemu-iotests/group |   2 +-
+ 5 files changed, 390 insertions(+), 71 deletions(-)
+
+-- 
+1.8.1.4
+

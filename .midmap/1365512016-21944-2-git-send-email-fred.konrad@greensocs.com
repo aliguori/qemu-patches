@@ -1,0 +1,1 @@
+../virtio-serial-refactoring/v6.1365537209/0001-virtio-serial-add-the-virtio-serial-device.patch

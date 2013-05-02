@@ -1,0 +1,73 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: 
+Date: Thu,  4 Apr 2013 21:23:11 +0200
+Message-id: 1365103395-11547-32-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 31/35] hw: move ARM CPU cores to hw/cpu/,
+ configure with default-configs/
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ default-configs/arm-softmmu.mak | 4 ++++
+ hw/arm/Makefile.objs            | 2 --
+ hw/cpu/Makefile.objs            | 4 ++++
+ hw/{ => cpu}/a15mpcore.c        | 0
+ hw/{ => cpu}/a9mpcore.c         | 0
+ hw/{ => cpu}/arm11mpcore.c      | 0
+ 6 files changed, 8 insertions(+), 2 deletions(-)
+ rename hw/{ => cpu}/a15mpcore.c (100%)
+ rename hw/{ => cpu}/a9mpcore.c (100%)
+ rename hw/{ => cpu}/arm11mpcore.c (100%)
+
+diff --git a/default-configs/arm-softmmu.mak b/default-configs/arm-softmmu.mak
+index e03840e..31725a9 100644
+--- a/default-configs/arm-softmmu.mak
++++ b/default-configs/arm-softmmu.mak
+@@ -34,6 +34,10 @@ CONFIG_PFLASH_CFI02=y
+ CONFIG_MICRODRIVE=y
+ CONFIG_USB_MUSB=y
+ 
++CONFIG_ARM5MPCORE=y
++CONFIG_ARM9MPCORE=y
++CONFIG_ARM15MPCORE=y
++
+ CONFIG_ARM_GIC=y
+ CONFIG_ARM_GIC_KVM=$(CONFIG_KVM)
+ CONFIG_ARM_TIMER=y
+diff --git a/hw/arm/Makefile.objs b/hw/arm/Makefile.objs
+index cb94927..35c5f11 100644
+--- a/hw/arm/Makefile.objs
++++ b/hw/arm/Makefile.objs
+@@ -1,5 +1,3 @@
+-obj-y += arm11mpcore.o a9mpcore.o
+-obj-y += a15mpcore.o
+ obj-y += strongarm.o
+ 
+ obj-y := $(addprefix ../,$(obj-y))
+diff --git a/hw/cpu/Makefile.objs b/hw/cpu/Makefile.objs
+index e69de29..a49ca04 100644
+--- a/hw/cpu/Makefile.objs
++++ b/hw/cpu/Makefile.objs
+@@ -0,0 +1,4 @@
++obj-$(CONFIG_ARM11MPCORE) += arm11mpcore.o
++obj-$(CONFIG_ARM9MPCORE) += a9mpcore.o
++obj-$(CONFIG_ARM15MPCORE) += a15mpcore.o
++
+diff --git a/hw/a15mpcore.c b/hw/cpu/a15mpcore.c
+similarity index 100%
+rename from hw/a15mpcore.c
+rename to hw/cpu/a15mpcore.c
+diff --git a/hw/a9mpcore.c b/hw/cpu/a9mpcore.c
+similarity index 100%
+rename from hw/a9mpcore.c
+rename to hw/cpu/a9mpcore.c
+diff --git a/hw/arm11mpcore.c b/hw/cpu/arm11mpcore.c
+similarity index 100%
+rename from hw/arm11mpcore.c
+rename to hw/cpu/arm11mpcore.c
+-- 
+1.8.1.4
+
+
+

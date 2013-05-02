@@ -1,0 +1,48 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Jason Wang <jasowang@redhat.com>
+To: Anthony Liguori <aliguori@us.ibm.com>, qemu-devel@nongnu.org,
+ Jason Wang <jasowang@redhat.com>
+Cc: Jesse Larrew <jlarrew@linux.vnet.ibm.com>,
+ Anthony Liguori <aliguori@us.ibm.com>, Jason Wang <jasowang@redhat.com>,
+ qemu-devel@nongnu.org, mst@redhat.com
+Date: Thu, 25 Apr 2013 15:26:54 +0800
+Message-id: 1366874814-2658-1-git-send-email-jasowang@redhat.com
+Subject: [PATCH 1/1] virtio-net: count VIRTIO_NET_F_MAC when calculating
+ config_len
+
+Commit 14f9b664 (hw/virtio-net.c: set config size using host features) tries to
+calculate config size based on the host features. But it forgets the
+VIRTIO_NET_F_MAC were always set for qemu later. This will lead a zero config
+len for virtio-net device when both VIRTIO_NET_F_STATUS and VIRTIO_NET_F_MQ were
+disabled form command line. Then qemu will crash when user tries to read the
+config of virtio-net.
+
+Fix this by counting VIRTIO_NET_F_MAC and make sure the config at least contains
+the mac address.
+
+Cc: Jesse Larrew <jlarrew@linux.vnet.ibm.com>
+Signed-off-by: Jason Wang <jasowang@redhat.com>
+Reviewed-by: Michael S. Tsirkin <mst@redhat.com>
+Acked-by: Michael S. Tsirkin <mst@redhat.com>
+---
+Changes from V1:
+- Set VIRTIO_NET_F_MAC bit in host_features instead of initializing config_size
+---
+ hw/net/virtio-net.c |    1 +
+ 1 files changed, 1 insertions(+), 0 deletions(-)
+
+diff --git a/hw/net/virtio-net.c b/hw/net/virtio-net.c
+index 1662f46..d4533d5 100644
+--- a/hw/net/virtio-net.c
++++ b/hw/net/virtio-net.c
+@@ -1266,6 +1266,7 @@ static void virtio_net_guest_notifier_mask(VirtIODevice *vdev, int idx,
+ void virtio_net_set_config_size(VirtIONet *n, uint32_t host_features)
+ {
+     int i, config_size = 0;
++    host_features |= (1 << VIRTIO_NET_F_MAC);
+     for (i = 0; feature_sizes[i].flags != 0; i++) {
+         if (host_features & feature_sizes[i].flags) {
+             config_size = MAX(feature_sizes[i].end, config_size);
+-- 
+1.7.1
+

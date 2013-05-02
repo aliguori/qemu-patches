@@ -1,0 +1,5 @@
+0000-block-Vectored-bdrv_writev_vmstate.txt
+0001-block-Introduce-bdrv_writev_vmstate.patch
+0002-savevm-Implement-block_writev_buffer.patch
+0003-block-Introduce-bdrv_pwritev-for-qcow2_save_vmstate.patch
+0004-qemu-iotests-A-few-more-bdrv_pread-pwrite-tests.patch

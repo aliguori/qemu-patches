@@ -1,0 +1,8 @@
+0000-implement-power-chip.txt
+0001-hw-irq-move-struct-IRQState-to-irqh.patch
+0002-hw-power-add-main-power-chip-implementation.patch
+0003-vl-create-power-chip-device.patch
+0004-sysemu-remove-PowerReason-in-sysemuh.patch
+0005-qdev-add-power_signal_in-for-DeviceState.patch
+0006-ich9-refactor-wakeup-reset-function.patch
+0007-vl-run-power_management.patch

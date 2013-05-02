@@ -1,0 +1,69 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: Anthony Liguori <aliguori@us.ibm.com>, Paolo Bonzini <pbonzini@redhat.com>,
+ av1474@comtv.ru, qemu-devel@nongnu.org
+Cc: av1474@comtv.ru, qemu-devel@nongnu.org
+Date: Thu, 18 Apr 2013 18:43:56 +0200
+Message-id: 1366303444-24620-1-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 0/8] make audio card configuration uniform
+
+These patches make audio card configuration the same as all other
+devices, and remove the need to explicitly enable -soundhw on
+boards that wish to support it.
+
+I would like these in 1.5, malc didn't comment on the RFC.  Patches 6-8
+are new or different in the final series, everything else is mostly
+the same.
+
+Paolo Bonzini (8):
+  adlib: qdev-ify
+  audio: remove the need for audio card CONFIG_* symbols
+  audio: remove HAS_AUDIO
+  audio: remove CONFIG_* symbols
+  audio: replace audio card configuration with default-configs
+  qom: do not return root for empty path
+  audio: look for the ISA and PCI buses
+  audio: enable PCI audio cards for all PCI-enabled targets
+
+ arch_init.c                          | 169 ++++++++++-------------------------
+ configure                            |  30 -------
+ default-configs/i386-softmmu.mak     |   2 +-
+ default-configs/mips-softmmu.mak     |   2 +-
+ default-configs/mips64-softmmu.mak   |   2 +-
+ default-configs/mips64el-softmmu.mak |   2 +-
+ default-configs/mipsel-softmmu.mak   |   2 +-
+ default-configs/pci.mak              |   3 +
+ default-configs/ppc-softmmu.mak      |   2 +-
+ default-configs/ppc64-softmmu.mak    |   2 +-
+ default-configs/ppcemb-softmmu.mak   |   2 +-
+ default-configs/sound.mak            |   4 +
+ default-configs/x86_64-softmmu.mak   |   2 +-
+ hmp-commands.hx                      |   4 -
+ hw/audio/Makefile.objs               |  16 ++--
+ hw/audio/ac97.c                      |   3 +-
+ hw/audio/adlib.c                     |  84 +++++++++++++----
+ hw/audio/cs4231a.c                   |   3 +-
+ hw/audio/es1370.c                    |   3 +-
+ hw/audio/gus.c                       |   3 +-
+ hw/audio/intel-hda.c                 |  22 ++---
+ hw/audio/pcspk.c                     |   4 +-
+ hw/audio/sb16.c                      |   3 +-
+ hw/i386/pc_piix.c                    |   2 -
+ hw/i386/pc_q35.c                     |   1 -
+ hw/mips/mips_jazz.c                  |   2 -
+ hw/mips/mips_malta.c                 |   3 -
+ hw/ppc/prep.c                        |   3 -
+ hw/usb/dev-audio.c                   |   1 -
+ include/hw/audio/audio.h             |  23 +----
+ include/hw/audio/pcspk.h             |   2 -
+ include/sysemu/arch_init.h           |   3 +-
+ monitor.c                            |   2 -
+ qom/object.c                         |  12 +--
+ vl.c                                 |  10 +--
+ 35 files changed, 171 insertions(+), 262 deletions(-)
+ create mode 100644 default-configs/sound.mak
+
+-- 
+1.8.1.4
+
+

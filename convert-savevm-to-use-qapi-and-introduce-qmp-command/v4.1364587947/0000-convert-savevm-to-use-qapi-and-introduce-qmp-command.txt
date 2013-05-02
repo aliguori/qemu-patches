@@ -1,0 +1,77 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Pavel Hrdina <phrdina@redhat.com>
+To: Luiz Capitulino <lcapitulino@redhat.com>,
+ Markus Armbruster <armbru@redhat.com>, qemu-devel@nongnu.org,
+ Pavel Hrdina <phrdina@redhat.com>, Eric Blake <eblake@redhat.com>
+Cc: phrdina@redhat.com, Wenchao Xia <xiawenc@linux.vnet.ibm.com>,
+ qemu-devel@nongnu.org, armbru@redhat.com,
+ Luiz Capitulino <lcapitulino@redhat.com>, Pavel Hrdina <phrdina@redhat.com>,
+ Markus Armbruster <armbru@redhat.com>, lcapitulino@redhat.com
+Date: Fri, 29 Mar 2013 15:12:27 +0100
+Message-id: cover.1364565637.git.phrdina@redhat.com
+Subject: [PATCH 00/11] convert savevm to use qapi and introduce qmp command
+
+This patch series convert the savevm command into qapi and introduce QMP
+command vm-snapshot-save.
+It also rewrite error report for functions used by this command.
+
+The last patch introduce new functionality of savevm that you cannot override
+existing snapshot without using 'force' parameter.
+
+If non-blocking behaviour of this command is required and we cannot wait
+until live snapshots will be finished, I could improve this basic command
+to be non-blocking.
+
+Changes from v3:
+    - correct hopefully all error messages
+    - proper commit message for 'qapi: Convert savevm'
+
+Changes from v2:
+    - correct error messages
+    - introduce of 'force' option moved to qapi: Convert savevm
+    - update of return value for used functions
+    - drop of the speed improve because it isn't actually speed improve
+    - vm-snapshot-save and savevm now returns snapshot information
+
+Changes from v1:
+    - rebase on current master branch
+    - improve the speed of savevm
+    - name parameter remains optionl for HMP and QMP
+
+
+Pavel Hrdina (11):
+  block: add error parameter to bdrv_snapshot_create() and related
+    functions
+  block: add error parameter to del_existing_snapshots()
+  savevm: add error parameter to qemu_savevm_state_begin()
+  savevm: add error parameter to qemu_savevm_state_iterate()
+  savevm: add error parameter to qemu_savevm_state_complete()
+  savevm: add error parameter to qemu_savevm_state()
+  qapi: Convert savevm
+  qemu-img: introduce qemu_img_handle_error
+  block: update return value from bdrv_snapshot_create
+  savevm: update return value from qemu_savevm_state
+  savevm: add force parameter to HMP command and return snapshot info
+
+ block.c                   | 24 +++++++-----
+ block/qcow2-snapshot.c    | 15 +++++---
+ block/qcow2.h             |  4 +-
+ block/rbd.c               | 19 +++++-----
+ block/sheepdog.c          | 20 +++++-----
+ hmp-commands.hx           | 18 ++++-----
+ hmp.c                     | 27 ++++++++++++++
+ hmp.h                     |  1 +
+ include/block/block.h     |  5 ++-
+ include/block/block_int.h |  5 ++-
+ include/sysemu/sysemu.h   |  8 ++--
+ migration.c               |  6 +--
+ qapi-schema.json          | 22 +++++++++++
+ qemu-img.c                | 27 ++++++++------
+ qmp-commands.hx           | 43 ++++++++++++++++++++++
+ savevm.c                  | 93 ++++++++++++++++++++++++++++-------------------
+ 16 files changed, 235 insertions(+), 102 deletions(-)
+
+-- 
+1.8.1.4
+
+

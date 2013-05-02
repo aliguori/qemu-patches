@@ -1,0 +1,1 @@
+../New-cpu-max-field-in-query-machines-QMP-command-output/v2.1365463262/0001-New-cpu-max-field-in-query-machines-QMP-command-output.patch

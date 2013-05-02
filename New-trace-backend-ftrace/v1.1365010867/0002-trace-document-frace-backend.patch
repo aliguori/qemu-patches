@@ -1,0 +1,47 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Eiichi Tsukata <eiichi.tsukata.xh@hitachi.com>
+To: qemu-devel@nongnu.org, stefanha@redhat.com
+Cc: Eiichi Tsukata <eiichi.tsukata.xh@hitachi.com>
+Date: Wed,  3 Apr 2013 12:41:09 +0900
+Message-id: 1364960469-4462-3-git-send-email-eiichi.tsukata.xh@hitachi.com
+Subject: [PATCH 2/2] trace: document frace backend
+
+Add documentation of ftrace backend.
+
+Signed-off-by: Eiichi Tsukata <eiichi.tsukata.xh@hitachi.com>
+---
+ docs/tracing.txt | 16 ++++++++++++++++
+ 1 file changed, 16 insertions(+)
+
+diff --git a/docs/tracing.txt b/docs/tracing.txt
+index cf53c17..60ff9c5 100644
+--- a/docs/tracing.txt
++++ b/docs/tracing.txt
+@@ -175,6 +175,22 @@ unless you have specific needs for more advanced backends.
+ The "simple" backend currently does not capture string arguments, it simply
+ records the char* pointer value instead of the string that is pointed to.
+ 
++=== Ftrace ===
++
++The "ftrace" backend writes trace data to ftrace marker. This effectively
++sends trace events to ftrace ring buffer, and you can compare qemu trace
++data and kernel(especially kvm.ko when using KVM) trace data.
++
++if you use KVM, enable kvm events in ftrace:
++
++   # echo 1 > /sys/kernel/debug/tracing/events/kvm/enable
++
++After running qemu by root user, you can get the trace:
++
++   # cat /sys/kernel/debug/tracing/trace
++
++Restriction: "ftrace" backend is restricted to Linux only.
++
+ ==== Monitor commands ====
+ 
+ * trace-file on|off|flush|set <path>
+-- 
+1.8.1.4
+
+
+

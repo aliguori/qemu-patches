@@ -1,0 +1,47 @@
+From patches Mon Sep 17 00:00:00 2001
+From: liguang <lig.fnst@cn.fujitsu.com>
+To: Andreas =?ISO-8859-1?Q?F=E4rber?= <afaerber@suse.de>, qemu-devel@nongnu.org,
+ liguang <lig.fnst@cn.fujitsu.com>
+Cc: qemu-devel@nongnu.org, liguang <lig.fnst@cn.fujitsu.com>
+Date: Fri, 12 Apr 2013 12:12:23 +0800
+Message-id: 1365739943-30194-3-git-send-email-lig.fnst@cn.fujitsu.com
+Subject: [PATCH 3/3] debugcon: fix compiler warning when open DEBUG_DEBUGCON
+
+compiler warnings:
+  CC    hw/char/debugcon.o
+hw/char/debugcon.c: In function ‘debugcon_ioport_write’:
+hw/char/debugcon.c:58: warning: format ‘%02x’ expects type ‘unsigned int’, but argument 3 has type ‘uint64_t’
+hw/char/debugcon.c: In function ‘debugcon_ioport_read’:
+hw/char/debugcon.c:70: warning: format ‘%04x’ expects type ‘unsigned int’, but argument 2 has type ‘hwaddr’
+
+Signed-off-by: liguang <lig.fnst@cn.fujitsu.com>
+---
+ hw/char/debugcon.c |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/hw/char/debugcon.c b/hw/char/debugcon.c
+index b52cbeb..4cf07c6 100644
+--- a/hw/char/debugcon.c
++++ b/hw/char/debugcon.c
+@@ -55,7 +55,7 @@ static void debugcon_ioport_write(void *opaque, hwaddr addr, uint64_t val,
+     unsigned char ch = val;
+ 
+ #ifdef DEBUG_DEBUGCON
+-    printf(" [debugcon: write addr=0x%04llx val=0x%02x]\n", addr, val);
++    printf(" [debugcon: write addr=0x%04llx val=0x%02llx]\n", addr, val);
+ #endif
+ 
+     qemu_chr_fe_write(s->chr, &ch, 1);
+@@ -67,7 +67,7 @@ static uint64_t debugcon_ioport_read(void *opaque, hwaddr addr, unsigned width)
+     DebugconState *s = opaque;
+ 
+ #ifdef DEBUG_DEBUGCON
+-    printf("debugcon: read addr=0x%04x\n", addr);
++    printf("debugcon: read addr=0x%04llx\n", addr);
+ #endif
+ 
+     return s->readback;
+-- 
+1.7.2.5
+
+

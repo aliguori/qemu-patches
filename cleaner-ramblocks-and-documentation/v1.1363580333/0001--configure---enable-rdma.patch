@@ -1,0 +1,92 @@
+From patches Mon Sep 17 00:00:00 2001
+From: mrhines@linux.vnet.ibm.com
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, mst@redhat.com,
+ Michael R Hines <mrhines@us.ibm.com>, Bulent Abali <abali@us.ibm.com>,
+ owasserm@redhat.com, pbonzini@redhat.com, Gokul B Kandiraju <gokul@us.ibm.com>
+Date: Sun, 17 Mar 2013 23:18:54 -0400
+Message-id: 1363576743-6146-2-git-send-email-mrhines@linux.vnet.ibm.com
+Subject: [PATCH 01/10] ./configure --enable-rdma
+
+From: "Michael R. Hines" <mrhines@us.ibm.com>
+
+
+Signed-off-by: Michael R. Hines <mrhines@us.ibm.com>
+---
+ configure |   25 +++++++++++++++++++++++++
+ 1 file changed, 25 insertions(+)
+
+diff --git a/configure b/configure
+index 46a7594..bdc6b13 100755
+--- a/configure
++++ b/configure
+@@ -170,6 +170,7 @@ xfs=""
+ 
+ vhost_net="no"
+ kvm="no"
++rdma="no"
+ gprof="no"
+ debug_tcg="no"
+ debug="no"
+@@ -904,6 +905,10 @@ for opt do
+   ;;
+   --enable-gtk) gtk="yes"
+   ;;
++  --enable-rdma) rdma="yes"
++  ;;
++  --disable-rdma) rdma="no"
++  ;;
+   --with-gtkabi=*) gtkabi="$optarg"
+   ;;
+   --enable-tpm) tpm="yes"
+@@ -1104,6 +1109,8 @@ echo "  --enable-bluez           enable bluez stack connectivity"
+ echo "  --disable-slirp          disable SLIRP userspace network connectivity"
+ echo "  --disable-kvm            disable KVM acceleration support"
+ echo "  --enable-kvm             enable KVM acceleration support"
++echo "  --disable-rdma           disable RDMA-based migration support"
++echo "  --enable-rdma            enable RDMA-based migration support"
+ echo "  --enable-tcg-interpreter enable TCG with bytecode interpreter (TCI)"
+ echo "  --disable-nptl           disable usermode NPTL support"
+ echo "  --enable-nptl            enable usermode NPTL support"
+@@ -1766,6 +1773,18 @@ EOF
+   libs_softmmu="$sdl_libs $libs_softmmu"
+ fi
+ 
++if test "$rdma" = "yes" ; then
++  cat > $TMPC <<EOF
++#include <rdma/rdma_cma.h>
++int main(void) { return 0; }
++EOF
++  rdma_libs="-lrdmacm -libverbs"
++  if ! compile_prog "" "$rdma_libs" ; then
++      feature_not_found "rdma"
++  fi
++    
++fi
++
+ ##########################################
+ # VNC TLS/WS detection
+ if test "$vnc" = "yes" -a \( "$vnc_tls" != "no" -o "$vnc_ws" != "no" \) ; then
+@@ -3412,6 +3431,7 @@ echo "Linux AIO support $linux_aio"
+ echo "ATTR/XATTR support $attr"
+ echo "Install blobs     $blobs"
+ echo "KVM support       $kvm"
++echo "RDMA support      $rdma"
+ echo "TCG interpreter   $tcg_interpreter"
+ echo "fdt support       $fdt"
+ echo "preadv support    $preadv"
+@@ -4384,6 +4404,11 @@ if [ "$pixman" = "internal" ]; then
+   echo "config-host.h: subdir-pixman" >> $config_host_mak
+ fi
+ 
++if test "$rdma" = "yes" ; then
++echo "CONFIG_RDMA=y" >> $config_host_mak
++echo "LIBS+=$rdma_libs" >> $config_host_mak
++fi
++
+ # build tree in object directory in case the source is not in the current directory
+ DIRS="tests tests/tcg tests/tcg/cris tests/tcg/lm32"
+ DIRS="$DIRS pc-bios/optionrom pc-bios/spapr-rtas"
+-- 
+1.7.10.4
+

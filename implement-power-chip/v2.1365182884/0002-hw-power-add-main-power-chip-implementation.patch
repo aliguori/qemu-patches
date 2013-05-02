@@ -1,0 +1,285 @@
+From patches Mon Sep 17 00:00:00 2001
+From: liguang <lig.fnst@cn.fujitsu.com>
+To: Anthony Liguori <aliguori@us.ibm.com>, peter.maydell@linaro.org,
+ stefanha@gmail.com, qemu-devel@nongnu.org, liguang <lig.fnst@cn.fujitsu.com>,
+ li guang <lig.fnst@cn.fujitsu.com>, Peter Maydell <peter.maydell@linaro.org>,
+ pbonzini@redhat.com, afaerber@suse.de
+Cc: Anthony Liguori <aliguori@us.ibm.com>, stefanha@gmail.com,
+ qemu-devel@nongnu.org, liguang <lig.fnst@cn.fujitsu.com>,
+ Peter Maydell <peter.maydell@linaro.org>, pbonzini@redhat.com,
+ afaerber@suse.de
+Date: Fri, 5 Apr 2013 12:28:06 +0800
+Message-id: 1365136091-26148-3-git-send-email-lig.fnst@cn.fujitsu.com
+Subject: [PATCH 2/7] hw/power: add main power chip implementation
+
+here, we will handle power state transition between
+on, off, suspend, wakeup, we treat reset as power
+on then off, and power out pin will be connected to
+power in pin of devices, if we want a transition,
+we will trigger a power signal(qemu_irq), then all
+connected devices will be reply for this.
+
+Signed-off-by: liguang <lig.fnst@cn.fujitsu.com>
+---
+ hw/Makefile.objs |    1 +
+ hw/power.c       |  178 ++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ hw/power.h       |   50 +++++++++++++++
+ 3 files changed, 229 insertions(+), 0 deletions(-)
+ create mode 100644 hw/power.c
+ create mode 100644 hw/power.h
+
+diff --git a/hw/Makefile.objs b/hw/Makefile.objs
+index d0b2ecb..d6a8474 100644
+--- a/hw/Makefile.objs
++++ b/hw/Makefile.objs
+@@ -2,6 +2,7 @@
+ common-obj-y += qdev.o qdev-properties.o
+ # irq.o needed for qdev GPIO handling:
+ common-obj-y += irq.o
++common-obj-y += power.o
+ 
+ ifeq ($(CONFIG_SOFTMMU),y)
+ common-obj-y += usb/ ide/ pci/
+diff --git a/hw/power.c b/hw/power.c
+new file mode 100644
+index 0000000..a4e524f
+--- /dev/null
++++ b/hw/power.c
+@@ -0,0 +1,178 @@
++#include "hw/power.h"
++#include "qemu/main-loop.h"
++#include "qemu/thread.h"
++
++
++
++PowerChip pmc;
++static QemuMutex power_mutex;
++
++void power_management_set(PowerState ps)
++{
++    if (ps != POWER_IDLE) {
++        qemu_mutex_lock(&power_mutex);
++    }
++    switch (ps) {
++    case POWER_OFF:
++    case POWER_ON:
++    case POWER_SUSPEND:
++    case POWER_WAKEUP:
++        pmc.power_state = ps;
++        break;
++    case POWER_RESET:
++        pmc.power_state = ps | POWER_OFF;
++        break;
++    default:
++        pmc.power_state = POWER_IDLE;
++        break;
++    }
++}
++
++PowerState power_state(void)
++{
++    return pmc.power_state;
++}
++
++void connect_power_signal(qemu_irq *s)
++{
++    PowerSignal *psig = g_malloc0(sizeof(PowerSignal));
++
++    psig->signal = s;
++    QLIST_INSERT_HEAD(&pmc.power_signal_out, psig, link);
++}
++
++static void generate_power_signal(PowerState ps)
++{
++    PowerSignal *psig;
++
++    QLIST_FOREACH(psig, &pmc.power_signal_out, link) {
++        qemu_set_irq(*psig->signal, 1);
++    }
++}
++
++static void power_management_on(void)
++{
++    generate_power_signal(POWER_ON);
++}
++
++static void power_management_off(void)
++{
++    generate_power_signal(POWER_OFF);
++}
++
++static void power_management_suspend(void)
++{
++    generate_power_signal(POWER_SUSPEND);
++}
++
++static void power_management_wakeup(void)
++{
++    generate_power_signal(POWER_WAKEUP);
++}
++
++WakeupReason power_management_wakeup_reason(void)
++{
++    return pmc.wakeup_reason;
++}
++
++void power_management_wakeup_reason_set(WakeupReason wr)
++{
++    pmc.wakeup_reason = wr;
++}
++
++void power_management_wakeup_capability(WakeupReason wr, bool ok)
++{
++    switch (wr) {
++    case QEMU_WAKEUP_REASON_RTC:
++    case QEMU_WAKEUP_REASON_PMTIMER:
++        if (ok) {
++            pmc.wakeup_capability |= 1 << wr;
++        } else {
++            pmc.wakeup_capability &= ~(1 << wr);
++        }
++    default:
++        break;
++    }
++}
++
++PowerState power_management(void)
++{
++    int reset = pmc.power_state & 0x80;
++
++    switch (pmc.power_state & 0xf) {
++    case POWER_ON:
++        power_management_on();
++        break;
++    case POWER_OFF:
++        power_management_off();
++        if (reset) {
++            pmc.power_state = POWER_ON;
++        }
++        break;
++    case POWER_SUSPEND:
++        power_management_suspend();
++        break;
++    case POWER_WAKEUP:
++        if (1 << pmc.wakeup_reason & pmc.wakeup_capability) {
++            power_management_wakeup();
++        }
++    default:
++        break;
++    }
++
++    if (reset == 0) {
++        pmc.power_state = POWER_IDLE;
++    }
++
++    if (pmc.power_state != POWER_IDLE) {
++        qemu_mutex_unlock(&power_mutex);
++    }
++
++    return pmc.power_state;
++}
++
++static int power_chip_init(DeviceState *dev)
++{
++    pmc.power_state = POWER_IDLE;
++    pmc.wakeup_reason = QEMU_WAKEUP_REASON_UNKNOWN;
++    pmc.wakeup_capability = QEMU_WAKEUP_REASON_RTC | QEMU_WAKEUP_REASON_PMTIMER;
++    QLIST_INIT(&pmc.power_signal_out);
++    qemu_mutex_init(&power_mutex);
++
++    return 0;
++}
++
++static int power_chip_exit(DeviceState *dev)
++{
++    PowerSignal *psig;
++
++    QLIST_FOREACH(psig, &pmc.power_signal_out, link) {
++        QLIST_REMOVE(psig, link);
++        g_free(psig);
++    }
++
++    return 0;
++}
++
++static void power_chip_class_init(ObjectClass *oc, void *data)
++{
++     DeviceClass *dc = DEVICE_CLASS(oc);
++
++     dc->init = power_chip_init;
++     dc->exit = power_chip_exit;
++}
++
++static const TypeInfo power_chip_info = {
++    .name = TYPE_POWER_CHIP,
++    .parent = TYPE_DEVICE,
++    .instance_size = sizeof(PowerChip),
++    .class_init = power_chip_class_init,
++};
++
++static void power_chip_types(void)
++{
++    type_register_static(&power_chip_info);
++}
++
++type_init(power_chip_types);
++
+diff --git a/hw/power.h b/hw/power.h
+new file mode 100644
+index 0000000..152468c
+--- /dev/null
++++ b/hw/power.h
+@@ -0,0 +1,50 @@
++#ifndef ____POWER_H_
++#define ____POWER_H_
++
++#include "hw/qdev.h"
++#include "hw/qdev-core.h"
++#include "hw/irq.h"
++
++
++typedef enum PowerState {
++    POWER_IDLE = 0,
++    POWER_OFF = 0x1,
++    POWER_ON = 0x2,
++    POWER_RESET = 0x80,
++    POWER_SUSPEND = 0x4,
++    POWER_WAKEUP = 0x8,
++} PowerState;
++
++typedef enum WakeupReason {
++    QEMU_WAKEUP_REASON_UNKNOWN = -1,
++    QEMU_WAKEUP_REASON_OTHER = 0,
++    QEMU_WAKEUP_REASON_RTC,
++    QEMU_WAKEUP_REASON_PMTIMER,
++} WakeupReason;
++
++typedef struct PowerSignal {
++    qemu_irq *signal;
++    QLIST_ENTRY(PowerSignal) link;
++} PowerSignal;
++
++typedef struct PowerChip {
++    DeviceState dev;
++    PowerState power_state;
++    WakeupReason wakeup_reason;
++    int wakeup_capability;
++    QLIST_HEAD(, PowerSignal) power_signal_out;
++} PowerChip;
++
++#define TYPE_POWER_CHIP "power-chip"
++
++#define PMC(obj)  OBJECT_CHECK(PowerChip, (obj), TYPE_CPU)
++
++void power_management_set(PowerState ps);
++PowerState power_state(void);
++PowerState power_management(void);
++WakeupReason power_management_wakeup_reason(void);
++void power_management_wakeup_reason_set(WakeupReason wr);
++void power_management_wakeup_capability(WakeupReason wr, bool ok);
++void connect_power_signal(qemu_irq *s);
++
++#endif
+-- 
+1.7.2.5
+

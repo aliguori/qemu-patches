@@ -1,0 +1,408 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Corey Bryant <coreyb@linux.vnet.ibm.com>
+To: seabios@seabios.org
+Cc: Corey Bryant <coreyb@linux.vnet.ibm.com>, qemu-devel@nongnu.org,
+ stefanb@linux.vnet.ibm.com
+Date: Tue, 26 Mar 2013 10:14:54 -0400
+Message-id: 1364307295-518-2-git-send-email-coreyb@linux.vnet.ibm.com
+Subject: [PATCH 1/2] Add an implementation of a TPM TIS driver
+
+This patch adds an implementation of a TPM TIS driver for the TPM TIS
+emulation supported by QEMU (patches for passthrough vTPM are upstream in QEMU).
+Usage of the driver is broken up into several functions. The driver is cleanly
+separated from the rest of the code through an interface holding pointers to the
+driver's functions. A client using this driver first probes whether the TPM TIS
+interface is available (probe function) and then invokes the interface
+functions to initialize the interface and send requests and receive responses.
+
+Possible future extensions *could* include a virtio interface for the TPM
+with a corresponding driver here.
+
+Signed-off-by: Stefan Berger <stefanb@linux.vnet.ibm.com>
+Signed-off-by: Corey Bryant <coreyb@linux.vnet.ibm.com>
+---
+Version history from prior patch submission:
+
+v7:
+  - moving declaration of tpm_drivers[] into tpm_drivers.h
+
+v6:
+  - reworked timeouts; not hardcoded anymore
+
+v5:
+  - introducing a configurable threashold as part of the driver interface
+    structure below which the TPM is used for calculating the sha1
+
+v2:
+  - adapted tpm_drivers.c to be under LGPLv3
+---
+ src/tpm_drivers.c |  258 +++++++++++++++++++++++++++++++++++++++++++++++++++++
+ src/tpm_drivers.h |   90 +++++++++++++++++++
+ 2 files changed, 348 insertions(+), 0 deletions(-)
+ create mode 100644 src/tpm_drivers.c
+ create mode 100644 src/tpm_drivers.h
+
+diff --git a/src/tpm_drivers.c b/src/tpm_drivers.c
+new file mode 100644
+index 0000000..edf192d
+--- /dev/null
++++ b/src/tpm_drivers.c
+@@ -0,0 +1,258 @@
++// Implementation of a TPM driver for the TPM TIS interface
++//
++// Copyright (C) 2006-2013 IBM Corporation
++//
++// Authors:
++//     Stefan Berger <stefanb@linux.vnet.ibm.com>
++//
++// This file may be distributed under the terms of the GNU LGPLv3 license.
++
++#include "config.h"
++#include "util.h"
++#include "tpm_drivers.h"
++#include "tcgbios.h"
++
++static u32 tis_default_timeouts[4] = {
++    TIS_DEFAULT_TIMEOUT_A,
++    TIS_DEFAULT_TIMEOUT_B,
++    TIS_DEFAULT_TIMEOUT_C,
++    TIS_DEFAULT_TIMEOUT_D,
++};
++
++static u32 tpm_default_durations[3] = {
++    TPM_DEFAULT_DURATION_SHORT,
++    TPM_DEFAULT_DURATION_MEDIUM,
++    TPM_DEFAULT_DURATION_LONG,
++};
++
++
++/* if device is not there, return '0', '1' otherwise */
++static u32 tis_probe(void)
++{
++    u32 rc = 0;
++    u32 didvid = readl(TIS_REG(0, TIS_REG_DID_VID));
++
++    if ((didvid != 0) && (didvid != 0xffffffff))
++        rc = 1;
++
++    return rc;
++}
++
++static u32 tis_init(void)
++{
++    writeb(TIS_REG(0, TIS_REG_INT_ENABLE), 0);
++
++    if (tpm_drivers[TIS_DRIVER_IDX].durations == NULL) {
++        u32 *durations = malloc_low(sizeof(tpm_default_durations));
++        if (durations)
++            memcpy(durations, tpm_default_durations,
++                   sizeof(tpm_default_durations));
++        else
++            durations = tpm_default_durations;
++        tpm_drivers[TIS_DRIVER_IDX].durations = durations;
++    }
++
++    if (tpm_drivers[TIS_DRIVER_IDX].timeouts == NULL) {
++        u32 *timeouts = malloc_low(sizeof(tis_default_timeouts));
++        if (timeouts)
++            memcpy(timeouts, tis_default_timeouts,
++                   sizeof(tis_default_timeouts));
++        else
++            timeouts = tis_default_timeouts;
++        tpm_drivers[TIS_DRIVER_IDX].timeouts = timeouts;
++    }
++
++    return 1;
++}
++
++
++static void set_timeouts(u32 timeouts[4], u32 durations[3])
++{
++    u32 *tos = tpm_drivers[TIS_DRIVER_IDX].timeouts;
++    u32 *dus = tpm_drivers[TIS_DRIVER_IDX].durations;
++
++    if (tos && tos != tis_default_timeouts && timeouts)
++        memcpy(tos, timeouts, 4 * sizeof(u32));
++    if (dus && dus != tpm_default_durations && durations)
++        memcpy(dus, durations, 3 * sizeof(u32));
++}
++
++
++static u32 tis_wait_sts(u8 locty, u32 time, u8 mask, u8 expect)
++{
++    u32 rc = 1;
++
++    while (time > 0) {
++        u8 sts = readb(TIS_REG(locty, TIS_REG_STS));
++        if ((sts & mask) == expect) {
++            rc = 0;
++            break;
++        }
++        msleep(1);
++        time--;
++    }
++    return rc;
++}
++
++static u32 tis_activate(u8 locty)
++{
++    u32 rc = 0;
++    u8 acc;
++    int l;
++    u32 timeout_a = tpm_drivers[TIS_DRIVER_IDX].timeouts[TIS_TIMEOUT_TYPE_A];
++
++    if (!(readb(TIS_REG(locty, TIS_REG_ACCESS)) &
++          TIS_ACCESS_ACTIVE_LOCALITY)) {
++        /* release locality in use top-downwards */
++        for (l = 4; l >= 0; l--)
++            writeb(TIS_REG(l, TIS_REG_ACCESS),
++                   TIS_ACCESS_ACTIVE_LOCALITY);
++    }
++
++    /* request access to locality */
++    writeb(TIS_REG(locty, TIS_REG_ACCESS), TIS_ACCESS_REQUEST_USE);
++
++    acc = readb(TIS_REG(locty, TIS_REG_ACCESS));
++    if ((acc & TIS_ACCESS_ACTIVE_LOCALITY)) {
++        writeb(TIS_REG(locty, TIS_REG_STS), TIS_STS_COMMAND_READY);
++        rc = tis_wait_sts(locty, timeout_a,
++                          TIS_STS_COMMAND_READY, TIS_STS_COMMAND_READY);
++    }
++
++    return rc;
++}
++
++static u32 tis_find_active_locality(void)
++{
++    u8 locty;
++
++    for (locty = 0; locty <= 4; locty++) {
++        if ((readb(TIS_REG(locty, TIS_REG_ACCESS)) &
++             TIS_ACCESS_ACTIVE_LOCALITY))
++            return locty;
++    }
++
++    tis_activate(0);
++
++    return 0;
++}
++
++static u32 tis_ready(void)
++{
++    u32 rc = 0;
++    u8 locty = tis_find_active_locality();
++    u32 timeout_b = tpm_drivers[TIS_DRIVER_IDX].timeouts[TIS_TIMEOUT_TYPE_B];
++
++    writeb(TIS_REG(locty, TIS_REG_STS), TIS_STS_COMMAND_READY);
++    rc = tis_wait_sts(locty, timeout_b,
++                      TIS_STS_COMMAND_READY, TIS_STS_COMMAND_READY);
++
++    return rc;
++}
++
++static u32 tis_senddata(const u8 *const data, u32 len)
++{
++    u32 rc = 0;
++    u32 offset = 0;
++    u32 end = 0;
++    u16 burst = 0;
++    u32 ctr = 0;
++    u8 locty = tis_find_active_locality();
++    u32 timeout_d = tpm_drivers[TIS_DRIVER_IDX].timeouts[TIS_TIMEOUT_TYPE_D];
++
++    do {
++        while (burst == 0 && ctr < timeout_d) {
++               burst = readl(TIS_REG(locty, TIS_REG_STS)) >> 8;
++            if (burst == 0) {
++                msleep(1);
++                ctr++;
++            }
++        }
++
++        if (burst == 0) {
++            rc = TCG_RESPONSE_TIMEOUT;
++            break;
++        }
++
++        while (1) {
++            writeb(TIS_REG(locty, TIS_REG_DATA_FIFO), data[offset++]);
++            burst--;
++
++            if (burst == 0 || offset == len)
++                break;
++        }
++
++        if (offset == len)
++            end = 1;
++    } while (end == 0);
++
++    return rc;
++}
++
++static u32 tis_readresp(u8 *buffer, u32 *len)
++{
++    u32 rc = 0;
++    u32 offset = 0;
++    u32 sts;
++    u8 locty = tis_find_active_locality();
++
++    while (offset < *len) {
++        buffer[offset] = readb(TIS_REG(locty, TIS_REG_DATA_FIFO));
++        offset++;
++        sts = readb(TIS_REG(locty, TIS_REG_STS));
++        /* data left ? */
++        if ((sts & TIS_STS_DATA_AVAILABLE) == 0)
++            break;
++    }
++
++    *len = offset;
++
++    return rc;
++}
++
++
++static u32 tis_waitdatavalid(void)
++{
++    u32 rc = 0;
++    u8 locty = tis_find_active_locality();
++    u32 timeout_c = tpm_drivers[TIS_DRIVER_IDX].timeouts[TIS_TIMEOUT_TYPE_C];
++
++    if (tis_wait_sts(locty, timeout_c, TIS_STS_VALID, TIS_STS_VALID) != 0)
++        rc = TCG_NO_RESPONSE;
++
++    return rc;
++}
++
++static u32 tis_waitrespready(enum tpmDurationType to_t)
++{
++    u32 rc = 0;
++    u8 locty = tis_find_active_locality();
++    u32 timeout = tpm_drivers[TIS_DRIVER_IDX].durations[to_t];
++
++    writeb(TIS_REG(locty ,TIS_REG_STS), TIS_STS_TPM_GO);
++
++    if (tis_wait_sts(locty, timeout,
++                     TIS_STS_DATA_AVAILABLE, TIS_STS_DATA_AVAILABLE) != 0)
++        rc = TCG_NO_RESPONSE;
++
++    return rc;
++}
++
++
++struct tpm_driver tpm_drivers[TPM_NUM_DRIVERS] = {
++    [TIS_DRIVER_IDX] =
++        {
++            .timeouts      = NULL,
++            .durations     = NULL,
++            .set_timeouts  = set_timeouts,
++            .probe         = tis_probe,
++            .init          = tis_init,
++            .activate      = tis_activate,
++            .ready         = tis_ready,
++            .senddata      = tis_senddata,
++            .readresp      = tis_readresp,
++            .waitdatavalid = tis_waitdatavalid,
++            .waitrespready = tis_waitrespready,
++            .sha1threshold = 100 * 1024,
++        },
++};
+diff --git a/src/tpm_drivers.h b/src/tpm_drivers.h
+new file mode 100644
+index 0000000..34bb12d
+--- /dev/null
++++ b/src/tpm_drivers.h
+@@ -0,0 +1,90 @@
++#ifndef TPM_DRIVERS_H
++#define TPM_DRIVERS_H
++
++#include "types.h" // u32
++
++
++enum tpmDurationType {
++    TPM_DURATION_TYPE_SHORT = 0,
++    TPM_DURATION_TYPE_MEDIUM,
++    TPM_DURATION_TYPE_LONG,
++};
++
++/* low level driver implementation */
++struct tpm_driver {
++    u32 *timeouts;
++    u32 *durations;
++    void (*set_timeouts)(u32 timeouts[4], u32 durations[3]);
++    u32 (*probe)(void);
++    u32 (*init)(void);
++    u32 (*activate)(u8 locty);
++    u32 (*ready)(void);
++    u32 (*senddata)(const u8 *const data, u32 len);
++    u32 (*readresp)(u8 *buffer, u32 *len);
++    u32 (*waitdatavalid)(void);
++    u32 (*waitrespready)(enum tpmDurationType to_t);
++    /* the TPM will be used for buffers of sizes below the sha1threshold
++       for calculating the hash */
++    u32 sha1threshold;
++};
++
++extern struct tpm_driver tpm_drivers[];
++
++
++#define TIS_DRIVER_IDX       0
++#define TPM_NUM_DRIVERS      1
++
++#define TPM_INVALID_DRIVER  -1
++
++/* TIS driver */
++/* address of locality 0 (TIS) */
++#define TPM_TIS_BASE_ADDRESS        0xfed40000
++
++#define TIS_REG(LOCTY, REG) \
++    (void *)(TPM_TIS_BASE_ADDRESS + (LOCTY << 12) + REG)
++
++/* hardware registers */
++#define TIS_REG_ACCESS                 0x0
++#define TIS_REG_INT_ENABLE             0x8
++#define TIS_REG_INT_VECTOR             0xc
++#define TIS_REG_INT_STATUS             0x10
++#define TIS_REG_INTF_CAPABILITY        0x14
++#define TIS_REG_STS                    0x18
++#define TIS_REG_DATA_FIFO              0x24
++#define TIS_REG_DID_VID                0xf00
++#define TIS_REG_RID                    0xf04
++
++#define TIS_STS_VALID                  (1 << 7) /* 0x80 */
++#define TIS_STS_COMMAND_READY          (1 << 6) /* 0x40 */
++#define TIS_STS_TPM_GO                 (1 << 5) /* 0x20 */
++#define TIS_STS_DATA_AVAILABLE         (1 << 4) /* 0x10 */
++#define TIS_STS_EXPECT                 (1 << 3) /* 0x08 */
++#define TIS_STS_RESPONSE_RETRY         (1 << 1) /* 0x02 */
++
++#define TIS_ACCESS_TPM_REG_VALID_STS   (1 << 7) /* 0x80 */
++#define TIS_ACCESS_ACTIVE_LOCALITY     (1 << 5) /* 0x20 */
++#define TIS_ACCESS_BEEN_SEIZED         (1 << 4) /* 0x10 */
++#define TIS_ACCESS_SEIZE               (1 << 3) /* 0x08 */
++#define TIS_ACCESS_PENDING_REQUEST     (1 << 2) /* 0x04 */
++#define TIS_ACCESS_REQUEST_USE         (1 << 1) /* 0x02 */
++#define TIS_ACCESS_TPM_ESTABLISHMENT   (1 << 0) /* 0x01 */
++
++#define SCALER 10
++
++#define TIS_DEFAULT_TIMEOUT_A          (750  * SCALER)
++#define TIS_DEFAULT_TIMEOUT_B          (2000 * SCALER)
++#define TIS_DEFAULT_TIMEOUT_C          (750  * SCALER)
++#define TIS_DEFAULT_TIMEOUT_D          (750  * SCALER)
++
++enum tisTimeoutType {
++    TIS_TIMEOUT_TYPE_A = 0,
++    TIS_TIMEOUT_TYPE_B,
++    TIS_TIMEOUT_TYPE_C,
++    TIS_TIMEOUT_TYPE_D,
++};
++
++#define TPM_DEFAULT_DURATION_SHORT     (2000  * SCALER)
++#define TPM_DEFAULT_DURATION_MEDIUM    (20000 * SCALER)
++#define TPM_DEFAULT_DURATION_LONG      (60000 * SCALER)
++
++#endif /* TPM_DRIVERS_H */
+-- 
+1.7.1
+
+

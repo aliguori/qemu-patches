@@ -1,0 +1,98 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: Paolo Bonzini <pbonzini@redhat.com>, qemu-devel@nongnu.org
+Cc: qemu-devel@nongnu.org
+Date: Tue,  2 Apr 2013 16:44:17 +0200
+Message-id: 1364913860-25159-3-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 2/5] cpu: default TARGET_LONG_ALIGNMENT to TARGET_LONG_SIZE
+
+This is the case for all supported 64-bits architectures.
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ include/exec/cpu-defs.h | 2 +-
+ target-alpha/cpu.h      | 1 -
+ target-i386/cpu.h       | 1 -
+ target-ppc/cpu.h        | 1 -
+ target-s390x/cpu.h      | 1 -
+ target-sparc/cpu.h      | 1 -
+ 6 files changed, 1 insertion(+), 6 deletions(-)
+
+diff --git a/include/exec/cpu-defs.h b/include/exec/cpu-defs.h
+index 32d11e8..7d23fc2 100644
+--- a/include/exec/cpu-defs.h
++++ b/include/exec/cpu-defs.h
+@@ -43,7 +43,7 @@
+ #define TARGET_INT_ALIGNMENT 4
+ #endif
+ #ifndef TARGET_LONG_ALIGNMENT
+-#define TARGET_LONG_ALIGNMENT 4
++#define TARGET_LONG_ALIGNMENT TARGET_LONG_SIZE
+ #endif
+ #ifndef TARGET_LLONG_ALIGNMENT
+ #define TARGET_LLONG_ALIGNMENT 8
+diff --git a/target-alpha/cpu.h b/target-alpha/cpu.h
+index b0338fb..2156a1e 100644
+--- a/target-alpha/cpu.h
++++ b/target-alpha/cpu.h
+@@ -24,7 +24,6 @@
+ #include "qemu-common.h"
+ 
+ #define TARGET_LONG_BITS 64
+-#define TARGET_LONG_ALIGNMENT 8
+ 
+ #define CPUArchState struct CPUAlphaState
+ 
+diff --git a/target-i386/cpu.h b/target-i386/cpu.h
+index f1ef87c..48f41ca 100644
+--- a/target-i386/cpu.h
++++ b/target-i386/cpu.h
+@@ -24,7 +24,6 @@
+ 
+ #ifdef TARGET_X86_64
+ #define TARGET_LONG_BITS 64
+-#define TARGET_LONG_ALIGNMENT 8
+ #else
+ #define TARGET_LONG_BITS 32
+ #endif
+diff --git a/target-ppc/cpu.h b/target-ppc/cpu.h
+index 19d4e4c..42c36e2 100644
+--- a/target-ppc/cpu.h
++++ b/target-ppc/cpu.h
+@@ -27,7 +27,6 @@
+ #if defined (TARGET_PPC64)
+ /* PowerPC 64 definitions */
+ #define TARGET_LONG_BITS 64
+-#define TARGET_LONG_ALIGNMENT 8
+ #define TARGET_PAGE_BITS 12
+ 
+ /* Note that the official physical address space bits is 62-M where M
+diff --git a/target-s390x/cpu.h b/target-s390x/cpu.h
+index 8a241d3..e351005 100644
+--- a/target-s390x/cpu.h
++++ b/target-s390x/cpu.h
+@@ -26,7 +26,6 @@
+ #include "qemu-common.h"
+ 
+ #define TARGET_LONG_BITS 64
+-#define TARGET_LONG_ALIGNMENT 8
+ 
+ #define ELF_MACHINE	EM_S390
+ 
+diff --git a/target-sparc/cpu.h b/target-sparc/cpu.h
+index 9e5941a..6fa7778 100644
+--- a/target-sparc/cpu.h
++++ b/target-sparc/cpu.h
+@@ -13,7 +13,6 @@
+ #define TARGET_VIRT_ADDR_SPACE_BITS 32
+ #else
+ #define TARGET_LONG_BITS 64
+-#define TARGET_LONG_ALIGNMENT 8
+ #define TARGET_DPREGS 32
+ #define TARGET_PAGE_BITS 13 /* 8k */
+ #define TARGET_PHYS_ADDR_SPACE_BITS 41
+-- 
+1.8.1.4
+
+
+

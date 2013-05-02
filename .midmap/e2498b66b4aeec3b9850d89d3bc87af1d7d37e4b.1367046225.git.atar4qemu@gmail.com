@@ -1,0 +1,1 @@
+../sparc64-Fix-NVRAM-access-mode/v1.1367071936/0001-m48t59-use-mmio-for-the-m48t08-model-of-the-m48t59_isa-card.patch

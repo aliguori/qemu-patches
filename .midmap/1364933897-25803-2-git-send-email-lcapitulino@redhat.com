@@ -1,0 +1,1 @@
+../Monitor-make-output-buffer-dynamic/v2.1364937493/0001-qstring-add-qstring_get_length.patch

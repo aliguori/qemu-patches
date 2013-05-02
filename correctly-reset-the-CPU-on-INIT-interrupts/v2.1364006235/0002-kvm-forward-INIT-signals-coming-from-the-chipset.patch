@@ -1,0 +1,138 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Marcelo Tosatti <mtosatti@redhat.com>, Gleb Natapov <gnatapov@redhat.com>,
+ kvm@vger.kernel.org
+Date: Fri, 22 Mar 2013 21:37:17 +0100
+Message-id: 1363984637-18132-3-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 2/2] kvm: forward INIT signals coming from the chipset
+
+When an INIT comes in, we can do the entire reset process in userspace.
+However, we have to be careful and move APs into KVM_MP_STATE_INIT_RECEIVED,
+so that the in-kernel APIC will listen to startup IPIs.
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ target-i386/helper.c   |  4 ++++
+ target-i386/kvm.c      | 37 ++++++++++++++++++++++++++-----------
+ target-i386/kvm_i386.h |  1 +
+ 3 files changed, 31 insertions(+), 11 deletions(-)
+
+diff --git a/target-i386/helper.c b/target-i386/helper.c
+index 9449a0c..bbc5adf 100644
+--- a/target-i386/helper.c
++++ b/target-i386/helper.c
+@@ -19,6 +19,7 @@
+ 
+ #include "cpu.h"
+ #include "sysemu/kvm.h"
++#include "kvm_i386.h"
+ #ifndef CONFIG_USER_ONLY
+ #include "sysemu/sysemu.h"
+ #include "monitor/monitor.h"
+@@ -1290,6 +1291,9 @@ void do_cpu_init(X86CPU *cpu)
+     cpu_reset(cs);
+     cs->interrupt_request = sipi;
+     env->pat = pat;
++    if (kvm_enabled()) {
++        kvm_arch_do_init_vcpu(cs);
++    }
+     apic_init_reset(env->apic_state);
+ }
+ 
+diff --git a/target-i386/kvm.c b/target-i386/kvm.c
+index df30fa6..42a4571 100644
+--- a/target-i386/kvm.c
++++ b/target-i386/kvm.c
+@@ -30,6 +30,8 @@
+ #include "qemu/config-file.h"
+ #include "hw/pc.h"
+ #include "hw/apic.h"
++#include "hw/apic_internal.h"
++#include "hw/apic-msidef.h"
+ #include "exec/ioport.h"
+ #include "hyperv.h"
+ #include "hw/pci/pci.h"
+@@ -676,6 +678,17 @@ void kvm_arch_reset_vcpu(CPUState *cs)
+     }
+ }
+ 
++void kvm_arch_do_init_vcpu(CPUState *cs)
++{
++    X86CPU *cpu = X86_CPU(cs);
++    CPUX86State *env = &cpu->env;
++
++    /* APs go straight into wait-for-SIPI state after INIT# is asserted.  */
++    if (env->mp_state == KVM_MP_STATE_UNINITIALIZED) {
++        env->mp_state = KVM_MP_STATE_INIT_RECEIVED;
++    }
++}
++
+ static int kvm_get_supported_msrs(KVMState *s)
+ {
+     static int kvm_supported_msrs;
+@@ -1773,14 +1786,15 @@ void kvm_arch_pre_run(CPUState *cpu, struct kvm_run *run)
+         }
+     }
+ 
+-    if (!kvm_irqchip_in_kernel()) {
+-        /* Force the VCPU out of its inner loop to process any INIT requests
+-         * or pending TPR access reports. */
+-        if (cpu->interrupt_request &
+-            (CPU_INTERRUPT_INIT | CPU_INTERRUPT_TPR)) {
+-            cpu->exit_request = 1;
+-        }
++    /* Force the VCPU out of its inner loop to process any INIT requests
++     * or (for userspace APIC, but it is cheap to combine the checks here)
++     * pending TPR access reports.
++     */
++    if (cpu->interrupt_request & (CPU_INTERRUPT_INIT | CPU_INTERRUPT_TPR)) {
++        cpu->exit_request = 1;
++    }
+ 
++    if (!kvm_irqchip_in_kernel()) {
+         /* Try to inject an interrupt if the guest can accept it */
+         if (run->ready_for_interrupt_injection &&
+             (cpu->interrupt_request & CPU_INTERRUPT_HARD) &&
+@@ -1860,6 +1874,11 @@ int kvm_arch_process_async_events(CPUState *cs)
+         }
+     }
+ 
++    if (cs->interrupt_request & CPU_INTERRUPT_INIT) {
++        kvm_cpu_synchronize_state(env);
++        do_cpu_init(cpu);
++    }
++
+     if (kvm_irqchip_in_kernel()) {
+         return 0;
+     }
+@@ -1873,10 +1892,6 @@ int kvm_arch_process_async_events(CPUState *cs)
+         (cs->interrupt_request & CPU_INTERRUPT_NMI)) {
+         cs->halted = 0;
+     }
+-    if (cs->interrupt_request & CPU_INTERRUPT_INIT) {
+-        kvm_cpu_synchronize_state(env);
+-        do_cpu_init(cpu);
+-    }
+     if (cs->interrupt_request & CPU_INTERRUPT_SIPI) {
+         kvm_cpu_synchronize_state(env);
+         do_cpu_sipi(cpu);
+diff --git a/target-i386/kvm_i386.h b/target-i386/kvm_i386.h
+index 3accc2d..ce38ee6 100644
+--- a/target-i386/kvm_i386.h
++++ b/target-i386/kvm_i386.h
+@@ -15,6 +15,7 @@
+ 
+ bool kvm_allows_irq0_override(void);
+ void kvm_arch_reset_vcpu(CPUState *cs);
++void kvm_arch_do_init_vcpu(CPUState *cs);
+ 
+ int kvm_device_pci_assign(KVMState *s, PCIHostDeviceAddress *dev_addr,
+                           uint32_t flags, uint32_t *dev_id);
+-- 
+1.8.1.4
+
+--
+To unsubscribe from this list: send the line "unsubscribe kvm" in
+the body of a message to majordomo@vger.kernel.org
+More majordomo info at  http://vger.kernel.org/majordomo-info.html

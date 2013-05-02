@@ -1,0 +1,118 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Jens Freimann <jfrei@linux.vnet.ibm.com>
+To: Alexander Graf <agraf@suse.de>
+Cc: Ekaterina Tumanova <tumanova_ek@ru.ibm.com>,
+ qemu-devel <qemu-devel@nongnu.org>,
+ Christian Borntraeger <borntraeger@de.ibm.com>,
+ Ekaterina Tumanova <tumanova@linux.vnet.ibm.com>,
+ =?UTF-8?q?Andreas=20F=C3=A4rber?= <afaerber@suse.de>,
+ Cornelia Huck <cornelia.huck@de.ibm.com>, Rabin Vincent <rabin@rab.in>,
+ Jens Freimann <jfrei@linux.vnet.ibm.com>
+Date: Thu, 28 Mar 2013 17:35:59 +0100
+Message-id: 1364488560-16265-3-git-send-email-jfrei@linux.vnet.ibm.com
+Subject: [PATCH 2/3] s390: Added check for unsupported parameters of
+ dump-guest-memory
+
+From: Ekaterina Tumanova <tumanova_ek@ru.ibm.com>
+
+Check for the 'begin' and 'length' parameters of dump-guest-memory monitor
+command (not supported for s390) was placed into arch specific function:
+arch_check_parameter.  The stub of this function is added to target-i386
+directory for compatibility reasons.
+
+Signed-Off-By: Ekaterina Tumanova <tumanova@linux.vnet.ibm.com>
+Signed-off-by: Jens Freimann <jfrei@linux.vnet.ibm.com>
+---
+ dump.c                    |  4 ++++
+ include/qapi/qmp/qerror.h |  3 +++
+ include/sysemu/dump.h     |  6 ++++++
+ target-i386/arch_dump.c   |  6 ++++++
+ target-s390x/arch_dump.c  | 11 +++++++++++
+ 5 files changed, 30 insertions(+)
+
+diff --git a/dump.c b/dump.c
+index a25f509..fd1d0f6 100644
+--- a/dump.c
++++ b/dump.c
+@@ -822,6 +822,10 @@ void qmp_dump_guest_memory(bool paging, const char *file, bool has_begin,
+     DumpState *s;
+     int ret;
+ 
++    if (arch_check_parameter(paging, has_begin, begin, length, errp) < 0) {
++       return; 
++    }
++
+     if (has_begin && !has_length) {
+         error_set(errp, QERR_MISSING_PARAMETER, "length");
+         return;
+diff --git a/include/qapi/qmp/qerror.h b/include/qapi/qmp/qerror.h
+index 6c0a18d..58b7f7a 100644
+--- a/include/qapi/qmp/qerror.h
++++ b/include/qapi/qmp/qerror.h
+@@ -249,4 +249,7 @@ void assert_no_error(Error *err);
+ #define QERR_SOCKET_CREATE_FAILED \
+     ERROR_CLASS_GENERIC_ERROR, "Failed to create socket"
+ 
++#define QERR_UNSUPPORTED_COMMAND_OPTION \
++    ERROR_CLASS_GENERIC_ERROR, "Option(s) %s of %s command not supported for %s"
++
+ #endif /* QERROR_H */
+diff --git a/include/sysemu/dump.h b/include/sysemu/dump.h
+index e25b7cf..b03efd4 100644
+--- a/include/sysemu/dump.h
++++ b/include/sysemu/dump.h
+@@ -14,6 +14,9 @@
+ #ifndef DUMP_H
+ #define DUMP_H
+ 
++#include "qapi/error.h"
++#include "include/qapi/qmp/qerror.h"
++
+ typedef struct ArchDumpInfo {
+     int d_machine;  /* Architecture */
+     int d_endian;   /* ELFDATA2LSB or ELFDATA2MSB */
+@@ -32,4 +35,7 @@ int cpu_write_elf32_qemunote(write_core_dump_function f, CPUArchState *env,
+ int cpu_get_dump_info(ArchDumpInfo *info);
+ ssize_t cpu_get_note_size(int class, int machine, int nr_cpus);
+ 
++int arch_check_parameter(bool paging, bool has_filter, int64_t begin, int64_t length,
++                         Error **errp);
++
+ #endif
+diff --git a/target-i386/arch_dump.c b/target-i386/arch_dump.c
+index 2cd2f7f..959a5f7 100644
+--- a/target-i386/arch_dump.c
++++ b/target-i386/arch_dump.c
+@@ -447,3 +447,9 @@ ssize_t cpu_get_note_size(int class, int machine, int nr_cpus)
+ 
+     return (elf_note_size + qemu_note_size) * nr_cpus;
+ }
++
++int arch_check_parameter(bool paging, bool has_filter, int64_t begin, int64_t length,
++                          Error **errp)
++{
++    return 0;
++}
+diff --git a/target-s390x/arch_dump.c b/target-s390x/arch_dump.c
+index d8fa158..18f2652 100644
+--- a/target-s390x/arch_dump.c
++++ b/target-s390x/arch_dump.c
+@@ -241,3 +241,14 @@ int cpu_write_elf32_qemunote(write_core_dump_function f, CPUArchState *env,
+     return 0;
+ }
+ 
++int arch_check_parameter(bool paging, bool has_filter, int64_t begin, int64_t length, 
++                          Error **errp)
++{
++    if (has_filter) {
++        error_set(errp, QERR_UNSUPPORTED_COMMAND_OPTION, "begin and length", 
++                  "dump-guest-memory", "s390");
++        return -2;
++    }
++    return 0;
++}
++
+-- 
+1.7.12.4
+
+

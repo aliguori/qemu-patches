@@ -1,0 +1,1 @@
+../covert-savevm-loadvm-and-delvm-into-qapi/v1.1366153512/0010-qapi-Convert-savevm.patch

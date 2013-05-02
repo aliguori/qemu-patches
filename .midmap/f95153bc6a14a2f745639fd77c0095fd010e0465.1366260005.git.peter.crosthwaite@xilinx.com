@@ -1,0 +1,1 @@
+../DTC-as-submodule/v5.1366314335/0002-dtc-add-submodule.patch

@@ -1,0 +1,1 @@
+../ccid-and-libcacard-fixes-for-windows-mingw/v3.1366671870/0016-dev-smartcard-reader-remove-aborts-never-triggered-but-just-in-case.patch

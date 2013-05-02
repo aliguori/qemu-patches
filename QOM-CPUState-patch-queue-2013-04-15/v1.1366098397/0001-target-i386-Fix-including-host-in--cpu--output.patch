@@ -1,0 +1,48 @@
+From patches Mon Sep 17 00:00:00 2001
+From: =?utf-8?q?Andreas_F=C3=A4rber_=3Cafaerber=40suse=2Ede=3E?=
+To: qemu-devel@nongnu.org
+Cc: Jan Kiszka <jan.kiszka@siemens.com>,
+ =?UTF-8?q?Andreas=20F=C3=A4rber?= <afaerber@suse.de>
+Date: Tue, 16 Apr 2013 02:46:38 +0200
+Message-id: 1366073209-27119-2-git-send-email-afaerber@suse.de
+Subject: [PATCH 01/12] target-i386: Fix including "host" in -cpu ? output
+
+From: Jan Kiszka <jan.kiszka@siemens.com>
+
+kvm_enabled() cannot be true at this point because accelerators are
+initialized much later during init. Also, hiding this makes it very hard
+to discover for users. Simply dump unconditionally if CONFIG_KVM is set.
+
+Add explanation for "host" CPU type.
+
+Signed-off-by: Jan Kiszka <jan.kiszka@siemens.com>
+Reviewed-by: Igor Mammedov <imammedo@redhat.com>
+Signed-off-by: Andreas Färber <afaerber@suse.de>
+---
+ target-i386/cpu.c | 9 ++++++---
+ 1 file changed, 6 insertions(+), 3 deletions(-)
+
+diff --git a/target-i386/cpu.c b/target-i386/cpu.c
+index 6dd993f..b8690d2 100644
+--- a/target-i386/cpu.c
++++ b/target-i386/cpu.c
+@@ -1463,9 +1463,12 @@ void x86_cpu_list(FILE *f, fprintf_function cpu_fprintf)
+         snprintf(buf, sizeof(buf), "%s", def->name);
+         (*cpu_fprintf)(f, "x86 %16s  %-48s\n", buf, def->model_id);
+     }
+-    if (kvm_enabled()) {
+-        (*cpu_fprintf)(f, "x86 %16s\n", "[host]");
+-    }
++#ifdef CONFIG_KVM
++    (*cpu_fprintf)(f, "x86 %16s  %-48s\n", "host",
++                   "KVM processor with all supported host features "
++                   "(only available in KVM mode)");
++#endif
++
+     (*cpu_fprintf)(f, "\nRecognized CPUID flags:\n");
+     listflags(buf, sizeof(buf), (uint32_t)~0, feature_name, 1);
+     (*cpu_fprintf)(f, "  %s\n", buf);
+-- 
+1.8.1.4
+
+

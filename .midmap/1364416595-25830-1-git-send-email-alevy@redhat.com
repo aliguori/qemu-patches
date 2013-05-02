@@ -1,0 +1,1 @@
+../ccid-and-libcacard-fixes-for-windows-mingw/v2.1364441785/0000-ccid-and-libcacard-fixes-for-windows-mingw.txt

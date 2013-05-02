@@ -1,0 +1,1 @@
+../covert-savevm-loadvm-and-delvm-into-qapi/v2.1366842718/0012-savevm-remove-backward-compatibility-from-bdrv_snapshot_find.patch

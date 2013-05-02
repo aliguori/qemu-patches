@@ -1,0 +1,1 @@
+../input-kbd-handler-list/v1.1366823316/0001-input-make-QEMUPutLEDEntry--QEMUPutMouseEntry-private.patch

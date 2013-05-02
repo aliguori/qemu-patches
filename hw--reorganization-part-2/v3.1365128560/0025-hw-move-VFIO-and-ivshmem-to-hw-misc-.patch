@@ -1,0 +1,63 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: 
+Date: Thu,  4 Apr 2013 21:23:05 +0200
+Message-id: 1365103395-11547-26-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 25/35] hw: move VFIO and ivshmem to hw/misc/
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ hw/Makefile.objs               | 10 ----------
+ hw/misc/Makefile.objs          |  6 ++++++
+ hw/{ => misc}/ivshmem.c        |  0
+ hw/{vfio_pci.c => misc/vfio.c} |  0
+ 4 files changed, 6 insertions(+), 10 deletions(-)
+ rename hw/{ => misc}/ivshmem.c (100%)
+ rename hw/{vfio_pci.c => misc/vfio.c} (100%)
+
+diff --git a/hw/Makefile.objs b/hw/Makefile.objs
+index 297efce..c25e228 100644
+--- a/hw/Makefile.objs
++++ b/hw/Makefile.objs
+@@ -29,13 +29,3 @@ devices-dirs-$(CONFIG_SOFTMMU) += xen/
+ common-obj-y += core/
+ common-obj-y += $(devices-dirs-y)
+ obj-y += $(devices-dirs-y)
+-
+-ifeq ($(CONFIG_SOFTMMU),y)
+-
+-# Inter-VM PCI shared memory & VFIO PCI device assignment
+-ifeq ($(CONFIG_PCI), y)
+-obj-$(CONFIG_KVM) += ivshmem.o
+-obj-$(CONFIG_LINUX) += vfio_pci.o
+-endif
+-
+-endif
+diff --git a/hw/misc/Makefile.objs b/hw/misc/Makefile.objs
+index 009b1d9..9b1ab39 100644
+--- a/hw/misc/Makefile.objs
++++ b/hw/misc/Makefile.objs
+@@ -9,3 +9,9 @@ common-obj-$(CONFIG_PL310) += arm_l2x0.o
+ common-obj-$(CONFIG_PUV3) += puv3_pm.o
+ 
+ common-obj-$(CONFIG_MACIO) += macio/
++
++ifeq ($(CONFIG_PCI), y)
++obj-$(CONFIG_KVM) += ivshmem.o
++obj-$(CONFIG_LINUX) += vfio.o
++endif
++
+diff --git a/hw/ivshmem.c b/hw/misc/ivshmem.c
+similarity index 100%
+rename from hw/ivshmem.c
+rename to hw/misc/ivshmem.c
+diff --git a/hw/vfio_pci.c b/hw/misc/vfio.c
+similarity index 100%
+rename from hw/vfio_pci.c
+rename to hw/misc/vfio.c
+-- 
+1.8.1.4
+
+
+

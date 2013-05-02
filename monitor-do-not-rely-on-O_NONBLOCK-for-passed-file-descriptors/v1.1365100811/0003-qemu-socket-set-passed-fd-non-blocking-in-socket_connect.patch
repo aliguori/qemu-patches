@@ -1,0 +1,36 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Stefan Hajnoczi <stefanha@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Luiz Capitulino <lcapitulino@redhat.com>,
+ Stefan Hajnoczi <stefanha@redhat.com>,
+ Michael Roth <mdroth@linux.vnet.ibm.com>
+Date: Thu,  4 Apr 2013 13:40:14 +0200
+Message-id: 1365075615-14027-4-git-send-email-stefanha@redhat.com
+Subject: [PATCH 3/4] qemu-socket: set passed fd non-blocking in
+ socket_connect()
+
+socket_connect() sets non-blocking on TCP or UNIX domain sockets if a
+callback function is passed.  Do the same for file descriptor passing,
+otherwise we could unexpectedly be using a blocking file descriptor.
+
+Signed-off-by: Stefan Hajnoczi <stefanha@redhat.com>
+---
+ util/qemu-sockets.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/util/qemu-sockets.c b/util/qemu-sockets.c
+index e92e0d5..cd54fb4 100644
+--- a/util/qemu-sockets.c
++++ b/util/qemu-sockets.c
+@@ -906,6 +906,7 @@ int socket_connect(SocketAddress *addr, Error **errp,
+     case SOCKET_ADDRESS_KIND_FD:
+         fd = monitor_get_fd(cur_mon, addr->fd->str, errp);
+         if (callback) {
++            qemu_set_nonblock(fd);
+             callback(fd, opaque);
+         }
+         break;
+-- 
+1.8.1.4
+
+

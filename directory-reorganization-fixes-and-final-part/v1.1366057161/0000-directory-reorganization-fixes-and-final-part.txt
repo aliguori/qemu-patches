@@ -1,0 +1,221 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: Paolo Bonzini <pbonzini@redhat.com>, qemu-devel@nongnu.org
+Cc: Laszlo Ersek <lersek@redhat.com>
+Date: Mon, 15 Apr 2013 15:19:21 +0200
+Message-id: 1366031973-7718-1-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 00/12] directory reorganization, fixes and final part
+
+Anthony,
+
+The following changes since commit e2ec3f976803b360c70d9ae2ba13852fa5d11665:
+
+  qjson: to_json() case QTYPE_QSTRING is buggy, rewrite (2013-04-13 19:40:25 +0000)
+
+are available in the git repository at:
+
+  git://github.com/bonzini/qemu.git hw-dirs
+
+for you to fetch changes up to 4355deaaff63d715115fdf1359bfbb7cbc374662:
+
+  exec: remove useless declarations from memory-internal.h (2013-04-15 15:17:31 +0200)
+
+----------------------------------------------------------------
+Hu Tao (1):
+      Fix failure to create q35 machine
+
+Jan Kiszka (1):
+      Add linux-headers to QEMU_INCLUDES
+
+Michael S. Tsirkin (2):
+      acpi: move declarations from pc.h to acpi.h
+      acpi.h: make it self contained
+
+Paolo Bonzini (6):
+      configure: fix TPM logic
+      tpm: reorganize headers and split hardware part
+      sysemu: avoid proliferation of include/ subdirectories
+      include: avoid useless includes of exec/ headers
+      memory: move core typedefs to qemu/typedefs.h
+      exec: remove useless declarations from memory-internal.h
+
+Peter Maydell (1):
+      arm: fix location of some include files
+
+Stefan Weil (1):
+      hw: Add lost ARM core again
+
+ Makefile.objs                                      |  2 +-
+ arch_init.c                                        |  2 +-
+ backends/baum.c                                    |  2 +-
+ backends/msmouse.c                                 |  2 +-
+ backends/rng-egd.c                                 |  4 +-
+ backends/rng-random.c                              |  4 +-
+ backends/rng.c                                     |  2 +-
+ backends/tpm.c                                     | 40 ++++++++++++++-
+ bt-host.c                                          |  2 +-
+ bt-vhci.c                                          |  2 +-
+ configure                                          | 29 +++++++----
+ default-configs/arm-softmmu.mak                    |  2 +-
+ default-configs/i386-softmmu.mak                   |  5 +-
+ default-configs/x86_64-softmmu.mak                 |  5 +-
+ dump.c                                             |  6 ++-
+ gdbstub.c                                          |  2 +-
+ hmp.c                                              |  2 +-
+ hw/Makefile.objs                                   |  1 +
+ hw/alpha/typhoon.c                                 |  3 +-
+ hw/arm/armv7m.c                                    |  2 +-
+ hw/arm/boot.c                                      |  2 +-
+ hw/arm/collie.c                                    |  4 +-
+ hw/arm/exynos4210.c                                |  2 +-
+ hw/arm/exynos4_boards.c                            |  2 +-
+ hw/arm/gumstix.c                                   |  2 +-
+ hw/arm/highbank.c                                  |  4 +-
+ hw/arm/integratorcp.c                              |  4 +-
+ hw/arm/kzm.c                                       |  4 +-
+ hw/arm/mainstone.c                                 |  4 +-
+ hw/arm/musicpal.c                                  |  4 +-
+ hw/arm/nseries.c                                   |  4 +-
+ hw/arm/omap1.c                                     |  2 +-
+ hw/arm/omap2.c                                     |  4 +-
+ hw/arm/omap_sx1.c                                  |  2 +-
+ hw/arm/palm.c                                      |  4 +-
+ hw/arm/pic_cpu.c                                   |  2 +-
+ hw/arm/pxa2xx.c                                    |  2 +-
+ hw/arm/realview.c                                  |  4 +-
+ hw/arm/spitz.c                                     |  4 +-
+ hw/arm/stellaris.c                                 |  4 +-
+ hw/arm/strongarm.c                                 |  4 +-
+ hw/arm/tosa.c                                      |  4 +-
+ hw/arm/versatilepb.c                               |  4 +-
+ hw/arm/vexpress.c                                  |  4 +-
+ hw/arm/xilinx_zynq.c                               |  2 +-
+ hw/arm/z2.c                                        |  4 +-
+ hw/block/m25p80.c                                  |  2 +-
+ hw/bt/core.c                                       |  2 +-
+ hw/bt/hci-csr.c                                    |  4 +-
+ hw/bt/hci.c                                        |  2 +-
+ hw/char/cadence_uart.c                             |  2 +-
+ hw/char/debugcon.c                                 |  2 +-
+ hw/char/escc.c                                     |  2 +-
+ hw/char/etraxfs_ser.c                              |  2 +-
+ hw/char/exynos4210_uart.c                          |  2 +-
+ hw/char/grlib_apbuart.c                            |  2 +-
+ hw/char/imx_serial.c                               |  2 +-
+ hw/char/ipoctal232.c                               |  2 +-
+ hw/char/lm32_juart.c                               |  2 +-
+ hw/char/lm32_uart.c                                |  2 +-
+ hw/char/mcf_uart.c                                 |  2 +-
+ hw/char/milkymist-uart.c                           |  2 +-
+ hw/char/omap_uart.c                                |  2 +-
+ hw/char/parallel.c                                 |  2 +-
+ hw/char/pl011.c                                    |  2 +-
+ hw/char/sclpconsole.c                              |  2 +-
+ hw/char/serial.c                                   |  2 +-
+ hw/char/sh_serial.c                                |  2 +-
+ hw/char/spapr_vty.c                                |  2 +-
+ hw/char/virtio-console.c                           |  2 +-
+ hw/char/xen_console.c                              |  2 +-
+ hw/char/xilinx_uartlite.c                          |  2 +-
+ hw/core/qdev-properties-system.c                   |  2 +-
+ hw/core/qdev-properties.c                          |  2 +-
+ hw/display/blizzard.c                              |  2 +-
+ hw/display/sm501.c                                 |  2 +-
+ hw/display/tc6393xb.c                              |  2 +-
+ hw/display/xenfb.c                                 |  2 +-
+ hw/i386/pc.c                                       |  1 +
+ hw/i386/pc_piix.c                                  |  1 +
+ hw/ide/ahci.c                                      |  1 -
+ hw/ide/internal.h                                  |  1 -
+ hw/input/stellaris_input.c                         |  2 +-
+ hw/input/tsc2005.c                                 |  2 +-
+ hw/input/tsc210x.c                                 |  2 +-
+ hw/intc/armv7m_nvic.c                              |  2 +-
+ hw/isa/pc87312.c                                   |  2 +-
+ hw/lm32/lm32_boards.c                              |  2 +-
+ hw/lm32/milkymist.c                                |  2 +-
+ hw/microblaze/petalogix_ml605_mmu.c                |  2 +-
+ hw/microblaze/petalogix_s3adsp1800_mmu.c           |  2 +-
+ hw/mips/mips_fulong2e.c                            |  2 +-
+ hw/mips/mips_malta.c                               |  2 +-
+ hw/misc/cbus.c                                     |  2 +-
+ hw/misc/ivshmem.c                                  |  2 +-
+ hw/net/lan9118.c                                   |  2 +-
+ hw/net/smc91c111.c                                 |  2 +-
+ hw/net/vmxnet_tx_pkt.c                             |  2 +-
+ hw/net/xgmac.c                                     |  2 +-
+ hw/ppc/spapr_events.c                              |  2 +-
+ hw/ppc/spapr_rtas.c                                |  2 +-
+ hw/ppc/virtex_ml507.c                              |  2 +-
+ hw/sh4/r2d.c                                       |  2 +-
+ hw/sparc/leon3.c                                   |  2 +-
+ hw/timer/tusb6010.c                                |  2 +-
+ {tpm => hw/tpm}/Makefile.objs                      |  4 --
+ {tpm => hw/tpm}/tpm_int.h                          | 37 +-------------
+ {tpm => hw/tpm}/tpm_passthrough.c                  | 22 ++++++--
+ {tpm => hw/tpm}/tpm_tis.c                          |  4 +-
+ {tpm => hw/tpm}/tpm_tis.h                          |  5 --
+ hw/usb/ccid-card-emulated.c                        |  2 +-
+ hw/usb/ccid-card-passthru.c                        |  2 +-
+ hw/usb/dev-bluetooth.c                             |  2 +-
+ hw/usb/dev-serial.c                                |  2 +-
+ hw/usb/libhw.c                                     |  2 +-
+ hw/usb/redirect.c                                  |  2 +-
+ hw/virtio/virtio-rng.c                             |  2 +-
+ hw/xen/xen_backend.c                               |  2 +-
+ hw/xtensa/xtensa_lx60.c                            |  2 +-
+ include/exec/memory-internal.h                     |  6 ---
+ include/exec/memory.h                              |  5 --
+ include/hw/acpi/acpi.h                             | 13 +++++
+ include/hw/{ => arm}/arm.h                         |  0
+ include/hw/{arm => }/devices.h                     |  0
+ include/hw/i386/pc.h                               |  8 ---
+ include/hw/virtio/virtio-rng.h                     |  4 +-
+ include/qemu/typedefs.h                            |  4 ++
+ include/{bt => sysemu}/bt.h                        |  0
+ include/{char => sysemu}/char.h                    |  0
+ include/{qemu => sysemu}/rng-random.h              |  0
+ include/{qemu => sysemu}/rng.h                     |  0
+ include/{tpm => sysemu}/tpm.h                      |  2 -
+ include/{backends/tpm.h => sysemu/tpm_backend.h}   | 42 +++++++++++++++-
+ .../sysemu/tpm_backend_int.h                       |  0
+ kvm-stub.c                                         |  1 -
+ monitor.c                                          |  4 +-
+ net/slirp.c                                        |  2 +-
+ qemu-char.c                                        |  2 +-
+ qmp.c                                              |  2 +-
+ qtest.c                                            |  2 +-
+ slirp/slirp.c                                      |  2 +-
+ spice-qemu-char.c                                  |  2 +-
+ target-arm/arm-semi.c                              |  2 +-
+ target-arm/kvm.c                                   |  2 +-
+ target-ppc/kvm_ppc.h                               |  2 -
+ tpm/tpm.c => tpm.c                                 | 21 ++------
+ tpm/tpm_backend.c                                  | 58 ----------------------
+ translate-all.c                                    |  5 +-
+ ui/console.c                                       |  2 +-
+ ui/gtk.c                                           |  2 +-
+ util/event_notifier-posix.c                        |  2 +-
+ vl.c                                               |  6 +--
+ xen-all.c                                          |  2 +-
+ 153 files changed, 297 insertions(+), 319 deletions(-)
+ rename {tpm => hw/tpm}/Makefile.objs (55%)
+ rename {tpm => hw/tpm}/tpm_int.h (50%)
+ rename {tpm => hw/tpm}/tpm_passthrough.c (96%)
+ rename {tpm => hw/tpm}/tpm_tis.c (99%)
+ rename {tpm => hw/tpm}/tpm_tis.h (96%)
+ rename include/hw/{ => arm}/arm.h (100%)
+ rename include/hw/{arm => }/devices.h (100%)
+ rename include/{bt => sysemu}/bt.h (100%)
+ rename include/{char => sysemu}/char.h (100%)
+ rename include/{qemu => sysemu}/rng-random.h (100%)
+ rename include/{qemu => sysemu}/rng.h (100%)
+ rename include/{tpm => sysemu}/tpm.h (82%)
+ rename include/{backends/tpm.h => sysemu/tpm_backend.h} (77%)
+ rename tpm/tpm_backend.h => include/sysemu/tpm_backend_int.h (100%)
+ rename tpm/tpm.c => tpm.c (93%)
+ delete mode 100644 tpm/tpm_backend.c
+-- 
+1.8.1.4
+
+

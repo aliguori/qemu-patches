@@ -1,0 +1,2085 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Dong Xu Wang <wdongxu@linux.vnet.ibm.com>
+To: qemu-devel@nongnu.org
+Cc: kwolf@redhat.com, wdongxu@cn.ibm.com,
+ Dong Xu Wang <wdongxu@linux.vnet.ibm.com>, stefanha@redhat.com,
+ armbru@redhat.com
+Date: Wed, 10 Apr 2013 14:25:10 +0800
+Message-id: 1365575111-4476-6-git-send-email-wdongxu@linux.vnet.ibm.com
+Subject: [PATCH 5/6] Use QemuOpts support in block layer
+
+This patch will use QemuOpts related functions in block layer, add
+a member bdrv_create_opts to BlockDriver struct, it will return
+a QemuOptsList pointer, which includes the image format's create
+options.
+
+And create options's primary consumer is block creating related
+functions, so modify them together.
+
+Signed-off-by: Dong Xu Wang <wdongxu@linux.vnet.ibm.com>
+---
+v12->v13:
+1) split into 2 patches. one for block, one for QemuOpts funcitons.
+2) fix leaking cco->opts.
+3) other small fix.
+
+v11->v12:
+1) create functions, such as qemu_opt_get_del and qemu_opt_replace_set.
+These functions works like origin code.
+2) use QEMU_OPT_SIZE, not QEMU_OPT_NUMBER.
+3) in bdrv_create, if opts is NULL, will create an empty one, so can
+discard if(opts) code safely.
+
+v10->v11:
+1) qed.h move QED_DEFAULT_CLUSTER_SIZE from enum to macro, or
+qemu_opts_print produce un-expanded cluster_size.
+2) In qcow2.c and qcow.c, bdrv_create_file(filename, NULL), NULL ->
+opts,
+or while using protocol, there will be an error.
+
+v8->v9:
+1) add qemu_ prefix to gluster_create_opts.
+2) fix bug: bdrv_gluster_unix and bdrv_gluster_rdma should also be
+converted.
+
+v7->v8:
+1) rebase to upstream source tree.
+2) add gluster.c, raw-win32.c, and rbd.c.
+
+v6->v7:
+1) use osdep.h:stringify(), not redefining new macro.
+2) preserve TODO comment.
+3) fix typo. BLOCK_OPT_ENCRYPT->BLOCK_OPT_STATIC.
+4) initialize disk_type even when opts is NULL.
+
+v5->v6:
+1) judge if opts == NULL in block layer create functions.
+2) use bdrv_create_file(filename, NULL) in qcow_create and cow_create
+funtion.
+3) made more readable while using qemu_opt_get_number.
+
+ block.c                   |  98 ++++++++++++--------------
+ block/cow.c               |  46 ++++++------
+ block/gluster.c           |  37 +++++-----
+ block/iscsi.c             |  35 +++++-----
+ block/qcow.c              |  61 ++++++++--------
+ block/qcow2.c             | 173 +++++++++++++++++++++++-----------------------
+ block/qed.c               |  86 +++++++++++------------
+ block/qed.h               |   2 +-
+ block/raw-posix.c         |  59 +++++++---------
+ block/raw-win32.c         |  31 +++++----
+ block/raw.c               |  30 ++++----
+ block/rbd.c               |  62 ++++++++---------
+ block/sheepdog.c          |  79 ++++++++++-----------
+ block/vdi.c               |  70 +++++++++----------
+ block/vmdk.c              |  90 ++++++++++++------------
+ block/vpc.c               |  57 +++++++--------
+ block/vvfat.c             |  11 +--
+ include/block/block.h     |   5 +-
+ include/block/block_int.h |   6 +-
+ qemu-img.c                |  61 ++++++++--------
+ 20 files changed, 535 insertions(+), 564 deletions(-)
+
+diff --git a/block.c b/block.c
+index 602d8a4..45e1d96 100644
+--- a/block.c
++++ b/block.c
+@@ -355,7 +355,7 @@ BlockDriver *bdrv_find_whitelisted_format(const char *format_name)
+ typedef struct CreateCo {
+     BlockDriver *drv;
+     char *filename;
+-    QEMUOptionParameter *options;
++    QemuOpts *opts;
+     int ret;
+ } CreateCo;
+ 
+@@ -364,11 +364,10 @@ static void coroutine_fn bdrv_create_co_entry(void *opaque)
+     CreateCo *cco = opaque;
+     assert(cco->drv);
+ 
+-    cco->ret = cco->drv->bdrv_create(cco->filename, cco->options);
++    cco->ret = cco->drv->bdrv_create(cco->filename, cco->opts);
+ }
+ 
+-int bdrv_create(BlockDriver *drv, const char* filename,
+-    QEMUOptionParameter *options)
++int bdrv_create(BlockDriver *drv, const char* filename, QemuOpts *opts)
+ {
+     int ret;
+ 
+@@ -376,7 +375,7 @@ int bdrv_create(BlockDriver *drv, const char* filename,
+     CreateCo cco = {
+         .drv = drv,
+         .filename = g_strdup(filename),
+-        .options = options,
++        .opts = opts ?: qemu_opts_create_nofail(drv->bdrv_create_opts),
+         .ret = NOT_DONE,
+     };
+ 
+@@ -399,11 +398,14 @@ int bdrv_create(BlockDriver *drv, const char* filename,
+     ret = cco.ret;
+ 
+ out:
++    if (!opts) {
++        qemu_opts_del(cco.opts);
++    }
+     g_free(cco.filename);
+     return ret;
+ }
+ 
+-int bdrv_create_file(const char* filename, QEMUOptionParameter *options)
++int bdrv_create_file(const char *filename, QemuOpts *opts)
+ {
+     BlockDriver *drv;
+ 
+@@ -412,7 +414,7 @@ int bdrv_create_file(const char* filename, QEMUOptionParameter *options)
+         return -ENOENT;
+     }
+ 
+-    return bdrv_create(drv, filename, options);
++    return bdrv_create(drv, filename, opts);
+ }
+ 
+ /*
+@@ -924,7 +926,7 @@ int bdrv_open(BlockDriverState *bs, const char *filename, QDict *options,
+         BlockDriverState *bs1;
+         int64_t total_size;
+         BlockDriver *bdrv_qcow2;
+-        QEMUOptionParameter *create_options;
++        QemuOpts *opts;
+         char backing_filename[PATH_MAX];
+ 
+         if (qdict_size(options) != 0) {
+@@ -963,19 +965,16 @@ int bdrv_open(BlockDriverState *bs, const char *filename, QDict *options,
+         }
+ 
+         bdrv_qcow2 = bdrv_find_format("qcow2");
+-        create_options = parse_option_parameters("", bdrv_qcow2->create_options,
+-                                                 NULL);
++        opts = qemu_opts_create_nofail(bdrv_qcow2->bdrv_create_opts);
+ 
+-        set_option_parameter_int(create_options, BLOCK_OPT_SIZE, total_size);
+-        set_option_parameter(create_options, BLOCK_OPT_BACKING_FILE,
+-                             backing_filename);
++        qemu_opt_set_number(opts, BLOCK_OPT_SIZE, total_size);
++        qemu_opt_set(opts, BLOCK_OPT_BACKING_FILE, backing_filename);
+         if (drv) {
+-            set_option_parameter(create_options, BLOCK_OPT_BACKING_FMT,
+-                drv->format_name);
++            qemu_opt_set(opts, BLOCK_OPT_BACKING_FMT, drv->format_name);
+         }
+ 
+-        ret = bdrv_create(bdrv_qcow2, tmp_filename, create_options);
+-        free_option_parameters(create_options);
++        ret = bdrv_create(bdrv_qcow2, tmp_filename, opts);
++        qemu_opts_del(opts);
+         if (ret < 0) {
+             goto fail;
+         }
+@@ -4640,8 +4639,10 @@ void bdrv_img_create(const char *filename, const char *fmt,
+                      char *options, uint64_t img_size, int flags,
+                      Error **errp, bool quiet)
+ {
+-    QEMUOptionParameter *param = NULL, *create_options = NULL;
+-    QEMUOptionParameter *backing_fmt, *backing_file, *size;
++    QemuOpts *opts = NULL;
++    QemuOptsList *create_opts = NULL;
++    const char *backing_fmt, *backing_file;
++    int64_t size;
+     BlockDriverState *bs = NULL;
+     BlockDriver *drv, *proto_drv;
+     BlockDriver *backing_drv = NULL;
+@@ -4659,28 +4660,23 @@ void bdrv_img_create(const char *filename, const char *fmt,
+         error_setg(errp, "Unknown protocol '%s'", filename);
+         return;
+     }
+-
+-    create_options = append_option_parameters(create_options,
+-                                              drv->create_options);
+-    create_options = append_option_parameters(create_options,
+-                                              proto_drv->create_options);
+-
++    create_opts = qemu_opts_append(drv->bdrv_create_opts,
++                                   proto_drv->bdrv_create_opts);
+     /* Create parameter list with default values */
+-    param = parse_option_parameters("", create_options, param);
++    opts = qemu_opts_create_nofail(create_opts);
+ 
+-    set_option_parameter_int(param, BLOCK_OPT_SIZE, img_size);
++    qemu_opt_set_number(opts, BLOCK_OPT_SIZE, img_size);
+ 
+     /* Parse -o options */
+     if (options) {
+-        param = parse_option_parameters(options, create_options, param);
+-        if (param == NULL) {
++        if (qemu_opts_do_parse_replace(opts, options, NULL) != 0) {
+             error_setg(errp, "Invalid options for file format '%s'.", fmt);
+             goto out;
+         }
+     }
+ 
+     if (base_filename) {
+-        if (set_option_parameter(param, BLOCK_OPT_BACKING_FILE,
++        if (qemu_opt_replace_set(opts, BLOCK_OPT_BACKING_FILE,
+                                  base_filename)) {
+             error_setg(errp, "Backing file not supported for file format '%s'",
+                        fmt);
+@@ -4689,39 +4685,37 @@ void bdrv_img_create(const char *filename, const char *fmt,
+     }
+ 
+     if (base_fmt) {
+-        if (set_option_parameter(param, BLOCK_OPT_BACKING_FMT, base_fmt)) {
++        if (qemu_opt_replace_set(opts, BLOCK_OPT_BACKING_FMT, base_fmt)) {
+             error_setg(errp, "Backing file format not supported for file "
+                              "format '%s'", fmt);
+             goto out;
+         }
+     }
+ 
+-    backing_file = get_option_parameter(param, BLOCK_OPT_BACKING_FILE);
+-    if (backing_file && backing_file->value.s) {
+-        if (!strcmp(filename, backing_file->value.s)) {
++    backing_file = qemu_opt_get(opts, BLOCK_OPT_BACKING_FILE);
++    if (backing_file) {
++        if (!strcmp(filename, backing_file)) {
+             error_setg(errp, "Error: Trying to create an image with the "
+                              "same filename as the backing file");
+             goto out;
+         }
+     }
+ 
+-    backing_fmt = get_option_parameter(param, BLOCK_OPT_BACKING_FMT);
+-    if (backing_fmt && backing_fmt->value.s) {
+-        backing_drv = bdrv_find_format(backing_fmt->value.s);
++    backing_fmt = qemu_opt_get(opts, BLOCK_OPT_BACKING_FMT);
++    if (backing_fmt) {
++        backing_drv = bdrv_find_format(backing_fmt);
+         if (!backing_drv) {
+-            error_setg(errp, "Unknown backing file format '%s'",
+-                       backing_fmt->value.s);
++            error_setg(errp, "Unknown backing file format '%s'", backing_fmt);
+             goto out;
+         }
+     }
+ 
+     // The size for the image must always be specified, with one exception:
+     // If we are using a backing file, we can obtain the size from there
+-    size = get_option_parameter(param, BLOCK_OPT_SIZE);
+-    if (size && size->value.n == -1) {
+-        if (backing_file && backing_file->value.s) {
++    size = qemu_opt_get_size(opts, BLOCK_OPT_SIZE, 0);
++    if (size == -1) {
++        if (backing_file) {
+             uint64_t size;
+-            char buf[32];
+             int back_flags;
+ 
+             /* backing files always opened read-only */
+@@ -4730,18 +4724,16 @@ void bdrv_img_create(const char *filename, const char *fmt,
+ 
+             bs = bdrv_new("");
+ 
+-            ret = bdrv_open(bs, backing_file->value.s, NULL, back_flags,
+-                            backing_drv);
++            ret = bdrv_open(bs, backing_file, NULL, back_flags, backing_drv);
+             if (ret < 0) {
+                 error_setg_errno(errp, -ret, "Could not open '%s'",
+-                                 backing_file->value.s);
++                                 backing_file);
+                 goto out;
+             }
+             bdrv_get_geometry(bs, &size);
+             size *= 512;
+ 
+-            snprintf(buf, sizeof(buf), "%" PRId64, size);
+-            set_option_parameter(param, BLOCK_OPT_SIZE, buf);
++            qemu_opt_replace_set_number(opts, BLOCK_OPT_SIZE, size);
+         } else {
+             error_setg(errp, "Image creation needs a size parameter");
+             goto out;
+@@ -4750,10 +4742,10 @@ void bdrv_img_create(const char *filename, const char *fmt,
+ 
+     if (!quiet) {
+         printf("Formatting '%s', fmt=%s ", filename, fmt);
+-        print_option_parameters(param);
++        qemu_opts_print(opts);
+         puts("");
+     }
+-    ret = bdrv_create(drv, filename, param);
++    ret = bdrv_create(drv, filename, opts);
+     if (ret < 0) {
+         if (ret == -ENOTSUP) {
+             error_setg(errp,"Formatting or formatting option not supported for "
+@@ -4768,8 +4760,10 @@ void bdrv_img_create(const char *filename, const char *fmt,
+     }
+ 
+ out:
+-    free_option_parameters(create_options);
+-    free_option_parameters(param);
++    qemu_opts_free(create_opts);
++    if (opts) {
++        qemu_opts_del(opts);
++    }
+ 
+     if (bs) {
+         bdrv_delete(bs);
+diff --git a/block/cow.c b/block/cow.c
+index 9f94599..3f50e0e 100644
+--- a/block/cow.c
++++ b/block/cow.c
+@@ -255,7 +255,7 @@ static void cow_close(BlockDriverState *bs)
+ {
+ }
+ 
+-static int cow_create(const char *filename, QEMUOptionParameter *options)
++static int cow_create(const char *filename, QemuOpts *opts)
+ {
+     struct cow_header_v2 cow_header;
+     struct stat st;
+@@ -264,17 +264,11 @@ static int cow_create(const char *filename, QEMUOptionParameter *options)
+     int ret;
+     BlockDriverState *cow_bs;
+ 
+-    /* Read out options */
+-    while (options && options->name) {
+-        if (!strcmp(options->name, BLOCK_OPT_SIZE)) {
+-            image_sectors = options->value.n / 512;
+-        } else if (!strcmp(options->name, BLOCK_OPT_BACKING_FILE)) {
+-            image_filename = options->value.s;
+-        }
+-        options++;
+-    }
++    /* Read out opts */
++    image_sectors = qemu_opt_get_size_del(opts, BLOCK_OPT_SIZE, 0) / 512;
++    image_filename = qemu_opt_get_del(opts, BLOCK_OPT_BACKING_FILE);
+ 
+-    ret = bdrv_create_file(filename, options);
++    ret = bdrv_create_file(filename, opts);
+     if (ret < 0) {
+         return ret;
+     }
+@@ -318,18 +312,22 @@ exit:
+     return ret;
+ }
+ 
+-static QEMUOptionParameter cow_create_options[] = {
+-    {
+-        .name = BLOCK_OPT_SIZE,
+-        .type = OPT_SIZE,
+-        .help = "Virtual disk size"
+-    },
+-    {
+-        .name = BLOCK_OPT_BACKING_FILE,
+-        .type = OPT_STRING,
+-        .help = "File name of a base image"
+-    },
+-    { NULL }
++static QemuOptsList cow_create_opts = {
++    .name = "cow-create-opts",
++    .head = QTAILQ_HEAD_INITIALIZER(cow_create_opts.head),
++    .desc = {
++        {
++            .name = BLOCK_OPT_SIZE,
++            .type = QEMU_OPT_SIZE,
++            .help = "Virtual disk size"
++        },
++        {
++            .name = BLOCK_OPT_BACKING_FILE,
++            .type = QEMU_OPT_STRING,
++            .help = "File name of a base image"
++        },
++        { /* end of list */ }
++    }
+ };
+ 
+ static BlockDriver bdrv_cow = {
+@@ -345,7 +343,7 @@ static BlockDriver bdrv_cow = {
+     .bdrv_write             = cow_co_write,
+     .bdrv_co_is_allocated   = cow_co_is_allocated,
+ 
+-    .create_options = cow_create_options,
++    .bdrv_create_opts       = &cow_create_opts,
+ };
+ 
+ static void bdrv_cow_init(void)
+diff --git a/block/gluster.c b/block/gluster.c
+index 9ccd4d4..39339f2 100644
+--- a/block/gluster.c
++++ b/block/gluster.c
+@@ -335,8 +335,7 @@ out:
+     return ret;
+ }
+ 
+-static int qemu_gluster_create(const char *filename,
+-        QEMUOptionParameter *options)
++static int qemu_gluster_create(const char *filename, QemuOpts *opts)
+ {
+     struct glfs *glfs;
+     struct glfs_fd *fd;
+@@ -350,12 +349,8 @@ static int qemu_gluster_create(const char *filename,
+         goto out;
+     }
+ 
+-    while (options && options->name) {
+-        if (!strcmp(options->name, BLOCK_OPT_SIZE)) {
+-            total_size = options->value.n / BDRV_SECTOR_SIZE;
+-        }
+-        options++;
+-    }
++    total_size =
++        qemu_opt_get_size_del(opts, BLOCK_OPT_SIZE, 0) / BDRV_SECTOR_SIZE;
+ 
+     fd = glfs_creat(glfs, gconf->image,
+         O_WRONLY | O_CREAT | O_TRUNC | O_BINARY, S_IRUSR | S_IWUSR);
+@@ -544,13 +539,17 @@ static void qemu_gluster_close(BlockDriverState *bs)
+     glfs_fini(s->glfs);
+ }
+ 
+-static QEMUOptionParameter qemu_gluster_create_options[] = {
+-    {
+-        .name = BLOCK_OPT_SIZE,
+-        .type = OPT_SIZE,
+-        .help = "Virtual disk size"
+-    },
+-    { NULL }
++static QemuOptsList qemu_gluster_create_opts = {
++    .name = "qemu-gluster-create-opts",
++    .head = QTAILQ_HEAD_INITIALIZER(qemu_gluster_create_opts.head),
++    .desc = {
++        {
++            .name = BLOCK_OPT_SIZE,
++            .type = QEMU_OPT_SIZE,
++            .help = "Virtual disk size"
++        },
++        { /* end of list */ }
++    }
+ };
+ 
+ static BlockDriver bdrv_gluster = {
+@@ -565,7 +564,7 @@ static BlockDriver bdrv_gluster = {
+     .bdrv_aio_readv               = qemu_gluster_aio_readv,
+     .bdrv_aio_writev              = qemu_gluster_aio_writev,
+     .bdrv_aio_flush               = qemu_gluster_aio_flush,
+-    .create_options               = qemu_gluster_create_options,
++    .bdrv_create_opts             = &qemu_gluster_create_opts,
+ };
+ 
+ static BlockDriver bdrv_gluster_tcp = {
+@@ -580,7 +579,7 @@ static BlockDriver bdrv_gluster_tcp = {
+     .bdrv_aio_readv               = qemu_gluster_aio_readv,
+     .bdrv_aio_writev              = qemu_gluster_aio_writev,
+     .bdrv_aio_flush               = qemu_gluster_aio_flush,
+-    .create_options               = qemu_gluster_create_options,
++    .bdrv_create_opts             = &qemu_gluster_create_opts,
+ };
+ 
+ static BlockDriver bdrv_gluster_unix = {
+@@ -595,7 +594,7 @@ static BlockDriver bdrv_gluster_unix = {
+     .bdrv_aio_readv               = qemu_gluster_aio_readv,
+     .bdrv_aio_writev              = qemu_gluster_aio_writev,
+     .bdrv_aio_flush               = qemu_gluster_aio_flush,
+-    .create_options               = qemu_gluster_create_options,
++    .bdrv_create_opts             = &qemu_gluster_create_opts,
+ };
+ 
+ static BlockDriver bdrv_gluster_rdma = {
+@@ -610,7 +609,7 @@ static BlockDriver bdrv_gluster_rdma = {
+     .bdrv_aio_readv               = qemu_gluster_aio_readv,
+     .bdrv_aio_writev              = qemu_gluster_aio_writev,
+     .bdrv_aio_flush               = qemu_gluster_aio_flush,
+-    .create_options               = qemu_gluster_create_options,
++    .bdrv_create_opts             = &qemu_gluster_create_opts,
+ };
+ 
+ static void bdrv_gluster_init(void)
+diff --git a/block/iscsi.c b/block/iscsi.c
+index 92d6eae..496e39f 100644
+--- a/block/iscsi.c
++++ b/block/iscsi.c
+@@ -904,9 +904,7 @@ static char *parse_initiator_name(const char *target)
+         if (!opts) {
+             opts = QTAILQ_FIRST(&list->head);
+         }
+-        if (opts) {
+-            name = qemu_opt_get(opts, "initiator-name");
+-        }
++        name = qemu_opt_get(opts, "initiator-name");
+     }
+ 
+     if (name) {
+@@ -1184,7 +1182,7 @@ static int iscsi_has_zero_init(BlockDriverState *bs)
+     return 0;
+ }
+ 
+-static int iscsi_create(const char *filename, QEMUOptionParameter *options)
++static int iscsi_create(const char *filename,  QemuOpts *opts)
+ {
+     int ret = 0;
+     int64_t total_size = 0;
+@@ -1194,13 +1192,8 @@ static int iscsi_create(const char *filename, QEMUOptionParameter *options)
+     memset(&bs, 0, sizeof(BlockDriverState));
+ 
+     /* Read out options */
+-    while (options && options->name) {
+-        if (!strcmp(options->name, "size")) {
+-            total_size = options->value.n / BDRV_SECTOR_SIZE;
+-        }
+-        options++;
+-    }
+-
++    total_size =
++        qemu_opt_get_size_del(opts, BLOCK_OPT_SIZE, 0) / BDRV_SECTOR_SIZE;
+     bs.opaque = g_malloc0(sizeof(struct IscsiLun));
+     iscsilun = bs.opaque;
+ 
+@@ -1229,13 +1222,17 @@ out:
+     return ret;
+ }
+ 
+-static QEMUOptionParameter iscsi_create_options[] = {
+-    {
+-        .name = BLOCK_OPT_SIZE,
+-        .type = OPT_SIZE,
+-        .help = "Virtual disk size"
+-    },
+-    { NULL }
++static QemuOptsList iscsi_create_opts = {
++    .name = "iscsi-create-opts",
++    .head = QTAILQ_HEAD_INITIALIZER(iscsi_create_opts.head),
++    .desc = {
++        {
++            .name = BLOCK_OPT_SIZE,
++            .type = QEMU_OPT_SIZE,
++            .help = "Virtual disk size"
++        },
++        { /* end of list */ }
++    }
+ };
+ 
+ static BlockDriver bdrv_iscsi = {
+@@ -1246,7 +1243,7 @@ static BlockDriver bdrv_iscsi = {
+     .bdrv_file_open  = iscsi_open,
+     .bdrv_close      = iscsi_close,
+     .bdrv_create     = iscsi_create,
+-    .create_options  = iscsi_create_options,
++    .bdrv_create_opts = &iscsi_create_opts,
+ 
+     .bdrv_getlength  = iscsi_getlength,
+     .bdrv_truncate   = iscsi_truncate,
+diff --git a/block/qcow.c b/block/qcow.c
+index 13d396b..c3701bd 100644
+--- a/block/qcow.c
++++ b/block/qcow.c
+@@ -651,7 +651,7 @@ static void qcow_close(BlockDriverState *bs)
+     error_free(s->migration_blocker);
+ }
+ 
+-static int qcow_create(const char *filename, QEMUOptionParameter *options)
++static int qcow_create(const char *filename, QemuOpts *opts)
+ {
+     int header_size, backing_filename_len, l1_size, shift, i;
+     QCowHeader header;
+@@ -662,19 +662,14 @@ static int qcow_create(const char *filename, QEMUOptionParameter *options)
+     int ret;
+     BlockDriverState *qcow_bs;
+ 
+-    /* Read out options */
+-    while (options && options->name) {
+-        if (!strcmp(options->name, BLOCK_OPT_SIZE)) {
+-            total_size = options->value.n / 512;
+-        } else if (!strcmp(options->name, BLOCK_OPT_BACKING_FILE)) {
+-            backing_file = options->value.s;
+-        } else if (!strcmp(options->name, BLOCK_OPT_ENCRYPT)) {
+-            flags |= options->value.n ? BLOCK_FLAG_ENCRYPT : 0;
+-        }
+-        options++;
++    /* Read out opts */
++    total_size = qemu_opt_get_size_del(opts, BLOCK_OPT_SIZE, 0) / 512;
++    backing_file = qemu_opt_get_del(opts, BLOCK_OPT_BACKING_FILE);
++    if (qemu_opt_get_bool_del(opts, BLOCK_OPT_ENCRYPT, 0)) {
++        flags |= BLOCK_FLAG_ENCRYPT;
+     }
+ 
+-    ret = bdrv_create_file(filename, options);
++    ret = bdrv_create_file(filename, opts);
+     if (ret < 0) {
+         return ret;
+     }
+@@ -851,24 +846,28 @@ static int qcow_get_info(BlockDriverState *bs, BlockDriverInfo *bdi)
+     return 0;
+ }
+ 
+-
+-static QEMUOptionParameter qcow_create_options[] = {
+-    {
+-        .name = BLOCK_OPT_SIZE,
+-        .type = OPT_SIZE,
+-        .help = "Virtual disk size"
+-    },
+-    {
+-        .name = BLOCK_OPT_BACKING_FILE,
+-        .type = OPT_STRING,
+-        .help = "File name of a base image"
+-    },
+-    {
+-        .name = BLOCK_OPT_ENCRYPT,
+-        .type = OPT_FLAG,
+-        .help = "Encrypt the image"
+-    },
+-    { NULL }
++static QemuOptsList qcow_create_opts = {
++    .name = "qcow-create-opts",
++    .head = QTAILQ_HEAD_INITIALIZER(qcow_create_opts.head),
++    .desc = {
++        {
++            .name = BLOCK_OPT_SIZE,
++            .type = QEMU_OPT_SIZE,
++            .help = "Virtual disk size"
++        },
++        {
++            .name = BLOCK_OPT_BACKING_FILE,
++            .type = QEMU_OPT_STRING,
++            .help = "File name of a base image"
++        },
++        {
++            .name = BLOCK_OPT_ENCRYPT,
++            .type = QEMU_OPT_BOOL,
++            .help = "Encrypt the image",
++            .def_value_str = "off"
++        },
++        { /* end of list */ }
++    }
+ };
+ 
+ static BlockDriver bdrv_qcow = {
+@@ -889,7 +888,7 @@ static BlockDriver bdrv_qcow = {
+     .bdrv_write_compressed  = qcow_write_compressed,
+     .bdrv_get_info          = qcow_get_info,
+ 
+-    .create_options = qcow_create_options,
++    .bdrv_create_opts       = &qcow_create_opts,
+ };
+ 
+ static void bdrv_qcow_init(void)
+diff --git a/block/qcow2.c b/block/qcow2.c
+index 7e7d775..5871192 100644
+--- a/block/qcow2.c
++++ b/block/qcow2.c
+@@ -1224,7 +1224,7 @@ static int preallocate(BlockDriverState *bs)
+ static int qcow2_create2(const char *filename, int64_t total_size,
+                          const char *backing_file, const char *backing_format,
+                          int flags, size_t cluster_size, int prealloc,
+-                         QEMUOptionParameter *options, int version)
++                         QemuOpts *opts, int version)
+ {
+     /* Calculate cluster_bits */
+     int cluster_bits;
+@@ -1255,7 +1255,7 @@ static int qcow2_create2(const char *filename, int64_t total_size,
+     uint8_t* refcount_table;
+     int ret;
+ 
+-    ret = bdrv_create_file(filename, options);
++    ret = bdrv_create_file(filename, opts);
+     if (ret < 0) {
+         return ret;
+     }
+@@ -1358,7 +1358,7 @@ out:
+     return ret;
+ }
+ 
+-static int qcow2_create(const char *filename, QEMUOptionParameter *options)
++static int qcow2_create(const char *filename, QemuOpts *opts)
+ {
+     const char *backing_file = NULL;
+     const char *backing_fmt = NULL;
+@@ -1367,45 +1367,41 @@ static int qcow2_create(const char *filename, QEMUOptionParameter *options)
+     size_t cluster_size = DEFAULT_CLUSTER_SIZE;
+     int prealloc = 0;
+     int version = 2;
++    const char *buf;
+ 
+     /* Read out options */
+-    while (options && options->name) {
+-        if (!strcmp(options->name, BLOCK_OPT_SIZE)) {
+-            sectors = options->value.n / 512;
+-        } else if (!strcmp(options->name, BLOCK_OPT_BACKING_FILE)) {
+-            backing_file = options->value.s;
+-        } else if (!strcmp(options->name, BLOCK_OPT_BACKING_FMT)) {
+-            backing_fmt = options->value.s;
+-        } else if (!strcmp(options->name, BLOCK_OPT_ENCRYPT)) {
+-            flags |= options->value.n ? BLOCK_FLAG_ENCRYPT : 0;
+-        } else if (!strcmp(options->name, BLOCK_OPT_CLUSTER_SIZE)) {
+-            if (options->value.n) {
+-                cluster_size = options->value.n;
+-            }
+-        } else if (!strcmp(options->name, BLOCK_OPT_PREALLOC)) {
+-            if (!options->value.s || !strcmp(options->value.s, "off")) {
+-                prealloc = 0;
+-            } else if (!strcmp(options->value.s, "metadata")) {
+-                prealloc = 1;
+-            } else {
+-                fprintf(stderr, "Invalid preallocation mode: '%s'\n",
+-                    options->value.s);
+-                return -EINVAL;
+-            }
+-        } else if (!strcmp(options->name, BLOCK_OPT_COMPAT_LEVEL)) {
+-            if (!options->value.s || !strcmp(options->value.s, "0.10")) {
+-                version = 2;
+-            } else if (!strcmp(options->value.s, "1.1")) {
+-                version = 3;
+-            } else {
+-                fprintf(stderr, "Invalid compatibility level: '%s'\n",
+-                    options->value.s);
+-                return -EINVAL;
+-            }
+-        } else if (!strcmp(options->name, BLOCK_OPT_LAZY_REFCOUNTS)) {
+-            flags |= options->value.n ? BLOCK_FLAG_LAZY_REFCOUNTS : 0;
+-        }
+-        options++;
++    sectors = qemu_opt_get_size_del(opts, BLOCK_OPT_SIZE, 0) / 512;
++    backing_file = qemu_opt_get_del(opts, BLOCK_OPT_BACKING_FILE);
++    backing_fmt = qemu_opt_get_del(opts, BLOCK_OPT_BACKING_FMT);
++    if (qemu_opt_get_bool_del(opts, BLOCK_OPT_ENCRYPT, 0)) {
++        flags |= BLOCK_FLAG_ENCRYPT;
++    }
++    cluster_size = qemu_opt_get_size_del(opts, BLOCK_OPT_CLUSTER_SIZE,
++                                         DEFAULT_CLUSTER_SIZE);
++    buf = qemu_opt_get_del(opts, BLOCK_OPT_PREALLOC);
++    if (!buf || !strcmp(buf, "off")) {
++        prealloc = 0;
++    } else if (!strcmp(buf, "metadata")) {
++        prealloc = 1;
++    } else {
++        fprintf(stderr, "Invalid preallocation mode: '%s'\n",
++            buf);
++        return -EINVAL;
++    }
++
++    buf = qemu_opt_get_del(opts, BLOCK_OPT_COMPAT_LEVEL);
++    if (!buf || !strcmp(buf, "0.10")) {
++        version = 2;
++    } else if (!strcmp(buf, "1.1")) {
++        version = 3;
++    } else {
++        fprintf(stderr, "Invalid compatibility level: '%s'\n",
++            buf);
++        return -EINVAL;
++    }
++
++    if (qemu_opt_get_bool_del(opts, BLOCK_OPT_LAZY_REFCOUNTS, 0)) {
++        flags |= BLOCK_FLAG_LAZY_REFCOUNTS;
+     }
+ 
+     if (backing_file && prealloc) {
+@@ -1421,7 +1417,7 @@ static int qcow2_create(const char *filename, QEMUOptionParameter *options)
+     }
+ 
+     return qcow2_create2(filename, sectors, backing_file, backing_fmt, flags,
+-                         cluster_size, prealloc, options, version);
++                         cluster_size, prealloc, opts, version);
+ }
+ 
+ static int qcow2_make_empty(BlockDriverState *bs)
+@@ -1682,49 +1678,55 @@ static int qcow2_load_vmstate(BlockDriverState *bs, uint8_t *buf,
+     return ret;
+ }
+ 
+-static QEMUOptionParameter qcow2_create_options[] = {
+-    {
+-        .name = BLOCK_OPT_SIZE,
+-        .type = OPT_SIZE,
+-        .help = "Virtual disk size"
+-    },
+-    {
+-        .name = BLOCK_OPT_COMPAT_LEVEL,
+-        .type = OPT_STRING,
+-        .help = "Compatibility level (0.10 or 1.1)"
+-    },
+-    {
+-        .name = BLOCK_OPT_BACKING_FILE,
+-        .type = OPT_STRING,
+-        .help = "File name of a base image"
+-    },
+-    {
+-        .name = BLOCK_OPT_BACKING_FMT,
+-        .type = OPT_STRING,
+-        .help = "Image format of the base image"
+-    },
+-    {
+-        .name = BLOCK_OPT_ENCRYPT,
+-        .type = OPT_FLAG,
+-        .help = "Encrypt the image"
+-    },
+-    {
+-        .name = BLOCK_OPT_CLUSTER_SIZE,
+-        .type = OPT_SIZE,
+-        .help = "qcow2 cluster size",
+-        .value = { .n = DEFAULT_CLUSTER_SIZE },
+-    },
+-    {
+-        .name = BLOCK_OPT_PREALLOC,
+-        .type = OPT_STRING,
+-        .help = "Preallocation mode (allowed values: off, metadata)"
+-    },
+-    {
+-        .name = BLOCK_OPT_LAZY_REFCOUNTS,
+-        .type = OPT_FLAG,
+-        .help = "Postpone refcount updates",
+-    },
+-    { NULL }
++static QemuOptsList qcow2_create_opts = {
++    .name = "qcow2-create-opts",
++    .head = QTAILQ_HEAD_INITIALIZER(qcow2_create_opts.head),
++    .desc = {
++        {
++            .name = BLOCK_OPT_SIZE,
++            .type = QEMU_OPT_SIZE,
++            .help = "Virtual disk size"
++        },
++        {
++            .name = BLOCK_OPT_COMPAT_LEVEL,
++            .type = QEMU_OPT_STRING,
++            .help = "Compatibility level (0.10 or 1.1)"
++        },
++        {
++            .name = BLOCK_OPT_BACKING_FILE,
++            .type = QEMU_OPT_STRING,
++            .help = "File name of a base image"
++        },
++        {
++            .name = BLOCK_OPT_BACKING_FMT,
++            .type = QEMU_OPT_STRING,
++            .help = "Image format of the base image"
++        },
++        {
++            .name = BLOCK_OPT_ENCRYPT,
++            .type = QEMU_OPT_BOOL,
++            .help = "Encrypt the image",
++            .def_value_str = "off"
++        },
++        {
++            .name = BLOCK_OPT_CLUSTER_SIZE,
++            .type = QEMU_OPT_SIZE,
++            .help = "qcow2 cluster size",
++            .def_value_str = stringify(DEFAULT_CLUSTER_SIZE)
++        },
++        {
++            .name = BLOCK_OPT_PREALLOC,
++            .type = QEMU_OPT_STRING,
++            .help = "Preallocation mode (allowed values: off, metadata)"
++        },
++        {
++            .name = BLOCK_OPT_LAZY_REFCOUNTS,
++            .type = QEMU_OPT_BOOL,
++            .help = "Postpone refcount updates",
++            .def_value_str = "off"
++        },
++        { /* end of list */ }
++    }
+ };
+ 
+ static BlockDriver bdrv_qcow2 = {
+@@ -1762,8 +1764,9 @@ static BlockDriver bdrv_qcow2 = {
+ 
+     .bdrv_invalidate_cache      = qcow2_invalidate_cache,
+ 
+-    .create_options = qcow2_create_options,
+     .bdrv_check = qcow2_check,
++
++    .bdrv_create_opts     = &qcow2_create_opts,
+ };
+ 
+ static void bdrv_qcow2_init(void)
+diff --git a/block/qed.c b/block/qed.c
+index 4651403..acffc2d 100644
+--- a/block/qed.c
++++ b/block/qed.c
+@@ -603,7 +603,7 @@ out:
+     return ret;
+ }
+ 
+-static int bdrv_qed_create(const char *filename, QEMUOptionParameter *options)
++static int bdrv_qed_create(const char *filename, QemuOpts *opts)
+ {
+     uint64_t image_size = 0;
+     uint32_t cluster_size = QED_DEFAULT_CLUSTER_SIZE;
+@@ -611,24 +611,14 @@ static int bdrv_qed_create(const char *filename, QEMUOptionParameter *options)
+     const char *backing_file = NULL;
+     const char *backing_fmt = NULL;
+ 
+-    while (options && options->name) {
+-        if (!strcmp(options->name, BLOCK_OPT_SIZE)) {
+-            image_size = options->value.n;
+-        } else if (!strcmp(options->name, BLOCK_OPT_BACKING_FILE)) {
+-            backing_file = options->value.s;
+-        } else if (!strcmp(options->name, BLOCK_OPT_BACKING_FMT)) {
+-            backing_fmt = options->value.s;
+-        } else if (!strcmp(options->name, BLOCK_OPT_CLUSTER_SIZE)) {
+-            if (options->value.n) {
+-                cluster_size = options->value.n;
+-            }
+-        } else if (!strcmp(options->name, BLOCK_OPT_TABLE_SIZE)) {
+-            if (options->value.n) {
+-                table_size = options->value.n;
+-            }
+-        }
+-        options++;
+-    }
++    image_size = qemu_opt_get_size_del(opts, BLOCK_OPT_SIZE, 0);
++    backing_file = qemu_opt_get_del(opts, BLOCK_OPT_BACKING_FILE);
++    backing_fmt = qemu_opt_get_del(opts, BLOCK_OPT_BACKING_FMT);
++    cluster_size = qemu_opt_get_size_del(opts,
++                                         BLOCK_OPT_CLUSTER_SIZE,
++                                         QED_DEFAULT_CLUSTER_SIZE);
++    table_size = qemu_opt_get_size_del(opts, BLOCK_OPT_TABLE_SIZE,
++                                       QED_DEFAULT_TABLE_SIZE);
+ 
+     if (!qed_is_cluster_size_valid(cluster_size)) {
+         fprintf(stderr, "QED cluster size must be within range [%u, %u] and power of 2\n",
+@@ -1537,36 +1527,44 @@ static int bdrv_qed_check(BlockDriverState *bs, BdrvCheckResult *result,
+     return qed_check(s, result, !!fix);
+ }
+ 
+-static QEMUOptionParameter qed_create_options[] = {
+-    {
+-        .name = BLOCK_OPT_SIZE,
+-        .type = OPT_SIZE,
+-        .help = "Virtual disk size (in bytes)"
+-    }, {
+-        .name = BLOCK_OPT_BACKING_FILE,
+-        .type = OPT_STRING,
+-        .help = "File name of a base image"
+-    }, {
+-        .name = BLOCK_OPT_BACKING_FMT,
+-        .type = OPT_STRING,
+-        .help = "Image format of the base image"
+-    }, {
+-        .name = BLOCK_OPT_CLUSTER_SIZE,
+-        .type = OPT_SIZE,
+-        .help = "Cluster size (in bytes)",
+-        .value = { .n = QED_DEFAULT_CLUSTER_SIZE },
+-    }, {
+-        .name = BLOCK_OPT_TABLE_SIZE,
+-        .type = OPT_SIZE,
+-        .help = "L1/L2 table size (in clusters)"
+-    },
+-    { /* end of list */ }
++static QemuOptsList qed_create_opts = {
++    .name = "qed-create-opts",
++    .head = QTAILQ_HEAD_INITIALIZER(qed_create_opts.head),
++    .desc = {
++        {
++            .name = BLOCK_OPT_SIZE,
++            .type = QEMU_OPT_SIZE,
++            .help = "Virtual disk size"
++        },
++        {
++            .name = BLOCK_OPT_BACKING_FILE,
++            .type = QEMU_OPT_STRING,
++            .help = "File name of a base image"
++        },
++        {
++            .name = BLOCK_OPT_BACKING_FMT,
++            .type = QEMU_OPT_STRING,
++            .help = "Image format of the base image"
++        },
++        {
++            .name = BLOCK_OPT_CLUSTER_SIZE,
++            .type = QEMU_OPT_SIZE,
++            .help = "Cluster size (in bytes)",
++            .def_value_str = stringify(QED_DEFAULT_CLUSTER_SIZE),
++        },
++        {
++            .name = BLOCK_OPT_TABLE_SIZE,
++            .type = QEMU_OPT_SIZE,
++            .help = "L1/L2 table size (in clusters)"
++        },
++        { /* end of list */ }
++    }
+ };
+ 
+ static BlockDriver bdrv_qed = {
+     .format_name              = "qed",
+     .instance_size            = sizeof(BDRVQEDState),
+-    .create_options           = qed_create_options,
++    .bdrv_create_opts         = &qed_create_opts,
+ 
+     .bdrv_probe               = bdrv_qed_probe,
+     .bdrv_rebind              = bdrv_qed_rebind,
+diff --git a/block/qed.h b/block/qed.h
+index 2b4dded..99a7726 100644
+--- a/block/qed.h
++++ b/block/qed.h
+@@ -43,6 +43,7 @@
+  *
+  * All fields are little-endian on disk.
+  */
++#define  QED_DEFAULT_CLUSTER_SIZE  65536
+ 
+ enum {
+     QED_MAGIC = 'Q' | 'E' << 8 | 'D' << 16 | '\0' << 24,
+@@ -69,7 +70,6 @@ enum {
+      */
+     QED_MIN_CLUSTER_SIZE = 4 * 1024, /* in bytes */
+     QED_MAX_CLUSTER_SIZE = 64 * 1024 * 1024,
+-    QED_DEFAULT_CLUSTER_SIZE = 64 * 1024,
+ 
+     /* Allocated clusters are tracked using a 2-level pagetable.  Table size is
+      * a multiple of clusters so large maximum image sizes can be supported
+diff --git a/block/raw-posix.c b/block/raw-posix.c
+index 99ac869..12b23d4 100644
+--- a/block/raw-posix.c
++++ b/block/raw-posix.c
+@@ -123,6 +123,19 @@
+ 
+ #define MAX_BLOCKSIZE	4096
+ 
++static QemuOptsList file_proto_create_opts = {
++    .name = "file-proto-create-opts",
++    .head = QTAILQ_HEAD_INITIALIZER(file_proto_create_opts.head),
++    .desc = {
++        {
++            .name = BLOCK_OPT_SIZE,
++            .type = QEMU_OPT_SIZE,
++            .help = "Virtual disk size"
++        },
++        { /* end of list */ }
++    }
++};
++
+ typedef struct BDRVRawState {
+     int fd;
+     int type;
+@@ -1009,19 +1022,14 @@ static int64_t raw_get_allocated_file_size(BlockDriverState *bs)
+     return (int64_t)st.st_blocks * 512;
+ }
+ 
+-static int raw_create(const char *filename, QEMUOptionParameter *options)
++static int raw_create(const char *filename, QemuOpts *opts)
+ {
+     int fd;
+     int result = 0;
+     int64_t total_size = 0;
+ 
+-    /* Read out options */
+-    while (options && options->name) {
+-        if (!strcmp(options->name, BLOCK_OPT_SIZE)) {
+-            total_size = options->value.n / BDRV_SECTOR_SIZE;
+-        }
+-        options++;
+-    }
++    total_size =
++        qemu_opt_get_size_del(opts, BLOCK_OPT_SIZE, 0) / BDRV_SECTOR_SIZE;
+ 
+     fd = qemu_open(filename, O_WRONLY | O_CREAT | O_TRUNC | O_BINARY,
+                    0644);
+@@ -1148,15 +1156,6 @@ static coroutine_fn BlockDriverAIOCB *raw_aio_discard(BlockDriverState *bs,
+                        cb, opaque, QEMU_AIO_DISCARD);
+ }
+ 
+-static QEMUOptionParameter raw_create_options[] = {
+-    {
+-        .name = BLOCK_OPT_SIZE,
+-        .type = OPT_SIZE,
+-        .help = "Virtual disk size"
+-    },
+-    { NULL }
+-};
+-
+ static BlockDriver bdrv_file = {
+     .format_name = "file",
+     .protocol_name = "file",
+@@ -1179,8 +1178,7 @@ static BlockDriver bdrv_file = {
+     .bdrv_getlength = raw_getlength,
+     .bdrv_get_allocated_file_size
+                         = raw_get_allocated_file_size,
+-
+-    .create_options = raw_create_options,
++    .bdrv_create_opts   = &file_proto_create_opts,
+ };
+ 
+ /***********************************************/
+@@ -1465,20 +1463,15 @@ static coroutine_fn BlockDriverAIOCB *hdev_aio_discard(BlockDriverState *bs,
+                        cb, opaque, QEMU_AIO_DISCARD|QEMU_AIO_BLKDEV);
+ }
+ 
+-static int hdev_create(const char *filename, QEMUOptionParameter *options)
++static int hdev_create(const char *filename, QemuOpts *opts)
+ {
+     int fd;
+     int ret = 0;
+     struct stat stat_buf;
+     int64_t total_size = 0;
+ 
+-    /* Read out options */
+-    while (options && options->name) {
+-        if (!strcmp(options->name, "size")) {
+-            total_size = options->value.n / BDRV_SECTOR_SIZE;
+-        }
+-        options++;
+-    }
++    total_size =
++        qemu_opt_get_size_del(opts, BLOCK_OPT_SIZE, 0) / BDRV_SECTOR_SIZE;
+ 
+     fd = qemu_open(filename, O_WRONLY | O_BINARY);
+     if (fd < 0)
+@@ -1502,7 +1495,7 @@ static int hdev_has_zero_init(BlockDriverState *bs)
+ 
+ static BlockDriver bdrv_host_device = {
+     .format_name        = "host_device",
+-    .protocol_name        = "host_device",
++    .protocol_name      = "host_device",
+     .instance_size      = sizeof(BDRVRawState),
+     .bdrv_probe_device  = hdev_probe_device,
+     .bdrv_file_open     = hdev_open,
+@@ -1511,7 +1504,6 @@ static BlockDriver bdrv_host_device = {
+     .bdrv_reopen_commit  = raw_reopen_commit,
+     .bdrv_reopen_abort   = raw_reopen_abort,
+     .bdrv_create        = hdev_create,
+-    .create_options     = raw_create_options,
+     .bdrv_has_zero_init = hdev_has_zero_init,
+ 
+     .bdrv_aio_readv	= raw_aio_readv,
+@@ -1520,9 +1512,10 @@ static BlockDriver bdrv_host_device = {
+     .bdrv_aio_discard   = hdev_aio_discard,
+ 
+     .bdrv_truncate      = raw_truncate,
+-    .bdrv_getlength	= raw_getlength,
++    .bdrv_getlength     = raw_getlength,
+     .bdrv_get_allocated_file_size
+                         = raw_get_allocated_file_size,
++    .bdrv_create_opts   = &file_proto_create_opts,
+ 
+     /* generic scsi device */
+ #ifdef __linux__
+@@ -1637,7 +1630,6 @@ static BlockDriver bdrv_host_floppy = {
+     .bdrv_reopen_commit  = raw_reopen_commit,
+     .bdrv_reopen_abort   = raw_reopen_abort,
+     .bdrv_create        = hdev_create,
+-    .create_options     = raw_create_options,
+     .bdrv_has_zero_init = hdev_has_zero_init,
+ 
+     .bdrv_aio_readv     = raw_aio_readv,
+@@ -1653,6 +1645,7 @@ static BlockDriver bdrv_host_floppy = {
+     .bdrv_is_inserted   = floppy_is_inserted,
+     .bdrv_media_changed = floppy_media_changed,
+     .bdrv_eject         = floppy_eject,
++    .bdrv_create_opts   = &file_proto_create_opts,
+ };
+ 
+ static int cdrom_open(BlockDriverState *bs, const char *filename,
+@@ -1740,7 +1733,6 @@ static BlockDriver bdrv_host_cdrom = {
+     .bdrv_reopen_commit  = raw_reopen_commit,
+     .bdrv_reopen_abort   = raw_reopen_abort,
+     .bdrv_create        = hdev_create,
+-    .create_options     = raw_create_options,
+     .bdrv_has_zero_init = hdev_has_zero_init,
+ 
+     .bdrv_aio_readv     = raw_aio_readv,
+@@ -1760,6 +1752,8 @@ static BlockDriver bdrv_host_cdrom = {
+     /* generic scsi device */
+     .bdrv_ioctl         = hdev_ioctl,
+     .bdrv_aio_ioctl     = hdev_aio_ioctl,
++
++    .bdrv_create_opts   = &file_proto_create_opts,
+ };
+ #endif /* __linux__ */
+ 
+@@ -1863,7 +1857,6 @@ static BlockDriver bdrv_host_cdrom = {
+     .bdrv_reopen_commit  = raw_reopen_commit,
+     .bdrv_reopen_abort   = raw_reopen_abort,
+     .bdrv_create        = hdev_create,
+-    .create_options     = raw_create_options,
+     .bdrv_has_zero_init = hdev_has_zero_init,
+ 
+     .bdrv_aio_readv     = raw_aio_readv,
+diff --git a/block/raw-win32.c b/block/raw-win32.c
+index ece2f1a..525a398 100644
+--- a/block/raw-win32.c
++++ b/block/raw-win32.c
+@@ -385,18 +385,15 @@ static int64_t raw_get_allocated_file_size(BlockDriverState *bs)
+     return st.st_size;
+ }
+ 
+-static int raw_create(const char *filename, QEMUOptionParameter *options)
++static int raw_create(const char *filename, QemuOpts *opts)
+ {
+     int fd;
+     int64_t total_size = 0;
+ 
+     /* Read out options */
+-    while (options && options->name) {
+-        if (!strcmp(options->name, BLOCK_OPT_SIZE)) {
+-            total_size = options->value.n / 512;
+-        }
+-        options++;
+-    }
++
++    total_size =
++        qemu_opt_get_size_del(opts, BLOCK_OPT_SIZE, 0) / 512;
+ 
+     fd = qemu_open(filename, O_WRONLY | O_CREAT | O_TRUNC | O_BINARY,
+                    0644);
+@@ -408,13 +405,17 @@ static int raw_create(const char *filename, QEMUOptionParameter *options)
+     return 0;
+ }
+ 
+-static QEMUOptionParameter raw_create_options[] = {
+-    {
+-        .name = BLOCK_OPT_SIZE,
+-        .type = OPT_SIZE,
+-        .help = "Virtual disk size"
+-    },
+-    { NULL }
++static QemuOptsList raw_create_opts = {
++    .name = "raw-create-opts",
++    .head = QTAILQ_HEAD_INITIALIZER(raw_create_opts.head),
++    .desc = {
++        {
++            .name = BLOCK_OPT_SIZE,
++            .type = QEMU_OPT_SIZE,
++            .help = "Virtual disk size"
++        },
++        { /* end of list */ }
++    }
+ };
+ 
+ static BlockDriver bdrv_file = {
+@@ -434,7 +435,7 @@ static BlockDriver bdrv_file = {
+     .bdrv_get_allocated_file_size
+                         = raw_get_allocated_file_size,
+ 
+-    .create_options = raw_create_options,
++    .bdrv_create_opts   = &raw_create_opts,
+ };
+ 
+ /***********************************************/
+diff --git a/block/raw.c b/block/raw.c
+index ce10422..f526ab8 100644
+--- a/block/raw.c
++++ b/block/raw.c
+@@ -95,18 +95,22 @@ static BlockDriverAIOCB *raw_aio_ioctl(BlockDriverState *bs,
+    return bdrv_aio_ioctl(bs->file, req, buf, cb, opaque);
+ }
+ 
+-static int raw_create(const char *filename, QEMUOptionParameter *options)
+-{
+-    return bdrv_create_file(filename, options);
+-}
+-
+-static QEMUOptionParameter raw_create_options[] = {
+-    {
+-        .name = BLOCK_OPT_SIZE,
+-        .type = OPT_SIZE,
+-        .help = "Virtual disk size"
+-    },
+-    { NULL }
++static int raw_create(const char *filename, QemuOpts *opts)
++{
++    return bdrv_create_file(filename, opts);
++}
++
++static QemuOptsList raw_create_opts = {
++    .name = "raw-create-opts",
++    .head = QTAILQ_HEAD_INITIALIZER(raw_create_opts.head),
++    .desc = {
++        {
++            .name = BLOCK_OPT_SIZE,
++            .type = QEMU_OPT_SIZE,
++            .help = "Virtual disk size"
++        },
++        { /* end of list */ }
++    }
+ };
+ 
+ static int raw_has_zero_init(BlockDriverState *bs)
+@@ -143,8 +147,8 @@ static BlockDriver bdrv_raw = {
+     .bdrv_aio_ioctl     = raw_aio_ioctl,
+ 
+     .bdrv_create        = raw_create,
+-    .create_options     = raw_create_options,
+     .bdrv_has_zero_init = raw_has_zero_init,
++    .bdrv_create_opts   = &raw_create_opts,
+ };
+ 
+ static void bdrv_raw_init(void)
+diff --git a/block/rbd.c b/block/rbd.c
+index 1a8ea6d..452e488 100644
+--- a/block/rbd.c
++++ b/block/rbd.c
+@@ -287,7 +287,7 @@ static int qemu_rbd_set_conf(rados_t cluster, const char *conf)
+     return ret;
+ }
+ 
+-static int qemu_rbd_create(const char *filename, QEMUOptionParameter *options)
++static int qemu_rbd_create(const char *filename, QemuOpts *opts)
+ {
+     int64_t bytes = 0;
+     int64_t objsize;
+@@ -310,24 +310,18 @@ static int qemu_rbd_create(const char *filename, QEMUOptionParameter *options)
+     }
+ 
+     /* Read out options */
+-    while (options && options->name) {
+-        if (!strcmp(options->name, BLOCK_OPT_SIZE)) {
+-            bytes = options->value.n;
+-        } else if (!strcmp(options->name, BLOCK_OPT_CLUSTER_SIZE)) {
+-            if (options->value.n) {
+-                objsize = options->value.n;
+-                if ((objsize - 1) & objsize) {    /* not a power of 2? */
+-                    error_report("obj size needs to be power of 2");
+-                    return -EINVAL;
+-                }
+-                if (objsize < 4096) {
+-                    error_report("obj size too small");
+-                    return -EINVAL;
+-                }
+-                obj_order = ffs(objsize) - 1;
+-            }
++    bytes = qemu_opt_get_size_del(opts, BLOCK_OPT_SIZE, 0);
++    objsize = qemu_opt_get_size_del(opts, BLOCK_OPT_CLUSTER_SIZE, 0);
++    if (objsize) {
++        if ((objsize - 1) & objsize) {    /* not a power of 2? */
++            error_report("obj size needs to be power of 2");
++            return -EINVAL;
++        }
++        if (objsize < 4096) {
++            error_report("obj size too small");
++            return -EINVAL;
+         }
+-        options++;
++        obj_order = ffs(objsize) - 1;
+     }
+ 
+     clientname = qemu_rbd_parse_clientname(conf, clientname_buf);
+@@ -921,20 +915,24 @@ static BlockDriverAIOCB* qemu_rbd_aio_discard(BlockDriverState *bs,
+ }
+ #endif
+ 
+-static QEMUOptionParameter qemu_rbd_create_options[] = {
+-    {
+-     .name = BLOCK_OPT_SIZE,
+-     .type = OPT_SIZE,
+-     .help = "Virtual disk size"
+-    },
+-    {
+-     .name = BLOCK_OPT_CLUSTER_SIZE,
+-     .type = OPT_SIZE,
+-     .help = "RBD object size"
+-    },
+-    {NULL}
++static QemuOptsList rbd_create_opts = {
++    .name = "rbd-create-opts",
++    .head = QTAILQ_HEAD_INITIALIZER(rbd_create_opts.head),
++    .desc = {
++        {
++            .name = BLOCK_OPT_SIZE,
++            .type = QEMU_OPT_SIZE,
++            .help = "Virtual disk size"
++        },
++        {
++            .name = BLOCK_OPT_CLUSTER_SIZE,
++            .type = QEMU_OPT_SIZE,
++            .help = "RBD object size",
++            .def_value_str = stringify(0),
++        },
++        { /* end of list */ }
++    }
+ };
+-
+ static BlockDriver bdrv_rbd = {
+     .format_name        = "rbd",
+     .instance_size      = sizeof(BDRVRBDState),
+@@ -942,7 +940,7 @@ static BlockDriver bdrv_rbd = {
+     .bdrv_close         = qemu_rbd_close,
+     .bdrv_create        = qemu_rbd_create,
+     .bdrv_get_info      = qemu_rbd_getinfo,
+-    .create_options     = qemu_rbd_create_options,
++    .bdrv_create_opts   = &rbd_create_opts,
+     .bdrv_getlength     = qemu_rbd_getlength,
+     .bdrv_truncate      = qemu_rbd_truncate,
+     .protocol_name      = "rbd",
+diff --git a/block/sheepdog.c b/block/sheepdog.c
+index 987018e..4e46e08 100644
+--- a/block/sheepdog.c
++++ b/block/sheepdog.c
+@@ -1305,12 +1305,12 @@ out:
+     return ret;
+ }
+ 
+-static int sd_create(const char *filename, QEMUOptionParameter *options)
++static int sd_create(const char *filename, QemuOpts *opts)
+ {
+     int ret = 0;
+     uint32_t vid = 0, base_vid = 0;
+     int64_t vdi_size = 0;
+-    char *backing_file = NULL;
++    const char *backing_file = NULL, *buf = NULL;
+     BDRVSheepdogState *s;
+     char vdi[SD_MAX_VDI_LEN], tag[SD_MAX_VDI_TAG_LEN];
+     uint32_t snapid;
+@@ -1329,26 +1329,18 @@ static int sd_create(const char *filename, QEMUOptionParameter *options)
+         goto out;
+     }
+ 
+-    while (options && options->name) {
+-        if (!strcmp(options->name, BLOCK_OPT_SIZE)) {
+-            vdi_size = options->value.n;
+-        } else if (!strcmp(options->name, BLOCK_OPT_BACKING_FILE)) {
+-            backing_file = options->value.s;
+-        } else if (!strcmp(options->name, BLOCK_OPT_PREALLOC)) {
+-            if (!options->value.s || !strcmp(options->value.s, "off")) {
+-                prealloc = false;
+-            } else if (!strcmp(options->value.s, "full")) {
+-                prealloc = true;
+-            } else {
+-                error_report("Invalid preallocation mode: '%s'",
+-                             options->value.s);
+-                ret = -EINVAL;
+-                goto out;
+-            }
+-        }
+-        options++;
++    vdi_size = qemu_opt_get_size_del(opts, BLOCK_OPT_SIZE, 0);
++    backing_file = qemu_opt_get_del(opts, BLOCK_OPT_BACKING_FILE);
++    buf = qemu_opt_get_del(opts, BLOCK_OPT_PREALLOC);
++    if (!buf || !strcmp(buf, "off")) {
++        prealloc = false;
++    } else if (!strcmp(buf, "full")) {
++        prealloc = true;
++    } else {
++        error_report("Invalid preallocation mode: '%s'", buf);
++        ret = -EINVAL;
++        goto out;
+     }
+-
+     if (vdi_size > SD_MAX_VDI_SIZE) {
+         error_report("too big image size");
+         ret = -EINVAL;
+@@ -2070,24 +2062,27 @@ static int sd_load_vmstate(BlockDriverState *bs, uint8_t *data,
+     return do_load_save_vmstate(s, data, pos, size, 1);
+ }
+ 
+-
+-static QEMUOptionParameter sd_create_options[] = {
+-    {
+-        .name = BLOCK_OPT_SIZE,
+-        .type = OPT_SIZE,
+-        .help = "Virtual disk size"
+-    },
+-    {
+-        .name = BLOCK_OPT_BACKING_FILE,
+-        .type = OPT_STRING,
+-        .help = "File name of a base image"
+-    },
+-    {
+-        .name = BLOCK_OPT_PREALLOC,
+-        .type = OPT_STRING,
+-        .help = "Preallocation mode (allowed values: off, full)"
+-    },
+-    { NULL }
++static QemuOptsList sd_create_opts = {
++    .name = "sheepdog-create-opts",
++    .head = QTAILQ_HEAD_INITIALIZER(sd_create_opts.head),
++    .desc = {
++        {
++            .name = BLOCK_OPT_SIZE,
++            .type = QEMU_OPT_SIZE,
++            .help = "Virtual disk size"
++        },
++        {
++            .name = BLOCK_OPT_BACKING_FILE,
++            .type = QEMU_OPT_STRING,
++            .help = "File name of a base image"
++        },
++        {
++            .name = BLOCK_OPT_PREALLOC,
++            .type = QEMU_OPT_STRING,
++            .help = "Preallocation mode (allowed values: off, full)"
++        },
++        { /* end of list */ }
++    }
+ };
+ 
+ static BlockDriver bdrv_sheepdog = {
+@@ -2112,7 +2107,7 @@ static BlockDriver bdrv_sheepdog = {
+     .bdrv_save_vmstate  = sd_save_vmstate,
+     .bdrv_load_vmstate  = sd_load_vmstate,
+ 
+-    .create_options = sd_create_options,
++    .bdrv_create_opts   = &sd_create_opts,
+ };
+ 
+ static BlockDriver bdrv_sheepdog_tcp = {
+@@ -2137,7 +2132,7 @@ static BlockDriver bdrv_sheepdog_tcp = {
+     .bdrv_save_vmstate  = sd_save_vmstate,
+     .bdrv_load_vmstate  = sd_load_vmstate,
+ 
+-    .create_options = sd_create_options,
++    .bdrv_create_opts = &sd_create_opts,
+ };
+ 
+ static BlockDriver bdrv_sheepdog_unix = {
+@@ -2162,7 +2157,7 @@ static BlockDriver bdrv_sheepdog_unix = {
+     .bdrv_save_vmstate  = sd_save_vmstate,
+     .bdrv_load_vmstate  = sd_load_vmstate,
+ 
+-    .create_options = sd_create_options,
++    .bdrv_create_opts = &sd_create_opts,
+ };
+ 
+ static void bdrv_sheepdog_init(void)
+diff --git a/block/vdi.c b/block/vdi.c
+index 2662d89..0e9d1f8 100644
+--- a/block/vdi.c
++++ b/block/vdi.c
+@@ -633,7 +633,7 @@ static int vdi_co_write(BlockDriverState *bs,
+     return ret;
+ }
+ 
+-static int vdi_create(const char *filename, QEMUOptionParameter *options)
++static int vdi_create(const char *filename, QemuOpts *opts)
+ {
+     int fd;
+     int result = 0;
+@@ -648,25 +648,18 @@ static int vdi_create(const char *filename, QEMUOptionParameter *options)
+     logout("\n");
+ 
+     /* Read out options. */
+-    while (options && options->name) {
+-        if (!strcmp(options->name, BLOCK_OPT_SIZE)) {
+-            bytes = options->value.n;
++    bytes = qemu_opt_get_size_del(opts, BLOCK_OPT_SIZE, 0);
+ #if defined(CONFIG_VDI_BLOCK_SIZE)
+-        } else if (!strcmp(options->name, BLOCK_OPT_CLUSTER_SIZE)) {
+-            if (options->value.n) {
+-                /* TODO: Additional checks (SECTOR_SIZE * 2^n, ...). */
+-                block_size = options->value.n;
+-            }
++        /* TODO: Additional checks (SECTOR_SIZE * 2^n, ...). */
++    block_size = qemu_opt_get_size_del(opts,
++                                       BLOCK_OPT_CLUSTER_SIZE,
++                                       DEFAULT_CLUSTER_SIZE);
+ #endif
+ #if defined(CONFIG_VDI_STATIC_IMAGE)
+-        } else if (!strcmp(options->name, BLOCK_OPT_STATIC)) {
+-            if (options->value.n) {
+-                image_type = VDI_TYPE_STATIC;
+-            }
+-#endif
+-        }
+-        options++;
++    if (qemu_opt_get_bool_del(opts, BLOCK_OPT_STATIC, 0)) {
++        image_type = VDI_TYPE_STATIC;
+     }
++#endif
+ 
+     fd = qemu_open(filename,
+                    O_WRONLY | O_CREAT | O_TRUNC | O_BINARY | O_LARGEFILE,
+@@ -746,29 +739,34 @@ static void vdi_close(BlockDriverState *bs)
+     error_free(s->migration_blocker);
+ }
+ 
+-static QEMUOptionParameter vdi_create_options[] = {
+-    {
+-        .name = BLOCK_OPT_SIZE,
+-        .type = OPT_SIZE,
+-        .help = "Virtual disk size"
+-    },
++static QemuOptsList vdi_create_opts = {
++    .name = "vdi-create-opts",
++    .head = QTAILQ_HEAD_INITIALIZER(vdi_create_opts.head),
++    .desc = {
++        {
++            .name = BLOCK_OPT_SIZE,
++            .type = QEMU_OPT_SIZE,
++            .help = "Virtual disk size"
++        },
+ #if defined(CONFIG_VDI_BLOCK_SIZE)
+-    {
+-        .name = BLOCK_OPT_CLUSTER_SIZE,
+-        .type = OPT_SIZE,
+-        .help = "VDI cluster (block) size",
+-        .value = { .n = DEFAULT_CLUSTER_SIZE },
+-    },
++        {
++            .name = BLOCK_OPT_CLUSTER_SIZE,
++            .type = QEMU_OPT_SIZE,
++            .help = "VDI cluster (block) size",
++            .def_value_str = stringify(DEFAULT_CLUSTER_SIZE)
++        },
+ #endif
+ #if defined(CONFIG_VDI_STATIC_IMAGE)
+-    {
+-        .name = BLOCK_OPT_STATIC,
+-        .type = OPT_FLAG,
+-        .help = "VDI static (pre-allocated) image"
+-    },
++        {
++            .name = BLOCK_OPT_STATIC,
++            .type = QEMU_OPT_BOOL,
++            .help = "VDI static (pre-allocated) image",
++            .def_value_str = "off"
++        },
+ #endif
+-    /* TODO: An additional option to set UUID values might be useful. */
+-    { NULL }
++        /* TODO: An additional option to set UUID values might be useful. */
++        { /* end of list */ }
++    }
+ };
+ 
+ static BlockDriver bdrv_vdi = {
+@@ -789,7 +787,7 @@ static BlockDriver bdrv_vdi = {
+ 
+     .bdrv_get_info = vdi_get_info,
+ 
+-    .create_options = vdi_create_options,
++    .bdrv_create_opts = &vdi_create_opts,
+     .bdrv_check = vdi_check,
+ };
+ 
+diff --git a/block/vmdk.c b/block/vmdk.c
+index 7bad757..6a83bb9 100644
+--- a/block/vmdk.c
++++ b/block/vmdk.c
+@@ -1429,7 +1429,7 @@ static int relative_path(char *dest, int dest_size,
+     return 0;
+ }
+ 
+-static int vmdk_create(const char *filename, QEMUOptionParameter *options)
++static int vmdk_create(const char *filename, QemuOpts *opts)
+ {
+     int fd, idx = 0;
+     char desc[BUF_SIZE];
+@@ -1470,21 +1470,14 @@ static int vmdk_create(const char *filename, QEMUOptionParameter *options)
+     if (filename_decompose(filename, path, prefix, postfix, PATH_MAX)) {
+         return -EINVAL;
+     }
+-    /* Read out options */
+-    while (options && options->name) {
+-        if (!strcmp(options->name, BLOCK_OPT_SIZE)) {
+-            total_size = options->value.n;
+-        } else if (!strcmp(options->name, BLOCK_OPT_ADAPTER_TYPE)) {
+-            adapter_type = options->value.s;
+-        } else if (!strcmp(options->name, BLOCK_OPT_BACKING_FILE)) {
+-            backing_file = options->value.s;
+-        } else if (!strcmp(options->name, BLOCK_OPT_COMPAT6)) {
+-            flags |= options->value.n ? BLOCK_FLAG_COMPAT6 : 0;
+-        } else if (!strcmp(options->name, BLOCK_OPT_SUBFMT)) {
+-            fmt = options->value.s;
+-        }
+-        options++;
++    /* Read out opts */
++    total_size = qemu_opt_get_size_del(opts, BLOCK_OPT_SIZE, 0);
++    adapter_type = qemu_opt_get_del(opts, BLOCK_OPT_ADAPTER_TYPE);
++    backing_file = qemu_opt_get_del(opts, BLOCK_OPT_BACKING_FILE);
++    if (qemu_opt_get_bool_del(opts, BLOCK_OPT_COMPAT6, 0)) {
++        flags |= BLOCK_FLAG_COMPAT6;
+     }
++    fmt = qemu_opt_get_del(opts, BLOCK_OPT_SUBFMT);
+     if (!adapter_type) {
+         adapter_type = "ide";
+     } else if (strcmp(adapter_type, "ide") &&
+@@ -1665,36 +1658,41 @@ static int64_t vmdk_get_allocated_file_size(BlockDriverState *bs)
+     return ret;
+ }
+ 
+-static QEMUOptionParameter vmdk_create_options[] = {
+-    {
+-        .name = BLOCK_OPT_SIZE,
+-        .type = OPT_SIZE,
+-        .help = "Virtual disk size"
+-    },
+-    {
+-        .name = BLOCK_OPT_ADAPTER_TYPE,
+-        .type = OPT_STRING,
+-        .help = "Virtual adapter type, can be one of "
+-                "ide (default), lsilogic, buslogic or legacyESX"
+-    },
+-    {
+-        .name = BLOCK_OPT_BACKING_FILE,
+-        .type = OPT_STRING,
+-        .help = "File name of a base image"
+-    },
+-    {
+-        .name = BLOCK_OPT_COMPAT6,
+-        .type = OPT_FLAG,
+-        .help = "VMDK version 6 image"
+-    },
+-    {
+-        .name = BLOCK_OPT_SUBFMT,
+-        .type = OPT_STRING,
+-        .help =
+-            "VMDK flat extent format, can be one of "
+-            "{monolithicSparse (default) | monolithicFlat | twoGbMaxExtentSparse | twoGbMaxExtentFlat | streamOptimized} "
+-    },
+-    { NULL }
++static QemuOptsList vmdk_create_opts = {
++    .name = "vmdk-create-opts",
++    .head = QTAILQ_HEAD_INITIALIZER(vmdk_create_opts.head),
++    .desc = {
++        {
++            .name = BLOCK_OPT_SIZE,
++            .type = QEMU_OPT_SIZE,
++            .help = "Virtual disk size"
++        },
++        {
++            .name = BLOCK_OPT_ADAPTER_TYPE,
++            .type = OPT_STRING,
++            .help = "Virtual adapter type, can be one of "
++                    "ide (default), lsilogic, buslogic or legacyESX"
++        },
++        {
++            .name = BLOCK_OPT_BACKING_FILE,
++            .type = QEMU_OPT_STRING,
++            .help = "File name of a base image"
++        },
++        {
++            .name = BLOCK_OPT_COMPAT6,
++            .type = QEMU_OPT_BOOL,
++            .help = "VMDK version 6 image",
++            .def_value_str = "off"
++        },
++        {
++            .name = BLOCK_OPT_SUBFMT,
++            .type = QEMU_OPT_STRING,
++            .help =
++                "VMDK flat extent format, can be one of "
++                "{monolithicSparse (default) | monolithicFlat | twoGbMaxExtentSparse | twoGbMaxExtentFlat | streamOptimized} "
++        },
++        { /* end of list */ }
++    }
+ };
+ 
+ static BlockDriver bdrv_vmdk = {
+@@ -1711,7 +1709,7 @@ static BlockDriver bdrv_vmdk = {
+     .bdrv_co_is_allocated   = vmdk_co_is_allocated,
+     .bdrv_get_allocated_file_size  = vmdk_get_allocated_file_size,
+ 
+-    .create_options = vmdk_create_options,
++    .bdrv_create_opts = &vmdk_create_opts,
+ };
+ 
+ static void bdrv_vmdk_init(void)
+diff --git a/block/vpc.c b/block/vpc.c
+index 3cad52e..02d6fb3 100644
+--- a/block/vpc.c
++++ b/block/vpc.c
+@@ -683,34 +683,31 @@ static int create_fixed_disk(int fd, uint8_t *buf, int64_t total_size)
+     return ret;
+ }
+ 
+-static int vpc_create(const char *filename, QEMUOptionParameter *options)
++static int vpc_create(const char *filename, QemuOpts *opts)
+ {
+     uint8_t buf[1024];
+     struct vhd_footer *footer = (struct vhd_footer *) buf;
+-    QEMUOptionParameter *disk_type_param;
++    const char *disk_type_param = NULL;
+     int fd, i;
+     uint16_t cyls = 0;
+     uint8_t heads = 0;
+     uint8_t secs_per_cyl = 0;
+     int64_t total_sectors;
+-    int64_t total_size;
+-    int disk_type;
++    int64_t total_size = 0;
++    int disk_type = VHD_DYNAMIC;
+     int ret = -EIO;
+ 
+-    /* Read out options */
+-    total_size = get_option_parameter(options, BLOCK_OPT_SIZE)->value.n;
+-
+-    disk_type_param = get_option_parameter(options, BLOCK_OPT_SUBFMT);
+-    if (disk_type_param && disk_type_param->value.s) {
+-        if (!strcmp(disk_type_param->value.s, "dynamic")) {
++    /* Read out opts */
++    total_size = qemu_opt_get_size_del(opts, BLOCK_OPT_SIZE, 0);
++    disk_type_param = qemu_opt_get_del(opts, BLOCK_OPT_SUBFMT);
++    if (disk_type_param) {
++        if (!strcmp(disk_type_param, "dynamic")) {
+             disk_type = VHD_DYNAMIC;
+-        } else if (!strcmp(disk_type_param->value.s, "fixed")) {
++        } else if (!strcmp(disk_type_param, "fixed")) {
+             disk_type = VHD_FIXED;
+         } else {
+             return -EINVAL;
+         }
+-    } else {
+-        disk_type = VHD_DYNAMIC;
+     }
+ 
+     /* Create the file */
+@@ -798,20 +795,24 @@ static void vpc_close(BlockDriverState *bs)
+     error_free(s->migration_blocker);
+ }
+ 
+-static QEMUOptionParameter vpc_create_options[] = {
+-    {
+-        .name = BLOCK_OPT_SIZE,
+-        .type = OPT_SIZE,
+-        .help = "Virtual disk size"
+-    },
+-    {
+-        .name = BLOCK_OPT_SUBFMT,
+-        .type = OPT_STRING,
+-        .help =
+-            "Type of virtual hard disk format. Supported formats are "
+-            "{dynamic (default) | fixed} "
+-    },
+-    { NULL }
++static QemuOptsList vpc_create_opts = {
++    .name = "vpc-create-opts",
++    .head = QTAILQ_HEAD_INITIALIZER(vpc_create_opts.head),
++    .desc = {
++        {
++            .name = BLOCK_OPT_SIZE,
++            .type = QEMU_OPT_SIZE,
++            .help = "Virtual disk size"
++        },
++        {
++            .name = BLOCK_OPT_SUBFMT,
++            .type = OPT_STRING,
++            .help =
++                "Type of virtual hard disk format. Supported formats are "
++                "{dynamic (default) | fixed} "
++        },
++        { /* end of list */ }
++    }
+ };
+ 
+ static BlockDriver bdrv_vpc = {
+@@ -827,7 +828,7 @@ static BlockDriver bdrv_vpc = {
+     .bdrv_read              = vpc_co_read,
+     .bdrv_write             = vpc_co_write,
+ 
+-    .create_options = vpc_create_options,
++    .bdrv_create_opts = &vpc_create_opts,
+ };
+ 
+ static void bdrv_vpc_init(void)
+diff --git a/block/vvfat.c b/block/vvfat.c
+index ef74c30..51d95ed 100644
+--- a/block/vvfat.c
++++ b/block/vvfat.c
+@@ -2803,7 +2803,7 @@ static BlockDriver vvfat_write_target = {
+ static int enable_write_target(BDRVVVFATState *s)
+ {
+     BlockDriver *bdrv_qcow;
+-    QEMUOptionParameter *options;
++    QemuOpts *opts;
+     int ret;
+     int size = sector2cluster(s, s->sector_count);
+     s->used_clusters = calloc(size, 1);
+@@ -2819,12 +2819,13 @@ static int enable_write_target(BDRVVVFATState *s)
+     }
+ 
+     bdrv_qcow = bdrv_find_format("qcow");
+-    options = parse_option_parameters("", bdrv_qcow->create_options, NULL);
+-    set_option_parameter_int(options, BLOCK_OPT_SIZE, s->sector_count * 512);
+-    set_option_parameter(options, BLOCK_OPT_BACKING_FILE, "fat:");
++    opts = qemu_opts_create_nofail(bdrv_qcow->bdrv_create_opts);
++    qemu_opt_set_number(opts, BLOCK_OPT_SIZE, s->sector_count * 512);
++    qemu_opt_set(opts, BLOCK_OPT_BACKING_FILE, "fat:");
+ 
+-    if (bdrv_create(bdrv_qcow, s->qcow_filename, options) < 0)
++    if (bdrv_create(bdrv_qcow, s->qcow_filename, opts) < 0) {
+ 	return -1;
++    }
+ 
+     s->qcow = bdrv_new("");
+     if (s->qcow == NULL) {
+diff --git a/include/block/block.h b/include/block/block.h
+index 9dc6aad..6e73277 100644
+--- a/include/block/block.h
++++ b/include/block/block.h
+@@ -125,9 +125,8 @@ void bdrv_init_with_whitelist(void);
+ BlockDriver *bdrv_find_protocol(const char *filename);
+ BlockDriver *bdrv_find_format(const char *format_name);
+ BlockDriver *bdrv_find_whitelisted_format(const char *format_name);
+-int bdrv_create(BlockDriver *drv, const char* filename,
+-    QEMUOptionParameter *options);
+-int bdrv_create_file(const char* filename, QEMUOptionParameter *options);
++int bdrv_create(BlockDriver *drv, const char* filename, QemuOpts *opts);
++int bdrv_create_file(const char *filename, QemuOpts *opts);
+ BlockDriverState *bdrv_new(const char *device_name);
+ void bdrv_make_anon(BlockDriverState *bs);
+ void bdrv_swap(BlockDriverState *bs_new, BlockDriverState *bs_old);
+diff --git a/include/block/block_int.h b/include/block/block_int.h
+index 9aa98b5..a44a9ac 100644
+--- a/include/block/block_int.h
++++ b/include/block/block_int.h
+@@ -95,7 +95,7 @@ struct BlockDriver {
+                       const uint8_t *buf, int nb_sectors);
+     void (*bdrv_close)(BlockDriverState *bs);
+     void (*bdrv_rebind)(BlockDriverState *bs);
+-    int (*bdrv_create)(const char *filename, QEMUOptionParameter *options);
++    int (*bdrv_create)(const char *filename, QemuOpts *opts);
+     int (*bdrv_set_key)(BlockDriverState *bs, const char *key);
+     int (*bdrv_make_empty)(BlockDriverState *bs);
+     /* aio */
+@@ -184,9 +184,7 @@ struct BlockDriver {
+         unsigned long int req, void *buf,
+         BlockDriverCompletionFunc *cb, void *opaque);
+ 
+-    /* List of options for creating images, terminated by name == NULL */
+-    QEMUOptionParameter *create_options;
+-
++    QemuOptsList *bdrv_create_opts;
+ 
+     /*
+      * Returns 0 for completed check, -errno for internal errors.
+diff --git a/qemu-img.c b/qemu-img.c
+index 31627b0..3eac10c 100644
+--- a/qemu-img.c
++++ b/qemu-img.c
+@@ -229,7 +229,7 @@ static int read_password(char *buf, int buf_size)
+ static int print_block_option_help(const char *filename, const char *fmt)
+ {
+     BlockDriver *drv, *proto_drv;
+-    QEMUOptionParameter *create_options = NULL;
++    QemuOptsList *create_opts = NULL;
+ 
+     /* Find driver and parse its options */
+     drv = bdrv_find_format(fmt);
+@@ -244,12 +244,10 @@ static int print_block_option_help(const char *filename, const char *fmt)
+         return 1;
+     }
+ 
+-    create_options = append_option_parameters(create_options,
+-                                              drv->create_options);
+-    create_options = append_option_parameters(create_options,
+-                                              proto_drv->create_options);
+-    print_option_help(create_options);
+-    free_option_parameters(create_options);
++    create_opts = qemu_opts_append(drv->bdrv_create_opts,
++                                   proto_drv->bdrv_create_opts);
++    qemu_opts_print_help(create_opts);
++    qemu_opts_free(create_opts);
+     return 0;
+ }
+ 
+@@ -301,19 +299,19 @@ fail:
+     return NULL;
+ }
+ 
+-static int add_old_style_options(const char *fmt, QEMUOptionParameter *list,
++static int add_old_style_options(const char *fmt, QemuOpts *list,
+                                  const char *base_filename,
+                                  const char *base_fmt)
+ {
+     if (base_filename) {
+-        if (set_option_parameter(list, BLOCK_OPT_BACKING_FILE, base_filename)) {
++        if (qemu_opt_set(list, BLOCK_OPT_BACKING_FILE, base_filename)) {
+             error_report("Backing file not supported for file format '%s'",
+                          fmt);
+             return -1;
+         }
+     }
+     if (base_fmt) {
+-        if (set_option_parameter(list, BLOCK_OPT_BACKING_FMT, base_fmt)) {
++        if (qemu_opt_set(list, BLOCK_OPT_BACKING_FMT, base_fmt)) {
+             error_report("Backing file format not supported for file "
+                          "format '%s'", fmt);
+             return -1;
+@@ -1120,8 +1118,9 @@ static int img_convert(int argc, char **argv)
+     uint8_t * buf = NULL;
+     const uint8_t *buf1;
+     BlockDriverInfo bdi;
+-    QEMUOptionParameter *param = NULL, *create_options = NULL;
+-    QEMUOptionParameter *out_baseimg_param;
++    QemuOpts *param = NULL;
++    QemuOptsList *create_opts = NULL;
++    const char *out_baseimg_param;
+     char *options = NULL;
+     const char *snapshot_name = NULL;
+     float local_progress = 0;
+@@ -1265,40 +1264,36 @@ static int img_convert(int argc, char **argv)
+         goto out;
+     }
+ 
+-    create_options = append_option_parameters(create_options,
+-                                              drv->create_options);
+-    create_options = append_option_parameters(create_options,
+-                                              proto_drv->create_options);
++    create_opts = qemu_opts_append(drv->bdrv_create_opts,
++                                   proto_drv->bdrv_create_opts);
+ 
+     if (options) {
+-        param = parse_option_parameters(options, create_options, param);
+-        if (param == NULL) {
++        if (qemu_opts_do_parse_replace(param, options, NULL) != 0) {
+             error_report("Invalid options for file format '%s'.", out_fmt);
+             ret = -1;
+             goto out;
+         }
+     } else {
+-        param = parse_option_parameters("", create_options, param);
++        param = qemu_opts_create_nofail(create_opts);
+     }
+-
+-    set_option_parameter_int(param, BLOCK_OPT_SIZE, total_sectors * 512);
++    qemu_opt_set_number(param, BLOCK_OPT_SIZE, total_sectors * 512);
+     ret = add_old_style_options(out_fmt, param, out_baseimg, NULL);
+     if (ret < 0) {
+         goto out;
+     }
+ 
+     /* Get backing file name if -o backing_file was used */
+-    out_baseimg_param = get_option_parameter(param, BLOCK_OPT_BACKING_FILE);
++    out_baseimg_param = qemu_opt_get(param, BLOCK_OPT_BACKING_FILE);
+     if (out_baseimg_param) {
+-        out_baseimg = out_baseimg_param->value.s;
++        out_baseimg = out_baseimg_param;
+     }
+ 
+     /* Check if compression is supported */
+     if (compress) {
+-        QEMUOptionParameter *encryption =
+-            get_option_parameter(param, BLOCK_OPT_ENCRYPT);
+-        QEMUOptionParameter *preallocation =
+-            get_option_parameter(param, BLOCK_OPT_PREALLOC);
++        bool encryption =
++            qemu_opt_get_bool(param, BLOCK_OPT_ENCRYPT, false);
++        const char *preallocation =
++            qemu_opt_get(param, BLOCK_OPT_PREALLOC);
+ 
+         if (!drv->bdrv_write_compressed) {
+             error_report("Compression not supported for this file format");
+@@ -1306,15 +1301,15 @@ static int img_convert(int argc, char **argv)
+             goto out;
+         }
+ 
+-        if (encryption && encryption->value.n) {
++        if (encryption) {
+             error_report("Compression and encryption not supported at "
+                          "the same time");
+             ret = -1;
+             goto out;
+         }
+ 
+-        if (preallocation && preallocation->value.s
+-            && strcmp(preallocation->value.s, "off"))
++        if (preallocation
++            && strcmp(preallocation, "off"))
+         {
+             error_report("Compression and preallocation not supported at "
+                          "the same time");
+@@ -1532,8 +1527,10 @@ static int img_convert(int argc, char **argv)
+     }
+ out:
+     qemu_progress_end();
+-    free_option_parameters(create_options);
+-    free_option_parameters(param);
++    qemu_opts_free(create_opts);
++    if (param) {
++        qemu_opts_del(param);
++    }
+     qemu_vfree(buf);
+     if (out_bs) {
+         bdrv_delete(out_bs);
+-- 
+1.7.11.7
+
+

@@ -1,0 +1,265 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Dominik Dingel <dingel@linux.vnet.ibm.com>
+To: Dominik Dingel <dingel@linux.vnet.ibm.com>, Alexander Graf <agraf@suse.de>,
+ qemu-devel@nongnu.org
+Cc: Christian Borntraeger <borntraeger@de.ibm.com>,
+ Alexander Graf <agraf@suse.de>, qemu-devel@nongnu.org,
+ Dominik Dingel <dingel@linux.vnet.ibm.com>
+Date: Fri, 26 Apr 2013 14:12:57 +0200
+Message-id: 1366978377-16823-11-git-send-email-dingel@linux.vnet.ibm.com
+Subject: [PATCH 10/10] S390: Enabling device and program selection
+
+Pass the eboot device info and the loadparm in register 7 and 8.
+Use this values in the BIOS to directly boot the respective
+operating system.
+
+Signed-off-by: Dominik Dingel <dingel@linux.vnet.ibm.com>
+
+diff --git a/hw/s390x/ipl.c b/hw/s390x/ipl.c
+index 36daa67..960ba71 100644
+--- a/hw/s390x/ipl.c
++++ b/hw/s390x/ipl.c
+@@ -77,6 +77,10 @@ static void s390_ipl_from_disk(VirtIOBlkCcw *dev, uint64_t pswaddr)
+     env->psw.addr = pswaddr;
+     env->psw.mask = IPL_PSW_MASK;
+     env->regs[7] = ccw_dev->sch->devno;
++    env->regs[7] = (env->regs[7] << 16) | (ccw_dev->sch->schid);
++    env->regs[7] = (env->regs[7] << 8) | (ccw_dev->sch->cssid);
++    env->regs[7] = (env->regs[7] << 8) | (ccw_dev->sch->ssid);
++    env->regs[8] = ccw_dev->loadparm;
+     s390_add_running_cpu(cpu);
+ }
+ 
+diff --git a/pc-bios/s390-ccw.img b/pc-bios/s390-ccw.img
+index b549a86e55194bbf54e25f839e52b490ac308260..fe8d2c6b9f5d937ea156084f7eb248b17e1fa89c 100644
+GIT binary patch
+literal 17528
+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
+
+literal 9432
+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
+
+diff --git a/pc-bios/s390-ccw/bootmap.c b/pc-bios/s390-ccw/bootmap.c
+index 53a460d..9cd3edf 100644
+--- a/pc-bios/s390-ccw/bootmap.c
++++ b/pc-bios/s390-ccw/bootmap.c
+@@ -173,7 +173,7 @@ fail:
+     return -1;
+ }
+ 
+-int zipl_load(void)
++int zipl_load(uint64_t load_parm)
+ {
+     struct mbr *mbr = (void*)sec;
+     uint8_t *ns, *ns_end;
+@@ -223,7 +223,7 @@ int zipl_load(void)
+ 
+     /* Run the default entry */
+ 
+-    prog_table_entry = (struct scsi_blockptr *)(sec + pte_len);
++    prog_table_entry = (struct scsi_blockptr *)(sec + (pte_len *(1+load_parm)));
+ 
+     return zipl_run(prog_table_entry);
+ 
+diff --git a/pc-bios/s390-ccw/main.c b/pc-bios/s390-ccw/main.c
+index fd40fa5..0c1c11c 100644
+--- a/pc-bios/s390-ccw/main.c
++++ b/pc-bios/s390-ccw/main.c
+@@ -20,7 +20,7 @@ void virtio_panic(const char *string)
+     while (1) { }
+ }
+ 
+-static void virtio_setup(void)
++static void virtio_setup(uint16_t dev_no)
+ {
+     struct schib schib;
+     int i;
+@@ -35,7 +35,7 @@ static void virtio_setup(void)
+         if (r == 3) {
+             break;
+         }
+-        if (schib.pmcw.dnv) {
++        if (schib.pmcw.dnv && (schib.pmcw.dev == dev_no)) {
+             if (virtio_is_blk(blk_schid)) {
+                 found = true;
+                 break;
+@@ -52,10 +52,24 @@ static void virtio_setup(void)
+ 
+ int main(void)
+ {
++    uint64_t boot_value;
++    uint64_t load_parm;
++    register uint64_t reg7 asm("7");
++    register uint64_t reg8 asm("8");
++    
++    asm volatile(
++            "   stg     %2, %0\n"
++            "   stg     %3, %1\n"
++            : "=m" (boot_value), "=m" (load_parm)
++            : "d" (reg7), "d" (reg8)
++            : "cc");
++    
+     sclp_setup();
+-    virtio_setup();
+-    if (zipl_load() < 0)
++    virtio_setup(boot_value >> 32);
++
++    if (zipl_load(load_parm) < 0) {
+         sclp_print("Failed to load OS from hard disk\n");
++    }
+     disabled_wait();
+     while (1) { }
+ }
+diff --git a/pc-bios/s390-ccw/s390-ccw.h b/pc-bios/s390-ccw/s390-ccw.h
+index 8241b0a..2851995 100644
+--- a/pc-bios/s390-ccw/s390-ccw.h
++++ b/pc-bios/s390-ccw/s390-ccw.h
+@@ -63,7 +63,7 @@ void virtio_setup_block(struct subchannel_id schid);
+ int virtio_read(ulong sector, void *load_addr);
+ 
+ /* bootmap.c */
+-int zipl_load(void);
++int zipl_load(uint64_t load_parm);
+ 
+ static inline void *memset(void *s, int c, size_t n)
+ {
+-- 
+1.7.9.5
+
+

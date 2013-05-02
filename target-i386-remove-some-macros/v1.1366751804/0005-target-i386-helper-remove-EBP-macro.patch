@@ -1,0 +1,123 @@
+From patches Mon Sep 17 00:00:00 2001
+From: liguang <lig.fnst@cn.fujitsu.com>
+To: qemu-devel@nongnu.org
+Cc: peter.maydell@linaro.org, ehabkost@redhat.com,
+ liguang <lig.fnst@cn.fujitsu.com>, blauwirbel@gmail.com, imammedo@redhat.com,
+ pbonzini@redhat.com, afaerber@suse.de, rth@twiddle.net
+Date: Tue, 23 Apr 2013 16:16:49 +0800
+Message-id: 1366705016-30471-6-git-send-email-lig.fnst@cn.fujitsu.com
+Subject: [PATCH 05/12] target-i386/helper: remove EBP macro
+
+Signed-off-by: liguang <lig.fnst@cn.fujitsu.com>
+---
+ target-i386/cpu.h        |    2 --
+ target-i386/seg_helper.c |   10 +++++-----
+ target-i386/smm_helper.c |    8 ++++----
+ 3 files changed, 9 insertions(+), 11 deletions(-)
+
+diff --git a/target-i386/cpu.h b/target-i386/cpu.h
+index 78d1033..f2c4a49 100644
+--- a/target-i386/cpu.h
++++ b/target-i386/cpu.h
+@@ -1109,8 +1109,6 @@ static inline int cpu_mmu_index (CPUX86State *env)
+ 
+ #undef ESP
+ #define ESP (env->regs[R_ESP])
+-#undef EBP
+-#define EBP (env->regs[R_EBP])
+ #undef ESI
+ #define ESI (env->regs[R_ESI])
+ #undef EDI
+diff --git a/target-i386/seg_helper.c b/target-i386/seg_helper.c
+index fc67f52..56db00f 100644
+--- a/target-i386/seg_helper.c
++++ b/target-i386/seg_helper.c
+@@ -329,7 +329,7 @@ static void switch_tss(CPUX86State *env, int tss_selector,
+         cpu_stl_kernel(env, env->tr.base + (0x28 + 2 * 4), env->regs[R_EDX]);
+         cpu_stl_kernel(env, env->tr.base + (0x28 + 3 * 4), env->regs[R_EBX]);
+         cpu_stl_kernel(env, env->tr.base + (0x28 + 4 * 4), ESP);
+-        cpu_stl_kernel(env, env->tr.base + (0x28 + 5 * 4), EBP);
++        cpu_stl_kernel(env, env->tr.base + (0x28 + 5 * 4), env->regs[R_EBP]);
+         cpu_stl_kernel(env, env->tr.base + (0x28 + 6 * 4), ESI);
+         cpu_stl_kernel(env, env->tr.base + (0x28 + 7 * 4), EDI);
+         for (i = 0; i < 6; i++) {
+@@ -345,7 +345,7 @@ static void switch_tss(CPUX86State *env, int tss_selector,
+         cpu_stw_kernel(env, env->tr.base + (0x12 + 2 * 2), env->regs[R_EDX]);
+         cpu_stw_kernel(env, env->tr.base + (0x12 + 3 * 2), env->regs[R_EBX]);
+         cpu_stw_kernel(env, env->tr.base + (0x12 + 4 * 2), ESP);
+-        cpu_stw_kernel(env, env->tr.base + (0x12 + 5 * 2), EBP);
++        cpu_stw_kernel(env, env->tr.base + (0x12 + 5 * 2), env->regs[R_EBP]);
+         cpu_stw_kernel(env, env->tr.base + (0x12 + 6 * 2), ESI);
+         cpu_stw_kernel(env, env->tr.base + (0x12 + 7 * 2), EDI);
+         for (i = 0; i < 4; i++) {
+@@ -401,7 +401,7 @@ static void switch_tss(CPUX86State *env, int tss_selector,
+     env->regs[R_EDX] = new_regs[2];
+     env->regs[R_EBX] = new_regs[3];
+     ESP = new_regs[4];
+-    EBP = new_regs[5];
++    env->regs[R_EBP] = new_regs[5];
+     ESI = new_regs[6];
+     EDI = new_regs[7];
+     if (new_eflags & VM_MASK) {
+@@ -1272,7 +1272,7 @@ void helper_enter_level(CPUX86State *env, int level, int data32,
+ 
+     esp_mask = get_sp_mask(env->segs[R_SS].flags);
+     ssp = env->segs[R_SS].base;
+-    ebp = EBP;
++    ebp = env->regs[R_EBP];
+     esp = ESP;
+     if (data32) {
+         /* 32 bit */
+@@ -1305,7 +1305,7 @@ void helper_enter64_level(CPUX86State *env, int level, int data64,
+ {
+     target_ulong esp, ebp;
+ 
+-    ebp = EBP;
++    ebp = env->regs[R_EBP];
+     esp = ESP;
+ 
+     if (data64) {
+diff --git a/target-i386/smm_helper.c b/target-i386/smm_helper.c
+index 5bc6802..4bd73eb 100644
+--- a/target-i386/smm_helper.c
++++ b/target-i386/smm_helper.c
+@@ -87,7 +87,7 @@ void do_smm_enter(CPUX86State *env)
+     stq_phys(sm_state + 0x7fe8, env->regs[R_EDX]);
+     stq_phys(sm_state + 0x7fe0, env->regs[R_EBX]);
+     stq_phys(sm_state + 0x7fd8, ESP);
+-    stq_phys(sm_state + 0x7fd0, EBP);
++    stq_phys(sm_state + 0x7fd0, env->regs[R_EBP]);
+     stq_phys(sm_state + 0x7fc8, ESI);
+     stq_phys(sm_state + 0x7fc0, EDI);
+     for (i = 8; i < 16; i++) {
+@@ -111,7 +111,7 @@ void do_smm_enter(CPUX86State *env)
+     stl_phys(sm_state + 0x7ff0, env->eip);
+     stl_phys(sm_state + 0x7fec, EDI);
+     stl_phys(sm_state + 0x7fe8, ESI);
+-    stl_phys(sm_state + 0x7fe4, EBP);
++    stl_phys(sm_state + 0x7fe4, env->regs[R_EBP]);
+     stl_phys(sm_state + 0x7fe0, ESP);
+     stl_phys(sm_state + 0x7fdc, env->regs[R_EBX]);
+     stl_phys(sm_state + 0x7fd8, env->regs[R_EDX]);
+@@ -218,7 +218,7 @@ void helper_rsm(CPUX86State *env)
+     env->regs[R_EDX] = ldq_phys(sm_state + 0x7fe8);
+     env->regs[R_EBX] = ldq_phys(sm_state + 0x7fe0);
+     ESP = ldq_phys(sm_state + 0x7fd8);
+-    EBP = ldq_phys(sm_state + 0x7fd0);
++    env->regs[R_EBP] = ldq_phys(sm_state + 0x7fd0);
+     ESI = ldq_phys(sm_state + 0x7fc8);
+     EDI = ldq_phys(sm_state + 0x7fc0);
+     for (i = 8; i < 16; i++) {
+@@ -246,7 +246,7 @@ void helper_rsm(CPUX86State *env)
+     env->eip = ldl_phys(sm_state + 0x7ff0);
+     EDI = ldl_phys(sm_state + 0x7fec);
+     ESI = ldl_phys(sm_state + 0x7fe8);
+-    EBP = ldl_phys(sm_state + 0x7fe4);
++    env->regs[R_EBP] = ldl_phys(sm_state + 0x7fe4);
+     ESP = ldl_phys(sm_state + 0x7fe0);
+     env->regs[R_EBX] = ldl_phys(sm_state + 0x7fdc);
+     env->regs[R_EDX] = ldl_phys(sm_state + 0x7fd8);
+-- 
+1.7.2.5
+
+

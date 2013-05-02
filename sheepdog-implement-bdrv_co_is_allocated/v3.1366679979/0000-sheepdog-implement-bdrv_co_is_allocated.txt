@@ -1,0 +1,30 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Liu Yuan <namei.unix@gmail.com>
+To: qemu-devel@nongnu.org
+Cc: sheepdog@lists.wpkg.org
+Date: Mon, 22 Apr 2013 20:19:39 +0800
+Message-id: 1366633182-9354-1-git-send-email-namei.unix@gmail.com
+Subject: [PATCH 0/3] sheepdog: implement .bdrv_co_is_allocated
+
+From: Liu Yuan <tailai.ly@taobao.com>
+
+v3:
+ - include discard patch for easy review and merge
+ - update the comment typo
+ - get variable 'idx' definition more clear
+
+v2:
+ - correct 'end' calculation
+ - get the longest unallocated area
+ - replace SECTOR_SIZE with BDRV_SECTOR_SIZE
+
+PATCH 1/3 is the previous distard patch which implement .bdrv_co_discard
+PATCH 2/3 is ia prepare patch
+PATCH 3/3 implement .bdrv_co_is_allocated
+
+Thanks,
+Yuan
+-- 
+1.7.9.5
+
+

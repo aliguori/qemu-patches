@@ -1,0 +1,1 @@
+../Stream-Patches/v5.1365020220/0002-xilinx_axienet-Defined-and-use-type-cast-macro.patch

@@ -1,0 +1,48 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Dominik Dingel <dingel@linux.vnet.ibm.com>
+To: qemu-devel@nongnu.org
+Cc: Christian Borntraeger <borntraeger@de.ibm.com>,
+ Alexander Graf <agraf@suse.de>, Cornelia Huck <cornelia.huck@de.ibm.com>
+Date: Fri, 26 Apr 2013 14:12:52 +0200
+Message-id: 1366978377-16823-6-git-send-email-dingel@linux.vnet.ibm.com
+Subject: [PATCH 05/10] s390-ccw.img: Detect devices with stsch.
+
+From: Cornelia Huck <cornelia.huck@de.ibm.com>
+
+stsch is the canonical way to detect devices. As a bonus, we can
+abort the loop if we get cc 3, and we need to check only the valid
+devices (dnv set).
+
+Signed-off-by: Cornelia Huck <cornelia.huck@de.ibm.com>
+
+diff --git a/pc-bios/s390-ccw/main.c b/pc-bios/s390-ccw/main.c
+index 67f4987..fd40fa5 100644
+--- a/pc-bios/s390-ccw/main.c
++++ b/pc-bios/s390-ccw/main.c
+@@ -22,7 +22,7 @@ void virtio_panic(const char *string)
+ 
+ static void virtio_setup(void)
+ {
+-    struct irb irb;
++    struct schib schib;
+     int i;
+     int r;
+     bool found = false;
+@@ -31,8 +31,11 @@ static void virtio_setup(void)
+ 
+     for (i = 0; i < 0x10000; i++) {
+         blk_schid.sch_no = i;
+-        r = tsch(blk_schid, &irb);
+-        if (r != 3) {
++        r = stsch_err(blk_schid, &schib);
++        if (r == 3) {
++            break;
++        }
++        if (schib.pmcw.dnv) {
+             if (virtio_is_blk(blk_schid)) {
+                 found = true;
+                 break;
+-- 
+1.7.9.5
+
+

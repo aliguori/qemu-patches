@@ -1,0 +1,92 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Hu Tao <hutao@cn.fujitsu.com>
+To: Paolo Bonzini <pbonzini@redhat.com>, qemu-devel <qemu-devel@nongnu.org>,
+ Luiz Capitulino <lcapitulino@redhat.com>, Wen Congyang <wency@cn.fujitsu.com>,
+ Jan Kiszka <jan.kiszka@siemens.com>,
+ KAMEZAWA Hiroyuki <kamezawa.hiroyu@jp.fujitsu.com>,
+ Anthony Liguori <aliguori@us.ibm.com>, "Michael S. Tsirkin" <mst@redhat.com>,
+ Gleb Natapov <gleb@redhat.com>, Peter Maydell <peter.maydell@linaro.org>,
+ Blue Swirl <blauwirbel@gmail.com>, Alexander Graf <agraf@suse.de>,
+ Christian Borntraeger <borntraeger@de.ibm.com>,
+ Sasha Levin <levinsasha928@gmail.com>, Orit Wasserman <owasserm@redhat.com>,
+ Andrew Jones <drjones@redhat.com>, Markus Armbruster <armbru@redhat.com>,
+ Stefan Hajnoczi <stefanha@redhat.com>, Eric Blake <eblake@redhat.com>,
+ Juan Quintela <quintela@redhat.com>, Hu Tao <hutao@cn.fujitsu.com>,
+ "Daniel P. Berrange" <berrange@redhat.com>,
+ Marcelo Tosatti <mtosatti@redhat.com>,
+ Alex Williamson <alex.williamson@redhat.com>
+Cc: qemu-devel <qemu-devel@nongnu.org>,
+ Luiz Capitulino <lcapitulino@redhat.com>, Wen Congyang <wency@cn.fujitsu.com>,
+ Jan Kiszka <jan.kiszka@siemens.com>,
+ KAMEZAWA Hiroyuki <kamezawa.hiroyu@jp.fujitsu.com>,
+ Anthony Liguori <aliguori@us.ibm.com>, "Michael S. Tsirkin" <mst@redhat.com>,
+ Gleb Natapov <gleb@redhat.com>, Peter Maydell <peter.maydell@linaro.org>,
+ Blue Swirl <blauwirbel@gmail.com>, Alexander Graf <agraf@suse.de>,
+ Christian Borntraeger <borntraeger@de.ibm.com>,
+ Sasha Levin <levinsasha928@gmail.com>, Orit Wasserman <owasserm@redhat.com>,
+ Andrew Jones <drjones@redhat.com>, Markus Armbruster <armbru@redhat.com>,
+ Stefan Hajnoczi <stefanha@redhat.com>, Eric Blake <eblake@redhat.com>,
+ Juan Quintela <quintela@redhat.com>,
+ "Daniel P. Berrange" <berrange@redhat.com>,
+ Marcelo Tosatti <mtosatti@redhat.com>,
+ Alex Williamson <alex.williamson@redhat.com>
+Date: Wed, 10 Apr 2013 11:33:49 +0800
+Message-id: cover.1365564298.git.hutao@cn.fujitsu.com
+Subject: [PATCH 0/7] Add pvpanic device to deal with guest panic event
+
+This series introduces a new simulated device, pvpanic, to notify
+qemu when guest panic event happens.
+
+Along with this series, there are two patches to add seabios ACPI
+driver and kernel ACPI driver for the device, respectively.
+
+Tested with:
+
+  - qemu(kvm)/qemu(tcg)
+  - qemu piix/q35
+  - default ioport/custom ioport
+
+Changes from v17:
+
+  - create pvpanic device by default for machine 1.5
+  - rebase on top of latest git tree(hw directories changed a lot)
+  - integrate Christian's patch for s390
+
+v17: https://lists.gnu.org/archive/html/qemu-devel/2013-04/msg01028.html
+
+
+Christian Borntraeger (1):
+  Wire up disabled wait a panicked event on s390
+
+Hu Tao (6):
+  add a new runstate: RUN_STATE_GUEST_PANICKED
+  add a new qevent: QEVENT_GUEST_PANICKED
+  introduce a new qom device to deal with panicked event
+  pvpanic: pass configurable ioport to seabios
+  pvpanic: add document of pvpanic
+  pvpanic: create pvpanic by default for machine 1.5
+
+ QMP/qmp-events.txt        |  14 +++++
+ docs/specs/pvpanic.txt    |  37 +++++++++++++
+ hw/i386/pc_piix.c         |  16 +++++-
+ hw/i386/pc_q35.c          |  15 ++++-
+ hw/misc/Makefile.objs     |   2 +
+ hw/misc/pvpanic.c         | 137 ++++++++++++++++++++++++++++++++++++++++++++++
+ hw/nvram/fw_cfg.c         |   8 ++-
+ include/hw/i386/pc.h      |   3 +
+ include/hw/nvram/fw_cfg.h |   2 +
+ include/monitor/monitor.h |   1 +
+ include/sysemu/sysemu.h   |   1 +
+ monitor.c                 |   1 +
+ qapi-schema.json          |   5 +-
+ qmp.c                     |   3 +-
+ target-s390x/kvm.c        |  17 +++++-
+ vl.c                      |  13 ++++-
+ 16 files changed, 263 insertions(+), 12 deletions(-)
+ create mode 100644 docs/specs/pvpanic.txt
+ create mode 100644 hw/misc/pvpanic.c
+
+Reviewed-by: Paolo Bonzini <pbonzini@redhat.com>
+-- 
+1.8.1.4
+

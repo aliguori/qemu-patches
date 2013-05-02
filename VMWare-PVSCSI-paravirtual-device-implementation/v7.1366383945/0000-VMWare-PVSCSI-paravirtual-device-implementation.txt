@@ -1,0 +1,72 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Dmitry Fleytman <dmitry@daynix.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <anthony@codemonkey.ws>,
+ Dmitry Fleytman <dmitry@daynix.com>, Deep Debroy <ddebroy@gmail.com>,
+ Yan Vugenfirer <yan@daynix.com>, Paolo Bonzini <pbonzini@redhat.com>
+Date: Fri, 19 Apr 2013 10:05:45 +0300
+Message-id: 1366355146-25496-1-git-send-email-dmitry@daynix.com
+Subject: [PATCH 0/1] VMWare PVSCSI paravirtual device implementation
+
+Below is the implementation of VMWare PVSCSI device
+
+PVSCSI implementation is based on Paolo Bonzini code sumbitted
+some time ago but never applied.
+See commit messages and file headers for details.
+
+This patch contains changes made by Deep Debroy, see here:
+http://lists.gnu.org/archive/html/qemu-devel/2012-07/msg03585.html
+Cc: Deep Debroy <ddebroy@gmail.com>
+
+Implementation supports of all the device features.
+Code was tested on different OSes:
+    Fedora 15
+    Ubuntu 10.4
+    Centos 6.2
+    Windows 2008R2
+    Windows 2008 64bit
+    Windows 2008 32bit
+    Windows 2003 64bit
+    Windows 2003 32bit
+
+Changes since V6:
+1. Fixes as suggested by Paolo Bonzini
+Reported-by: Paolo Bonzini <pbonzini@redhat.com>
+
+Changes since V5:
+1. SCSI hotplug support added
+2. Code rebase for mainline
+
+Changes since V4:
+Array access checks and minor beautification as suggested by Blue Swirl.
+Reported-by: Blue Swirl <blauwirbel@gmail.com>
+
+Changes since V3:
+1. Utility function strpadcpy() and structure changes in SCSI devices removed from v4 since they are already applied to scsi-next from v3 by Paolo.
+2. Logging ported to use tracepoints. All ifdef based custom macros for logging removed.
+3. The vmware_utils.h is no longer present with necessary macros inlined.
+4. pvscsi.h replaced by vmw_pvscsi.h from linux kernel with some minor modifications to build in qemu.
+5. Various fixes and beautification as suggested by Blue Swirl.
+Reported-by: Blue Swirl <blauwirbel@gmail.com>
+
+Changes since V1:
+    Various fixes and beautification as suggested by Paolo Bonzini
+    Reported-by: Paolo Bonzini <pbonzini@redhat.com>
+
+Dmitry Fleytman (1):
+  VMWare PVSCSI paravirtual device implementation
+
+ default-configs/pci.mak    |    1 +
+ docs/specs/pvscsi-spec.txt |   92 ++++
+ hw/Makefile.objs           |    1 +
+ hw/pci/pci.h               |    1 +
+ hw/pvscsi.c                | 1194 ++++++++++++++++++++++++++++++++++++++++++++
+ hw/vmw_pvscsi.h            |  434 ++++++++++++++++
+ trace-events               |   36 ++
+ 7 files changed, 1759 insertions(+)
+ create mode 100644 docs/specs/pvscsi-spec.txt
+ create mode 100644 hw/pvscsi.c
+ create mode 100644 hw/vmw_pvscsi.h
+
+-- 
+1.8.1.4

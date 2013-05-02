@@ -1,0 +1,125 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Igor Mammedov <imammedo@redhat.com>
+To: Igor Mammedov <imammedo@redhat.com>, qemu-devel@nongnu.org
+Cc: peter.maydell@linaro.org, gleb@redhat.com, mst@redhat.com,
+ jan.kiszka@siemens.com, qemu-devel@nongnu.org, lcapitulino@redhat.com,
+ blauwirbel@gmail.com, kraxel@redhat.com, eblake@redhat.com,
+ Anthony Liguori <aliguori@us.ibm.com>, quintela@redhat.com, armbru@redhat.com,
+ yang.z.zhang@intel.com, ehabkost@redhat.com, stefano.stabellini@eu.citrix.com,
+ aderumier@odiso.com, anthony.perard@citrix.com, alex.williamson@redhat.com,
+ rth@twiddle.net, kwolf@redhat.com, claudio.fontana@huawei.com,
+ pbonzini@redhat.com, afaerber@suse.de
+Date: Tue, 23 Apr 2013 10:29:35 +0200
+Message-id: 1366705795-24732-2-git-send-email-imammedo@redhat.com
+Subject: [PATCH 01/21] cpu: make kvm-stub.o a part of CPU library
+
+Signed-off-by: Igor Mammedov <imammedo@redhat.com>
+Reviewed-by: Eduardo Habkost <ehabkost@redhat.com>
+---
+v3:
+  put ifndef around msi.h in kvm-stub.c instead of in msi.h
+
+v2:
+  remove unnecessary kvm-stub.o from "System emulator target" section
+---
+ Makefile.target      |   14 +++++++-------
+ include/sysemu/kvm.h |    4 ++--
+ kvm-stub.c           |    7 ++++++-
+ 3 files changed, 15 insertions(+), 10 deletions(-)
+
+diff --git a/Makefile.target b/Makefile.target
+index 2636103..0783c13 100644
+--- a/Makefile.target
++++ b/Makefile.target
+@@ -60,6 +60,12 @@ all: $(PROGS) stap
+ # Dummy command so that make thinks it has done something
+ 	@true
+ 
++CONFIG_NO_PCI = $(if $(subst n,,$(CONFIG_PCI)),n,y)
++CONFIG_NO_KVM = $(if $(subst n,,$(CONFIG_KVM)),n,y)
++CONFIG_NO_XEN = $(if $(subst n,,$(CONFIG_XEN)),n,y)
++CONFIG_NO_GET_MEMORY_MAPPING = $(if $(subst n,,$(CONFIG_HAVE_GET_MEMORY_MAPPING)),n,y)
++CONFIG_NO_CORE_DUMP = $(if $(subst n,,$(CONFIG_HAVE_CORE_DUMP)),n,y)
++
+ #########################################################
+ # cpu emulator library
+ obj-y = exec.o translate-all.o cpu-exec.o
+@@ -70,6 +76,7 @@ obj-y += fpu/softfloat.o
+ obj-y += target-$(TARGET_BASE_ARCH)/
+ obj-y += disas.o
+ obj-$(CONFIG_GDBSTUB_XML) += gdbstub-xml.o
++obj-$(CONFIG_NO_KVM) += kvm-stub.o
+ 
+ #########################################################
+ # Linux user emulator target
+@@ -98,18 +105,11 @@ endif #CONFIG_BSD_USER
+ #########################################################
+ # System emulator target
+ ifdef CONFIG_SOFTMMU
+-CONFIG_NO_PCI = $(if $(subst n,,$(CONFIG_PCI)),n,y)
+-CONFIG_NO_KVM = $(if $(subst n,,$(CONFIG_KVM)),n,y)
+-CONFIG_NO_XEN = $(if $(subst n,,$(CONFIG_XEN)),n,y)
+-CONFIG_NO_GET_MEMORY_MAPPING = $(if $(subst n,,$(CONFIG_HAVE_GET_MEMORY_MAPPING)),n,y)
+-CONFIG_NO_CORE_DUMP = $(if $(subst n,,$(CONFIG_HAVE_CORE_DUMP)),n,y)
+-
+ obj-y += arch_init.o cpus.o monitor.o gdbstub.o balloon.o ioport.o
+ obj-y += qtest.o
+ obj-y += hw/
+ obj-$(CONFIG_FDT) += device_tree.o
+ obj-$(CONFIG_KVM) += kvm-all.o
+-obj-$(CONFIG_NO_KVM) += kvm-stub.o
+ obj-y += memory.o savevm.o cputlb.o
+ obj-$(CONFIG_HAVE_GET_MEMORY_MAPPING) += memory_mapping.o
+ obj-$(CONFIG_HAVE_CORE_DUMP) += dump.o
+diff --git a/include/sysemu/kvm.h b/include/sysemu/kvm.h
+index 75bd7d9..2bc1f6b 100644
+--- a/include/sysemu/kvm.h
++++ b/include/sysemu/kvm.h
+@@ -144,10 +144,10 @@ int kvm_cpu_exec(CPUArchState *env);
+ #if !defined(CONFIG_USER_ONLY)
+ void *kvm_vmalloc(ram_addr_t size);
+ void *kvm_arch_vmalloc(ram_addr_t size);
+-void kvm_setup_guest_memory(void *start, size_t size);
++#endif
+ 
++void kvm_setup_guest_memory(void *start, size_t size);
+ void kvm_flush_coalesced_mmio_buffer(void);
+-#endif
+ 
+ int kvm_insert_breakpoint(CPUArchState *current_env, target_ulong addr,
+                           target_ulong len, int type);
+diff --git a/kvm-stub.c b/kvm-stub.c
+index 5f52186..b228378 100644
+--- a/kvm-stub.c
++++ b/kvm-stub.c
+@@ -12,10 +12,13 @@
+ 
+ #include "qemu-common.h"
+ #include "hw/hw.h"
+-#include "hw/pci/msi.h"
+ #include "cpu.h"
+ #include "sysemu/kvm.h"
+ 
++#ifndef CONFIG_USER_ONLY
++#include "hw/pci/msi.h"
++#endif
++
+ KVMState *kvm_state;
+ bool kvm_kernel_irqchip;
+ bool kvm_async_interrupts_allowed;
+@@ -111,6 +114,7 @@ int kvm_on_sigbus(int code, void *addr)
+     return 1;
+ }
+ 
++#ifndef CONFIG_USER_ONLY
+ int kvm_irqchip_add_msi_route(KVMState *s, MSIMessage msg)
+ {
+     return -ENOSYS;
+@@ -134,3 +138,4 @@ int kvm_irqchip_remove_irqfd_notifier(KVMState *s, EventNotifier *n, int virq)
+ {
+     return -ENOSYS;
+ }
++#endif
+-- 
+1.7.1
+

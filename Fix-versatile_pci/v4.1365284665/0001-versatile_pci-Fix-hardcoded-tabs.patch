@@ -1,0 +1,37 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Peter Maydell <peter.maydell@linaro.org>
+To: qemu-devel@nongnu.org
+Cc: Arnd Bergmann <arnd@arndb.de>, patches@linaro.org,
+ "Michael S. Tsirkin" <mst@redhat.com>, Paul Brook <paul@codesourcery.com>,
+ =?UTF-8?q?Andreas=20F=C3=A4rber?= <afaerber@suse.de>,
+ Will Deacon <will.deacon@arm.com>
+Date: Sat,  6 Apr 2013 16:44:26 +0100
+Message-id: 1365263076-16909-2-git-send-email-peter.maydell@linaro.org
+Subject: [PATCH 01/11] versatile_pci: Fix hardcoded tabs
+
+There is just one line in this source file with a hardcoded tab
+indent, so just fix it.
+
+Signed-off-by: Peter Maydell <peter.maydell@linaro.org>
+Acked-by: Paul Brook <paul@codesourcery.com>
+---
+ hw/versatile_pci.c |    2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/hw/versatile_pci.c b/hw/versatile_pci.c
+index d67ca79..04d0029 100644
+--- a/hw/versatile_pci.c
++++ b/hw/versatile_pci.c
+@@ -104,7 +104,7 @@ static int pci_realview_init(SysBusDevice *dev)
+ static int versatile_pci_host_init(PCIDevice *d)
+ {
+     pci_set_word(d->config + PCI_STATUS,
+-		 PCI_STATUS_66MHZ | PCI_STATUS_DEVSEL_MEDIUM);
++                 PCI_STATUS_66MHZ | PCI_STATUS_DEVSEL_MEDIUM);
+     pci_set_byte(d->config + PCI_LATENCY_TIMER, 0x10);
+     return 0;
+ }
+-- 
+1.7.9.5
+
+

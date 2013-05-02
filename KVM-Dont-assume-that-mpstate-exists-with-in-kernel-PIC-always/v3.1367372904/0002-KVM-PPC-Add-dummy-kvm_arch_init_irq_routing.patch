@@ -1,0 +1,46 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Scott Wood <scottwood@freescale.com>
+To: Alexander Graf <agraf@suse.de>
+Cc: qemu-ppc@nongnu.org, qemu-devel@nongnu.org,
+ Scott Wood <scottwood@freescale.com>
+Date: Tue, 30 Apr 2013 20:48:25 -0500
+Message-id: 1367372912-23519-2-git-send-email-scottwood@freescale.com
+Subject: [PATCH 2/9] KVM: PPC: Add dummy kvm_arch_init_irq_routing()
+
+The common KVM code insists on calling kvm_arch_init_irq_routing()
+as soon as it sees kernel header support for it (regardless of whether
+QEMU supports it).  Provide a dummy function to satisfy this.
+
+Unlike x86, PPC does not have one default irqchip, so there's no common
+code that we'd stick here.  Even if you ignore the routes themselves,
+which even on x86 are not set up in this function, the initial XICS
+kernel implementation will not support IRQ routing, so it's best to
+leave even the general feature flags up to the specific irqchip code.
+
+Signed-off-by: Scott Wood <scottwood@freescale.com>
+---
+Perhaps we shouldn't require each architecture to add a dummy function,
+but I wasn't sure if weak functions were acceptable in QEMU (didn't see
+any existing), and likewise with defining something like
+HAVE_ARCH_INIT_IRQ_ROUTING (which header would it go in?).
+---
+ target-ppc/kvm.c |    4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/target-ppc/kvm.c b/target-ppc/kvm.c
+index 725071e..fe688ac 100644
+--- a/target-ppc/kvm.c
++++ b/target-ppc/kvm.c
+@@ -1799,3 +1799,7 @@ int kvm_arch_on_sigbus(int code, void *addr)
+ {
+     return 1;
+ }
++
++void kvm_arch_init_irq_routing(KVMState *s)
++{
++}
+-- 
+1.7.10.4
+
+
+

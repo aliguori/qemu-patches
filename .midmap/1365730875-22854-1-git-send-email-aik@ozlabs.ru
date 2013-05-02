@@ -1,0 +1,1 @@
+../bswap-fix-compiler-warning/v1.1365784875/0001-bswap-fix-compiler-warning.patch

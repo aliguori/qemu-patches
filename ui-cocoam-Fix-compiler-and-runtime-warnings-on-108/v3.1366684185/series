@@ -1,0 +1,5 @@
+0000-ui-cocoam-Fix-compiler-and-runtime-warnings-on-108.txt
+0001-ui-cocoam-Fix-leaks-of-NSScreen-and-NSConcreteMapTable.patch
+0002-ui-cocoam-Avoid-deprecated-CPS-functions.patch
+0003-ui-cocoam-Avoid-deprecated-NSOpenPanel-filename-method.patch
+0004-ui-cocoam-Avoid-deprecated-NSOpenPanel-beginSheetForDirectory.patch

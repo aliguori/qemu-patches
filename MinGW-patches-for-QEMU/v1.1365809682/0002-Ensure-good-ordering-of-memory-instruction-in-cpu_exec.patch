@@ -1,0 +1,46 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Stefan Weil <sw@weilnetz.de>
+To: Anthony Liguori <aliguori@us.ibm.com>
+Cc: Olivier Hainque <hainque@adacore.com>, Stefan Weil <sw@weilnetz.de>,
+ qemu-devel@nongnu.org, Fabien Chouteau <chouteau@adacore.com>
+Date: Fri, 12 Apr 2013 18:34:44 +0200
+Message-id: 1365784486-617-3-git-send-email-sw@weilnetz.de
+Subject: [PATCH 2/4] Ensure good ordering of memory instruction in cpu_exec
+
+From: Olivier Hainque <hainque@adacore.com>
+
+The IO thread, when it senses cpu_single_env == 0, expects exit_request
+to be checked later on. A compiler scheduling constraint is not strong
+enough to ensure this on modern architecture. A memory fence is needed
+as well.
+
+Signed-off-by: Olivier Hainque <hainque@adacore.com>
+Signed-off-by: Fabien Chouteau <chouteau@adacore.com>
+Reviewed-by: Paolo Bonzini <pbonzini@redhat.com>
+Signed-off-by: Stefan Weil <sw@weilnetz.de>
+---
+ cpu-exec.c |    8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+diff --git a/cpu-exec.c b/cpu-exec.c
+index e74e556..aa8fa89 100644
+--- a/cpu-exec.c
++++ b/cpu-exec.c
+@@ -217,6 +217,14 @@ int cpu_exec(CPUArchState *env)
+ 
+     cpu_single_env = env;
+ 
++    /* As long as cpu_single_env is null, up to the assignment just above,
++     * requests by other threads to exit the execution loop are expected to
++     * be issued using the exit_request global. We must make sure that our
++     * evaluation of the global value is performed past the cpu_single_env
++     * value transition point, which requires a memory barrier as well as
++     * an instruction scheduling constraint on modern architectures.  */
++    smp_mb();
++
+     if (unlikely(exit_request)) {
+         cpu->exit_request = 1;
+     }
+-- 
+1.7.10.4
+

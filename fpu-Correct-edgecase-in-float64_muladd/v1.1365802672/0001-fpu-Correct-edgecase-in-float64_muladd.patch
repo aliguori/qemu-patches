@@ -1,0 +1,57 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Peter Maydell <peter.maydell@linaro.org>
+To: Peter Maydell <peter.maydell@linaro.org>, qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, Blue Swirl <blauwirbel@gmail.com>,
+ Aurelien Jarno <aurelien@aurel32.net>, qemu-devel@nongnu.org,
+ patches@linaro.org
+Date: Fri, 12 Apr 2013 16:37:52 +0100
+Message-id: 1365781072-24979-1-git-send-email-peter.maydell@linaro.org
+Subject: [PATCH 1/1] fpu: Correct edgecase in float64_muladd
+
+In handling float64_muladd, if we end up doing a subtraction of the
+product and c, and the 128 bit result of this subtraction happens to
+have its most significant bit in bit 63, we weren't handling this
+correctly when attempting to normalize to put the most significant
+bit into bit 126.  We would end up doing a right shift by a negative
+number (undefined behaviour in C) so at best we would return an
+incorrect result to the guest.  MSB in bit 63 has to be handled as a
+special case separately from MSB in 0..62 and MSB in 63..126.  (MSB
+in 127 is not possible.)
+
+Signed-off-by: Peter Maydell <peter.maydell@linaro.org>
+Reviewed-by: Aurelien Jarno <aurelien@aurel32.net>
+---
+Specific test vector which triggers this:
+ a = 3fffffffffe00000 b = 3fffffffffe00000 c = c00fffffffc00000
+
+Also tested with my usual set of random test vectors.
+
+ fpu/softfloat.c |   12 +++++++++---
+ 1 file changed, 9 insertions(+), 3 deletions(-)
+
+diff --git a/fpu/softfloat.c b/fpu/softfloat.c
+index 83ccc4b..7ba51b6 100644
+--- a/fpu/softfloat.c
++++ b/fpu/softfloat.c
+@@ -3898,9 +3898,15 @@ float64 float64_muladd(float64 a, float64 b, float64 c, int flags STATUS_PARAM)
+             }
+             zExp -= shiftcount;
+         } else {
+-            shiftcount = countLeadingZeros64(zSig1) - 1;
+-            zSig0 = zSig1 << shiftcount;
+-            zExp -= (shiftcount + 64);
++            shiftcount = countLeadingZeros64(zSig1);
++            if (shiftcount == 0) {
++                zSig0 = (zSig1 >> 1) | (zSig1 & 1);
++                zExp -= 63;
++            } else {
++                shiftcount--;
++                zSig0 = zSig1 << shiftcount;
++                zExp -= (shiftcount + 64);
++            }
+         }
+         return roundAndPackFloat64(zSign, zExp, zSig0 STATUS_VAR);
+     }
+-- 
+1.7.9.5
+

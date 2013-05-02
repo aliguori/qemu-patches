@@ -1,0 +1,1 @@
+../m25p80-Fix-debug-printfery/v1.1365016155/0001-m25p80-Fix-debug-messages.patch

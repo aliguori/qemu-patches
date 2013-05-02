@@ -1,0 +1,369 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: 
+Date: Tue,  2 Apr 2013 16:59:00 +0200
+Message-id: 1364914749-11141-27-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 26/35] hw: move interrupt controllers to hw/intc/,
+ configure with default-configs/
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ default-configs/arm-softmmu.mak          |  4 ++++
+ default-configs/i386-softmmu.mak         |  2 ++
+ default-configs/ppc-softmmu.mak          |  1 +
+ default-configs/ppc64-softmmu.mak        |  1 +
+ default-configs/ppcemb-softmmu.mak       |  1 +
+ default-configs/x86_64-softmmu.mak       |  2 ++
+ hw/arm/Makefile.objs                     | 10 +++-------
+ hw/cris/Makefile.objs                    |  6 ------
+ hw/i386/Makefile.objs                    |  2 --
+ hw/intc/Makefile.objs                    | 17 +++++++++++++++++
+ hw/{ => intc}/apic.c                     |  0
+ hw/{ => intc}/apic_common.c              |  0
+ hw/{ => intc}/arm_gic.c                  |  0
+ hw/{ => intc}/arm_gic_common.c           |  0
+ hw/{kvm/arm_gic.c => intc/arm_gic_kvm.c} |  0
+ hw/{ => intc}/armv7m_nvic.c              |  0
+ hw/{ => intc}/etraxfs_pic.c              |  0
+ hw/{ => intc}/exynos4210_combiner.c      |  0
+ hw/{ => intc}/exynos4210_gic.c           |  0
+ hw/{ => intc}/grlib_irqmp.c              |  0
+ hw/{ => intc}/imx_avic.c                 |  0
+ hw/{ => intc}/ioapic.c                   |  0
+ hw/{ => intc}/ioapic_common.c            |  0
+ hw/{ => intc}/lm32_pic.c                 |  0
+ hw/{ => intc}/omap_intc.c                |  0
+ hw/{ => intc}/openpic.c                  |  0
+ hw/{ => intc}/realview_gic.c             |  0
+ hw/{ => intc}/sbi.c                      |  0
+ hw/{ => intc}/sh_intc.c                  |  0
+ hw/{ => intc}/slavio_intctl.c            |  0
+ hw/{ => intc}/sun4c_intctl.c             |  0
+ hw/lm32/Makefile.objs                    |  1 -
+ hw/ppc/Makefile.objs                     |  2 --
+ hw/sh4/Makefile.objs                     |  4 ----
+ hw/sparc/Makefile.objs                   |  6 +-----
+ 35 files changed, 32 insertions(+), 27 deletions(-)
+ rename hw/{ => intc}/apic.c (100%)
+ rename hw/{ => intc}/apic_common.c (100%)
+ rename hw/{ => intc}/arm_gic.c (100%)
+ rename hw/{ => intc}/arm_gic_common.c (100%)
+ rename hw/{kvm/arm_gic.c => intc/arm_gic_kvm.c} (100%)
+ rename hw/{ => intc}/armv7m_nvic.c (100%)
+ rename hw/{ => intc}/etraxfs_pic.c (100%)
+ rename hw/{ => intc}/exynos4210_combiner.c (100%)
+ rename hw/{ => intc}/exynos4210_gic.c (100%)
+ rename hw/{ => intc}/grlib_irqmp.c (100%)
+ rename hw/{ => intc}/imx_avic.c (100%)
+ rename hw/{ => intc}/ioapic.c (100%)
+ rename hw/{ => intc}/ioapic_common.c (100%)
+ rename hw/{ => intc}/lm32_pic.c (100%)
+ rename hw/{ => intc}/omap_intc.c (100%)
+ rename hw/{ => intc}/openpic.c (100%)
+ rename hw/{ => intc}/realview_gic.c (100%)
+ rename hw/{ => intc}/sbi.c (100%)
+ rename hw/{ => intc}/sh_intc.c (100%)
+ rename hw/{ => intc}/slavio_intctl.c (100%)
+ rename hw/{ => intc}/sun4c_intctl.c (100%)
+
+diff --git a/default-configs/arm-softmmu.mak b/default-configs/arm-softmmu.mak
+index 94b52da..93c7d95 100644
+--- a/default-configs/arm-softmmu.mak
++++ b/default-configs/arm-softmmu.mak
+@@ -16,6 +16,7 @@ CONFIG_TWL92230=y
+ CONFIG_TSC2005=y
+ CONFIG_LM832X=y
+ CONFIG_TMP105=y
++CONFIG_STELLARIS=y
+ CONFIG_STELLARIS_INPUT=y
+ CONFIG_STELLARIS_ENET=y
+ CONFIG_SSD0303=y
+@@ -33,6 +34,8 @@ CONFIG_PFLASH_CFI02=y
+ CONFIG_MICRODRIVE=y
+ CONFIG_USB_MUSB=y
+ 
++CONFIG_ARM_GIC=y
++CONFIG_ARM_GIC_KVM=$(CONFIG_KVM)
+ CONFIG_ARM_TIMER=y
+ CONFIG_ARM_MPTIMER=y
+ CONFIG_PL011=y
+@@ -62,6 +65,7 @@ CONFIG_BLIZZARD=y
+ CONFIG_ONENAND=y
+ CONFIG_TUSB6010=y
+ CONFIG_IMX=y
++CONFIG_REALVIEW=y
+ CONFIG_ZAURUS=y
+ 
+ CONFIG_VERSATILE_PCI=y
+diff --git a/default-configs/i386-softmmu.mak b/default-configs/i386-softmmu.mak
+index 2167e3b..5d5ae62 100644
+--- a/default-configs/i386-softmmu.mak
++++ b/default-configs/i386-softmmu.mak
+@@ -42,3 +42,5 @@ CONFIG_VMPORT=y
+ CONFIG_SGA=y
+ CONFIG_LPC_ICH9=y
+ CONFIG_Q35=y
++CONFIG_APIC=y
++CONFIG_IOAPIC=y
+diff --git a/default-configs/ppc-softmmu.mak b/default-configs/ppc-softmmu.mak
+index 6eb472d..92e28ca 100644
+--- a/default-configs/ppc-softmmu.mak
++++ b/default-configs/ppc-softmmu.mak
+@@ -41,6 +41,7 @@ CONFIG_PTIMER=y
+ CONFIG_I8259=y
+ CONFIG_XILINX=y
+ CONFIG_XILINX_ETHLITE=y
++CONFIG_OPENPIC=y
+ CONFIG_PCI_PPC4XX=y
+ CONFIG_E500=$(CONFIG_FDT)
+ # For PReP
+diff --git a/default-configs/ppc64-softmmu.mak b/default-configs/ppc64-softmmu.mak
+index bc69d3c..6406af4 100644
+--- a/default-configs/ppc64-softmmu.mak
++++ b/default-configs/ppc64-softmmu.mak
+@@ -42,6 +42,7 @@ CONFIG_I8259=y
+ CONFIG_XILINX=y
+ CONFIG_XILINX_ETHLITE=y
+ CONFIG_PCI_PPC4XX=y
++CONFIG_OPENPIC=y
+ CONFIG_PSERIES=$(CONFIG_FDT)
+ CONFIG_E500=$(CONFIG_FDT)
+ # For pSeries
+diff --git a/default-configs/ppcemb-softmmu.mak b/default-configs/ppcemb-softmmu.mak
+index ee63657..c1a1e6d 100644
+--- a/default-configs/ppcemb-softmmu.mak
++++ b/default-configs/ppcemb-softmmu.mak
+@@ -36,6 +36,7 @@ CONFIG_PTIMER=y
+ CONFIG_I8259=y
+ CONFIG_XILINX=y
+ CONFIG_XILINX_ETHLITE=y
++CONFIG_OPENPIC=y
+ CONFIG_PCI_PPC4XX=y
+ CONFIG_E500=$(CONFIG_FDT)
+ # For PReP
+diff --git a/default-configs/x86_64-softmmu.mak b/default-configs/x86_64-softmmu.mak
+index 6ddc03d..2a86e92 100644
+--- a/default-configs/x86_64-softmmu.mak
++++ b/default-configs/x86_64-softmmu.mak
+@@ -41,3 +41,5 @@ CONFIG_VMPORT=y
+ CONFIG_SGA=y
+ CONFIG_LPC_ICH9=y
+ CONFIG_Q35=y
++CONFIG_APIC=y
++CONFIG_IOAPIC=y
+diff --git a/hw/arm/Makefile.objs b/hw/arm/Makefile.objs
+index 59b5cf6..915073b 100644
+--- a/hw/arm/Makefile.objs
++++ b/hw/arm/Makefile.objs
+@@ -1,20 +1,16 @@
+ obj-y += zynq_slcr.o
+-obj-y += arm_gic.o arm_gic_common.o
+ obj-y += a9scu.o
+-obj-y += realview_gic.o arm_sysctl.o arm11mpcore.o a9mpcore.o
+-obj-y += exynos4210_gic.o exynos4210_combiner.o
++obj-y += arm_sysctl.o arm11mpcore.o a9mpcore.o
+ obj-y += exynos4210_pmu.o
+ obj-y += a15mpcore.o
+-obj-y += armv7m_nvic.o
+ obj-y += pxa2xx_pcmcia.o
+ obj-y += zaurus.o
+-obj-y += omap_clk.o omap_gpio.o omap_intc.o
++obj-y += omap_clk.o omap_gpio.o
+ obj-y += omap_gpmc.o omap_sdrc.o omap_tap.o omap_l4.o
+ obj-y += cbus.o
+ obj-y += mst_fpga.o
+ obj-y += strongarm.o
+-obj-y += imx_ccm.o imx_avic.o
+-obj-$(CONFIG_KVM) += kvm/arm_gic.o
++obj-y += imx_ccm.o
+ 
+ obj-y := $(addprefix ../,$(obj-y))
+ 
+diff --git a/hw/cris/Makefile.objs b/hw/cris/Makefile.objs
+index f8c85a4..776db7c 100644
+--- a/hw/cris/Makefile.objs
++++ b/hw/cris/Makefile.objs
+@@ -1,9 +1,3 @@
+-# IO blocks
+-obj-y += etraxfs_pic.o
+-
+-obj-y := $(addprefix ../,$(obj-y))
+-
+-# Boards
+ obj-y += pic_cpu.o
+ obj-y += boot.o
+ obj-y += axis_dev88.o
+diff --git a/hw/i386/Makefile.objs b/hw/i386/Makefile.objs
+index c06e92a..c1d73a8 100644
+--- a/hw/i386/Makefile.objs
++++ b/hw/i386/Makefile.objs
+@@ -1,5 +1,3 @@
+-obj-y += apic_common.o apic.o
+-obj-y += ioapic_common.o ioapic.o
+ obj-y += kvm/
+ 
+ obj-y := $(addprefix ../,$(obj-y))
+diff --git a/hw/intc/Makefile.objs b/hw/intc/Makefile.objs
+index 2813adb..4b69f8c 100644
+--- a/hw/intc/Makefile.objs
++++ b/hw/intc/Makefile.objs
+@@ -3,3 +3,20 @@ common-obj-$(CONFIG_I8259) += i8259_common.o i8259.o
+ common-obj-$(CONFIG_PL190) += pl190.o
+ common-obj-$(CONFIG_PUV3) += puv3_intc.o
+ common-obj-$(CONFIG_XILINX) += xilinx_intc.o
++
++obj-$(CONFIG_APIC) += apic.o apic_common.o
++obj-$(CONFIG_ARM_GIC) += arm_gic.o arm_gic_common.o
++obj-$(CONFIG_ARM_GIC_KVM) += kvm/arm_gic.o
++obj-$(CONFIG_STELLARIS) += armv7m_nvic.o
++obj-$(CONFIG_ETRAXFS) += etraxfs_pic.o
++obj-$(CONFIG_EXYNOS4) += exynos4210_gic.o exynos4210_combiner.o
++obj-$(CONFIG_GRLIB) += grlib_irqmp.o
++obj-$(CONFIG_IMX) += imx_avic.o
++obj-$(CONFIG_IOAPIC) += ioapic.o
++obj-$(CONFIG_IOAPIC) += ioapic_common.o
++obj-$(CONFIG_LM32) += lm32_pic.o
++obj-$(CONFIG_OMAP) += omap_intc.o
++obj-$(CONFIG_OPENPIC) += openpic.o
++obj-$(CONFIG_REALVIEW) += realview_gic.o
++obj-$(CONFIG_SH4) += sh_intc.o
++obj-$(CONFIG_SLAVIO) += sbi.o slavio_intctl.o sun4c_intctl.o
+diff --git a/hw/apic.c b/hw/intc/apic.c
+similarity index 100%
+rename from hw/apic.c
+rename to hw/intc/apic.c
+diff --git a/hw/apic_common.c b/hw/intc/apic_common.c
+similarity index 100%
+rename from hw/apic_common.c
+rename to hw/intc/apic_common.c
+diff --git a/hw/arm_gic.c b/hw/intc/arm_gic.c
+similarity index 100%
+rename from hw/arm_gic.c
+rename to hw/intc/arm_gic.c
+diff --git a/hw/arm_gic_common.c b/hw/intc/arm_gic_common.c
+similarity index 100%
+rename from hw/arm_gic_common.c
+rename to hw/intc/arm_gic_common.c
+diff --git a/hw/kvm/arm_gic.c b/hw/intc/arm_gic_kvm.c
+similarity index 100%
+rename from hw/kvm/arm_gic.c
+rename to hw/intc/arm_gic_kvm.c
+diff --git a/hw/armv7m_nvic.c b/hw/intc/armv7m_nvic.c
+similarity index 100%
+rename from hw/armv7m_nvic.c
+rename to hw/intc/armv7m_nvic.c
+diff --git a/hw/etraxfs_pic.c b/hw/intc/etraxfs_pic.c
+similarity index 100%
+rename from hw/etraxfs_pic.c
+rename to hw/intc/etraxfs_pic.c
+diff --git a/hw/exynos4210_combiner.c b/hw/intc/exynos4210_combiner.c
+similarity index 100%
+rename from hw/exynos4210_combiner.c
+rename to hw/intc/exynos4210_combiner.c
+diff --git a/hw/exynos4210_gic.c b/hw/intc/exynos4210_gic.c
+similarity index 100%
+rename from hw/exynos4210_gic.c
+rename to hw/intc/exynos4210_gic.c
+diff --git a/hw/grlib_irqmp.c b/hw/intc/grlib_irqmp.c
+similarity index 100%
+rename from hw/grlib_irqmp.c
+rename to hw/intc/grlib_irqmp.c
+diff --git a/hw/imx_avic.c b/hw/intc/imx_avic.c
+similarity index 100%
+rename from hw/imx_avic.c
+rename to hw/intc/imx_avic.c
+diff --git a/hw/ioapic.c b/hw/intc/ioapic.c
+similarity index 100%
+rename from hw/ioapic.c
+rename to hw/intc/ioapic.c
+diff --git a/hw/ioapic_common.c b/hw/intc/ioapic_common.c
+similarity index 100%
+rename from hw/ioapic_common.c
+rename to hw/intc/ioapic_common.c
+diff --git a/hw/lm32_pic.c b/hw/intc/lm32_pic.c
+similarity index 100%
+rename from hw/lm32_pic.c
+rename to hw/intc/lm32_pic.c
+diff --git a/hw/omap_intc.c b/hw/intc/omap_intc.c
+similarity index 100%
+rename from hw/omap_intc.c
+rename to hw/intc/omap_intc.c
+diff --git a/hw/openpic.c b/hw/intc/openpic.c
+similarity index 100%
+rename from hw/openpic.c
+rename to hw/intc/openpic.c
+diff --git a/hw/realview_gic.c b/hw/intc/realview_gic.c
+similarity index 100%
+rename from hw/realview_gic.c
+rename to hw/intc/realview_gic.c
+diff --git a/hw/sbi.c b/hw/intc/sbi.c
+similarity index 100%
+rename from hw/sbi.c
+rename to hw/intc/sbi.c
+diff --git a/hw/sh_intc.c b/hw/intc/sh_intc.c
+similarity index 100%
+rename from hw/sh_intc.c
+rename to hw/intc/sh_intc.c
+diff --git a/hw/slavio_intctl.c b/hw/intc/slavio_intctl.c
+similarity index 100%
+rename from hw/slavio_intctl.c
+rename to hw/intc/slavio_intctl.c
+diff --git a/hw/sun4c_intctl.c b/hw/intc/sun4c_intctl.c
+similarity index 100%
+rename from hw/sun4c_intctl.c
+rename to hw/intc/sun4c_intctl.c
+diff --git a/hw/lm32/Makefile.objs b/hw/lm32/Makefile.objs
+index bf8d152..1e59ac5 100644
+--- a/hw/lm32/Makefile.objs
++++ b/hw/lm32/Makefile.objs
+@@ -1,5 +1,4 @@
+ # LM32 peripherals
+-obj-y += lm32_pic.o
+ obj-y += lm32_sys.o
+ obj-y += milkymist-hpdmc.o
+ obj-y += milkymist-pfpu.o
+diff --git a/hw/ppc/Makefile.objs b/hw/ppc/Makefile.objs
+index 79b5c1e..dd2bd08 100644
+--- a/hw/ppc/Makefile.objs
++++ b/hw/ppc/Makefile.objs
+@@ -1,7 +1,5 @@
+ # IBM pSeries (sPAPR)
+ obj-$(CONFIG_PSERIES) += spapr_nvram.o
+-# PowerPC OpenPIC
+-obj-y += openpic.o
+ 
+ obj-y := $(addprefix ../,$(obj-y))
+ 
+diff --git a/hw/sh4/Makefile.objs b/hw/sh4/Makefile.objs
+index 5a49ae8..235271f 100644
+--- a/hw/sh4/Makefile.objs
++++ b/hw/sh4/Makefile.objs
+@@ -1,7 +1,3 @@
+-obj-y += sh_intc.o
+-
+-obj-y := $(addprefix ../,$(obj-y))
+-
+ obj-y += shix.o r2d.o
+ 
+ obj-y += sh7750.o sh7750_regnames.o
+diff --git a/hw/sparc/Makefile.objs b/hw/sparc/Makefile.objs
+index 3de10ff..3246bb1 100644
+--- a/hw/sparc/Makefile.objs
++++ b/hw/sparc/Makefile.objs
+@@ -1,9 +1,5 @@
+-obj-y = slavio_intctl.o
+ obj-y += slavio_misc.o
+-obj-y += eccmemctl.o sbi.o sun4c_intctl.o
+-
+-# GRLIB
+-obj-y += grlib_irqmp.o
++obj-y += eccmemctl.o
+ 
+ obj-y := $(addprefix ../,$(obj-y))
+ 
+-- 
+1.8.1.4
+
+
+

@@ -1,0 +1,311 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Liu Ping Fan <pingfank@linux.vnet.ibm.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <anthony@codemonkey.ws>,
+ Paolo Bonzini <pbonzini@redhat.com>, mdroth <mdroth@linux.vnet.ibm.com>,
+ Stefan Hajnoczi <stefanha@redhat.com>
+Date: Mon,  8 Apr 2013 13:36:08 +0800
+Message-id: 1365399368-26967-6-git-send-email-pingfank@linux.vnet.ibm.com
+Subject: [PATCH 5/5] net: port socket to glib
+
+Port NetSocketState onto NetClientSource. The only thing specail is that
+owning to the socket's state machine changes, we need to change the handler.
+We implement that by destroy the old NetClientSource and attach a new one
+with NetSocketState.
+
+Signed-off-by: Liu Ping Fan <pingfank@linux.vnet.ibm.com>
+---
+ net/socket.c |  152 ++++++++++++++++++++++++++++++++++++++++++++--------------
+ 1 files changed, 116 insertions(+), 36 deletions(-)
+
+diff --git a/net/socket.c b/net/socket.c
+index 396dc8c..6ff57a9 100644
+--- a/net/socket.c
++++ b/net/socket.c
+@@ -42,13 +42,14 @@ typedef struct NetSocketState {
+     unsigned int send_index;      /* number of bytes sent (only SOCK_STREAM) */
+     uint8_t buf[4096];
+     struct sockaddr_in dgram_dst; /* contains inet host and port destination iff connectionless (SOCK_DGRAM) */
+-    IOHandler *send_fn;           /* differs between SOCK_STREAM/SOCK_DGRAM */
+     bool read_poll;               /* waiting to receive data? */
+     bool write_poll;              /* waiting to transmit data? */
+ } NetSocketState;
+ 
+-static void net_socket_accept(void *opaque);
+ static void net_socket_writable(void *opaque);
++static gboolean net_socket_listen_handler(gpointer data);
++static gboolean net_socket_establish_handler(gpointer data);
++
+ 
+ /* Only read packets from socket when peer can receive them */
+ static int net_socket_can_send(void *opaque)
+@@ -58,25 +59,14 @@ static int net_socket_can_send(void *opaque)
+     return qemu_can_send_packet(&s->nc);
+ }
+ 
+-static void net_socket_update_fd_handler(NetSocketState *s)
+-{
+-    qemu_set_fd_handler2(s->fd,
+-                         s->read_poll  ? net_socket_can_send : NULL,
+-                         s->read_poll  ? s->send_fn : NULL,
+-                         s->write_poll ? net_socket_writable : NULL,
+-                         s);
+-}
+-
+ static void net_socket_read_poll(NetSocketState *s, bool enable)
+ {
+     s->read_poll = enable;
+-    net_socket_update_fd_handler(s);
+ }
+ 
+ static void net_socket_write_poll(NetSocketState *s, bool enable)
+ {
+     s->write_poll = enable;
+-    net_socket_update_fd_handler(s);
+ }
+ 
+ static void net_socket_writable(void *opaque)
+@@ -148,6 +138,7 @@ static void net_socket_send(void *opaque)
+     unsigned l;
+     uint8_t buf1[4096];
+     const uint8_t *buf;
++    NetClientSource *new_nsrc, *nsrc;
+ 
+     size = qemu_recv(s->fd, buf1, sizeof(buf1), 0);
+     if (size < 0) {
+@@ -160,7 +151,13 @@ static void net_socket_send(void *opaque)
+         net_socket_read_poll(s, false);
+         net_socket_write_poll(s, false);
+         if (s->listen_fd != -1) {
+-            qemu_set_fd_handler(s->listen_fd, net_socket_accept, NULL, s);
++            nsrc = s->nc.nsrc;
++            new_nsrc = net_source_new(s->listen_fd, net_socket_listen_handler,
++                                s);
++            s->nc.nsrc = new_nsrc;
++            new_nsrc->gfd.events = G_IO_IN;
++            g_source_destroy(&nsrc->source);
++            s->nc.info->bind_ctx(&s->nc, NULL);
+         }
+         closesocket(s->fd);
+ 
+@@ -333,13 +330,32 @@ static void net_socket_cleanup(NetClientState *nc)
+     }
+ }
+ 
++static void net_socket_bind_ctx(NetClientState *nc, GMainContext *ctx)
++{
++    g_source_attach(&nc->nsrc->source, ctx);
++}
++
+ static NetClientInfo net_dgram_socket_info = {
+     .type = NET_CLIENT_OPTIONS_KIND_SOCKET,
+     .size = sizeof(NetSocketState),
+     .receive = net_socket_receive_dgram,
+     .cleanup = net_socket_cleanup,
++    .bind_ctx = net_socket_bind_ctx,
+ };
+ 
++static gboolean net_socket_dgram_handler(gpointer data)
++{
++    NetClientSource *nsrc = (NetClientSource *)data;
++    NetSocketState *s = nsrc->opaque;
++
++    if (nsrc->gfd.revents & G_IO_IN) {
++        net_socket_send_dgram(s);
++    } else {
++        net_socket_writable(s);
++    }
++    return true;
++}
++
+ static NetSocketState *net_socket_fd_init_dgram(NetClientState *peer,
+                                                 const char *model,
+                                                 const char *name,
+@@ -350,6 +366,7 @@ static NetSocketState *net_socket_fd_init_dgram(NetClientState *peer,
+     socklen_t saddr_len;
+     NetClientState *nc;
+     NetSocketState *s;
++    NetClientSource *nsrc;
+ 
+     /* fd passed: multicast: "learn" dgram_dst address from bound address and save it
+      * Because this may be "shared" socket from a "master" process, datagrams would be recv()
+@@ -393,7 +410,10 @@ static NetSocketState *net_socket_fd_init_dgram(NetClientState *peer,
+ 
+     s->fd = fd;
+     s->listen_fd = -1;
+-    s->send_fn = net_socket_send_dgram;
++    nsrc = net_source_new(fd, net_socket_dgram_handler, s);
++    nc->nsrc = nsrc;
++    nsrc->gfd.events = G_IO_IN|G_IO_OUT;
++    nc->info->bind_ctx(nc, NULL);
+     net_socket_read_poll(s, true);
+ 
+     /* mcast: save bound address as dst */
+@@ -408,20 +428,28 @@ err:
+     return NULL;
+ }
+ 
+-static void net_socket_connect(void *opaque)
+-{
+-    NetSocketState *s = opaque;
+-    s->send_fn = net_socket_send;
+-    net_socket_read_poll(s, true);
+-}
+-
+ static NetClientInfo net_socket_info = {
+     .type = NET_CLIENT_OPTIONS_KIND_SOCKET,
+     .size = sizeof(NetSocketState),
+     .receive = net_socket_receive,
+     .cleanup = net_socket_cleanup,
++    .bind_ctx = net_socket_bind_ctx,
+ };
+ 
++static gboolean net_socket_connect_handler(gpointer data)
++{
++    NetClientSource *new_nsrc, *nsrc = data;
++    NetSocketState *s = nsrc->opaque;
++
++    new_nsrc = net_source_new(s->fd, net_socket_establish_handler, s);
++    s->nc.nsrc = new_nsrc;
++    new_nsrc->gfd.events = G_IO_IN|G_IO_OUT;
++    g_source_destroy(&nsrc->source);
++    s->nc.info->bind_ctx(&s->nc, NULL);
++
++    return true;
++}
++
+ static NetSocketState *net_socket_fd_init_stream(NetClientState *peer,
+                                                  const char *model,
+                                                  const char *name,
+@@ -429,6 +457,7 @@ static NetSocketState *net_socket_fd_init_stream(NetClientState *peer,
+ {
+     NetClientState *nc;
+     NetSocketState *s;
++    NetClientSource *nsrc;
+ 
+     nc = qemu_new_net_client(&net_socket_info, peer, model, name);
+ 
+@@ -440,9 +469,16 @@ static NetSocketState *net_socket_fd_init_stream(NetClientState *peer,
+     s->listen_fd = -1;
+ 
+     if (is_connected) {
+-        net_socket_connect(s);
++        nsrc = net_source_new(fd, net_socket_establish_handler, s);
++        nc->nsrc = nsrc;
++        nsrc->gfd.events = G_IO_IN|G_IO_OUT;
++        nc->info->bind_ctx(nc, NULL);
+     } else {
+-        qemu_set_fd_handler(s->fd, NULL, net_socket_connect, s);
++        nsrc = net_source_new(fd, net_socket_connect_handler, s);
++        nc->nsrc = nsrc;
++        nsrc->gfd.events = G_IO_IN;
++        nc->info->bind_ctx(nc, NULL);
++
+     }
+     return s;
+ }
+@@ -473,30 +509,69 @@ static NetSocketState *net_socket_fd_init(NetClientState *peer,
+     return NULL;
+ }
+ 
+-static void net_socket_accept(void *opaque)
++static gboolean net_socket_establish_handler(gpointer data)
++{
++    NetClientSource *nsrc = (NetClientSource *)data;
++    NetSocketState *s = nsrc->opaque;
++
++    if (nsrc->gfd.revents & G_IO_IN) {
++        net_socket_send(s);
++    } else {
++        net_socket_writable(s);
++    }
++    return true;
++}
++
++static bool readable(void *opaque)
++{
++    NetSocketState *s = opaque;
++
++    if (s->read_poll && net_socket_can_send(s)) {
++        return true;
++    }
++    return false;
++}
++
++static bool writable(void *opaque)
+ {
+     NetSocketState *s = opaque;
++
++    if (s->write_poll) {
++        return true;
++    }
++    return false;
++}
++
++static gboolean net_socket_listen_handler(gpointer data)
++{
++    NetClientSource *new_nsrc, *nsrc = data;
++    NetSocketState *s = nsrc->opaque;
+     struct sockaddr_in saddr;
+     socklen_t len;
+     int fd;
+ 
+-    for(;;) {
+-        len = sizeof(saddr);
+-        fd = qemu_accept(s->listen_fd, (struct sockaddr *)&saddr, &len);
+-        if (fd < 0 && errno != EINTR) {
+-            return;
+-        } else if (fd >= 0) {
+-            qemu_set_fd_handler(s->listen_fd, NULL, NULL, NULL);
+-            break;
+-        }
++    len = sizeof(saddr);
++    fd = qemu_accept(s->listen_fd, (struct sockaddr *)&saddr, &len);
++    if (fd < 0 && errno != EINTR) {
++        return false;
+     }
+ 
+     s->fd = fd;
+     s->nc.link_down = false;
+-    net_socket_connect(s);
++    new_nsrc = net_source_new(fd, net_socket_establish_handler, s);
++    s->nc.nsrc = new_nsrc;
++    new_nsrc->gfd.events = G_IO_IN|G_IO_OUT;
++    new_nsrc->readable = readable;
++    new_nsrc->writable = writable;
++    /* prevent more than one connect req */
++    g_source_destroy(&nsrc->source);
++    s->nc.info->bind_ctx(&s->nc, NULL);
++    net_socket_read_poll(s, true);
+     snprintf(s->nc.info_str, sizeof(s->nc.info_str),
+              "socket: connection from %s:%d",
+              inet_ntoa(saddr.sin_addr), ntohs(saddr.sin_port));
++
++    return true;
+ }
+ 
+ static int net_socket_listen_init(NetClientState *peer,
+@@ -508,6 +583,7 @@ static int net_socket_listen_init(NetClientState *peer,
+     NetSocketState *s;
+     struct sockaddr_in saddr;
+     int fd, val, ret;
++    NetClientSource *nsrc;
+ 
+     if (parse_host_port(&saddr, host_str) < 0)
+         return -1;
+@@ -542,7 +618,11 @@ static int net_socket_listen_init(NetClientState *peer,
+     s->listen_fd = fd;
+     s->nc.link_down = true;
+ 
+-    qemu_set_fd_handler(s->listen_fd, net_socket_accept, NULL, s);
++    nsrc = net_source_new(fd, net_socket_listen_handler, s);
++    s->nc.nsrc = nsrc;
++    nsrc->gfd.events = G_IO_IN;
++    nc->info->bind_ctx(nc, NULL);
++
+     return 0;
+ }
+ 
+-- 
+1.7.4.4
+

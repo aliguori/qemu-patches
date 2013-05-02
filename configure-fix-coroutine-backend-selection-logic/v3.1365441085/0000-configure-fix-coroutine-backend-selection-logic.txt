@@ -1,0 +1,42 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Peter Maydell <peter.maydell@linaro.org>
+To: Peter Maydell <peter.maydell@linaro.org>, qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, Paolo Bonzini <pbonzini@redhat.com>,
+ Stefan Hajnoczi <stefanha@gmail.com>, patches@linaro.org
+Date: Mon, 8 Apr 2013 12:11:25 +0100
+Message-id: 1365419487-19867-1-git-send-email-peter.maydell@linaro.org
+Subject: [PATCH 0/2] configure: fix coroutine backend selection logic
+
+The main aim of this patchset is patch 2, which changes the coroutine
+backend selection logic so that it goes 'ucontext -> sigaltstack'
+rather than 'ucontext -> gthread', since the gthread backend is
+broken. To do this properly on all platforms we have to refactor
+the code a bit (which it needed anyway).
+
+The first patch here is a generic configure cleanup to how we print
+error messages, which I wanted for the third patch because otherwise
+the various error paths would have been rather verbose.
+
+Changes v2->v3:
+ * canonicalize user-facing 'windows' backend name to 'win32' so
+   we pick up the right filename for windows builds
+
+Changes v1->v2:
+ * fix the tests makefile too
+ * CONFIG_COROUTINE_BACKEND=foo rather than CONFIG_FOO_COROUTINE=y;
+   this simplifies both the configure code and the makefiles
+ * dropped the 'move upper()' patch as no longer needed (in this
+   series, anyway)
+
+Peter Maydell (2):
+  configure: Provide and use convenience error reporting function
+  configure: Don't fall back to gthread coroutine backend
+
+ Makefile.objs  |   11 +--
+ configure      |  260 ++++++++++++++++++++++++++------------------------------
+ tests/Makefile |   14 +--
+ 3 files changed, 122 insertions(+), 163 deletions(-)
+
+-- 
+1.7.9.5
+

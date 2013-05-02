@@ -1,0 +1,31 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Wenchao Xia <xiawenc@linux.vnet.ibm.com>
+To: qemu-devel@nongnu.org
+Cc: kwolf@redhat.com, pbonzini@redhat.com,
+ Wenchao Xia <xiawenc@linux.vnet.ibm.com>, dietmar@proxmox.com,
+ stefanha@gmail.com
+Date: Mon,  1 Apr 2013 18:01:28 +0800
+Message-id: 1364810491-21404-1-git-send-email-xiawenc@linux.vnet.ibm.com
+Subject: [PATCH 0/3] block: make qmp_transaction extendable
+
+  This serial will package backing chain snapshot code as one case to make it
+possible adding more operations later. It is splitted out from previous snapshot
+patches since it have slightly different purpose, adjusting qmp_transaction.
+Previous patch and discuss could be found at:
+http://lists.nongnu.org/archive/html/qemu-devel/2013-01/msg00645.html
+
+  I can't find a way to split patch 2/3 to smaller ones unless breaking the build,
+so kepted it as a relative larger patch.
+
+Wenchao Xia (3):
+  1 block: add function deappend()
+  2 block: adjust qmp_transaction to be extendable
+  3 block: change rollback sequence in qmp_transaction
+
+ block.c               |   66 +++++++++++++
+ blockdev.c            |  252 ++++++++++++++++++++++++++++++-------------------
+ include/block/block.h |    1 +
+ 3 files changed, 221 insertions(+), 98 deletions(-)
+
+
+

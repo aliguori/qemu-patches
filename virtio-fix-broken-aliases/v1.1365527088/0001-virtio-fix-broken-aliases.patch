@@ -1,0 +1,70 @@
+From patches Mon Sep 17 00:00:00 2001
+From: fred.konrad@greensocs.com
+To: Anthony Liguori <aliguori@us.ibm.com>, aliguori@us.ibm.com,
+ qemu-devel@nongnu.org, fred.konrad@greensocs.com
+Cc: peter.maydell@linaro.org, aliguori@us.ibm.com, mark.burton@greensocs.com,
+ qemu-devel@nongnu.org, cornelia.huck@de.ibm.com, fred.konrad@greensocs.com
+Date: Tue, 9 Apr 2013 12:04:48 +0200
+Message-id: 1365501888-14602-1-git-send-email-fred.konrad@greensocs.com
+Subject: [PATCH 1/1] virtio: fix broken aliases.
+
+From: KONRAD Frederic <fred.konrad@greensocs.com>
+
+This fix the broken aliases, by renaming the devices.
+
+So: * virtio-blk => virtio-blk-device.
+    * virtio-balloon => virtio-balloon-device.
+    * virtio-scsi => virtio-scsi-device.
+
+All virtio-*-pci, virtio-*-s390, virtio-*-ccw didn't change.
+
+Signed-off-by: KONRAD Frederic <fred.konrad@greensocs.com>
+Tested-by: Luiz Capitulino <lcapitulino@redhat.com>
+---
+ include/hw/virtio/virtio-balloon.h | 2 +-
+ include/hw/virtio/virtio-blk.h     | 2 +-
+ include/hw/virtio/virtio-scsi.h    | 2 +-
+ 3 files changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/include/hw/virtio/virtio-balloon.h b/include/hw/virtio/virtio-balloon.h
+index 3b459bb..f863bfe 100644
+--- a/include/hw/virtio/virtio-balloon.h
++++ b/include/hw/virtio/virtio-balloon.h
+@@ -18,7 +18,7 @@
+ #include "hw/virtio/virtio.h"
+ #include "hw/pci/pci.h"
+ 
+-#define TYPE_VIRTIO_BALLOON "virtio-balloon"
++#define TYPE_VIRTIO_BALLOON "virtio-balloon-device"
+ #define VIRTIO_BALLOON(obj) \
+         OBJECT_CHECK(VirtIOBalloon, (obj), TYPE_VIRTIO_BALLOON)
+ 
+diff --git a/include/hw/virtio/virtio-blk.h b/include/hw/virtio/virtio-blk.h
+index c10d069..fc71853 100644
+--- a/include/hw/virtio/virtio-blk.h
++++ b/include/hw/virtio/virtio-blk.h
+@@ -17,7 +17,7 @@
+ #include "hw/virtio/virtio.h"
+ #include "hw/block/block.h"
+ 
+-#define TYPE_VIRTIO_BLK "virtio-blk"
++#define TYPE_VIRTIO_BLK "virtio-blk-device"
+ #define VIRTIO_BLK(obj) \
+         OBJECT_CHECK(VirtIOBlock, (obj), TYPE_VIRTIO_BLK)
+ 
+diff --git a/include/hw/virtio/virtio-scsi.h b/include/hw/virtio/virtio-scsi.h
+index c9d92ca..ccd7b06 100644
+--- a/include/hw/virtio/virtio-scsi.h
++++ b/include/hw/virtio/virtio-scsi.h
+@@ -18,7 +18,7 @@
+ #include "hw/pci/pci.h"
+ #include "hw/scsi/scsi.h"
+ 
+-#define TYPE_VIRTIO_SCSI "virtio-scsi"
++#define TYPE_VIRTIO_SCSI "virtio-scsi-device"
+ #define VIRTIO_SCSI(obj) \
+         OBJECT_CHECK(VirtIOSCSI, (obj), TYPE_VIRTIO_SCSI)
+ 
+-- 
+1.8.1.4
+

@@ -1,0 +1,93 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Dominik Dingel <dingel@linux.vnet.ibm.com>
+To: qemu-devel@nongnu.org
+Cc: Christian Borntraeger <borntraeger@de.ibm.com>,
+ Dominik Dingel <dingel@linux.vnet.ibm.com>
+Date: Tue, 30 Apr 2013 19:15:58 +0200
+Message-id: 1367342159-21545-4-git-send-email-dingel@linux.vnet.ibm.com
+Subject: [PATCH 3/4] S390: BIOS boot from given device
+
+Use the passed device, if there is no device, use the first applicable device.
+
+Signed-off-by: Dominik Dingel <dingel@linux.vnet.ibm.com>
+
+diff --git a/pc-bios/s390-ccw/main.c b/pc-bios/s390-ccw/main.c
+index fd40fa5..be1efe8 100644
+--- a/pc-bios/s390-ccw/main.c
++++ b/pc-bios/s390-ccw/main.c
+@@ -12,6 +12,7 @@
+ 
+ struct subchannel_id blk_schid;
+ char stack[PAGE_SIZE * 8] __attribute__((__aligned__(PAGE_SIZE)));
++uint64_t boot_value;
+ 
+ void virtio_panic(const char *string)
+ {
+@@ -20,15 +21,22 @@ void virtio_panic(const char *string)
+     while (1) { }
+ }
+ 
+-static void virtio_setup(void)
++static void virtio_setup(uint64_t dev_info)
+ {
+     struct schib schib;
+     int i;
+     int r;
+     bool found = false;
+-
++    bool check_devno = false;
++    uint16_t dev_no = -1;
+     blk_schid.one = 1;
+ 
++    if (dev_info != -1) {
++        check_devno = true;
++        dev_no = dev_info & 0xffff; 
++        debug_print_int("device no. ", dev_no);
++    }
++
+     for (i = 0; i < 0x10000; i++) {
+         blk_schid.sch_no = i;
+         r = stsch_err(blk_schid, &schib);
+@@ -36,9 +44,11 @@ static void virtio_setup(void)
+             break;
+         }
+         if (schib.pmcw.dnv) {
+-            if (virtio_is_blk(blk_schid)) {
+-                found = true;
+-                break;
++            if (!check_devno || (schib.pmcw.dev == dev_no)) {
++                if (virtio_is_blk(blk_schid)) {
++                    found = true;
++                    break;
++                }
+             }
+         }
+     }
+@@ -53,7 +63,9 @@ static void virtio_setup(void)
+ int main(void)
+ {
+     sclp_setup();
+-    virtio_setup();
++    debug_print_int("boot reg[7] ", boot_value);
++    virtio_setup(boot_value);
++    
+     if (zipl_load() < 0)
+         sclp_print("Failed to load OS from hard disk\n");
+     disabled_wait();
+diff --git a/pc-bios/s390-ccw/start.S b/pc-bios/s390-ccw/start.S
+index 09deee7..5d5df0d 100644
+--- a/pc-bios/s390-ccw/start.S
++++ b/pc-bios/s390-ccw/start.S
+@@ -14,6 +14,8 @@
+ _start:
+ 
+ larl	%r15, stack + 0x8000    /* Set up stack */
++larl    %r6, boot_value
++stg     %r7, 0(%r6)     /* save the boot_value before any function calls */
+ j	main                    /* And call C */
+ 
+ /*
+-- 
+1.7.1
+
+

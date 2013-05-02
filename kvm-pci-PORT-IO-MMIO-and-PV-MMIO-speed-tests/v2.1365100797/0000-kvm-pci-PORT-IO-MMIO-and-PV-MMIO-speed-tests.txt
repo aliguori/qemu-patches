@@ -1,0 +1,86 @@
+From patches Mon Sep 17 00:00:00 2001
+From: "Michael S. Tsirkin" <mst@redhat.com>
+To: kvm@vger.kernel.org, gleb@redhat.com, mtosatti@redhat.com,
+ qemu-devel@nongnu.org, virtualization@lists.linux-foundation.org,
+ pbonzini@redhat.com
+Cc: 
+Date: Thu, 4 Apr 2013 13:39:57 +0300
+Message-id: cover.1365071407.git.mst@redhat.com
+Subject: [PATCH 0/6] kvm: pci PORT IO MMIO and PV MMIO speed tests
+
+These patches add a test device, useful to measure speed of MMIO versus PIO, in
+different configurations. As I didn't want to reserve a hardcoded range
+of memory, I added pci device for this instead.  Used together with the
+kvm unittest patches I posted on kvm mailing list.
+
+To use, simply add the device on the pci bus.
+Example test output:
+    vmcall 1519
+    ....
+    outl_to_kernel 1745
+    ....
+    mmio-no-eventfd:pci-mem 9075
+    mmio-wildcard-eventfd:pci-mem 3529
+    mmio-datamatch-eventfd:pci-mem 3509
+    mmio-pv-eventfd:pci-mem 1878
+    portio-no-eventfd:pci-io 5535
+    portio-wildcard-eventfd:pci-io 1846
+    portio-datamatch-eventfd:pci-io 1848
+    portio-pv-eventfd:pci-io 1842
+
+
+First interesting conclusion is that the overhead of MMIO
+exit to QEMU as compared to PIO is double that of
+MMIO ioeventfd as compared to PIO eventfd. Is this a known fact?
+
+Second is that PV MMIO is almost as fast as portio, so it
+looks like a viable replacement when we have a lot of
+devices such that we run out of IO space.
+
+Third is that eventfd has small but measureable overhead,
+and that hypercalls are measureably faster than port io.
+The difference is probably in hardware. Whether this justifies
+considering hypercalls for e.g. virtio, is open for discussion.
+
+I also had to extend kvm in a minor way, making all ioeventfd
+options accessible through the API. This actually needs less code
+than checking that users DTRT.
+
+Patches 1-5 are useful in themselves.
+Patches 5 and 6 add support for PV MMIO eventfds and
+add the test for it, tested against a kernel patch
+I'll send shortly. They can be applied separately when
+we are sure the kernel interface is going to be there.
+
+Michael S. Tsirkin (6):
+  kvm: remove unused APIs
+  kvm: support any size for pio eventfd
+  kvm: support non datamatch ioeventfd
+  pci: add pci test device
+  kvm: add PV MMIO
+  pci-testdev: add pv mmio test
+
+ docs/specs/pci-testdev.txt |  26 ++++
+ hw/Makefile.objs           |   1 +
+ hw/dataplane/hostmem.c     |   1 +
+ hw/ivshmem.c               |   2 +
+ hw/pci-testdev.c           | 311 +++++++++++++++++++++++++++++++++++++++++++++
+ hw/pci/pci.h               |   1 +
+ hw/vhost.c                 |   4 +-
+ hw/virtio-pci.c            |   4 +-
+ include/exec/memory.h      |  10 ++
+ include/sysemu/kvm.h       |   4 -
+ kvm-all.c                  | 142 +++++++++++----------
+ kvm-stub.c                 |  10 --
+ linux-headers/linux/kvm.h  |   8 ++
+ memory.c                   |   9 +-
+ 14 files changed, 448 insertions(+), 85 deletions(-)
+ create mode 100644 docs/specs/pci-testdev.txt
+ create mode 100644 hw/pci-testdev.c
+
+-- 
+MST
+--
+To unsubscribe from this list: send the line "unsubscribe kvm" in
+the body of a message to majordomo@vger.kernel.org
+More majordomo info at  http://vger.kernel.org/majordomo-info.html

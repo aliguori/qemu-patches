@@ -1,0 +1,36 @@
+From patches Mon Sep 17 00:00:00 2001
+From: riku.voipio@linaro.org
+To: qemu-devel@nongnu.org
+Cc: Andreas Schwab <schwab@suse.de>
+Date: Fri, 19 Apr 2013 16:59:55 +0300
+Message-id: 9ab709be595bef9956ea550a95e14e157cb5704e.1366377671.git.riku.voipio@linaro.org
+Subject: [PATCH 2/3] linux-user: fix undefined shift in copy_to_user_fdset
+
+From: Andreas Schwab <schwab@suse.de>
+
+If TARGET_ABI_BITS is bigger than 32 we shift by more than the size of int.
+
+Signed-off-by: Andreas Schwab <schwab@suse.de>
+Reviewed-by: Peter Maydell <peter.maydell@linaro.org>
+Signed-off-by: Riku Voipio <riku.voipio@linaro.org>
+---
+ linux-user/syscall.c |    2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/linux-user/syscall.c b/linux-user/syscall.c
+index d6d2050..5a786f2 100644
+--- a/linux-user/syscall.c
++++ b/linux-user/syscall.c
+@@ -914,7 +914,7 @@ static inline abi_long copy_to_user_fdset(abi_ulong target_fds_addr,
+     for (i = 0; i < nw; i++) {
+         v = 0;
+         for (j = 0; j < TARGET_ABI_BITS; j++) {
+-            v |= ((FD_ISSET(k, fds) != 0) << j);
++            v |= ((abi_ulong)(FD_ISSET(k, fds) != 0) << j);
+             k++;
+         }
+         __put_user(v, &target_fds[i]);
+-- 
+1.7.10.4
+
+

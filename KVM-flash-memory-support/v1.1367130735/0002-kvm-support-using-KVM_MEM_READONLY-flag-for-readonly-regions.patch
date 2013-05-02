@@ -1,0 +1,110 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Jordan Justen <jordan.l.justen@intel.com>
+To: qemu-devel@nongnu.org
+Cc: Xiao Guangrong <xiaoguangrong@linux.vnet.ibm.com>,
+ Jordan Justen <jordan.l.justen@intel.com>
+Date: Sun, 28 Apr 2013 01:32:17 -0700
+Message-id: 1367137941-4310-3-git-send-email-jordan.l.justen@intel.com
+Subject: [PATCH 2/6] kvm: support using KVM_MEM_READONLY flag for readonly
+ regions
+
+A slot that uses KVM_MEM_READONLY can be read from and code
+can execute from the region, but writes will trap.
+
+For regions that are readonly and also not writeable, we
+force the slot to be removed so reads or writes to the region
+will trap. (A memory region in this state is not executable
+within kvm.)
+
+Signed-off-by: Jordan Justen <jordan.l.justen@intel.com>
+Cc: Xiao Guangrong <xiaoguangrong@linux.vnet.ibm.com>
+---
+ kvm-all.c |   28 ++++++++++++++++++++--------
+ 1 file changed, 20 insertions(+), 8 deletions(-)
+
+diff --git a/kvm-all.c b/kvm-all.c
+index f634c41..95e6bf2 100644
+--- a/kvm-all.c
++++ b/kvm-all.c
+@@ -266,9 +266,14 @@ err:
+  * dirty pages logging control
+  */
+ 
+-static int kvm_mem_flags(KVMState *s, bool log_dirty)
++static int kvm_mem_flags(KVMState *s, bool log_dirty, bool readonly)
+ {
+-    return log_dirty ? KVM_MEM_LOG_DIRTY_PAGES : 0;
++    int flags = 0;
++    flags = log_dirty ? KVM_MEM_LOG_DIRTY_PAGES : 0;
++    if (readonly && kvm_readonly_mem_allowed) {
++        flags |= KVM_MEM_READONLY;
++    }
++    return flags;
+ }
+ 
+ static int kvm_slot_dirty_pages_log_change(KVMSlot *mem, bool log_dirty)
+@@ -279,7 +284,7 @@ static int kvm_slot_dirty_pages_log_change(KVMSlot *mem, bool log_dirty)
+ 
+     old_flags = mem->flags;
+ 
+-    flags = (mem->flags & ~mask) | kvm_mem_flags(s, log_dirty);
++    flags = (mem->flags & ~mask) | kvm_mem_flags(s, log_dirty, false);
+     mem->flags = flags;
+ 
+     /* If nothing changed effectively, no need to issue ioctl */
+@@ -636,7 +641,14 @@ static void kvm_set_phys_mem(MemoryRegionSection *section, bool add)
+     }
+ 
+     if (!memory_region_is_ram(mr)) {
+-        return;
++        if (!mr->readonly || !kvm_readonly_mem_allowed) {
++            return;
++        } else if (!mr->readable && add) {
++            /* If the memory range is not readable, then we actually want
++             * to remove the kvm memory slot so all accesses will trap. */
++            assert(mr->readonly && kvm_readonly_mem_allowed);
++            add = false;
++        }
+     }
+ 
+     ram = memory_region_get_ram_ptr(mr) + section->offset_within_region + delta;
+@@ -685,7 +697,7 @@ static void kvm_set_phys_mem(MemoryRegionSection *section, bool add)
+             mem->memory_size = old.memory_size;
+             mem->start_addr = old.start_addr;
+             mem->ram = old.ram;
+-            mem->flags = kvm_mem_flags(s, log_dirty);
++            mem->flags = kvm_mem_flags(s, log_dirty, mr->readonly);
+ 
+             err = kvm_set_user_memory_region(s, mem);
+             if (err) {
+@@ -706,7 +718,7 @@ static void kvm_set_phys_mem(MemoryRegionSection *section, bool add)
+             mem->memory_size = start_addr - old.start_addr;
+             mem->start_addr = old.start_addr;
+             mem->ram = old.ram;
+-            mem->flags =  kvm_mem_flags(s, log_dirty);
++            mem->flags =  kvm_mem_flags(s, log_dirty, mr->readonly);
+ 
+             err = kvm_set_user_memory_region(s, mem);
+             if (err) {
+@@ -730,7 +742,7 @@ static void kvm_set_phys_mem(MemoryRegionSection *section, bool add)
+             size_delta = mem->start_addr - old.start_addr;
+             mem->memory_size = old.memory_size - size_delta;
+             mem->ram = old.ram + size_delta;
+-            mem->flags = kvm_mem_flags(s, log_dirty);
++            mem->flags = kvm_mem_flags(s, log_dirty, mr->readonly);
+ 
+             err = kvm_set_user_memory_region(s, mem);
+             if (err) {
+@@ -752,7 +764,7 @@ static void kvm_set_phys_mem(MemoryRegionSection *section, bool add)
+     mem->memory_size = size;
+     mem->start_addr = start_addr;
+     mem->ram = ram;
+-    mem->flags = kvm_mem_flags(s, log_dirty);
++    mem->flags = kvm_mem_flags(s, log_dirty, mr->readonly);
+ 
+     err = kvm_set_user_memory_region(s, mem);
+     if (err) {
+-- 
+1.7.10.4
+
+

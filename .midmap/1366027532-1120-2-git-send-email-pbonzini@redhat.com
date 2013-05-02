@@ -1,0 +1,1 @@
+../correctly-reset-the-CPU-on-INIT-interrupts/v3.1366052730/0001-kvm-reset-state-from-the-CPUs-reset-method.patch

@@ -1,0 +1,47 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Peter Maydell <peter.maydell@linaro.org>
+To: Peter Maydell <peter.maydell@linaro.org>, qemu-devel@nongnu.org,
+ =?UTF-8?Q?Andreas_F=C3=A4rber?= <afaerber@suse.de>
+Cc: qemu-devel@nongnu.org, =?UTF-8?q?Andreas=20F=C3=A4rber?= <afaerber@suse.de>,
+ patches@linaro.org
+Date: Tue, 26 Mar 2013 12:20:01 +0000
+Message-id: 1364300401-9340-1-git-send-email-peter.maydell@linaro.org
+Subject: [PATCH 1/1] sh7750: Fix crash when accessing PVR/PRR/CVR
+
+Commit b350ab75 causes segfaults on accesses to PVR/PRR/CVR because
+it tries to call SUPERH_CPU_GET_CLASS() on a pointer that isn't a
+QOM object. Fix this by getting the actual QOM CPU object first.
+
+Signed-off-by: Peter Maydell <peter.maydell@linaro.org>
+---
+Tested with the r2d image/instructions from
+https://oss.renesas.com/modules/document/?Getting%20Started%20with%20SH4%20and%20QEMU
+
+ hw/sh4/sh7750.c |    6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/hw/sh4/sh7750.c b/hw/sh4/sh7750.c
+index e4d37ad..3580c87 100644
+--- a/hw/sh4/sh7750.c
++++ b/hw/sh4/sh7750.c
+@@ -289,13 +289,13 @@ static uint32_t sh7750_mem_readl(void *opaque, hwaddr addr)
+     case SH7750_CCR_A7:
+ 	return s->ccr;
+     case 0x1f000030:		/* Processor version */
+-        scc = SUPERH_CPU_GET_CLASS(s->cpu);
++        scc = SUPERH_CPU_GET_CLASS(ENV_GET_CPU(s->cpu));
+         return scc->pvr;
+     case 0x1f000040:		/* Cache version */
+-        scc = SUPERH_CPU_GET_CLASS(s->cpu);
++        scc = SUPERH_CPU_GET_CLASS(ENV_GET_CPU(s->cpu));
+         return scc->cvr;
+     case 0x1f000044:		/* Processor revision */
+-        scc = SUPERH_CPU_GET_CLASS(s->cpu);
++        scc = SUPERH_CPU_GET_CLASS(ENV_GET_CPU(s->cpu));
+         return scc->prr;
+     default:
+ 	error_access("long read", addr);
+-- 
+1.7.9.5
+
+

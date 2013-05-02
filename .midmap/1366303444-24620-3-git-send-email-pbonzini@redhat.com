@@ -1,0 +1,1 @@
+../make-audio-card-configuration-uniform/v1.1366328636/0002-audio-remove-the-need-for-audio-card-CONFIG_-symbols.patch

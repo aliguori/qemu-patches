@@ -1,0 +1,1 @@
+../Xilinx-SPIPS-fixes-round-2/v3.1366661479/0009-xilinx_spips-lqspi-Dont-touch-config-register.patch

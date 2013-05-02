@@ -1,0 +1,1 @@
+../qapi-and-snapshot-code-clean-up-in-block-layer/v1.1367015468/0007-block-dump-to-monitor-for-bdrv_snapshot_dump-and-bdrv_image_info_dump.patch

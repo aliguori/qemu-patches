@@ -1,0 +1,91 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Alexander Graf <agraf@suse.de>
+To: qemu-ppc@nongnu.org
+Cc: Blue Swirl <blauwirbel@gmail.com>,
+ Christian Borntraeger <borntraeger@de.ibm.com>,
+ Aurelien Jarno <aurelien@aurel32.net>, qemu-devel@nongnu.org
+Date: Fri, 26 Apr 2013 20:19:20 +0200
+Message-id: 1367000373-7972-12-git-send-email-agraf@suse.de
+Subject: [PATCH 11/24] s390-ccw.img: replace while loop with a disabled wait
+ on s390 bios
+
+From: Christian Borntraeger <borntraeger@de.ibm.com>
+
+dont waste cpu power on an error condition. Lets stop the guest
+with a disabled wait.
+
+Signed-off-by: Christian Borntraeger <borntraeger@de.ibm.com>
+Signed-off-by: Alexander Graf <agraf@suse.de>
+---
+ pc-bios/s390-ccw/main.c     |    2 ++
+ pc-bios/s390-ccw/s390-ccw.h |    3 +++
+ pc-bios/s390-ccw/start.S    |   15 +++++++++++++++
+ 3 files changed, 20 insertions(+), 0 deletions(-)
+
+diff --git a/pc-bios/s390-ccw/main.c b/pc-bios/s390-ccw/main.c
+index 0913aac..67f4987 100644
+--- a/pc-bios/s390-ccw/main.c
++++ b/pc-bios/s390-ccw/main.c
+@@ -16,6 +16,7 @@ char stack[PAGE_SIZE * 8] __attribute__((__aligned__(PAGE_SIZE)));
+ void virtio_panic(const char *string)
+ {
+     sclp_print(string);
++    disabled_wait();
+     while (1) { }
+ }
+ 
+@@ -52,5 +53,6 @@ int main(void)
+     virtio_setup();
+     if (zipl_load() < 0)
+         sclp_print("Failed to load OS from hard disk\n");
++    disabled_wait();
+     while (1) { }
+ }
+diff --git a/pc-bios/s390-ccw/s390-ccw.h b/pc-bios/s390-ccw/s390-ccw.h
+index a03dbaf..8241b0a 100644
+--- a/pc-bios/s390-ccw/s390-ccw.h
++++ b/pc-bios/s390-ccw/s390-ccw.h
+@@ -45,6 +45,9 @@ typedef unsigned long long __u64;
+ 
+ #include "cio.h"
+ 
++/* start.s */
++void disabled_wait(void);
++
+ /* main.c */
+ void virtio_panic(const char *string);
+ 
+diff --git a/pc-bios/s390-ccw/start.S b/pc-bios/s390-ccw/start.S
+index c2b9a19..09deee7 100644
+--- a/pc-bios/s390-ccw/start.S
++++ b/pc-bios/s390-ccw/start.S
+@@ -3,6 +3,7 @@
+  * into the pc-bios directory of qemu.
+  *
+  * Copyright (c) 2013 Alexander Graf <agraf@suse.de>
++ * Copyright 2013 IBM Corp.
+  *
+  * This work is licensed under the terms of the GNU GPL, version 2 or (at
+  * your option) any later version. See the COPYING file in the top-level
+@@ -14,3 +15,17 @@ _start:
+ 
+ larl	%r15, stack + 0x8000    /* Set up stack */
+ j	main                    /* And call C */
++
++/*
++ * void disabled_wait(void)
++ *
++ * stops the current guest cpu.
++ */
++	.globl disabled_wait
++disabled_wait:
++        larl %r1,disabled_wait_psw
++        lpswe   0(%r1)
++
++        .align  8
++disabled_wait_psw:
++        .quad   0x0002000180000000,0x0000000000000000
+-- 
+1.6.0.2
+
+

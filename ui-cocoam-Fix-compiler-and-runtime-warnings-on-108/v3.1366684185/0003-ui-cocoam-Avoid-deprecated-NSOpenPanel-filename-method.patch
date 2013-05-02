@@ -1,0 +1,35 @@
+From patches Mon Sep 17 00:00:00 2001
+From: "Peter Maydell" <peter.maydell@linaro.org>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>,
+ =?UTF-8?q?Andreas=20F=C3=A4rber?= <afaerber@web.de>, patches@linaro.org
+Date: Mon, 22 Apr 2013 21:29:48 +0100
+Message-id: 1366662589-18315-4-git-send-email-peter.maydell@linaro.org
+Subject: [PATCH 3/4] ui/cocoa.m: Avoid deprecated NSOpenPanel filename method
+
+Avoid the NSOpenPanel filename method (deprecated in MacOSX 10.6)
+in favour of using the URL method and extracting the path from the
+resulting NSUrl object.
+
+Signed-off-by: Peter Maydell <peter.maydell@linaro.org>
+---
+ ui/cocoa.m | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/ui/cocoa.m b/ui/cocoa.m
+index e3e1204..9ff688d 100644
+--- a/ui/cocoa.m
++++ b/ui/cocoa.m
+@@ -810,7 +810,7 @@ QemuCocoaView *cocoaView;
+         exit(0);
+     } else if(returnCode == NSOKButton) {
+         const char *bin = "qemu";
+-        char *img = (char*)[ [ sheet filename ] cStringUsingEncoding:NSASCIIStringEncoding];
++        char *img = (char*)[ [ [ sheet URL ] path ] cStringUsingEncoding:NSASCIIStringEncoding];
+ 
+         char **argv = (char**)malloc( sizeof(char*)*3 );
+ 
+-- 
+1.7.11.4
+
+

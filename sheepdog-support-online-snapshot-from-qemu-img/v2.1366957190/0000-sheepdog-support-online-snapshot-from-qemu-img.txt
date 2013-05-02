@@ -1,0 +1,36 @@
+From patches Mon Sep 17 00:00:00 2001
+From: MORITA Kazutaka <morita.kazutaka@lab.ntt.co.jp>
+To: kwolf@redhat.com, MORITA Kazutaka <morita.kazutaka@lab.ntt.co.jp>,
+ stefanha@redhat.com
+Cc: kwolf@redhat.com, namei.unix@gmail.com, sheepdog@lists.wpkg.org,
+ qemu-devel@nongnu.org
+Date: Fri, 26 Apr 2013 01:19:50 +0900
+Message-id: 1366906794-24878-1-git-send-email-morita.kazutaka@lab.ntt.co.jp
+Subject: [PATCH 0/4] sheepdog: support online snapshot from qemu-img
+
+v2:
+ - rename reload_vdi_obj to reload_inode and use it from
+   sd_snapshot_goto (Yuan)
+ - use g_free instead of free (Stefan)
+ - fix typo in the comment (Stefan)
+ - add coroutine_fn marker to resend_aioreq
+
+Currently, we can take sheepdog snapshots of running VMs only from the
+qemu monitor.  This series allows taking online snapshots from
+qemu-img.
+
+The first two patches prepare for the thrid patch.
+
+MORITA Kazutaka (4):
+  sheepdog: cleanup find_vdi_name
+  sheepdog: add SD_RES_READONLY result code
+  sheepdog: add helper function to reload inode
+  sheepdog: resend write requests when SD_RES_READONLY is received
+
+ block/sheepdog.c |  142 ++++++++++++++++++++++++++++++++++++++++-------------
+ 1 files changed, 107 insertions(+), 35 deletions(-)
+
+-- 
+1.7.2.5
+
+

@@ -1,0 +1,30 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Wenchao Xia <xiawenc@linux.vnet.ibm.com>
+To: qemu-devel@nongnu.org
+Cc: kwolf@redhat.com, pbonzini@redhat.com,
+ Wenchao Xia <xiawenc@linux.vnet.ibm.com>, dietmar@proxmox.com,
+ stefanha@gmail.com
+Date: Sat, 13 Apr 2013 19:11:36 +0800
+Message-id: 1365851501-3037-1-git-send-email-xiawenc@linux.vnet.ibm.com
+Subject: [PATCH 0/5] block: make qmp_transaction extendable
+
+  This serial will package backing chain snapshot code as one case, to make it
+possible adding more operations later.
+
+v2:
+  Address Kevin's comments:
+  Use the same prototype prepare, commit, rollback model in original code,
+commit should never fail.
+
+Wenchao Xia (5):
+  block: package preparation code in qmp_transaction()
+  block: move input parsing code in qmp_transaction()
+  block: package committing code in qmp_transaction()
+  block: package rolling back code in qmp_transaction()
+  block: make all steps in qmp_transaction() as callback
+
+ blockdev.c |  252 +++++++++++++++++++++++++++++++++++++++---------------------
+ 1 files changed, 165 insertions(+), 87 deletions(-)
+
+
+

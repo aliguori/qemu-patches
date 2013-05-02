@@ -1,0 +1,1 @@
+../ccid-Fix-crash-when-backend-isnt-specified/v1.1365973619/0001-ccid-Fix-crash-when-backend-isnt-specified.patch

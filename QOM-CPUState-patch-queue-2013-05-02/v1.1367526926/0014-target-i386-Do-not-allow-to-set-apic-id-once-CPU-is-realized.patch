@@ -1,0 +1,46 @@
+From patches Mon Sep 17 00:00:00 2001
+From: =?utf-8?q?Andreas_F=C3=A4rber_=3Cafaerber=40suse=2Ede=3E?=
+To: qemu-devel@nongnu.org
+Cc: Igor Mammedov <imammedo@redhat.com>,
+ =?UTF-8?q?Andreas=20F=C3=A4rber?= <afaerber@suse.de>
+Date: Thu,  2 May 2013 15:35:40 +0200
+Message-id: 1367501755-32272-15-git-send-email-afaerber@suse.de
+Subject: [PATCH 14/29] target-i386: Do not allow to set apic-id once CPU is
+ realized
+
+From: Igor Mammedov <imammedo@redhat.com>
+
+Signed-off-by: Igor Mammedov <imammedo@redhat.com>
+Reviewed-by: Eduardo Habkost <ehabkost@redhat.com>
+Signed-off-by: Andreas Färber <afaerber@suse.de>
+---
+ target-i386/cpu.c | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/target-i386/cpu.c b/target-i386/cpu.c
+index f1cecc0..0d9493d 100644
+--- a/target-i386/cpu.c
++++ b/target-i386/cpu.c
+@@ -1284,11 +1284,18 @@ static void x86_cpuid_set_apic_id(Object *obj, Visitor *v, void *opaque,
+                                   const char *name, Error **errp)
+ {
+     X86CPU *cpu = X86_CPU(obj);
++    DeviceState *dev = DEVICE(obj);
+     const int64_t min = 0;
+     const int64_t max = UINT32_MAX;
+     Error *error = NULL;
+     int64_t value;
+ 
++    if (dev->realized) {
++        error_setg(errp, "Attempt to set property '%s' on '%s' after "
++                   "it was realized", name, object_get_typename(obj));
++        return;
++    }
++
+     visit_type_int(v, &value, name, &error);
+     if (error) {
+         error_propagate(errp, error);
+-- 
+1.8.1.4
+
+

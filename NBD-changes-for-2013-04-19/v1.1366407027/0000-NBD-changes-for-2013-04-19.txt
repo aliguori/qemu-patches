@@ -1,0 +1,32 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: stefanha@redhat.com
+Date: Fri, 19 Apr 2013 16:30:27 +0200
+Message-id: 1366381830-11267-1-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 0/3] NBD changes for 2013-04-19
+
+The following changes since commit e2ec3f976803b360c70d9ae2ba13852fa5d11665:
+
+  qjson: to_json() case QTYPE_QSTRING is buggy, rewrite (2013-04-13 19:40:25 +0000)
+
+are available in the git repository at:
+
+  git://github.com/bonzini/qemu.git nbd-next
+
+for you to fetch changes up to 97ebbab0e324831dff47dbfa4bed55808cb3ec74:
+
+  nbd: set TCP_NODELAY (2013-04-15 16:35:17 +0200)
+
+----------------------------------------------------------------
+Stefan Hajnoczi (3):
+      nbd: unlock mutex in nbd_co_send_request() error path
+      nbd: use TCP_CORK in nbd_co_send_request()
+      nbd: set TCP_NODELAY
+
+ block/nbd.c | 25 +++++++++++++++++++------
+ 1 file changed, 19 insertions(+), 6 deletions(-)
+-- 
+1.8.1.4
+
+

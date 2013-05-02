@@ -1,0 +1,23 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Cornelia Huck <cornelia.huck@de.ibm.com>
+To: qemu-devel <qemu-devel@nongnu.org>
+Cc: Cornelia Huck <cornelia.huck@de.ibm.com>
+Date: Tue, 23 Apr 2013 18:27:48 +0200
+Message-id: 1366734469-23795-1-git-send-email-cornelia.huck@de.ibm.com
+Subject: [PATCH 1/1] virtio-ccw: Indicators fix.
+
+Hi,
+
+here's another fix for virtio-ccw: We need to check whether an
+indicator location is actually valid before trying to write to it.
+
+Cornelia Huck (1):
+  virtio-ccw: Check indicators location.
+
+ hw/s390x/virtio-ccw.c |    6 ++++++
+ 1 file changed, 6 insertions(+)
+
+-- 
+1.7.9.5
+
+

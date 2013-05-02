@@ -1,0 +1,1 @@
+../Add-an-IPMI-device-to-qemu/v4.1347998427/0002-qemu-char-Allocate-CharDriverState-in-qemu_chr_new_from_opts.patch

@@ -1,0 +1,53 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Jason Wang <jasowang@redhat.com>
+To: aliguori@us.ibm.com, shajnocz@redhat.com, qemu-devel@nongnu.org,
+ mst@redhat.com
+Cc: krkumar2@in.ibm.com, kvm@vger.kernel.org, mprivozn@redhat.com,
+ rusty@rustcorp.com.au, Jason Wang <jasowang@redhat.com>,
+ gaowanlong@cn.fujitsu.com, jwhan@filewood.snu.ac.kr, shiyer@redhat.com
+Date: Fri, 25 Jan 2013 18:35:31 +0800
+Message-id: 1359110143-42984-9-git-send-email-jasowang@redhat.com
+Subject: [PATCH 08/20] tap: import linux multiqueue constants
+
+Import multiqueue constants from if_tun.h from 3.8-rc3. A new ifr flag
+IFF_MULTI_QUEUE were introduced to create a multiqueue backend by calling
+TUNSETIFF with the this flag and with the same interface name many times.
+
+A new ioctl TUNSETQUEUE were introduced. When doing this ioctl with
+IFF_DETACH_QUEUE, the queue were disabled in the linux kernel. When doing this
+ioctl with IFF_ATTACH_QUEUE, the queue were enabled in the linux kernel.
+
+Signed-off-by: Jason Wang <jasowang@redhat.com>
+---
+ net/tap-linux.h |    4 ++++
+ 1 files changed, 4 insertions(+), 0 deletions(-)
+
+diff --git a/net/tap-linux.h b/net/tap-linux.h
+index cb2a6d4..65087e1 100644
+--- a/net/tap-linux.h
++++ b/net/tap-linux.h
+@@ -29,6 +29,7 @@
+ #define TUNSETSNDBUF   _IOW('T', 212, int)
+ #define TUNGETVNETHDRSZ _IOR('T', 215, int)
+ #define TUNSETVNETHDRSZ _IOW('T', 216, int)
++#define TUNSETQUEUE  _IOW('T', 217, int)
+ 
+ #endif
+ 
+@@ -36,6 +37,9 @@
+ #define IFF_TAP		0x0002
+ #define IFF_NO_PI	0x1000
+ #define IFF_VNET_HDR	0x4000
++#define IFF_MULTI_QUEUE 0x0100
++#define IFF_ATTACH_QUEUE 0x0200
++#define IFF_DETACH_QUEUE 0x0400
+ 
+ /* Features for GSO (TUNSETOFFLOAD). */
+ #define TUN_F_CSUM	0x01	/* You can hand me unchecksummed packets. */
+-- 
+1.7.1
+
+--
+To unsubscribe from this list: send the line "unsubscribe kvm" in
+the body of a message to majordomo@vger.kernel.org
+More majordomo info at  http://vger.kernel.org/majordomo-info.html

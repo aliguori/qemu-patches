@@ -1,0 +1,63 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: Paolo Bonzini <pbonzini@redhat.com>, qemu-devel@nongnu.org,
+ Peter Maydell <peter.maydell@linaro.org>
+Cc: qemu-devel@nongnu.org
+Date: Tue,  2 Apr 2013 16:44:19 +0200
+Message-id: 1364913860-25159-5-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 4/5] configure: move common libraries to config-host.mak
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+Reviewed-by: Peter Maydell <peter.maydell@linaro.org>
+---
+ Makefile.target | 2 +-
+ configure       | 4 +++-
+ 2 files changed, 4 insertions(+), 2 deletions(-)
+
+diff --git a/Makefile.target b/Makefile.target
+index 2bd6d14..c8513f1 100644
+--- a/Makefile.target
++++ b/Makefile.target
+@@ -119,7 +119,7 @@ obj-$(CONFIG_HAVE_GET_MEMORY_MAPPING) += memory_mapping.o
+ obj-$(CONFIG_HAVE_CORE_DUMP) += dump.o
+ obj-$(CONFIG_NO_GET_MEMORY_MAPPING) += memory_mapping-stub.o
+ obj-$(CONFIG_NO_CORE_DUMP) += dump-stub.o
+-LIBS+=-lz
++LIBS+=$(libs_softmmu)
+ 
+ # xen support
+ obj-$(CONFIG_XEN) += xen-all.o xen-mapcache.o
+diff --git a/configure b/configure
+index 629f70b..da0e8aa 100755
+--- a/configure
++++ b/configure
+@@ -1455,6 +1455,7 @@ EOF
+         exit 1
+     fi
+ fi
++libs_softmmu="$libs_softmmu -lz"
+ 
+ ##########################################
+ # libseccomp check
+@@ -3479,6 +3480,7 @@ echo "qemu_helperdir=$libexecdir" >> $config_host_mak
+ echo "extra_cflags=$EXTRA_CFLAGS" >> $config_host_mak
+ echo "extra_ldflags=$EXTRA_LDFLAGS" >> $config_host_mak
+ echo "qemu_localedir=$qemu_localedir" >> $config_host_mak
++echo "libs_softmmu=$libs_softmmu" >> $config_host_mak
+ 
+ echo "ARCH=$ARCH" >> $config_host_mak
+ 
+@@ -4192,7 +4194,7 @@ if test "$target_bigendian" = "yes" ; then
+ fi
+ if test "$target_softmmu" = "yes" ; then
+   echo "CONFIG_SOFTMMU=y" >> $config_target_mak
+-  echo "LIBS+=$libs_softmmu $target_libs_softmmu" >> $config_target_mak
++  echo "LIBS+=$target_libs_softmmu" >> $config_target_mak
+   case "$target_arch2" in
+     i386|x86_64)
+       echo "CONFIG_HAVE_CORE_DUMP=y" >> $config_target_mak
+-- 
+1.8.1.4
+
+
+

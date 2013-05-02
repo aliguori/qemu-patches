@@ -1,0 +1,74 @@
+From patches Mon Sep 17 00:00:00 2001
+From: "Nicholas A. Bellinger" <nab@linux-iscsi.org>
+To: "Nicholas A. Bellinger" <nab@linux-iscsi.org>, Asias He <asias@redhat.com>,
+ target-devel <target-devel@vger.kernel.org>
+Cc: Paolo Bonzini <pbonzini@redhat.com>, qemu-devel <qemu-devel@nongnu.org>,
+ target-devel <target-devel@vger.kernel.org>,
+ lf-virt <virtualization@lists.linux-foundation.org>,
+ kvm-devel <kvm@vger.kernel.org>, "Michael S. Tsirkin" <mst@redhat.com>,
+ Nicholas Bellinger <nab@linux-iscsi.org>,
+ Anthony Liguori <aliguori@linux.vnet.ibm.com>,
+ Stefan Hajnoczi <stefanha@redhat.com>, Asias He <asias@redhat.com>
+Date: Fri, 29 Mar 2013 01:08:14 +0000
+Message-id: 1364519296-31883-1-git-send-email-nab@linux-iscsi.org
+Subject: [PATCH 0/2] Add support for vhost-scsi-pci
+
+From: Nicholas Bellinger <nab@linux-iscsi.org>
+
+Hi QEMU folks,
+
+The following is the patch-v2 series to support vhost-scsi-pci within
+the upstream QEMU tree.
+
+This includes the refactoring of existing virtio-scsi code from Paolo
+to allow a VirtIOSCSICommon structure that is shared amoungst existing
+virtio-scsi-pci device and new vhost-scsi-pci device code.
+
+Currently this code requires Asias's seabios bugfixes (commit 5a7730db5
+and b44a7be17), and two other tcm_vhost patches to reset vq->last_used_idx
+after seabios handoff and disable EVENT_IDX from GET_FEATURES that's
+currently in flight for v3.9.0 kernel code.
+
+There is a seperate issue with seabios virtio-scsi that's causing a failure
+in vhost_verify_ring_mappings() is still being tracked down, but this series
+should now be getting close to a merge minus this last outstanding item.
+
+Changes in Patch-v2:
+   - Move ->get_features() assignment to virtio_scsi_init() instead of
+     virtio_scsi_init_common() (nab)
+   - Add vhost_scsi_get_features() in order to determine feature bits
+     supports by host kernel (mst + nab)
+   - Re-enable usage of DEFINE_VIRTIO_COMMON_FEATURES, and allow
+     EVENT_IDX to be disabled by host in vhost_scsi_get_features() (mst)
+   - Drop unused hotplug bit in DEFINE_VHOST_SCSI_PROPERTIES (mst)
+   - Drop vhost_verify_ring_mappings() enable-only hack (mst)
+
+A big thanks to Paolo, Asias, MST, and Stefan for all of their efforts
+on this series.
+
+Thank you,
+
+Paolo Bonzini (2):
+  virtio-scsi: create VirtIOSCSICommon
+  vhost-scsi: new device supporting the tcm_vhost Linux kernel module
+
+ configure                  |   15 +++-
+ hw/Makefile.objs           |    5 +-
+ hw/s390x/s390-virtio-bus.c |   35 ++++++
+ hw/vhost-scsi.c            |  264 ++++++++++++++++++++++++++++++++++++++++++++
+ hw/vhost-scsi.h            |   64 +++++++++++
+ hw/virtio-pci.c            |   62 ++++++++++
+ hw/virtio-scsi.c           |  192 ++++++++------------------------
+ hw/virtio-scsi.h           |  132 +++++++++++++++++++++-
+ include/qemu/osdep.h       |    4 +
+ 9 files changed, 623 insertions(+), 150 deletions(-)
+ create mode 100644 hw/vhost-scsi.c
+ create mode 100644 hw/vhost-scsi.h
+
+-- 
+1.7.2.5
+
+--
+To unsubscribe from this list: send the line "unsubscribe kvm" in
+the body of a message to majordomo@vger.kernel.org
+More majordomo info at  http://vger.kernel.org/majordomo-info.html

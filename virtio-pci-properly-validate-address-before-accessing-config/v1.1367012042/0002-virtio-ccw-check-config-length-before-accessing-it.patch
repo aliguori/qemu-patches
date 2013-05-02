@@ -1,0 +1,48 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Jason Wang <jasowang@redhat.com>
+To: Anthony Liguori <aliguori@us.ibm.com>, Jason Wang <jasowang@redhat.com>,
+ qemu-devel@nongnu.org, "Michael S. Tsirkin" <mst@redhat.com>, mst@redhat.com
+Cc: Anthony Liguori <aliguori@us.ibm.com>, Alexander Graf <agraf@suse.de>,
+ qemu-devel@nongnu.org, Richard Henderson <rth@twiddle.net>,
+ Jason Wang <jasowang@redhat.com>, Cornelia Huck <cornelia.huck@de.ibm.com>,
+ pmatouse@redhat.com
+Date: Fri, 26 Apr 2013 16:34:03 +0800
+Message-id: 1366965244-20542-2-git-send-email-jasowang@redhat.com
+Subject: [PATCH 2/3] virtio-ccw: check config length before accessing it
+
+virtio-rng-ccw has zero config length, so we need validate the config length
+before trying to access it. Otherwise we may crash since vdev->config is NULL.
+
+Cc: Cornelia Huck <cornelia.huck@de.ibm.com>
+Cc: Richard Henderson <rth@twiddle.net>
+Cc: Alexander Graf <agraf@suse.de>
+Signed-off-by: Jason Wang <jasowang@redhat.com>
+---
+ hw/s390x/virtio-ccw.c |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/hw/s390x/virtio-ccw.c b/hw/s390x/virtio-ccw.c
+index 56539d3..8d0dff5 100644
+--- a/hw/s390x/virtio-ccw.c
++++ b/hw/s390x/virtio-ccw.c
+@@ -260,7 +260,7 @@ static int virtio_ccw_cb(SubchDev *sch, CCW1 ccw)
+             }
+         }
+         len = MIN(ccw.count, dev->vdev->config_len);
+-        if (!ccw.cda) {
++        if (!ccw.cda || !len) {
+             ret = -EFAULT;
+         } else {
+             dev->vdev->get_config(dev->vdev, dev->vdev->config);
+@@ -279,7 +279,7 @@ static int virtio_ccw_cb(SubchDev *sch, CCW1 ccw)
+         }
+         len = MIN(ccw.count, dev->vdev->config_len);
+         hw_len = len;
+-        if (!ccw.cda) {
++        if (!ccw.cda || !len) {
+             ret = -EFAULT;
+         } else {
+             config = cpu_physical_memory_map(ccw.cda, &hw_len, 0);
+-- 
+1.7.1
+

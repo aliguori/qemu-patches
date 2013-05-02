@@ -1,0 +1,1 @@
+../arm-devs-queue/v1.1365203585/0008-arm_gic-Fix-sizes-of-state-fields-in-preparation-for-vmstate-support.patch

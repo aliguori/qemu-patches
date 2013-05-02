@@ -1,0 +1,64 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Igor Mammedov <imammedo@redhat.com>
+To: Paolo Bonzini <pbonzini@redhat.com>, Igor Mammedov <imammedo@redhat.com>,
+ Andreas =?ISO-8859-1?B?RuRyYmVy?= <afaerber@suse.de>, qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, Paolo Bonzini <pbonzini@redhat.com>,
+ ehabkost@redhat.com, claudio.fontana@huawei.com, qemu-devel@nongnu.org,
+ aderumier@odiso.com, lcapitulino@redhat.com, jfrei@linux.vnet.ibm.com,
+ yang.z.zhang@intel.com, pbonzini@redhat.com, eblake@redhat.com,
+ afaerber@suse.de, lig.fnst@cn.fujitsu.com, rth@twiddle.net
+Date: Thu, 11 Apr 2013 16:51:52 +0200
+Message-id: 1365691918-30594-14-git-send-email-imammedo@redhat.com
+Subject: [PATCH 13/19] target-i386: cpu: attach ICC bus to CPU on its creation
+
+... during startup,  so it would be possible to uplug it later
+and set bus_type to TYPE_ICC_BUS for X86CPU type to make device_add
+attach hotplugged CPU to ICC bus.
+
+Signed-off-by: Igor Mammedov <imammedo@redhat.com>
+---
+ target-i386/cpu.c | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/target-i386/cpu.c b/target-i386/cpu.c
+index 4ddc18a..2bb38d6 100644
+--- a/target-i386/cpu.c
++++ b/target-i386/cpu.c
+@@ -41,6 +41,7 @@
+ #endif
+ 
+ #include "sysemu/sysemu.h"
++#include "hw/i386/icc_bus.h"
+ #ifndef CONFIG_USER_ONLY
+ #include "hw/xen/xen.h"
+ #include "hw/sysbus.h"
+@@ -1610,6 +1611,7 @@ X86CPU *cpu_x86_create(const char *cpu_model, Error **errp)
+     gchar **model_pieces;
+     char *name, *features;
+     Error *error = NULL;
++    Object *icc_bus = object_resolve_path_type("icc-bus", TYPE_ICC_BUS, NULL);
+ 
+     model_pieces = g_strsplit(cpu_model, ",", 2);
+     if (!model_pieces[0]) {
+@@ -1620,6 +1622,10 @@ X86CPU *cpu_x86_create(const char *cpu_model, Error **errp)
+     features = model_pieces[1];
+ 
+     cpu = X86_CPU(object_new(TYPE_X86_CPU));
++    if (icc_bus) {
++        qdev_set_parent_bus(DEVICE(cpu), BUS(icc_bus));
++        object_unref(OBJECT(cpu));
++    }
+     env = &cpu->env;
+     env->cpu_model_str = cpu_model;
+ 
+@@ -2330,6 +2336,7 @@ static void x86_cpu_common_class_init(ObjectClass *oc, void *data)
+ 
+     xcc->parent_realize = dc->realize;
+     dc->realize = x86_cpu_realizefn;
++    dc->bus_type = TYPE_ICC_BUS;
+ 
+     xcc->parent_reset = cc->reset;
+     cc->reset = x86_cpu_reset;
+-- 
+1.8.2
+

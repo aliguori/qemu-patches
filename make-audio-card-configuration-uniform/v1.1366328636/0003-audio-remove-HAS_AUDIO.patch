@@ -1,0 +1,181 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: av1474@comtv.ru
+Date: Thu, 18 Apr 2013 18:43:59 +0200
+Message-id: 1366303444-24620-4-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 3/8] audio: remove HAS_AUDIO
+
+Several targets can have wavcapture/-soundhw support via PCI cards.
+HAS_AUDIO is a useless limitation, remove it.
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+	RFC->v1: remove audio_available()
+
+ arch_init.c                | 23 +++++------------------
+ configure                  |  8 --------
+ hmp-commands.hx            |  4 ----
+ include/sysemu/arch_init.h |  1 -
+ monitor.c                  |  2 --
+ vl.c                       |  8 --------
+ 6 files changed, 5 insertions(+), 41 deletions(-)
+
+diff --git a/arch_init.c b/arch_init.c
+index 8d26993..88b74c0 100644
+--- a/arch_init.c
++++ b/arch_init.c
+@@ -887,7 +887,6 @@ SaveVMHandlers savevm_ram_handlers = {
+     .cancel = ram_migration_cancel,
+ };
+ 
+-#ifdef HAS_AUDIO
+ struct soundhw {
+     const char *name;
+     const char *descr;
+@@ -1006,14 +1010,6 @@ void audio_init(ISABus *isa_bus, PCIBus *pci_bus)
+         }
+     }
+ }
+-#else
+-void select_soundhw(const char *optarg)
+-{
+-}
+-void audio_init(ISABus *isa_bus, PCIBus *pci_bus)
+-{
+-}
+-#endif
+ 
+ int qemu_uuid_parse(const char *str, uint8_t *uuid)
+ {
+@@ -1069,15 +1065,6 @@ void cpudef_init(void)
+ #endif
+ }
+ 
+-int audio_available(void)
+-{
+-#ifdef HAS_AUDIO
+-    return 1;
+-#else
+-    return 0;
+-#endif
+-}
+-
+ int tcg_available(void)
+ {
+     return 1;
+diff --git a/configure b/configure
+index 7db1edb..d24d6c6 100755
+--- a/configure
++++ b/configure
+@@ -4453,14 +4453,6 @@ alpha)
+ ;;
+ esac
+ 
+-if test "$target_softmmu" = "yes" ; then
+-  case "$TARGET_BASE_ARCH" in
+-  arm|lm32|i386|mips|ppc)
+-    cflags="-DHAS_AUDIO $cflags"
+-  ;;
+-  esac
+-fi
+-
+ if test "$gprof" = "yes" ; then
+   echo "TARGET_GPROF=yes" >> $config_target_mak
+   if test "$target_linux_user" = "yes" ; then
+diff --git a/hmp-commands.hx b/hmp-commands.hx
+index df44906..9cea415 100644
+--- a/hmp-commands.hx
++++ b/hmp-commands.hx
+@@ -736,7 +736,6 @@ info mice
+ @end example
+ ETEXI
+ 
+-#ifdef HAS_AUDIO
+     {
+         .name       = "wavcapture",
+         .args_type  = "path:F,freq:i?,bits:i?,nchannels:i?",
+@@ -744,7 +743,6 @@ ETEXI
+         .help       = "capture audio to a wave file (default frequency=44100 bits=16 channels=2)",
+         .mhandler.cmd = do_wav_capture,
+     },
+-#endif
+ STEXI
+ @item wavcapture @var{filename} [@var{frequency} [@var{bits} [@var{channels}]]]
+ @findex wavcapture
+@@ -759,7 +757,6 @@ Defaults:
+ @end itemize
+ ETEXI
+ 
+-#ifdef HAS_AUDIO
+     {
+         .name       = "stopcapture",
+         .args_type  = "n:i",
+@@ -767,7 +764,6 @@ ETEXI
+         .help       = "stop capture",
+         .mhandler.cmd = do_stop_capture,
+     },
+-#endif
+ STEXI
+ @item stopcapture @var{index}
+ @findex stopcapture
+diff --git a/include/sysemu/arch_init.h b/include/sysemu/arch_init.h
+index aed3d1d..f18de33 100644
+--- a/include/sysemu/arch_init.h
++++ b/include/sysemu/arch_init.h
+@@ -30,7 +30,6 @@ void select_soundhw(const char *optarg);
+ void do_acpitable_option(const QemuOpts *opts);
+ void do_smbios_option(const char *optarg);
+ void cpudef_init(void);
+-int audio_available(void);
+ void audio_init(ISABus *isa_bus, PCIBus *pci_bus);
+ int tcg_available(void);
+ int kvm_available(void);
+diff --git a/monitor.c b/monitor.c
+index 332abe7..8f828d4 100644
+--- a/monitor.c
++++ b/monitor.c
+@@ -1862,7 +1862,6 @@ static void do_info_capture(Monitor *mon, const QDict *qdict)
+     }
+ }
+ 
+-#ifdef HAS_AUDIO
+ static void do_stop_capture(Monitor *mon, const QDict *qdict)
+ {
+     int i;
+@@ -1903,7 +1902,6 @@ static void do_wav_capture(Monitor *mon, const QDict *qdict)
+     }
+     QLIST_INSERT_HEAD (&capture_head, s, entries);
+ }
+-#endif
+ 
+ static qemu_acl *find_acl(Monitor *mon, const char *name)
+ {
+diff --git a/vl.c b/vl.c
+index 2ef00d8..9e56d77 100644
+--- a/vl.c
++++ b/vl.c
+@@ -3201,18 +3201,10 @@ int main(int argc, char **argv, char **envp)
+                 add_device_config(DEV_BT, optarg);
+                 break;
+             case QEMU_OPTION_audio_help:
+-                if (!(audio_available())) {
+-                    printf("Option %s not supported for this target\n", popt->name);
+-                    exit(1);
+-                }
+                 AUD_help ();
+                 exit (0);
+                 break;
+             case QEMU_OPTION_soundhw:
+-                if (!(audio_available())) {
+-                    printf("Option %s not supported for this target\n", popt->name);
+-                    exit(1);
+-                }
+                 select_soundhw (optarg);
+                 break;
+             case QEMU_OPTION_h:
+-- 
+1.8.1.4
+
+
+

@@ -1,0 +1,211 @@
+From patches Mon Sep 17 00:00:00 2001
+From: "Michael S. Tsirkin" <mst@redhat.com>
+To: seabios@seabios.org
+Cc: qemu-devel@nongnu.org
+Date: Thu, 25 Apr 2013 12:02:26 +0300
+Message-id: 3eaaace499fd99ab47a2d1ff00818aad8ceb8af5.1366879705.git.mst@redhat.com
+Subject: [PATCH 1/3] linker: utility to patch in-memory ROM files
+
+Add ability for a ROM file to point to
+it's image in memory. When file is in memory,
+add utility that can patch it, storing
+pointers to one file within another file.
+
+This is not a lot of code: together with the follow-up patch to load
+ACPI tables from ROM, we get:
+Before:
+Total size: 127880  Fixed: 59060  Free: 3192 (used 97.6% of 128KiB rom)
+After:
+Total size: 128776  Fixed: 59100  Free: 2296 (used 98.2% of 128KiB rom)
+
+Signed-off-by: Michael S. Tsirkin <mst@redhat.com>
+---
+ Makefile     |  2 +-
+ src/linker.c | 90 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ src/linker.h | 50 +++++++++++++++++++++++++++++++++
+ src/util.h   |  1 +
+ 4 files changed, 142 insertions(+), 1 deletion(-)
+ create mode 100644 src/linker.c
+ create mode 100644 src/linker.h
+
+diff --git a/Makefile b/Makefile
+index 759bbbb..020fb2f 100644
+--- a/Makefile
++++ b/Makefile
+@@ -18,7 +18,7 @@ SRC16=$(SRCBOTH) system.c disk.c font.c
+ SRC32FLAT=$(SRCBOTH) post.c shadow.c memmap.c pmm.c coreboot.c boot.c \
+     acpi.c smm.c mptable.c pirtable.c smbios.c pciinit.c optionroms.c mtrr.c \
+     lzmadecode.c bootsplash.c jpeg.c usb-hub.c paravirt.c \
+-    biostables.c xen.c bmp.c romfile.c csm.c
++    biostables.c xen.c bmp.c romfile.c csm.c linker.c
+ SRC32SEG=util.c output.c pci.c pcibios.c apm.c stacks.c
+ 
+ # Default compiler flags
+diff --git a/src/linker.c b/src/linker.c
+new file mode 100644
+index 0000000..223d2db
+--- /dev/null
++++ b/src/linker.c
+@@ -0,0 +1,90 @@
++#include "linker.h"
++#include "byteorder.h" // le64_to_cpu
++
++void linker_link(const char *name)
++{
++    struct linker_entry_s *entry;
++    int offset = 0;
++    int size, lsrc;
++    void *data = romfile_loadfile(name, &size);
++    struct romfile_s *src, *dst;
++    u32 dst_offset;
++    u64 val, buf;
++    if (!data)
++        return;
++
++    for (offset = 0; offset < size; offset += entry->size) {
++        entry = data + offset;
++        /* Entry must have some data. If not - skip it. */
++        if (entry->size <= sizeof *entry)
++            continue;
++        /* Check that entry fits in buffer. */
++        if (offset + entry->size > size) {
++            warn_internalerror();
++            break;
++        }
++        /* Skip any command that we don't recognize. */
++        if (entry->reserved1 || entry->reserved2)
++            continue;
++        if (entry->bytes != 1 &&
++            entry->bytes != 2 &&
++            entry->bytes != 4 &&
++            entry->bytes != 8)
++            continue;
++        if (entry->shift > 63)
++            continue;
++        if (entry->type >= LINKER_ENTRY_TYPE_MAX)
++            continue;
++        if (entry->format != LINKER_ENTRY_FORMAT_LE)
++            continue;
++        /* Last byte must be 0 */
++        if (entry->src_dst[entry->size - 1]) {
++            warn_internalerror();
++            continue;
++        }
++        lsrc = strlen(entry->src_dst);
++        if (!lsrc) {
++            warn_internalerror();
++            continue;
++        }
++        src = romfile_find(entry->src_dst);
++        if (!src) {
++            warn_internalerror();
++            continue;
++        }
++        if (!src->data) {
++            warn_internalerror();
++            continue;
++        }
++        if (lsrc + 1 +  sizeof *entry >= entry->size) {
++            warn_internalerror();
++            continue;
++        }
++        dst = romfile_find(entry->src_dst + lsrc + 1);
++        if (!dst) {
++            warn_internalerror();
++            continue;
++        }
++        if (!dst->data) {
++            warn_internalerror();
++            continue;
++        }
++        dst_offset = le32_to_cpu(entry->dst_offset);
++        if (dst->size < dst_offset + entry->bytes) {
++            warn_internalerror();
++            continue;
++        }
++        buf = 0;
++        memcpy(&buf, dst->data + dst_offset, entry->bytes);
++        val = ((u64)(unsigned long)src->data) >> entry->shift;
++        buf = le64_to_cpu(buf);
++        if (entry->type == LINKER_ENTRY_TYPE_ADD)
++            buf += val;
++        else
++            buf -= val;
++        buf = cpu_to_le64(val);
++        memcpy(dst->data + dst_offset, &buf, entry->bytes);
++    }
++
++    free(data);
++}
+diff --git a/src/linker.h b/src/linker.h
+new file mode 100644
+index 0000000..d8f4a79
+--- /dev/null
++++ b/src/linker.h
+@@ -0,0 +1,50 @@
++#ifndef __LINKER_H
++#define __LINKER_H
++
++#include "types.h" // u8
++#include "util.h" // romfile_s
++
++/* ROM file linker interface. Linker uses little endian format */
++struct linker_entry_s {
++    u8 size; /* size in bytes including the header */
++    u8 bytes; /* How many bytes to change. Can be 1,2,4 or 8. */
++    u8 shift; /* Shift source address right by this many bits. 0-63. */
++    u8 type;
++    u8 format;
++    u8 reserved1;
++    u16 reserved2;
++    u64 dst_offset; /* Offset in destination. Little endian format. */
++    /* Followed by source and destination, optionally padded by
++     * 0, up to the total of entry_len - 4 bytes.
++     * Strings are 0-terminated. */
++    char src_dst[];
++} PACKED;
++
++/* Note: align types must appear before all other types. */
++enum linker_entry_type {
++    /*
++     * increment value in DST by the address of source
++     * useful e.g. to fill in pointer values in ACPI tables
++     */
++
++    LINKER_ENTRY_TYPE_ADD = 0x0,
++    /*
++     * Decrement value in DST by the address of source
++     * useful e.g. to fix up checksum values in ACPI tables
++     */
++    LINKER_ENTRY_TYPE_SUB = 0x1,
++    /*
++     * The following move source so must come first,
++     * before sorce is used by other operations.
++     */
++    /* Last entry. Not a valid type. */
++    LINKER_ENTRY_TYPE_MAX,
++};
++
++enum linker_entry_format {
++    LINKER_ENTRY_FORMAT_LE = 0x0,
++};
++
++void linker_link(const char *name);
++
++#endif
+diff --git a/src/util.h b/src/util.h
+index 996c29a..7b50c38 100644
+--- a/src/util.h
++++ b/src/util.h
+@@ -436,6 +436,7 @@ struct romfile_s {
+     char name[128];
+     u32 size;
+     int (*copy)(struct romfile_s *file, void *dest, u32 maxlen);
++    void *data;
+ };
+ void romfile_add(struct romfile_s *file);
+ struct romfile_s *romfile_findprefix(const char *prefix, struct romfile_s *prev);
+-- 
+MST
+
+

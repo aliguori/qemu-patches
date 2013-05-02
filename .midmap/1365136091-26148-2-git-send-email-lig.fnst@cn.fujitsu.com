@@ -1,0 +1,1 @@
+../implement-power-chip/v2.1365182884/0001-hw-irq-move-struct-IRQState-to-irqh.patch

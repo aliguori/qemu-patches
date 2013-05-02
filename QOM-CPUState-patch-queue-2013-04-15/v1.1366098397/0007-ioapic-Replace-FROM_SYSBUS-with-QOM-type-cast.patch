@@ -1,0 +1,34 @@
+From patches Mon Sep 17 00:00:00 2001
+From: =?utf-8?q?Andreas_F=C3=A4rber_=3Cafaerber=40suse=2Ede=3E?=
+To: qemu-devel@nongnu.org
+Cc: Igor Mammedov <imammedo@redhat.com>,
+ =?UTF-8?q?Andreas=20F=C3=A4rber?= <afaerber@suse.de>
+Date: Tue, 16 Apr 2013 02:46:44 +0200
+Message-id: 1366073209-27119-8-git-send-email-afaerber@suse.de
+Subject: [PATCH 07/12] ioapic: Replace FROM_SYSBUS() with QOM type cast
+
+From: Igor Mammedov <imammedo@redhat.com>
+
+Signed-off-by: Igor Mammedov <imammedo@redhat.com>
+Signed-off-by: Andreas Färber <afaerber@suse.de>
+---
+ hw/intc/ioapic_common.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/hw/intc/ioapic_common.c b/hw/intc/ioapic_common.c
+index 42c7adc..5c5bb3c 100644
+--- a/hw/intc/ioapic_common.c
++++ b/hw/intc/ioapic_common.c
+@@ -59,7 +59,7 @@ static int ioapic_dispatch_post_load(void *opaque, int version_id)
+ 
+ static int ioapic_init_common(SysBusDevice *dev)
+ {
+-    IOAPICCommonState *s = FROM_SYSBUS(IOAPICCommonState, dev);
++    IOAPICCommonState *s = IOAPIC_COMMON(dev);
+     IOAPICCommonClass *info;
+     static int ioapic_no;
+ 
+-- 
+1.8.1.4
+
+

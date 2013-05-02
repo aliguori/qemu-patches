@@ -1,0 +1,226 @@
+From patches Mon Sep 17 00:00:00 2001
+From: fred.konrad@greensocs.com
+To: Anthony Liguori <aliguori@us.ibm.com>, amit.shah@redhat.com,
+ qemu-devel@nongnu.org
+Cc: cornelia.huck@de.ibm.com, peter.maydell@linaro.org,
+ mark.burton@greensocs.com, fred.konrad@greensocs.com
+Date: Tue, 9 Apr 2013 14:53:30 +0200
+Message-id: 1365512016-21944-2-git-send-email-fred.konrad@greensocs.com
+Subject: [PATCH 1/7] virtio-serial: add the virtio-serial device.
+
+From: KONRAD Frederic <fred.konrad@greensocs.com>
+
+Create virtio-serial which extends virtio-device, so it can be connected
+on virtio-bus.
+
+Signed-off-by: KONRAD Frederic <fred.konrad@greensocs.com>
+---
+ hw/char/virtio-serial-bus.c       | 95 ++++++++++++++++++++++++++++++++++++---
+ hw/s390x/s390-virtio-bus.c        |  3 +-
+ hw/s390x/virtio-ccw.c             |  3 +-
+ hw/virtio/virtio-pci.c            |  2 +-
+ include/hw/virtio/virtio-serial.h |  9 ++++
+ 5 files changed, 100 insertions(+), 12 deletions(-)
+
+diff --git a/hw/char/virtio-serial-bus.c b/hw/char/virtio-serial-bus.c
+index 1dba8ab..506377e 100644
+--- a/hw/char/virtio-serial-bus.c
++++ b/hw/char/virtio-serial-bus.c
+@@ -887,10 +887,12 @@ static int virtser_port_qdev_exit(DeviceState *qdev)
+     return 0;
+ }
+ 
+-VirtIODevice *virtio_serial_init(DeviceState *dev, virtio_serial_conf *conf)
++static VirtIODevice *virtio_serial_common_init(DeviceState *dev,
++                                               virtio_serial_conf *conf,
++                                               VirtIODevice **pvdev)
+ {
+     VirtIOSerial *vser;
+-    VirtIODevice *vdev;
++    VirtIODevice *vdev = *pvdev;
+     uint32_t i, max_supported_ports;
+ 
+     if (!conf->max_virtserial_ports)
+@@ -904,11 +906,22 @@ VirtIODevice *virtio_serial_init(DeviceState *dev, virtio_serial_conf *conf)
+         return NULL;
+     }
+ 
+-    vdev = virtio_common_init("virtio-serial", VIRTIO_ID_CONSOLE,
+-                              sizeof(struct virtio_console_config),
+-                              sizeof(VirtIOSerial));
+-
+-    vser = DO_UPCAST(VirtIOSerial, vdev, vdev);
++    /*
++     * We have two cases here: the old virtio-serial-pci device, and the
++     * refactored virtio-serial.
++     */
++    if (vdev == NULL) {
++        /* virtio-serial-pci */
++        vdev = virtio_common_init("virtio-serial", VIRTIO_ID_CONSOLE,
++                                  sizeof(struct virtio_console_config),
++                                  sizeof(VirtIOSerial));
++        vser = DO_UPCAST(VirtIOSerial, vdev, vdev);
++    } else {
++        /* virtio-serial */
++        virtio_init(vdev, "virtio-serial", VIRTIO_ID_CONSOLE,
++                    sizeof(struct virtio_console_config));
++        vser = VIRTIO_SERIAL(vdev);
++    }
+ 
+     /* Spawn a new virtio-serial bus on which the ports will ride as devices */
+     qbus_create_inplace(&vser->bus.qbus, TYPE_VIRTIO_SERIAL_BUS, dev, NULL);
+@@ -972,6 +985,16 @@ VirtIODevice *virtio_serial_init(DeviceState *dev, virtio_serial_conf *conf)
+     return vdev;
+ }
+ 
++/*
++ * The two following functions will be cleaned up at the end.
++ */
++
++VirtIODevice *virtio_serial_init(DeviceState *dev, virtio_serial_conf *conf)
++{
++    VirtIODevice *vdev = NULL;
++    return virtio_serial_common_init(dev, conf, &vdev);
++}
++
+ void virtio_serial_exit(VirtIODevice *vdev)
+ {
+     VirtIOSerial *vser = DO_UPCAST(VirtIOSerial, vdev, vdev);
+@@ -1009,10 +1032,68 @@ static const TypeInfo virtio_serial_port_type_info = {
+     .class_init = virtio_serial_port_class_init,
+ };
+ 
++static int virtio_serial_device_init(VirtIODevice *vdev)
++{
++    DeviceState *qdev = DEVICE(vdev);
++    VirtIOSerial *vser = VIRTIO_SERIAL(vdev);
++    virtio_serial_conf *conf = &(vser->serial);
++    if (virtio_serial_common_init(qdev, conf, &vdev) == NULL) {
++        return -1;
++    }
++    return 0;
++}
++
++static int virtio_serial_device_exit(DeviceState *dev)
++{
++    VirtIOSerial *vser = VIRTIO_SERIAL(dev);
++    VirtIODevice *vdev = VIRTIO_DEVICE(dev);
++
++    unregister_savevm(dev, "virtio-console", vser);
++
++    g_free(vser->ivqs);
++    g_free(vser->ovqs);
++    g_free(vser->ports_map);
++    if (vser->post_load) {
++        g_free(vser->post_load->connected);
++        qemu_del_timer(vser->post_load->timer);
++        qemu_free_timer(vser->post_load->timer);
++        g_free(vser->post_load);
++    }
++    virtio_common_cleanup(vdev);
++    return 0;
++}
++
++static Property virtio_serial_properties[] = {
++    DEFINE_VIRTIO_SERIAL_PROPERTIES(VirtIOSerial, serial),
++    DEFINE_PROP_END_OF_LIST(),
++};
++
++static void virtio_serial_class_init(ObjectClass *klass, void *data)
++{
++    DeviceClass *dc = DEVICE_CLASS(klass);
++    VirtioDeviceClass *vdc = VIRTIO_DEVICE_CLASS(klass);
++    dc->exit = virtio_serial_device_exit;
++    dc->props = virtio_serial_properties;
++    vdc->init = virtio_serial_device_init;
++    vdc->get_features = get_features;
++    vdc->get_config = get_config;
++    vdc->set_config = set_config;
++    vdc->set_status = set_status;
++    vdc->reset = vser_reset;
++}
++
++static const TypeInfo virtio_device_info = {
++    .name = TYPE_VIRTIO_SERIAL,
++    .parent = TYPE_VIRTIO_DEVICE,
++    .instance_size = sizeof(VirtIOSerial),
++    .class_init = virtio_serial_class_init,
++};
++
+ static void virtio_serial_register_types(void)
+ {
+     type_register_static(&virtser_bus_info);
+     type_register_static(&virtio_serial_port_type_info);
++    type_register_static(&virtio_device_info);
+ }
+ 
+ type_init(virtio_serial_register_types)
+diff --git a/hw/s390x/s390-virtio-bus.c b/hw/s390x/s390-virtio-bus.c
+index ddf15a2..6d857b9 100644
+--- a/hw/s390x/s390-virtio-bus.c
++++ b/hw/s390x/s390-virtio-bus.c
+@@ -465,8 +465,7 @@ static const TypeInfo s390_virtio_blk = {
+ };
+ 
+ static Property s390_virtio_serial_properties[] = {
+-    DEFINE_PROP_UINT32("max_ports", VirtIOS390Device,
+-                       serial.max_virtserial_ports, 31),
++    DEFINE_VIRTIO_SERIAL_PROPERTIES(VirtIOS390Device, serial),
+     DEFINE_PROP_END_OF_LIST(),
+ };
+ 
+diff --git a/hw/s390x/virtio-ccw.c b/hw/s390x/virtio-ccw.c
+index 4dec0cd..817d11c 100644
+--- a/hw/s390x/virtio-ccw.c
++++ b/hw/s390x/virtio-ccw.c
+@@ -786,8 +786,7 @@ static const TypeInfo virtio_ccw_blk = {
+ 
+ static Property virtio_ccw_serial_properties[] = {
+     DEFINE_PROP_STRING("devno", VirtioCcwDevice, bus_id),
+-    DEFINE_PROP_UINT32("max_ports", VirtioCcwDevice,
+-                       serial.max_virtserial_ports, 31),
++    DEFINE_VIRTIO_SERIAL_PROPERTIES(VirtioCcwDevice, serial),
+     DEFINE_VIRTIO_COMMON_FEATURES(VirtioCcwDevice, host_features[0]),
+     DEFINE_PROP_END_OF_LIST(),
+ };
+diff --git a/hw/virtio/virtio-pci.c b/hw/virtio/virtio-pci.c
+index 2b22588..434e76e 100644
+--- a/hw/virtio/virtio-pci.c
++++ b/hw/virtio/virtio-pci.c
+@@ -1075,7 +1075,7 @@ static Property virtio_serial_properties[] = {
+     DEFINE_PROP_UINT32("vectors", VirtIOPCIProxy, nvectors, 2),
+     DEFINE_PROP_HEX32("class", VirtIOPCIProxy, class_code, 0),
+     DEFINE_VIRTIO_COMMON_FEATURES(VirtIOPCIProxy, host_features),
+-    DEFINE_PROP_UINT32("max_ports", VirtIOPCIProxy, serial.max_virtserial_ports, 31),
++    DEFINE_VIRTIO_SERIAL_PROPERTIES(VirtIOPCIProxy, serial),
+     DEFINE_PROP_END_OF_LIST(),
+ };
+ 
+diff --git a/include/hw/virtio/virtio-serial.h b/include/hw/virtio/virtio-serial.h
+index 098deea..fbaf65f 100644
+--- a/include/hw/virtio/virtio-serial.h
++++ b/include/hw/virtio/virtio-serial.h
+@@ -210,6 +210,8 @@ struct VirtIOSerial {
+     struct virtio_console_config config;
+ 
+     struct VirtIOSerialPostLoad *post_load;
++
++    virtio_serial_conf serial;
+ };
+ 
+ /* Interface to the virtio-serial bus */
+@@ -244,4 +246,11 @@ size_t virtio_serial_guest_ready(VirtIOSerialPort *port);
+  */
+ void virtio_serial_throttle_port(VirtIOSerialPort *port, bool throttle);
+ 
++#define TYPE_VIRTIO_SERIAL "virtio-serial-device"
++#define VIRTIO_SERIAL(obj) \
++        OBJECT_CHECK(VirtIOSerial, (obj), TYPE_VIRTIO_SERIAL)
++
++#define DEFINE_VIRTIO_SERIAL_PROPERTIES(_state, _field) \
++        DEFINE_PROP_UINT32("max_ports", _state, _field.max_virtserial_ports, 31)
++
+ #endif
+-- 
+1.8.1.4
+

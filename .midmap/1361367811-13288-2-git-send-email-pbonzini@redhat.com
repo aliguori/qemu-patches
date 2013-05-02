@@ -1,0 +1,1 @@
+../Win32-fixes/v1.1361393009/0001-win32-do-not-set-CPU-affinity.patch

@@ -1,0 +1,161 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Gerd Hoffmann <kraxel@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, Gerd Hoffmann <kraxel@redhat.com>
+Date: Tue, 16 Apr 2013 11:39:34 +0200
+Message-id: 1366105178-26744-21-git-send-email-kraxel@redhat.com
+Subject: [PATCH 20/24] xen: re-enable refresh interval reporting for xenfb
+
+xenfb informs the guest about the gui refresh interval so it can avoid
+pointless work.  That logic was temporarely disabled for the
+DisplayState reorganization.  Restore it now, with a proper interface
+for it.
+
+Signed-off-by: Gerd Hoffmann <kraxel@redhat.com>
+---
+ hw/display/xenfb.c   |   56 +++++++++++++++-----------------------------------
+ include/ui/console.h |    1 +
+ ui/console.c         |    6 ++++++
+ 3 files changed, 24 insertions(+), 39 deletions(-)
+
+diff --git a/hw/display/xenfb.c b/hw/display/xenfb.c
+index 8d327f1..f2eb89f 100644
+--- a/hw/display/xenfb.c
++++ b/hw/display/xenfb.c
+@@ -78,7 +78,6 @@ struct XenFB {
+     void              *pixels;
+     int               fbpages;
+     int               feature_update;
+-    int               refresh_period;
+     int               bug_trigger;
+     int               have_console;
+     int               do_resize;
+@@ -646,7 +645,7 @@ static void xenfb_guest_copy(struct XenFB *xenfb, int x, int y, int w, int h)
+     dpy_gfx_update(xenfb->c.con, x, y, w, h);
+ }
+ 
+-#if 0 /* def XENFB_TYPE_REFRESH_PERIOD */
++#ifdef XENFB_TYPE_REFRESH_PERIOD
+ static int xenfb_queue_full(struct XenFB *xenfb)
+ {
+     struct xenfb_page *page = xenfb->c.page;
+@@ -704,39 +703,7 @@ static void xenfb_update(void *opaque)
+     if (xenfb->c.xendev.be_state != XenbusStateConnected)
+         return;
+ 
+-    if (xenfb->feature_update) {
+-#if 0 /* XENFB_TYPE_REFRESH_PERIOD */
+-        struct DisplayChangeListener *l;
+-        int period = 99999999;
+-        int idle = 1;
+-
+-	if (xenfb_queue_full(xenfb))
+-	    return;
+-
+-        QLIST_FOREACH(l, &xenfb->c.ds->listeners, next) {
+-            if (l->idle)
+-                continue;
+-            idle = 0;
+-            if (!l->gui_timer_interval) {
+-                if (period > GUI_REFRESH_INTERVAL)
+-                    period = GUI_REFRESH_INTERVAL;
+-            } else {
+-                if (period > l->gui_timer_interval)
+-                    period = l->gui_timer_interval;
+-            }
+-        }
+-        if (idle)
+-	    period = XENFB_NO_REFRESH;
+-
+-	if (xenfb->refresh_period != period) {
+-	    xenfb_send_refresh_period(xenfb, period);
+-	    xenfb->refresh_period = period;
+-            xen_be_printf(&xenfb->c.xendev, 1, "refresh period: %d\n", period);
+-	}
+-#else
+-	; /* nothing */
+-#endif
+-    } else {
++    if (!xenfb->feature_update) {
+ 	/* we don't get update notifications, thus use the
+ 	 * sledge hammer approach ... */
+ 	xenfb->up_fullscreen = 1;
+@@ -785,6 +752,20 @@ static void xenfb_update(void *opaque)
+     xenfb->up_fullscreen = 0;
+ }
+ 
++static void xenfb_update_interval(void *opaque, uint64_t interval)
++{
++    struct XenFB *xenfb = opaque;
++
++    if (xenfb->feature_update) {
++#ifdef XENFB_TYPE_REFRESH_PERIOD
++        if (xenfb_queue_full(xenfb)) {
++            return;
++        }
++        xenfb_send_refresh_period(xenfb, interval);
++#endif
++    }
++}
++
+ /* QEMU display state changed, so refresh the framebuffer copy */
+ static void xenfb_invalidate(void *opaque)
+ {
+@@ -858,10 +839,6 @@ static void xenfb_handle_events(struct XenFB *xenfb)
+ 
+ static int fb_init(struct XenDevice *xendev)
+ {
+-    struct XenFB *fb = container_of(xendev, struct XenFB, c.xendev);
+-
+-    fb->refresh_period = -1;
+-
+ #ifdef XENFB_TYPE_RESIZE
+     xenstore_write_be_int(xendev, "feature-resize", 1);
+ #endif
+@@ -980,6 +957,7 @@ struct XenDevOps xen_framebuffer_ops = {
+ static const GraphicHwOps xenfb_ops = {
+     .invalidate  = xenfb_invalidate,
+     .gfx_update  = xenfb_update,
++    .update_interval = xenfb_update_interval,
+ };
+ 
+ /*
+diff --git a/include/ui/console.h b/include/ui/console.h
+index 3cb0018..800f458 100644
+--- a/include/ui/console.h
++++ b/include/ui/console.h
+@@ -272,6 +272,7 @@ typedef struct GraphicHwOps {
+     void (*invalidate)(void *opaque);
+     void (*gfx_update)(void *opaque);
+     void (*text_update)(void *opaque, console_ch_t *text);
++    void (*update_interval)(void *opaque, uint64_t interval);
+ } GraphicHwOps;
+ 
+ QemuConsole *graphic_console_init(const GraphicHwOps *ops,
+diff --git a/ui/console.c b/ui/console.c
+index 5bbc891..43ff80b 100644
+--- a/ui/console.c
++++ b/ui/console.c
+@@ -182,6 +182,7 @@ static void gui_update(void *opaque)
+     uint64_t dcl_interval;
+     DisplayState *ds = opaque;
+     DisplayChangeListener *dcl;
++    int i;
+ 
+     ds->refreshing = true;
+     dpy_refresh(ds);
+@@ -196,6 +197,11 @@ static void gui_update(void *opaque)
+     }
+     if (ds->update_interval != interval) {
+         ds->update_interval = interval;
++        for (i = 0; i < nb_consoles; i++) {
++            if (consoles[i]->hw_ops->update_interval) {
++                consoles[i]->hw_ops->update_interval(consoles[i]->hw, interval);
++            }
++        }
+         trace_console_refresh(interval);
+     }
+     ds->last_update = qemu_get_clock_ms(rt_clock);
+-- 
+1.7.9.7
+

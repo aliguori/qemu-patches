@@ -1,0 +1,53 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Eduardo Habkost <ehabkost@redhat.com>
+To: Eduardo Habkost <ehabkost@redhat.com>, qemu-devel@nongnu.org
+Cc: None <afaerber@suse.de>, qemu-devel@nongnu.org, qemu-stable@nongnu.org,
+ Igor Mammedov <imammedo@redhat.com>,
+ Andreas =?ISO-8859-1?B?RuRyYmVy?= <afaerber@suse.de>,
+ =?UTF-8?q?Andreas=20F=C3=A4rber?= <afaerber@suse.de>
+Date: Tue,  2 Apr 2013 17:48:12 -0300
+Message-id: 1364935692-24004-1-git-send-email-ehabkost@redhat.com
+Subject: [PATCH 1/1] target-i386: Check for host features before
+ filter_features_for_kvm()
+
+commit 5ec01c2e96910e1588d1a0de8609b9dda7618c7f broke "-cpu ..,enforce",
+as it has moved kvm_check_features_against_host() after the
+filter_features_for_kvm() call. filter_features_for_kvm() removes all
+features not supported by the host, so this effectively made
+kvm_check_features_against_host() impossible to fail.
+
+This patch changes the call so we check for host feature support before
+filtering the feature bits.
+
+Signed-off-by: Eduardo Habkost <ehabkost@redhat.com>
+Cc: Igor Mammedov <imammedo@redhat.com>
+---
+ target-i386/cpu.c | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/target-i386/cpu.c b/target-i386/cpu.c
+index 9ee5b3d..8fe8bc7 100644
+--- a/target-i386/cpu.c
++++ b/target-i386/cpu.c
+@@ -2132,14 +2132,14 @@ static void x86_cpu_realizefn(DeviceState *dev, Error **errp)
+         env->cpuid_ext3_features &= TCG_EXT3_FEATURES;
+         env->cpuid_svm_features &= TCG_SVM_FEATURES;
+     } else {
+-#ifdef CONFIG_KVM
+-        filter_features_for_kvm(cpu);
+-#endif
+         if (check_cpuid && kvm_check_features_against_host(cpu)
+             && enforce_cpuid) {
+             error_setg(errp, "Host's CPU doesn't support requested features");
+             return;
+         }
++#ifdef CONFIG_KVM
++        filter_features_for_kvm(cpu);
++#endif
+     }
+ 
+ #ifndef CONFIG_USER_ONLY
+-- 
+1.8.1.4
+
+

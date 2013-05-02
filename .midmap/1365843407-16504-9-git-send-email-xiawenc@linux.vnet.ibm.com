@@ -1,0 +1,1 @@
+../qmp-hmp-interfaces-for-internal-snapshot-info/v12.1365890189/0008-block-add-image-info-query-function-bdrv_query_image_info.patch

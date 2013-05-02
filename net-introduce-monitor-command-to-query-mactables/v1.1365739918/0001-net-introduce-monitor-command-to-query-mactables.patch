@@ -1,0 +1,414 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Amos Kong <akong@redhat.com>
+To: Eric Blake <eblake@redhat.com>, Stefan Hajnoczi <stefanha@gmail.com>,
+ "Michael S. Tsirkin" <mst@redhat.com>, qemu-devel@nongnu.org,
+ Amos Kong <akong@redhat.com>
+Cc: Anthony Liguori <aliguori@us.ibm.com>, berrange@redhat.com,
+ Osier Yang <jyang@redhat.com>, mst@redhat.com, qemu-devel@nongnu.org,
+ laine@redhat.com, Markus Armbruster <armbru@redhat.com>
+Date: Thu, 11 Apr 2013 23:11:58 +0800
+Message-id: 1365693118-6603-1-git-send-email-akong@redhat.com
+Subject: [PATCH 1/1] net: introduce monitor command to query mactables
+
+We want to do macvtap programming by libvirt, this patch added
+a monitor command to query rx mode information. I will also
+work on another patch to add QMP event notification for rx-mode
+changing. Libvirt will sync the rx-mode change to macvtap
+devices, there maybe exist an un-controlled delay, guests
+normally expect rx mode updates immediately, it's another
+separate issue.
+
+Output examples:
+
+(qemu) info mac_table
+virtio-net-pci.0:
+ \ promisc: on
+ \ allmulti: off
+ \ alluni: off
+ \ nomulti: off
+ \ nouni: off
+ \ nobcast: off
+ \ multi_overflow: off
+ \ uni_overflow: off
+ \ multicast:
+    01:00:5e:00:00:01
+    33:33:00:00:00:01
+    33:33:ff:12:34:56
+
+QMP example is in qmp-commands.hx
+
+Signed-off-by: Amos Kong <akong@redhat.com>
+---
+Welcome your comments, thanks
+---
+ hmp-commands.hx   |    2 +
+ hmp.c             |   63 +++++++++++++++++++++++++++++++++++++++++++++++
+ hmp.h             |    1 +
+ hw/virtio-net.c   |   70 +++++++++++++++++++++++++++++++++++++++++++++++++++++
+ include/net/net.h |    2 +
+ monitor.c         |    7 +++++
+ net/net.c         |   23 +++++++++++++++++
+ qapi-schema.json  |   37 ++++++++++++++++++++++++++++
+ qmp-commands.hx   |   45 ++++++++++++++++++++++++++++++++++
+ 9 files changed, 250 insertions(+), 0 deletions(-)
+
+diff --git a/hmp-commands.hx b/hmp-commands.hx
+index 3d98604..254969d 100644
+--- a/hmp-commands.hx
++++ b/hmp-commands.hx
+@@ -1645,6 +1645,8 @@ show roms
+ show the TPM device
+ @item info cpu_max
+ show the number of CPUs supported by the machine being emulated.
++@item info mac_table
++show the mac tables of nic devices
+ @end table
+ ETEXI
+ 
+diff --git a/hmp.c b/hmp.c
+index dbe9b90..8820224 100644
+--- a/hmp.c
++++ b/hmp.c
+@@ -653,6 +653,69 @@ void hmp_info_tpm(Monitor *mon, const QDict *qdict)
+     qapi_free_TPMInfoList(info_list);
+ }
+ 
++void hmp_info_mac_table(Monitor *mon, const QDict *qdict)
++{
++    MacTableInfoList *table_list, *table_entry;
++    StringList *str_entry;
++
++    table_list = qmp_query_mac_table(NULL);
++    table_entry = table_list;
++    while (table_entry) {
++        monitor_printf(mon, "%s:\n", table_entry->value->name);
++        if (table_entry->value->has_promisc) {
++            monitor_printf(mon, " \\ promisc: %s\n",
++                           table_entry->value->promisc ? "on" : "off");
++        }
++        if (table_entry->value->has_allmulti) {
++            monitor_printf(mon, " \\ allmulti: %s\n",
++                           table_entry->value->allmulti ? "on" : "off");
++        }
++        if (table_entry->value->has_alluni) {
++            monitor_printf(mon, " \\ alluni: %s\n",
++                           table_entry->value->alluni ? "on" : "off");
++        }
++        if (table_entry->value->has_nomulti) {
++            monitor_printf(mon, " \\ nomulti: %s\n",
++                           table_entry->value->nomulti ? "on" : "off");
++        }
++        if (table_entry->value->has_nouni) {
++            monitor_printf(mon, " \\ nouni: %s\n",
++                           table_entry->value->nouni ? "on" : "off");
++        }
++        if (table_entry->value->has_nobcast) {
++            monitor_printf(mon, " \\ nobcast: %s\n",
++                           table_entry->value->nobcast ? "on" : "off");
++        }
++        if (table_entry->value->has_multi_overflow) {
++            monitor_printf(mon, " \\ multi_overflow: %s\n",
++                           table_entry->value->multi_overflow ? "on" : "off");
++        }
++        if (table_entry->value->has_uni_overflow) {
++            monitor_printf(mon, " \\ uni_overflow: %s\n",
++                           table_entry->value->uni_overflow ? "on" : "off");
++        }
++        if (table_entry->value->has_unicast) {
++            str_entry = table_entry->value->unicast;
++            monitor_printf(mon, " \\ unicast:\n");
++            while (str_entry) {
++                monitor_printf(mon, "    %s\n", str_entry->value->str);
++                str_entry = str_entry->next;
++            }
++        }
++
++        if (table_entry->value->has_multicast) {
++            str_entry = table_entry->value->multicast;
++            monitor_printf(mon, " \\ multicast:\n");
++            while (str_entry) {
++                monitor_printf(mon, "    %s\n", str_entry->value->str);
++                str_entry = str_entry->next;
++            }
++        }
++        table_entry = table_entry->next;
++    }
++    qapi_free_MacTableInfoList(table_list);
++}
++
+ void hmp_quit(Monitor *mon, const QDict *qdict)
+ {
+     monitor_suspend(mon);
+diff --git a/hmp.h b/hmp.h
+index 80e8b41..286558b 100644
+--- a/hmp.h
++++ b/hmp.h
+@@ -37,6 +37,7 @@ void hmp_info_balloon(Monitor *mon, const QDict *qdict);
+ void hmp_info_pci(Monitor *mon, const QDict *qdict);
+ void hmp_info_block_jobs(Monitor *mon, const QDict *qdict);
+ void hmp_info_tpm(Monitor *mon, const QDict *qdict);
++void hmp_info_mac_table(Monitor *mon, const QDict *qdict);
+ void hmp_quit(Monitor *mon, const QDict *qdict);
+ void hmp_stop(Monitor *mon, const QDict *qdict);
+ void hmp_system_reset(Monitor *mon, const QDict *qdict);
+diff --git a/hw/virtio-net.c b/hw/virtio-net.c
+index 5917740..8b15759 100644
+--- a/hw/virtio-net.c
++++ b/hw/virtio-net.c
+@@ -193,6 +193,75 @@ static void virtio_net_set_link_status(NetClientState *nc)
+     virtio_net_set_status(&n->vdev, n->vdev.status);
+ }
+ 
++static MacTableInfo *virtio_net_query_mactable(NetClientState *nc)
++{
++    VirtIONet *n = qemu_get_nic_opaque(nc);
++    MacTableInfo *info;
++    StringList *str_list = NULL;
++    StringList *entry;
++    char str[12];
++    int i;
++
++    info = g_malloc0(sizeof(*info));
++    info->name = g_strdup(nc->name);
++
++    info->promisc = n->promisc;
++    info->has_promisc = true;
++    info->allmulti = n->allmulti;
++    info->has_allmulti = true;
++    info->alluni = n->alluni;
++    info->has_alluni = true;
++    info->nomulti = n->nomulti;
++    info->has_nomulti = true;
++    info->nouni = n->nouni;
++    info->has_nouni = true;
++    info->nobcast = n->nobcast;
++    info->has_nobcast = true;
++    info->multi_overflow = n->mac_table.multi_overflow;
++    info->has_multi_overflow = true;
++    info->uni_overflow = n->mac_table.uni_overflow;
++    info->has_uni_overflow = true;
++
++    for (i = 0; i < n->mac_table.first_multi; i++) {
++        info->has_unicast = true;
++        entry = g_malloc0(sizeof(*entry));
++        sprintf(str,
++                "%.2x:%.2x:%.2x:%.2x:%.2x:%.2x",
++                n->mac_table.macs[i * ETH_ALEN],
++                n->mac_table.macs[i * ETH_ALEN + 1],
++                n->mac_table.macs[i * ETH_ALEN + 2],
++                n->mac_table.macs[i * ETH_ALEN + 3],
++                n->mac_table.macs[i * ETH_ALEN + 4],
++                n->mac_table.macs[i * ETH_ALEN + 5]);
++        entry->value = g_malloc0(sizeof(String *));
++        entry->value->str = g_strdup(str);
++        entry->next = str_list;
++        str_list = entry;
++    }
++    info->unicast = str_list;
++
++    str_list = NULL;
++    for (i = n->mac_table.first_multi; i < n->mac_table.in_use; i++) {
++        info->has_multicast = true;
++        entry = g_malloc0(sizeof(*entry));
++        sprintf(str,
++                "%.2x:%.2x:%.2x:%.2x:%.2x:%.2x",
++                n->mac_table.macs[i * ETH_ALEN],
++                n->mac_table.macs[i * ETH_ALEN + 1],
++                n->mac_table.macs[i * ETH_ALEN + 2],
++                n->mac_table.macs[i * ETH_ALEN + 3],
++                n->mac_table.macs[i * ETH_ALEN + 4],
++                n->mac_table.macs[i * ETH_ALEN + 5]);
++        entry->value = g_malloc0(sizeof(String *));
++        entry->value->str = g_strdup(str);
++        entry->next = str_list;
++        str_list = entry;
++    }
++    info->multicast = str_list;
++
++    return info;
++}
++
+ static void virtio_net_reset(VirtIODevice *vdev)
+ {
+     VirtIONet *n = to_virtio_net(vdev);
+@@ -1232,6 +1301,7 @@ static NetClientInfo net_virtio_info = {
+     .receive = virtio_net_receive,
+         .cleanup = virtio_net_cleanup,
+     .link_status_changed = virtio_net_set_link_status,
++    .query_mac_table = virtio_net_query_mactable,
+ };
+ 
+ static bool virtio_net_guest_notifier_pending(VirtIODevice *vdev, int idx)
+diff --git a/include/net/net.h b/include/net/net.h
+index 43d85a1..866ec81 100644
+--- a/include/net/net.h
++++ b/include/net/net.h
+@@ -49,6 +49,7 @@ typedef ssize_t (NetReceiveIOV)(NetClientState *, const struct iovec *, int);
+ typedef void (NetCleanup) (NetClientState *);
+ typedef void (LinkStatusChanged)(NetClientState *);
+ typedef void (NetClientDestructor)(NetClientState *);
++typedef MacTableInfo * (QueryMacTable)(NetClientState *);
+ 
+ typedef struct NetClientInfo {
+     NetClientOptionsKind type;
+@@ -59,6 +60,7 @@ typedef struct NetClientInfo {
+     NetCanReceive *can_receive;
+     NetCleanup *cleanup;
+     LinkStatusChanged *link_status_changed;
++    QueryMacTable *query_mac_table;
+     NetPoll *poll;
+ } NetClientInfo;
+ 
+diff --git a/monitor.c b/monitor.c
+index b4bda77..9846b1e 100644
+--- a/monitor.c
++++ b/monitor.c
+@@ -2772,6 +2772,13 @@ static mon_cmd_t info_cmds[] = {
+         .mhandler.cmd = hmp_query_cpu_max,
+     },
+     {
++        .name       = "mac_table",
++        .args_type  = "",
++        .params     = "",
++        .help       = "show the mac tables",
++        .mhandler.cmd = hmp_info_mac_table,
++    },
++    {
+         .name       = NULL,
+     },
+ };
+diff --git a/net/net.c b/net/net.c
+index 7869161..2103e7f 100644
+--- a/net/net.c
++++ b/net/net.c
+@@ -964,6 +964,29 @@ void print_net_client(Monitor *mon, NetClientState *nc)
+                    nc->info_str);
+ }
+ 
++MacTableInfoList *qmp_query_mac_table(Error **errp)
++{
++    NetClientState *nc;
++    MacTableInfoList *table_list = NULL;
++
++    QTAILQ_FOREACH(nc, &net_clients, next) {
++        MacTableInfoList *entry;
++        MacTableInfo *info;
++
++        if (nc->info->type != NET_CLIENT_OPTIONS_KIND_NIC) {
++            continue;
++        }
++        if (nc->info->query_mac_table) {
++            info = nc->info->query_mac_table(nc);
++            entry = g_malloc0(sizeof(*entry));
++            entry->value = info;
++            entry->next = table_list;
++            table_list = entry;
++        }
++    }
++    return table_list;
++}
++
+ void do_info_network(Monitor *mon, const QDict *qdict)
+ {
+     NetClientState *nc, *peer;
+diff --git a/qapi-schema.json b/qapi-schema.json
+index db542f6..febf62a 100644
+--- a/qapi-schema.json
++++ b/qapi-schema.json
+@@ -3513,3 +3513,40 @@
+     '*asl_compiler_rev':  'uint32',
+     '*file':              'str',
+     '*data':              'str' }}
++
++# @MacTableInfo:
++#
++# Mac table information.
++#
++# @name: the name of nic device
++#
++# @unicast: #optional a list of unicast mac strings
++#
++# @multicast: #optional a list of multicast mac strings
++#
++# Since 1.5
++##
++{ 'type': 'MacTableInfo',
++  'data': {
++    'name':            'str',
++    '*promisc':        'bool',
++    '*allmulti':       'bool',
++    '*alluni':         'bool',
++    '*nomulti':        'bool',
++    '*nouni':          'bool',
++    '*nobcast':        'bool',
++    '*multi_overflow': 'bool',
++    '*uni_overflow':   'bool',
++    '*unicast':        ['String'],
++    '*multicast':      ['String'] }}
++
++##
++# @query-mac-table:
++#
++# Return mac tables information of nic devices
++#
++# Returns: @MacTableInfo on success
++#
++# Since: 1.5
++##
++{ 'command': 'query-mac-table', 'returns': ['MacTableInfo'] }
+diff --git a/qmp-commands.hx b/qmp-commands.hx
+index 1e0e11e..6f79eb8 100644
+--- a/qmp-commands.hx
++++ b/qmp-commands.hx
+@@ -2884,3 +2884,48 @@ Example:
+ <- { "return": {} }
+ 
+ EQMP
++    {
++        .name       = "query-mac-table",
++        .args_type  = "",
++        .mhandler.cmd_new = qmp_marshal_input_query_mac_table,
++    },
++
++SQMP
++query-mac-table
++---------------------
++
++Show mac tables of nic devices
++
++Returns a json-object, it's a list of mac tables, one mac table contains
++"name", "unicast", "multicast". "name" is a json-str, "unicast" and "multicast"
++are all a list that contains some mac strings.
++
++Example:
++
++-> { "execute": "query-mac-table"}
++<- {"return": [
++        {
++            "name": "virtio-net-pci.0",
++            "uni_overflow": false,
++            "nobcast": false,
++            "promisc": ,
++            "nouni": false,
++            "nomulti": false,
++            "allmulti": false,
++            "multi_overflow": false,
++            "alluni": false
++            "unicast": [
++                {
++                    "str": "33:33:ff:00:00:00"
++                }
++            ],
++            "multicast": [
++                {
++                    "str": "01:80:c2:00:00:21"
++                },
++            ]
++        }
++    ]
++  }
++
++EQMP
+-- 
+1.7.1
+

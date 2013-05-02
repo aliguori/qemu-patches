@@ -1,0 +1,47 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Stefan Hajnoczi <stefanha@redhat.com>
+To: Stefan Hajnoczi <stefanha@redhat.com>, qemu-devel@nongnu.org
+Cc: Fam Zheng <famz@redhat.com>, Stefan Hajnoczi <stefanha@redhat.com>,
+ Kevin Wolf <kwolf@redhat.com>, ilkka.tengvall@cybercom.com,
+ qemu-devel@nongnu.org
+Date: Tue, 16 Apr 2013 11:14:19 +0200
+Message-id: 1366103663-11574-1-git-send-email-stefanha@redhat.com
+Subject: [PATCH 0/4] qemu-img: support compression regardless of cluster size
+
+It was hard to find a short email subject line.  Anyway, the problem is that
+qemu-img convert -c fails with the following error message if the input image
+length is not a multiple of the output cluster size:
+
+  qemu-img: error while compressing sector 0: Input/output error
+
+Ilkka Tengvall <ilkka.tengvall@cybercom.com> reported the failure.  kwolf and
+eblake suggested a fix which this patch series implements.
+
+qemu-img convert -c succeeds with these patches applied.
+
+The final patch adds qemu-iotests case 053 to protect against regressions.
+
+v2:
+ * Extend test case to check virtual disk size and contents [eblake]
+ * Note: only the last commit changed
+
+Stefan Hajnoczi (4):
+  qcow2: allow sub-cluster compressed write to last cluster
+  qcow: allow sub-cluster compressed write to last cluster
+  qemu-img: do not zero-pad the compressed write buffer
+  qemu-iotests: add 053 unaligned compressed image size test
+
+ block/qcow.c               | 17 +++++++++--
+ block/qcow2.c              | 17 +++++++++--
+ qemu-img.c                 |  8 ++---
+ tests/qemu-iotests/053     | 73 ++++++++++++++++++++++++++++++++++++++++++++++
+ tests/qemu-iotests/053.out | 17 +++++++++++
+ tests/qemu-iotests/group   |  1 +
+ 6 files changed, 123 insertions(+), 10 deletions(-)
+ create mode 100755 tests/qemu-iotests/053
+ create mode 100644 tests/qemu-iotests/053.out
+
+-- 
+1.8.1.4
+
+

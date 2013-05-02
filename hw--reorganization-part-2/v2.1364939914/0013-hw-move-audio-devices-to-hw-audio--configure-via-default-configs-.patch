@@ -1,0 +1,113 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: 
+Date: Tue,  2 Apr 2013 16:58:47 +0200
+Message-id: 1364914749-11141-14-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 13/35] hw: move audio devices to hw/audio/,
+ configure via default-configs/
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ default-configs/arm-softmmu.mak                         | 1 +
+ default-configs/sparc-softmmu.mak                       | 1 +
+ hw/arm/Makefile.objs                                    | 2 +-
+ hw/audio/Makefile.objs                                  | 4 ++++
+ hw/{ => audio}/cs4231.c                                 | 0
+ hw/{marvell_88w8618_audio.c => audio/marvell_88w8618.c} | 0
+ hw/{ => audio}/milkymist-ac97.c                         | 0
+ hw/lm32/Makefile.objs                                   | 1 -
+ hw/sparc/Makefile.objs                                  | 2 +-
+ 9 files changed, 8 insertions(+), 3 deletions(-)
+ rename hw/{ => audio}/cs4231.c (100%)
+ rename hw/{marvell_88w8618_audio.c => audio/marvell_88w8618.c} (100%)
+ rename hw/{ => audio}/milkymist-ac97.c (100%)
+
+diff --git a/default-configs/arm-softmmu.mak b/default-configs/arm-softmmu.mak
+index 7717ea6..c0e0110 100644
+--- a/default-configs/arm-softmmu.mak
++++ b/default-configs/arm-softmmu.mak
+@@ -48,6 +48,7 @@ CONFIG_PL310=y
+ CONFIG_PL330=y
+ CONFIG_CADENCE=y
+ CONFIG_XGMAC=y
++CONFIG_MARVELL_88W8618=y
+ CONFIG_ONENAND=y
+ 
+ CONFIG_VERSATILE_PCI=y
+diff --git a/default-configs/sparc-softmmu.mak b/default-configs/sparc-softmmu.mak
+index 6d11ba0..eda8797 100644
+--- a/default-configs/sparc-softmmu.mak
++++ b/default-configs/sparc-softmmu.mak
+@@ -9,3 +9,4 @@ CONFIG_FDC=y
+ CONFIG_EMPTY_SLOT=y
+ CONFIG_PCNET_COMMON=y
+ CONFIG_LANCE=y
++CONFIG_CS4231=y
+diff --git a/hw/arm/Makefile.objs b/hw/arm/Makefile.objs
+index ede019d..6582f5a 100644
+--- a/hw/arm/Makefile.objs
++++ b/hw/arm/Makefile.objs
+@@ -19,7 +19,7 @@ obj-y += omap_dss.o soc_dma.o omap_gptimer.o omap_synctimer.o \
+ obj-y += tsc210x.o
+ obj-y += blizzard.o cbus.o tusb6010.o
+ obj-y += mst_fpga.o
+-obj-y += bitbang_i2c.o marvell_88w8618_audio.o
++obj-y += bitbang_i2c.o
+ obj-y += framebuffer.o
+ obj-y += strongarm.o
+ obj-y += imx_serial.o imx_ccm.o imx_timer.o imx_avic.o
+diff --git a/hw/audio/Makefile.objs b/hw/audio/Makefile.objs
+index c50c367..2375102 100644
+--- a/hw/audio/Makefile.objs
++++ b/hw/audio/Makefile.objs
+@@ -13,4 +13,8 @@ common-obj-$(CONFIG_PCSPK) += pcspk.o
+ common-obj-$(CONFIG_WM8750) += wm8750.o
+ common-obj-$(CONFIG_PL041) += pl041.o lm4549.o
+ 
++common-obj-$(CONFIG_CS4231) += cs4231.o
++common-obj-$(CONFIG_MARVELL_88W8618) += marvell_88w8618.o
++common-obj-$(CONFIG_MILKYMIST) += milkymist-ac97.o
++
+ $(obj)/adlib.o $(obj)/fmopl.o: QEMU_CFLAGS += -DBUILD_Y8950=0
+diff --git a/hw/cs4231.c b/hw/audio/cs4231.c
+similarity index 100%
+rename from hw/cs4231.c
+rename to hw/audio/cs4231.c
+diff --git a/hw/marvell_88w8618_audio.c b/hw/audio/marvell_88w8618.c
+similarity index 100%
+rename from hw/marvell_88w8618_audio.c
+rename to hw/audio/marvell_88w8618.c
+diff --git a/hw/milkymist-ac97.c b/hw/audio/milkymist-ac97.c
+similarity index 100%
+rename from hw/milkymist-ac97.c
+rename to hw/audio/milkymist-ac97.c
+diff --git a/hw/lm32/Makefile.objs b/hw/lm32/Makefile.objs
+index d72756c..e328ec8 100644
+--- a/hw/lm32/Makefile.objs
++++ b/hw/lm32/Makefile.objs
+@@ -4,7 +4,6 @@ obj-y += lm32_juart.o
+ obj-y += lm32_timer.o
+ obj-y += lm32_uart.o
+ obj-y += lm32_sys.o
+-obj-y += milkymist-ac97.o
+ obj-y += milkymist-hpdmc.o
+ obj-y += milkymist-memcard.o
+ obj-y += milkymist-pfpu.o
+diff --git a/hw/sparc/Makefile.objs b/hw/sparc/Makefile.objs
+index 56eeb90..b2a921e 100644
+--- a/hw/sparc/Makefile.objs
++++ b/hw/sparc/Makefile.objs
+@@ -1,6 +1,6 @@
+ obj-y = tcx.o sun4m_iommu.o slavio_intctl.o
+ obj-y += slavio_timer.o slavio_misc.o sparc32_dma.o
+-obj-y += cs4231.o eccmemctl.o sbi.o sun4c_intctl.o
++obj-y += eccmemctl.o sbi.o sun4c_intctl.o
+ 
+ # GRLIB
+ obj-y += grlib_gptimer.o grlib_irqmp.o grlib_apbuart.o
+-- 
+1.8.1.4
+
+
+

@@ -1,0 +1,71 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Peter Maydell <peter.maydell@linaro.org>
+To: qemu-devel@nongnu.org
+Cc: =?UTF-8?q?Andreas=20F=C3=A4rber?= <afaerber@suse.de>, patches@linaro.org
+Date: Mon, 25 Mar 2013 22:31:32 +0000
+Message-id: 1364250694-7939-3-git-send-email-peter.maydell@linaro.org
+Subject: [PATCH 2/4] ui/cocoa.m: Avoid deprecated CPS* functions
+
+The functions CPSGetCurrentProcess and CPSEnableForegroundOperation
+are deprecated in newer versions of MacOSX and cause warning messages
+to be logged to the system log. Instead, use the new preferred method
+of promoting our console process up to a graphical app with menubar
+and Dock icon, which is TransformProcessType. (This function came
+in with MacOSX 10.3, so there's no need to retain the old method as
+we don't support anything earlier than 10.3 anyway.)
+
+Signed-off-by: Peter Maydell <peter.maydell@linaro.org>
+---
+ ui/cocoa.m | 23 ++++++-----------------
+ 1 file changed, 6 insertions(+), 17 deletions(-)
+
+diff --git a/ui/cocoa.m b/ui/cocoa.m
+index e9120e4..e768b05 100644
+--- a/ui/cocoa.m
++++ b/ui/cocoa.m
+@@ -851,22 +851,10 @@ QemuCocoaView *cocoaView;
+ 
+ 
+ 
+-// Dock Connection
+-typedef struct CPSProcessSerNum
+-{
+-        UInt32                lo;
+-        UInt32                hi;
+-} CPSProcessSerNum;
+-
+-OSErr CPSGetCurrentProcess( CPSProcessSerNum *psn);
+-OSErr CPSEnableForegroundOperation( CPSProcessSerNum *psn, UInt32 _arg2, UInt32 _arg3, UInt32 _arg4, UInt32 _arg5);
+-OSErr CPSSetFrontProcess( CPSProcessSerNum *psn);
+-
+ int main (int argc, const char * argv[]) {
+ 
+     gArgc = argc;
+     gArgv = (char **)argv;
+-    CPSProcessSerNum PSN;
+     int i;
+ 
+     /* In case we don't need to display a window, let's not do that */
+@@ -890,12 +878,13 @@ int main (int argc, const char * argv[]) {
+     }
+ 
+     NSAutoreleasePool * pool = [[NSAutoreleasePool alloc] init];
+-    [NSApplication sharedApplication];
+ 
+-    if (!CPSGetCurrentProcess(&PSN))
+-        if (!CPSEnableForegroundOperation(&PSN,0x03,0x3C,0x2C,0x1103))
+-            if (!CPSSetFrontProcess(&PSN))
+-                [NSApplication sharedApplication];
++    // Pull this console process up to being a fully-fledged graphical
++    // app with a menubar and Dock icon
++    ProcessSerialNumber psn = { 0, kCurrentProcess };
++    TransformProcessType(&psn, kProcessTransformToForegroundApplication);
++
++    [NSApplication sharedApplication];
+ 
+     // Add menus
+     NSMenu      *menu;
+-- 
+1.7.11.4
+
+

@@ -1,0 +1,37 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Andreas Schwab <schwab@suse.de>
+To: Andreas Schwab <schwab@suse.de>, qemu-devel@nongnu.org
+Cc: Riku Voipio <riku.voipio@iki.fi>, qemu-devel@nongnu.org
+Date: Tue, 09 Apr 2013 13:02:34 +0200
+Message-id: mvm38v02chh.fsf@hawking.suse.de
+Subject: [PATCH 1/1] linux-user: fix undefined shift in copy_to_user_fdset
+
+If TARGET_ABI_BITS is bigger than 32 we shift by more than the size of int.
+
+Signed-off-by: Andreas Schwab <schwab@suse.de>
+Reviewed-by: Peter Maydell <peter.maydell@linaro.org>
+---
+ linux-user/syscall.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/linux-user/syscall.c b/linux-user/syscall.c
+index fa3039f..5abc16f 100644
+--- a/linux-user/syscall.c
++++ b/linux-user/syscall.c
+@@ -922,7 +922,7 @@ static inline abi_long copy_to_user_fdset(abi_ulong target_fds_addr,
+     for (i = 0; i < nw; i++) {
+         v = 0;
+         for (j = 0; j < TARGET_ABI_BITS; j++) {
+-            v |= ((FD_ISSET(k, fds) != 0) << j);
++            v |= ((abi_ulong)(FD_ISSET(k, fds) != 0) << j);
+             k++;
+         }
+         __put_user(v, &target_fds[i]);
+-- 
+1.8.2.1
+
+-- 
+Andreas Schwab, SUSE Labs, schwab@suse.de
+GPG Key fingerprint = 0196 BAD8 1CE9 1970 F4BE  1748 E4D4 88E3 0EEA B9D7
+"And now for something completely different."
+

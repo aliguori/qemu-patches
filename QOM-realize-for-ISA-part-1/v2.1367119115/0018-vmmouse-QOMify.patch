@@ -1,0 +1,69 @@
+From patches Mon Sep 17 00:00:00 2001
+From: =?utf-8?q?Andreas_F=C3=A4rber_=3Cafaerber=40suse=2Ede=3E?=
+To: qemu-devel@nongnu.org
+Cc: =?UTF-8?q?Andreas=20F=C3=A4rber?= <afaerber@suse.de>
+Date: Sat, 27 Apr 2013 22:18:53 +0200
+Message-id: 1367093935-29091-19-git-send-email-afaerber@suse.de
+Subject: [PATCH 18/20] vmmouse: QOM'ify
+
+Introduce type constant and cast macro to obsolete DO_UPCAST() and
+container_of(). Prepares for ISA realizefn.
+
+Remove reserved underscore from struct name while at it.
+
+Signed-off-by: Andreas Färber <afaerber@suse.de>
+---
+ hw/input/vmmouse.c | 14 +++++++++-----
+ 1 file changed, 9 insertions(+), 5 deletions(-)
+
+diff --git a/hw/input/vmmouse.c b/hw/input/vmmouse.c
+index f4f9c93..a610738 100644
+--- a/hw/input/vmmouse.c
++++ b/hw/input/vmmouse.c
+@@ -51,9 +51,13 @@
+ #define DPRINTF(fmt, ...) do { } while (0)
+ #endif
+ 
+-typedef struct _VMMouseState
++#define TYPE_VMMOUSE "vmmouse"
++#define VMMOUSE(obj) OBJECT_CHECK(VMMouseState, (obj), TYPE_VMMOUSE)
++
++typedef struct VMMouseState
+ {
+-    ISADevice dev;
++    ISADevice parent_obj;
++
+     uint32_t queue[VMMOUSE_QUEUE_SIZE];
+     int32_t queue_size;
+     uint16_t nb_queue;
+@@ -250,7 +254,7 @@ static const VMStateDescription vmstate_vmmouse = {
+ 
+ static void vmmouse_reset(DeviceState *d)
+ {
+-    VMMouseState *s = container_of(d, VMMouseState, dev.qdev);
++    VMMouseState *s = VMMOUSE(d);
+ 
+     s->queue_size = VMMOUSE_QUEUE_SIZE;
+ 
+@@ -259,7 +263,7 @@ static void vmmouse_reset(DeviceState *d)
+ 
+ static int vmmouse_initfn(ISADevice *dev)
+ {
+-    VMMouseState *s = DO_UPCAST(VMMouseState, dev, dev);
++    VMMouseState *s = VMMOUSE(dev);
+ 
+     DPRINTF("vmmouse_init\n");
+ 
+@@ -287,7 +291,7 @@ static void vmmouse_class_initfn(ObjectClass *klass, void *data)
+ }
+ 
+ static const TypeInfo vmmouse_info = {
+-    .name          = "vmmouse",
++    .name          = TYPE_VMMOUSE,
+     .parent        = TYPE_ISA_DEVICE,
+     .instance_size = sizeof(VMMouseState),
+     .class_init    = vmmouse_class_initfn,
+-- 
+1.8.1.4
+
+

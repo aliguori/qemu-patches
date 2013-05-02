@@ -1,0 +1,82 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Alexander Graf <agraf@suse.de>
+To: qemu-ppc@nongnu.org
+Cc: Blue Swirl <blauwirbel@gmail.com>,
+ David Gibson <david@gibson.dropbear.id.au>,
+ Aurelien Jarno <aurelien@aurel32.net>, qemu-devel@nongnu.org
+Date: Fri, 26 Apr 2013 20:21:31 +0200
+Message-id: 1367000509-8833-13-git-send-email-agraf@suse.de
+Subject: [PATCH 12/30] pseries: Fix incorrect calculation of RMA size in
+ certain configurations
+
+From: David Gibson <david@gibson.dropbear.id.au>
+
+For the pseries machine, we need to advertise to the guest the size of its
+RMA - that is the amount of memory it can access with the MMU off.  For HV
+KVM, this is constrained by the hardware limitations on the virtual RMA of
+one hash PTE per PTE group in the hash page table.  We already had code to
+calculate this, but it was assuming the VRMA page size was the same as the
+(host) backing page size for guest RAM.
+
+In the case of a host kernel configured for 64k base page size, but running
+on hardware (or firmware) which only allows 4k pages, the hose will do all
+its allocations with a 64k page size, but still use 4k hardware pages for
+actual mappings.  Usually that's transparent to things running under the
+host, but in the case of the maximum VRMA size it's not.
+
+This patch refines the RMA size calculation to instead use the largest
+available hardware page size (as reported by the SMMU_INFO call) which is
+less than or equal to the backing page size.  This now gives the correct
+RMA size in all cases I've tested.
+
+Signed-off-by: David Gibson <david@gibson.dropbear.id.au>
+Signed-off-by: Alexander Graf <agraf@suse.de>
+---
+ target-ppc/kvm.c |   26 +++++++++++++++++++++++++-
+ 1 files changed, 25 insertions(+), 1 deletions(-)
+
+diff --git a/target-ppc/kvm.c b/target-ppc/kvm.c
+index 759983d..a1fa8d3 100644
+--- a/target-ppc/kvm.c
++++ b/target-ppc/kvm.c
+@@ -1446,11 +1446,35 @@ off_t kvmppc_alloc_rma(const char *name, MemoryRegion *sysmem)
+ 
+ uint64_t kvmppc_rma_size(uint64_t current_size, unsigned int hash_shift)
+ {
++    struct kvm_ppc_smmu_info info;
++    long rampagesize, best_page_shift;
++    int i;
++
+     if (cap_ppc_rma >= 2) {
+         return current_size;
+     }
++
++    /* Find the largest hardware supported page size that's less than
++     * or equal to the (logical) backing page size of guest RAM */
++    kvm_get_smmu_info(ppc_env_get_cpu(first_cpu), &info);
++    rampagesize = getrampagesize();
++    best_page_shift = 0;
++
++    for (i = 0; i < KVM_PPC_PAGE_SIZES_MAX_SZ; i++) {
++        struct kvm_ppc_one_seg_page_size *sps = &info.sps[i];
++
++        if (!sps->page_shift) {
++            continue;
++        }
++
++        if ((sps->page_shift > best_page_shift)
++            && ((1UL << sps->page_shift) <= rampagesize)) {
++            best_page_shift = sps->page_shift;
++        }
++    }
++
+     return MIN(current_size,
+-               getrampagesize() << (hash_shift - 7));
++               1ULL << (best_page_shift + hash_shift - 7));
+ }
+ #endif
+ 
+-- 
+1.6.0.2
+
+

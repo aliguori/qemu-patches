@@ -1,0 +1,41 @@
+From patches Mon Sep 17 00:00:00 2001
+From: peter.crosthwaite@xilinx.com
+To: qemu-devel@nongnu.org
+Cc: edgar.iglesias@gmail.com
+Date: Tue, 16 Apr 2013 10:23:59 +1000
+Message-id: f2ec3494dfd92757f08031114f3e242af5de8a6a.1366069170.git.peter.crosthwaite@xilinx.com
+Subject: [PATCH 09/16] petalogix_ml605_mmu: Fix machine node attachment
+
+From: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+
+Just attach devices straight to the root machine node, rather than the
+"unattached node"
+
+Signed-off-by: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+Reviewed-by: Andreas Färber <afaerber@suse.de>
+Acked-by: Edgar E. Iglesias <edgar.iglesias@xilinx.com>
+---
+Suggested (indirectly) by Andreas if he wants to put his Suggested-by to it.
+
+ hw/microblaze/petalogix_ml605_mmu.c |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/hw/microblaze/petalogix_ml605_mmu.c b/hw/microblaze/petalogix_ml605_mmu.c
+index f61818b..d7391e7 100644
+--- a/hw/microblaze/petalogix_ml605_mmu.c
++++ b/hw/microblaze/petalogix_ml605_mmu.c
+@@ -134,8 +134,8 @@ petalogix_ml605_init(QEMUMachineInitArgs *args)
+     dma = qdev_create(NULL, "xlnx.axi-dma");
+ 
+     /* FIXME: attach to the sysbus instead */
+-    object_property_add_child(container_get(qdev_get_machine(), "/unattached"),
+-                                  "xilinx-dma", OBJECT(dma), NULL);
++    object_property_add_child(qdev_get_machine(), "xilinx-dma", OBJECT(dma),
++                              NULL);
+ 
+     xilinx_axiethernet_init(eth0, &nd_table[0], STREAM_SLAVE(dma),
+                                    0x82780000, irq[3], 0x1000, 0x1000);
+-- 
+1.7.0.4
+
+

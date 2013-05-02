@@ -1,0 +1,1 @@
+../Xilinx-SPIPS-fixes-round-2/v2.1366390969/0003-xilinx_spips-Inhibit-interrupts-in-LQSPI-mode.patch

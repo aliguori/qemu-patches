@@ -1,0 +1,70 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Wenchao Xia <xiawenc@linux.vnet.ibm.com>
+To: qemu-devel@nongnu.org
+Cc: kwolf@redhat.com, Wenchao Xia <xiawenc@linux.vnet.ibm.com>,
+ stefanha@gmail.com, armbru@redhat.com, lcapitulino@redhat.com,
+ pbonzini@redhat.com
+Date: Tue,  2 Apr 2013 19:47:29 +0800
+Message-id: 1364903250-10429-17-git-send-email-xiawenc@linux.vnet.ibm.com
+Subject: [PATCH 16/17] hmp: show ImageInfo in 'info block'
+
+  Now human monitor can show image details include internal
+snapshot info for every block device.
+
+Signed-off-by: Wenchao Xia <xiawenc@linux.vnet.ibm.com>
+---
+ hmp.c |   22 ++++++++++++++++++++++
+ 1 files changed, 22 insertions(+), 0 deletions(-)
+
+diff --git a/hmp.c b/hmp.c
+index 89e1aaf..6f93fcd 100644
+--- a/hmp.c
++++ b/hmp.c
+@@ -278,6 +278,8 @@ void hmp_info_cpus(Monitor *mon, const QDict *qdict)
+ void hmp_info_block(Monitor *mon, const QDict *qdict)
+ {
+     BlockInfoList *block_list, *info;
++    ImageInfo *image_info;
++    GString *buf = NULL;
+ 
+     block_list = qmp_query_block(NULL);
+ 
+@@ -319,6 +321,23 @@ void hmp_info_block(Monitor *mon, const QDict *qdict)
+                             info->value->inserted->iops,
+                             info->value->inserted->iops_rd,
+                             info->value->inserted->iops_wr);
++
++            if (!buf) {
++                buf = g_string_sized_new(2048);
++            }
++            monitor_printf(mon, " images:\n");
++            image_info = info->value->inserted->image;
++            while (1) {
++                bdrv_image_info_dump(buf, image_info);
++                monitor_printf(mon, "%s", buf->str);
++                g_string_set_size(buf, 0);
++                if (image_info->has_backing_image) {
++                    image_info = image_info->backing_image;
++                } else {
++                    break;
++                }
++            }
++
+         } else {
+             monitor_printf(mon, " [not inserted]");
+         }
+@@ -326,6 +345,9 @@ void hmp_info_block(Monitor *mon, const QDict *qdict)
+         monitor_printf(mon, "\n");
+     }
+ 
++    if (buf) {
++        g_string_free(buf, true);
++    }
+     qapi_free_BlockInfoList(block_list);
+ }
+ 
+-- 
+1.7.1
+
+
+

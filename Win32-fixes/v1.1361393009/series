@@ -1,0 +1,3 @@
+0000-Win32-fixes.txt
+0001-win32-do-not-set-CPU-affinity.patch
+0002-qemu-timer-move-timeBeginPeriod-timeEndPeriod-to-os-win32.patch

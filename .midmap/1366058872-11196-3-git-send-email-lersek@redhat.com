@@ -1,0 +1,1 @@
+../publish-etc-acpi-APIC-in-fw_cfg/v2.1366084065/0002-acpi_table_install-fix-funcparam-formatting-in-leading-comment.patch

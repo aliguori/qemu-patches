@@ -1,0 +1,42 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Amit Shah <amit.shah@redhat.com>
+To: Anthony Liguori <anthony@codemonkey.ws>, Amit Shah <amit.shah@redhat.com>,
+ None <afaerber@suse.de>, Andreas =?iso-8859-1?Q?F=E4rber?= <afaerber@suse.de>
+Cc: Anthony Liguori <anthony@codemonkey.ws>, Amit Shah <amit.shah@redhat.com>,
+ qemu list <qemu-devel@nongnu.org>, qemu-stable <qemu-stable@nongnu.org>
+Date: Tue, 16 Apr 2013 15:58:16 +0530
+Message-id: eacda84dfaf2d99cf6d250b678be4e4d6c2088fb.1366108096.git.amit.shah@redhat.com
+Subject: [PATCH 1/1] rng random backend: check for -EAGAIN errors on read
+
+Not handling EAGAIN triggers the assert
+
+qemu/backends/rng-random.c:44:entropy_available: assertion failed: (len != -1)
+Aborted (core dumped)
+
+This happens when starting a guest with '-device virtio-rng-pci',
+issuing a 'cat /dev/hwrng' in the guest, while also doing 'cat
+/dev/random' on the host.
+
+Reported-by: yunpingzheng <yunzheng@redhat.com>
+Signed-off-by: Amit Shah <amit.shah@redhat.com>
+---
+ backends/rng-random.c | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/backends/rng-random.c b/backends/rng-random.c
+index d5761f2..830360c 100644
+--- a/backends/rng-random.c
++++ b/backends/rng-random.c
+@@ -41,6 +41,9 @@ static void entropy_available(void *opaque)
+     ssize_t len;
+ 
+     len = read(s->fd, buffer, s->size);
++    if (len < 0 && errno == EAGAIN) {
++        return;
++    }
+     g_assert(len != -1);
+ 
+     s->receive_func(s->opaque, buffer, len);
+-- 
+1.8.1.4
+

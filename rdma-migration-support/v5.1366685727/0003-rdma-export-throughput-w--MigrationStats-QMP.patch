@@ -1,0 +1,115 @@
+From patches Mon Sep 17 00:00:00 2001
+From: mrhines@linux.vnet.ibm.com
+To: quintela@redhat.com
+Cc: Anthony Liguori <aliguori@us.ibm.com>, qemu-devel@nongnu.org,
+ Michael R Hines <mrhines@us.ibm.com>, Bulent Abali <abali@us.ibm.com>,
+ owasserm@redhat.com, pbonzini@redhat.com, Gokul B Kandiraju <gokul@us.ibm.com>,
+ eblake@redhat.com
+Date: Mon, 22 Apr 2013 21:55:30 -0400
+Message-id: 1366682139-22122-4-git-send-email-mrhines@linux.vnet.ibm.com
+Subject: [PATCH 03/12] rdma: export throughput w/ MigrationStats QMP
+
+From: "Michael R. Hines" <mrhines@us.ibm.com>
+
+This exposes throughput (in megabits/sec) through QMP.
+
+By itself, this patch only prints zero and the value is
+actually calculated in the next patch.
+
+Signed-off-by: Michael R. Hines <mrhines@us.ibm.com>
+---
+ hmp.c                         |    2 ++
+ include/migration/qemu-file.h |    2 ++
+ migration.c                   |    2 ++
+ qapi-schema.json              |    5 ++++-
+ savevm.c                      |    7 +++++++
+ 5 files changed, 17 insertions(+), 1 deletion(-)
+
+diff --git a/hmp.c b/hmp.c
+index 4fb76ec..ab2c030 100644
+--- a/hmp.c
++++ b/hmp.c
+@@ -167,6 +167,8 @@ void hmp_info_migrate(Monitor *mon, const QDict *qdict)
+     if (info->has_ram) {
+         monitor_printf(mon, "transferred ram: %" PRIu64 " kbytes\n",
+                        info->ram->transferred >> 10);
++        monitor_printf(mon, "throughput: %0.2f mbps\n",
++                       info->ram->mbps);
+         monitor_printf(mon, "remaining ram: %" PRIu64 " kbytes\n",
+                        info->ram->remaining >> 10);
+         monitor_printf(mon, "total ram: %" PRIu64 " kbytes\n",
+diff --git a/include/migration/qemu-file.h b/include/migration/qemu-file.h
+index 7519464..70eb9bd 100644
+--- a/include/migration/qemu-file.h
++++ b/include/migration/qemu-file.h
+@@ -80,6 +80,8 @@ void qemu_put_byte(QEMUFile *f, int v);
+  * The buffer should be available till it is sent asynchronously.
+  */
+ void qemu_put_buffer_async(QEMUFile *f, const uint8_t *buf, int size);
++double qemu_get_mbps(void);
++
+ 
+ static inline void qemu_put_ubyte(QEMUFile *f, unsigned int v)
+ {
+diff --git a/migration.c b/migration.c
+index 3eb0fad..e2d73c4 100644
+--- a/migration.c
++++ b/migration.c
+@@ -201,6 +201,7 @@ MigrationInfo *qmp_query_migrate(Error **errp)
+         info->ram->normal = norm_mig_pages_transferred();
+         info->ram->normal_bytes = norm_mig_bytes_transferred();
+         info->ram->dirty_pages_rate = s->dirty_pages_rate;
++        info->ram->mbps = qemu_get_mbps();
+ 
+         if (blk_mig_active()) {
+             info->has_disk = true;
+@@ -230,6 +231,7 @@ MigrationInfo *qmp_query_migrate(Error **errp)
+         info->ram->skipped = skipped_mig_pages_transferred();
+         info->ram->normal = norm_mig_pages_transferred();
+         info->ram->normal_bytes = norm_mig_bytes_transferred();
++        info->ram->mbps = qemu_get_mbps();
+         break;
+     case MIG_STATE_ERROR:
+         info->has_status = true;
+diff --git a/qapi-schema.json b/qapi-schema.json
+index 751d3c2..cc846c3 100644
+--- a/qapi-schema.json
++++ b/qapi-schema.json
+@@ -507,12 +507,15 @@
+ # @dirty-pages-rate: number of pages dirtied by second by the
+ #        guest (since 1.3)
+ #
++# @mbps: throughput in megabits/sec. (since 1.5)
++#
+ # Since: 0.14.0
+ ##
+ { 'type': 'MigrationStats',
+   'data': {'transferred': 'int', 'remaining': 'int', 'total': 'int' ,
+            'duplicate': 'int', 'skipped': 'int', 'normal': 'int',
+-           'normal-bytes': 'int', 'dirty-pages-rate' : 'int' } }
++           'normal-bytes': 'int', 'dirty-pages-rate' : 'int',
++           'mbps' : 'number' } }
+ 
+ ##
+ # @XBZRLECacheStats
+diff --git a/savevm.c b/savevm.c
+index 4dbfa16..6fcad19 100644
+--- a/savevm.c
++++ b/savevm.c
+@@ -632,6 +632,13 @@ static void qemu_fill_buffer(QEMUFile *f)
+         qemu_file_set_error(f, len);
+ }
+ 
++static double mbps = -1;
++
++double qemu_get_mbps(void)
++{
++    return mbps;
++}
++
+ int qemu_get_fd(QEMUFile *f)
+ {
+     if (f->ops->get_fd) {
+-- 
+1.7.10.4
+

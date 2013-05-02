@@ -1,0 +1,35 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Kevin Wolf <kwolf@redhat.com>
+To: anthony@codemonkey.ws
+Cc: kwolf@redhat.com, qemu-devel@nongnu.org
+Date: Mon, 22 Apr 2013 13:31:18 +0200
+Message-id: 1366630294-18984-5-git-send-email-kwolf@redhat.com
+Subject: [PATCH 04/20] qemu-iotests: Fix _filter_qemu
+
+$QEMU_PROG happens to be 'qemu' in my setup, so this sed command
+replaces a bit too much. Restrict it to the start of the line and to
+when it's followed by a colon, i.e. the form used by error messages.
+
+Signed-off-by: Kevin Wolf <kwolf@redhat.com>
+Reviewed-by: Eric Blake <eblake@redhat.com>
+Reviewed-by: Stefan Hajnoczi <stefanha@redhat.com>
+---
+ tests/qemu-iotests/common.filter | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/tests/qemu-iotests/common.filter b/tests/qemu-iotests/common.filter
+index bc5f250..dcf6391 100644
+--- a/tests/qemu-iotests/common.filter
++++ b/tests/qemu-iotests/common.filter
+@@ -155,7 +155,7 @@ _filter_qemu_io()
+ # replace occurrences of QEMU_PROG with "qemu"
+ _filter_qemu()
+ {
+-    sed -e "s#$(basename $QEMU_PROG)#QEMU_PROG#g"
++    sed -e "s#^$(basename $QEMU_PROG):#QEMU_PROG:#"
+ }
+ 
+ # make sure this script returns success
+-- 
+1.8.1.4
+

@@ -1,0 +1,1 @@
+../qapi-and-snapshot-code-clean-up-in-block-layer/v1.1367015468/0005-block-move-collect_snapshots-and-collect_image_info-to-block-qapic.patch

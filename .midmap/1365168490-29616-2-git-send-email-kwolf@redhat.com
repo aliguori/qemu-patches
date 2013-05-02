@@ -1,0 +1,1 @@
+../Block-patches/v1.1365193682/0001-virtio-blk-x-fix-configuration-synchronization.patch

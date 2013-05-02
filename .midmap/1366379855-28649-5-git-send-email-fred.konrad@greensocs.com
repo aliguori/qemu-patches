@@ -1,0 +1,1 @@
+../virtio-rng-refactoring/v4.1366405047/0004-virtio-rng-s390-switch-to-the-new-API.patch

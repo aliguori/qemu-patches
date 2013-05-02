@@ -1,0 +1,78 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Eiichi Tsukata <eiichi.tsukata.xh@hitachi.com>
+To: Eiichi Tsukata <eiichi.tsukata.xh@hitachi.com>, qemu-devel@nongnu.org
+Cc: Eiichi Tsukata <eiichi.tsukata.xh@hitachi.com>, qemu-devel@nongnu.org
+Date: Wed,  3 Apr 2013 15:30:57 +0900
+Message-id: 1364970659-5715-1-git-send-email-eiichi.tsukata.xh@hitachi.com
+Subject: [PATCH 0/2] New trace backend: ftrace
+
+This patchset introduces a new tracing backend "ftrace".
+
+Currently, QEMU tracing backends do not support userspace tracing with ftrace.
+Collecting QEMU trace data and kernel trace data simultaniouly is useful for
+latency analysis and debugging especially when using KVM.
+
+With ftrace backend, you can easily collect QEMU-kernel merged trace data
+using existing ftrace event-based tracer. If you use KVM, you can effectively
+compare VM_EXIT and QEMU userspace handler.
+
+To try it out, compile QEMU with tracing backend ftrace, then enable KVM events
+in ftrace:
+
+    # echo 1 > /sys/kernel/debug/tracing/events/kvm/enable
+    
+After running qemu by root user, you can get the trace:
+    
+    # cat /sys/kernel/debug/tracing/trace
+
+Example:
+ # tracer: nop
+ #
+ # entries-in-buffer/entries-written: 8434/345512   #P:4
+ #
+ #                              _-----=> irqs-off
+ #                             / _----=> need-resched
+ #                            | / _---=> hardirq/softirq
+ #                            || / _--=> preempt-depth
+ #                            ||| /     delay
+ #           TASK-PID   CPU#  ||||    TIMESTAMP  FUNCTION
+ #              | |       |   ||||       |         |
+ <snip>
+ qemu-system-x86-31930 [000] d... 23580.595951: kvm_exit: reason IO_INSTRUCTION rip 0xc45d info 710048 0
+ qemu-system-x86-31930 [000] .... 23580.595954: kvm_emulate_insn: f0000:c45d:e4 71 (real)
+ qemu-system-x86-31930 [000] .... 23580.595955: kvm_pio: pio_read at 0x71 size 1 count 1
+ qemu-system-x86-31930 [000] .... 23580.595956: kvm_userspace_exit: reason KVM_EXIT_IO (2)
+ qemu-system-x86-31930 [000] ...1 23580.595959: tracing_mark_write: cpu_set_apic_base 00000000fee00900
+ qemu-system-x86-31930 [000] ...1 23580.595961: tracing_mark_write: cpu_in addr 0x71 value 0
+ qemu-system-x86-31930 [000] d... 23580.595964: kvm_entry: vcpu 0
+ <snip>
+
+"tracing_mark_write: cpu_set_apic_base 00000000fee00900" and
+"tracing_mark_write: cpu_in addr 0x71 value 0" are QEMU trace data.
+Others are Kernel trace data.
+
+Furthermore, the ftrace backend overhead is smaller than uprobe-based event
+tracer or SystemTap. My microbenchmark shows that ftrace tracing backend
+overhead is about 0.8us per tracepoint, whereas uprobe-based event tracer
+or SystemTap overhead is about 2.0us.
+
+Eiichi Tsukata (2):
+  trace: Add ftrace tracing backend
+  trace: document frace backend
+
+ configure                           |   8 +++
+ docs/tracing.txt                    |  16 ++++++
+ scripts/tracetool/backend/ftrace.py |  53 +++++++++++++++++++
+ trace/Makefile.objs                 |   1 +
+ trace/ftrace.c                      | 102 ++++++++++++++++++++++++++++++++++++
+ trace/ftrace.h                      |  10 ++++
+ 6 files changed, 190 insertions(+)
+ create mode 100644 scripts/tracetool/backend/ftrace.py
+ create mode 100644 trace/ftrace.c
+ create mode 100644 trace/ftrace.h
+
+-- 
+1.8.1.4
+
+
+

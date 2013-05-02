@@ -1,0 +1,85 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Peter Maydell <peter.maydell@linaro.org>
+To: Blue Swirl <blauwirbel@gmail.com>, Aurelien Jarno <aurelien@aurel32.net>
+Cc: Anthony Liguori <aliguori@us.ibm.com>, Paul Brook <paul@codesourcery.com>,
+ qemu-devel@nongnu.org
+Date: Fri, 19 Apr 2013 16:07:00 +0100
+Message-id: 1366384020-13253-5-git-send-email-peter.maydell@linaro.org
+Subject: [PATCH 4/4] target-arm: Correctly restore FPSCR
+
+Use the helper functions to save and restore the FPSCR, so that
+we correctly propagate rounding mode and flushing behaviour into
+the float_status fields. This also allows us to stop saving the
+vector length/stride fields separately.
+
+Signed-off-by: Peter Maydell <peter.maydell@linaro.org>
+---
+ target-arm/machine.c |   48 +++++++++++++++++++++++++++++++++++++++++-------
+ 1 file changed, 41 insertions(+), 7 deletions(-)
+
+diff --git a/target-arm/machine.c b/target-arm/machine.c
+index 2dd48d7..4dd057c 100644
+--- a/target-arm/machine.c
++++ b/target-arm/machine.c
+@@ -9,17 +9,51 @@ static bool vfp_needed(void *opaque)
+     return arm_feature(env, ARM_FEATURE_VFP);
+ }
+ 
++static int get_fpscr(QEMUFile *f, void *opaque, size_t size)
++{
++    ARMCPU *cpu = opaque;
++    CPUARMState *env = &cpu->env;
++    uint32_t val = qemu_get_be32(f);
++
++    vfp_set_fpscr(env, val);
++    return 0;
++}
++
++static void put_fpscr(QEMUFile *f, void *opaque, size_t size)
++{
++    ARMCPU *cpu = opaque;
++    CPUARMState *env = &cpu->env;
++
++    qemu_put_be32(f, vfp_get_fpscr(env));
++}
++
++static const VMStateInfo vmstate_fpscr = {
++    .name = "fpscr",
++    .get = get_fpscr,
++    .put = put_fpscr,
++};
++
+ static const VMStateDescription vmstate_vfp = {
+     .name = "cpu/vfp",
+-    .version_id = 1,
+-    .minimum_version_id = 1,
+-    .minimum_version_id_old = 1,
++    .version_id = 2,
++    .minimum_version_id = 2,
++    .minimum_version_id_old = 2,
+     .fields = (VMStateField[]) {
+         VMSTATE_FLOAT64_ARRAY(env.vfp.regs, ARMCPU, 32),
+-        VMSTATE_UINT32_ARRAY(env.vfp.xregs, ARMCPU, 16),
+-        /* TODO: Should use proper FPSCR access functions.  */
+-        VMSTATE_INT32(env.vfp.vec_len, ARMCPU),
+-        VMSTATE_INT32(env.vfp.vec_stride, ARMCPU),
++        /* The xregs array is a little awkward because element 1 (FPSCR)
++         * requires a specific accessor, so we have to split it up in
++         * the vmstate:
++         */
++        VMSTATE_UINT32(env.vfp.xregs[0], ARMCPU),
++        VMSTATE_UINT32_SUB_ARRAY(env.vfp.xregs, ARMCPU, 2, 14),
++        {
++            .name = "fpscr",
++            .version_id = 0,
++            .size = sizeof(uint32_t),
++            .info = &vmstate_fpscr,
++            .flags = VMS_SINGLE,
++            .offset = 0,
++        },
+         VMSTATE_END_OF_LIST()
+     }
+ };
+-- 
+1.7.9.5
+

@@ -1,0 +1,80 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Gerd Hoffmann <kraxel@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, Gerd Hoffmann <kraxel@redhat.com>
+Date: Wed, 24 Apr 2013 12:08:37 +0200
+Message-id: 1366798118-3248-2-git-send-email-kraxel@redhat.com
+Subject: [PATCH 1/2] input: make QEMUPutLEDEntry + QEMUPutMouseEntry private
+
+There is no need for anybody outside ui/input.c to access the
+struct elements.  Move the definitions, leaving only the typedefs
+in the header files.
+
+Signed-off-by: Gerd Hoffmann <kraxel@redhat.com>
+---
+ include/ui/console.h |   19 ++-----------------
+ ui/input.c           |   18 ++++++++++++++++++
+ 2 files changed, 20 insertions(+), 17 deletions(-)
+
+diff --git a/include/ui/console.h b/include/ui/console.h
+index e591d74..5cc5d0c 100644
+--- a/include/ui/console.h
++++ b/include/ui/console.h
+@@ -28,23 +28,8 @@ typedef void QEMUPutKBDEvent(void *opaque, int keycode);
+ typedef void QEMUPutLEDEvent(void *opaque, int ledstate);
+ typedef void QEMUPutMouseEvent(void *opaque, int dx, int dy, int dz, int buttons_state);
+ 
+-typedef struct QEMUPutMouseEntry {
+-    QEMUPutMouseEvent *qemu_put_mouse_event;
+-    void *qemu_put_mouse_event_opaque;
+-    int qemu_put_mouse_event_absolute;
+-    char *qemu_put_mouse_event_name;
+-
+-    int index;
+-
+-    /* used internally by qemu for handling mice */
+-    QTAILQ_ENTRY(QEMUPutMouseEntry) node;
+-} QEMUPutMouseEntry;
+-
+-typedef struct QEMUPutLEDEntry {
+-    QEMUPutLEDEvent *put_led;
+-    void *opaque;
+-    QTAILQ_ENTRY(QEMUPutLEDEntry) next;
+-} QEMUPutLEDEntry;
++typedef struct QEMUPutMouseEntry QEMUPutMouseEntry;
++typedef struct QEMUPutLEDEntry QEMUPutLEDEntry;
+ 
+ void qemu_add_kbd_event_handler(QEMUPutKBDEvent *func, void *opaque);
+ void qemu_remove_kbd_event_handler(void);
+diff --git a/ui/input.c b/ui/input.c
+index ecfeb43..d8793e7 100644
+--- a/ui/input.c
++++ b/ui/input.c
+@@ -29,6 +29,24 @@
+ #include "qmp-commands.h"
+ #include "qapi-types.h"
+ 
++struct QEMUPutMouseEntry {
++    QEMUPutMouseEvent *qemu_put_mouse_event;
++    void *qemu_put_mouse_event_opaque;
++    int qemu_put_mouse_event_absolute;
++    char *qemu_put_mouse_event_name;
++
++    int index;
++
++    /* used internally by qemu for handling mice */
++    QTAILQ_ENTRY(QEMUPutMouseEntry) node;
++};
++
++struct QEMUPutLEDEntry {
++    QEMUPutLEDEvent *put_led;
++    void *opaque;
++    QTAILQ_ENTRY(QEMUPutLEDEntry) next;
++};
++
+ static QEMUPutKBDEvent *qemu_put_kbd_event;
+ static void *qemu_put_kbd_event_opaque;
+ static QTAILQ_HEAD(, QEMUPutLEDEntry) led_handlers = QTAILQ_HEAD_INITIALIZER(led_handlers);
+-- 
+1.7.9.7
+

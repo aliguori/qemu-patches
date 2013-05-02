@@ -1,0 +1,6 @@
+0000-console-qom-ify-consoles.txt
+0001-console-qom-ify-QemuConsole.patch
+0002-console-add-device-link-to-QemuConsoles.patch
+0003-console-add-qemu_console_lookup_by_device.patch
+0004-console-switch-ppm_save-to-qemu_open.patch
+0005-console-zap-ds-arg-from-register_displaychangelistener.patch

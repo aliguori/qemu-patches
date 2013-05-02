@@ -1,0 +1,156 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Laszlo Ersek <lersek@redhat.com>
+To: aliguori@us.ibm.com, seabios@seabios.org, qemu-devel@nongnu.org
+Cc: 
+Date: Mon,  8 Apr 2013 15:13:20 +0200
+Message-id: 1365426803-1781-3-git-send-email-lersek@redhat.com
+Subject: [PATCH 2/5] hw/acpi: extract standard table headers as a standalone
+ structure
+
+This enables reuse when preparing per-table fw_cfg blobs later.
+
+Signed-off-by: Laszlo Ersek <lersek@redhat.com>
+---
+ hw/acpi.h |   11 +++++++++++
+ hw/acpi.c |   48 +++++++++++++++++++++---------------------------
+ 2 files changed, 32 insertions(+), 27 deletions(-)
+
+diff --git a/hw/acpi.h b/hw/acpi.h
+index e18ef28..d69b6ef 100644
+--- a/hw/acpi.h
++++ b/hw/acpi.h
+@@ -154,4 +154,15 @@ void acpi_gpe_reset(ACPIREGS *ar);
+ void acpi_gpe_ioport_writeb(ACPIREGS *ar, uint32_t addr, uint32_t val);
+ uint32_t acpi_gpe_ioport_readb(ACPIREGS *ar, uint32_t addr);
+ 
++typedef struct acpi_table_std_header {
++    char sig[4];              /* ACPI signature (4 ASCII characters) */
++    uint32_t length;          /* Length of table, in bytes, including header */
++    uint8_t revision;         /* ACPI Specification minor version # */
++    uint8_t checksum;         /* To make sum of entire table == 0 */
++    char oem_id[6];           /* OEM identification */
++    char oem_table_id[8];     /* OEM table identification */
++    uint32_t oem_revision;    /* OEM revision number */
++    char asl_compiler_id[4];  /* ASL compiler vendor ID */
++    uint32_t asl_compiler_revision; /* ASL compiler revision number */
++} QEMU_PACKED AcpiTableStdHdr;
+ #endif /* !QEMU_HW_ACPI_H */
+diff --git a/hw/acpi.c b/hw/acpi.c
+index 856da81..73af4bd 100644
+--- a/hw/acpi.c
++++ b/hw/acpi.c
+@@ -31,21 +31,13 @@
+ struct acpi_table_header {
+     uint16_t _length;         /* our length, not actual part of the hdr */
+                               /* allows easier parsing for fw_cfg clients */
+-    char sig[4];              /* ACPI signature (4 ASCII characters) */
+-    uint32_t length;          /* Length of table, in bytes, including header */
+-    uint8_t revision;         /* ACPI Specification minor version # */
+-    uint8_t checksum;         /* To make sum of entire table == 0 */
+-    char oem_id[6];           /* OEM identification */
+-    char oem_table_id[8];     /* OEM table identification */
+-    uint32_t oem_revision;    /* OEM revision number */
+-    char asl_compiler_id[4];  /* ASL compiler vendor ID */
+-    uint32_t asl_compiler_revision; /* ASL compiler revision number */
++    AcpiTableStdHdr std;
+ } QEMU_PACKED;
+ 
+-#define ACPI_TABLE_HDR_SIZE sizeof(struct acpi_table_header)
+-#define ACPI_TABLE_PFX_SIZE sizeof(uint16_t)  /* size of the extra prefix */
++/* size of the extra prefix */
++#define ACPI_TABLE_PFX_SIZE offsetof(struct acpi_table_header, std)
+ 
+-static const char unsigned dfl_hdr[ACPI_TABLE_HDR_SIZE - ACPI_TABLE_PFX_SIZE] =
++static const char unsigned dfl_hdr[sizeof(AcpiTableStdHdr)] =
+     "QEMU\0\0\0\0\1\0"       /* sig (4), len(4), revno (1), csum (1) */
+     "QEMUQEQEMUQEMU\1\0\0\0" /* OEM id (6), table (8), revno (4) */
+     "QEMU\1\0\0\0"           /* ASL compiler ID (4), version (4) */
+@@ -105,6 +97,7 @@ static void acpi_table_install(const char unsigned *blob, size_t bloblen,
+     size_t body_size, acpi_payload_size;
+     struct acpi_table_header *ext_hdr;
+     unsigned changed_fields;
++    AcpiTableStdHdr *std;
+ 
+     /* Calculate where the ACPI table body starts within the blob, plus where
+      * to copy the ACPI table header from.
+@@ -177,46 +170,47 @@ static void acpi_table_install(const char unsigned *blob, size_t bloblen,
+     changed_fields = 0;
+     ext_hdr->_length = cpu_to_le16(acpi_payload_size);
+ 
++    std = &ext_hdr->std;
+     if (hdrs->has_sig) {
+-        strncpy(ext_hdr->sig, hdrs->sig, sizeof ext_hdr->sig);
++        strncpy(std->sig, hdrs->sig, sizeof std->sig);
+         ++changed_fields;
+     }
+ 
+-    if (has_header && le32_to_cpu(ext_hdr->length) != acpi_payload_size) {
++    if (has_header && le32_to_cpu(std->length) != acpi_payload_size) {
+         fprintf(stderr,
+                 "warning: ACPI table has wrong length, header says "
+                 "%" PRIu32 ", actual size %zu bytes\n",
+-                le32_to_cpu(ext_hdr->length), acpi_payload_size);
++                le32_to_cpu(std->length), acpi_payload_size);
+     }
+-    ext_hdr->length = cpu_to_le32(acpi_payload_size);
++    std->length = cpu_to_le32(acpi_payload_size);
+ 
+     if (hdrs->has_rev) {
+-        ext_hdr->revision = hdrs->rev;
++        std->revision = hdrs->rev;
+         ++changed_fields;
+     }
+ 
+-    ext_hdr->checksum = 0;
++    std->checksum = 0;
+ 
+     if (hdrs->has_oem_id) {
+-        strncpy(ext_hdr->oem_id, hdrs->oem_id, sizeof ext_hdr->oem_id);
++        strncpy(std->oem_id, hdrs->oem_id, sizeof std->oem_id);
+         ++changed_fields;
+     }
+     if (hdrs->has_oem_table_id) {
+-        strncpy(ext_hdr->oem_table_id, hdrs->oem_table_id,
+-                sizeof ext_hdr->oem_table_id);
++        strncpy(std->oem_table_id, hdrs->oem_table_id,
++                sizeof std->oem_table_id);
+         ++changed_fields;
+     }
+     if (hdrs->has_oem_rev) {
+-        ext_hdr->oem_revision = cpu_to_le32(hdrs->oem_rev);
++        std->oem_revision = cpu_to_le32(hdrs->oem_rev);
+         ++changed_fields;
+     }
+     if (hdrs->has_asl_compiler_id) {
+-        strncpy(ext_hdr->asl_compiler_id, hdrs->asl_compiler_id,
+-                sizeof ext_hdr->asl_compiler_id);
++        strncpy(std->asl_compiler_id, hdrs->asl_compiler_id,
++                sizeof std->asl_compiler_id);
+         ++changed_fields;
+     }
+     if (hdrs->has_asl_compiler_rev) {
+-        ext_hdr->asl_compiler_revision = cpu_to_le32(hdrs->asl_compiler_rev);
++        std->asl_compiler_revision = cpu_to_le32(hdrs->asl_compiler_rev);
+         ++changed_fields;
+     }
+ 
+@@ -225,8 +219,8 @@ static void acpi_table_install(const char unsigned *blob, size_t bloblen,
+     }
+ 
+     /* recalculate checksum */
+-    ext_hdr->checksum = acpi_checksum((const char unsigned *)ext_hdr +
+-                                      ACPI_TABLE_PFX_SIZE, acpi_payload_size);
++    std->checksum = acpi_checksum((const char unsigned *)std,
++                                  acpi_payload_size);
+ }
+ 
+ void acpi_table_add(const QemuOpts *opts, Error **errp)
+-- 
+1.7.1
+
+
+
+_______________________________________________
+SeaBIOS mailing list
+SeaBIOS@seabios.org
+http://www.seabios.org/mailman/listinfo/seabios

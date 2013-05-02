@@ -1,0 +1,41 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: "Liuji \(Jeremy\)" <jeremy.liu@huawei.com>,
+ Paolo Bonzini <pbonzini@redhat.com>,
+ "quintela@redhat.com" <quintela@redhat.com>, qemu-devel@nongnu.org,
+ "qemu-devel@nongnu.org" <qemu-devel@nongnu.org>
+Cc: kwolf@redhat.com, Paolo Bonzini <pbonzini@redhat.com>,
+ Haofeng <haofeng@huawei.com>, "quintela@redhat.com" <quintela@redhat.com>,
+ quintela@redhat.com, qemu-devel@nongnu.org,
+ "qemu-devel@nongnu.org" <qemu-devel@nongnu.org>,
+ "Liuji \(Jeremy\)" <jeremy.liu@huawei.com>, owasserm@redhat.com,
+ "kwolf@redhat.com" <kwolf@redhat.com>,
+ "owasserm@redhat.com" <owasserm@redhat.com>, "Luohao
+ \(brian\)" <brian.luohao@huawei.com>,
+ "Luohao \(brian\)" <brian.luohao@huawei.com>
+Date: Mon,  8 Apr 2013 13:29:53 +0200
+Message-id: 1365420597-5506-1-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 0/4] QEMUFile improvements and simplifications
+
+This fixes Kevin's reported regression with savevm, and simplifies the
+QEMUFile code further.
+
+Patch 2 could be made a bit smaller at the expense of fixing the
+regression in the last patch only.  I prefer to fix the bug earlier.
+
+Tested with Autotest.
+
+Paolo Bonzini (4):
+  migration: set f->is_write and flush in add_to_iovec
+  migration: use a single I/O operation when writev_buffer is not defined
+  migration: drop is_write complications
+  migration: simplify writev vs. non-writev logic
+
+ savevm.c | 104 ++++++++++++++++++++++++++-------------------------------------
+ 1 file changed, 42 insertions(+), 62 deletions(-)
+
+Reviewed-by: Juan Quintela <quintela@redhat.com>
+-- 
+1.8.2
+
+

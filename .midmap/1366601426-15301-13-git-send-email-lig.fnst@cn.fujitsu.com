@@ -1,0 +1,1 @@
+../target-i386-remove-some-macros/v1.1366648214/0012-target-i386-fix-over-80-chars-warnings.patch

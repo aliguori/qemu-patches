@@ -1,0 +1,275 @@
+From patches Mon Sep 17 00:00:00 2001
+From: minyard@acm.org
+To: qemu-devel@nongnu.org
+Cc: Corey Minyard <cminyard@mvista.com>
+Date: Tue, 18 Sep 2012 15:00:43 -0500
+Message-id: 1347998443-20599-17-git-send-email-minyard@acm.org
+Subject: [PATCH 16/16] ipmi: Add migration capability to the IPMI device.
+
+From: Corey Minyard <cminyard@mvista.com>
+
+Signed-off-by: Corey Minyard <cminyard@mvista.com
+---
+ hw/ipmi.c        |   17 +++++++++++++++++
+ hw/ipmi.h        |    2 ++
+ hw/ipmi_bt.c     |   14 ++++++++++++++
+ hw/ipmi_extern.c |   42 ++++++++++++++++++++++++++++++++++++++----
+ hw/ipmi_kcs.c    |   15 +++++++++++++++
+ hw/ipmi_sim.c    |   31 +++++++++++++++++++++++++++++++
+ hw/isa_ipmi.c    |   12 ++++++++++++
+ 7 files changed, 129 insertions(+), 4 deletions(-)
+
+diff --git a/hw/ipmi.c b/hw/ipmi.c
+index 252eab0..56c0438 100644
+--- a/hw/ipmi.c
++++ b/hw/ipmi.c
+@@ -150,6 +150,23 @@ int ipmi_bmc_init(IPMIBmc *s)
+     return 0;
+ }
+ 
++const VMStateDescription vmstate_IPMIInterface = {
++    .name = TYPE_IPMI_INTERFACE,
++    .version_id = 1,
++    .minimum_version_id = 1,
++    .fields      = (VMStateField[]) {
++        VMSTATE_BOOL(obf_irq_set, IPMIInterface),
++        VMSTATE_BOOL(atn_irq_set, IPMIInterface),
++        VMSTATE_BOOL(use_irq, IPMIInterface),
++        VMSTATE_BOOL(irqs_enabled, IPMIInterface),
++        VMSTATE_UINT32(outpos, IPMIInterface),
++        VMSTATE_UINT32(outlen, IPMIInterface),
++        VMSTATE_VBUFFER_UINT32(inmsg, IPMIInterface, 1, NULL, 0, inlen),
++        VMSTATE_BOOL(write_end, IPMIInterface),
++        VMSTATE_END_OF_LIST()
++    }
++};
++
+ static TypeInfo ipmi_bmc_type_info = {
+     .name = TYPE_IPMI_BMC,
+     .parent = TYPE_OBJECT,
+diff --git a/hw/ipmi.h b/hw/ipmi.h
+index 13f0562..cbf2b18 100644
+--- a/hw/ipmi.h
++++ b/hw/ipmi.h
+@@ -187,6 +187,8 @@ typedef struct IPMIInterfaceClass {
+                        unsigned char *rsp, unsigned int rsp_len);
+ } IPMIInterfaceClass;
+ 
++extern const VMStateDescription vmstate_IPMIInterface;
++
+ int ipmi_interface_init(IPMIInterface *s);
+ void ipmi_interface_reset(IPMIInterface *s);
+ 
+diff --git a/hw/ipmi_bt.c b/hw/ipmi_bt.c
+index d068db0..a9d87eb 100644
+--- a/hw/ipmi_bt.c
++++ b/hw/ipmi_bt.c
+@@ -325,6 +325,19 @@ static void ipmi_bt_set_atn(IPMIInterface *s, int val, int irq)
+     }
+ }
+ 
++static const VMStateDescription vmstate_ipmi_bt = {
++    .name = TYPE_IPMI_INTERFACE_BT,
++    .version_id = 1,
++    .minimum_version_id = 1,
++    .fields      = (VMStateField[]) {
++        VMSTATE_UINT8(control_reg, IPMIBtInterface),
++        VMSTATE_UINT8(mask_reg, IPMIBtInterface),
++        VMSTATE_UINT8(waiting_rsp, IPMIBtInterface),
++        VMSTATE_UINT8(waiting_seq, IPMIBtInterface),
++        VMSTATE_END_OF_LIST()
++    }
++};
++
+ static int ipmi_bt_init(IPMIInterface *s)
+ {
+     IPMIBtInterface *bt = IPMI_INTERFACE_BT(s);
+@@ -335,6 +348,7 @@ static int ipmi_bt_init(IPMIInterface *s)
+     s->io_length = 3;
+ 
+     memory_region_init_io(&s->io, &ipmi_bt_io_ops, bt, "ipmi-bt", 3);
++    vmstate_register(NULL, 0, &vmstate_ipmi_bt, bt);
+ 
+     return 0;
+ }
+diff --git a/hw/ipmi_extern.c b/hw/ipmi_extern.c
+index b31aea0..803331c 100644
+--- a/hw/ipmi_extern.c
++++ b/hw/ipmi_extern.c
+@@ -63,10 +63,10 @@ typedef struct IPMIExternBmc {
+ 
+     unsigned char inbuf[MAX_IPMI_MSG_SIZE + 2];
+     unsigned int inpos;
+-    int in_escape;
+-    int in_too_many;
+-    int waiting_rsp;
+-    int sending_cmd;
++    bool in_escape;
++    bool in_too_many;
++    bool waiting_rsp;
++    bool sending_cmd;
+ 
+     unsigned char outbuf[(MAX_IPMI_MSG_SIZE + 2) * 2 + 1];
+     unsigned int outpos;
+@@ -442,12 +442,46 @@ static void ipmi_extern_handle_reset(IPMIBmc *b)
+     ipmi_unlock(s);
+ }
+ 
++static int ipmi_extern_post_migrate(void *opaque, int version_id)
++{
++    IPMIExternBmc *es = opaque;
++
++    /*
++     * We don't directly restore waiting_rsp, Instead, we return an
++     * error on the interface if a response was being waited for.
++     */
++    if (es->waiting_rsp) {
++        IPMIInterface *s = es->parent.intf;
++        IPMIInterfaceClass *k = IPMI_INTERFACE_GET_CLASS(s);
++
++        es->waiting_rsp = 0;
++        es->inbuf[1] = es->outbuf[1] | 0x04;
++        es->inbuf[2] = es->outbuf[2];
++        es->inbuf[3] = IPMI_CC_BMC_INIT_IN_PROGRESS;
++        k->handle_rsp(s, es->outbuf[0], es->inbuf + 1, 3);
++    }
++    return 0;
++}
++
++static const VMStateDescription vmstate_ipmi_extern = {
++    .name = TYPE_IPMI_BMC_EXTERN,
++    .version_id = 1,
++    .minimum_version_id = 1,
++    .post_load = ipmi_extern_post_migrate,
++    .fields      = (VMStateField[]) {
++        VMSTATE_BOOL(send_reset, IPMIExternBmc),
++        VMSTATE_BOOL(waiting_rsp, IPMIExternBmc),
++        VMSTATE_END_OF_LIST()
++    }
++};
++
+ static int ipmi_extern_init(IPMIBmc *b)
+ {
+     IPMIExternBmc *es = IPMI_BMC_EXTERN(b);
+ 
+     es->extern_timer = qemu_new_timer_ns(vm_clock, extern_timeout, es);
+     qemu_chr_add_handlers(es->parent.chr, can_receive, receive, chr_event, es);
++    vmstate_register(NULL, 0, &vmstate_ipmi_extern, es);
+     return 0;
+ }
+ 
+diff --git a/hw/ipmi_kcs.c b/hw/ipmi_kcs.c
+index ca934f6..b61335f 100644
+--- a/hw/ipmi_kcs.c
++++ b/hw/ipmi_kcs.c
+@@ -302,6 +302,20 @@ static void ipmi_kcs_set_atn(IPMIInterface *s, int val, int irq)
+     }
+ }
+ 
++static const VMStateDescription vmstate_ipmi_kcs = {
++    .name = TYPE_IPMI_INTERFACE_KCS,
++    .version_id = 1,
++    .minimum_version_id = 1,
++    .fields      = (VMStateField[]) {
++        VMSTATE_UINT8(status_reg, IPMIKcsInterface),
++        VMSTATE_UINT8(data_out_reg, IPMIKcsInterface),
++        VMSTATE_INT16(data_in_reg, IPMIKcsInterface),
++        VMSTATE_INT16(cmd_reg, IPMIKcsInterface),
++        VMSTATE_UINT8(waiting_rsp, IPMIKcsInterface),
++        VMSTATE_END_OF_LIST()
++    }
++};
++
+ static int ipmi_kcs_init(IPMIInterface *s)
+ {
+     IPMIKcsInterface *kcs = IPMI_INTERFACE_KCS(s);
+@@ -312,6 +326,7 @@ static int ipmi_kcs_init(IPMIInterface *s)
+     s->io_length = 2;
+ 
+     memory_region_init_io(&s->io, &ipmi_kcs_io_ops, kcs, "ipmi-kcs", 2);
++    vmstate_register(NULL, 0, &vmstate_ipmi_kcs, kcs);
+ 
+     return 0;
+ }
+diff --git a/hw/ipmi_sim.c b/hw/ipmi_sim.c
+index d41ac80..362c96e 100644
+--- a/hw/ipmi_sim.c
++++ b/hw/ipmi_sim.c
+@@ -1481,6 +1481,34 @@ static const uint8_t init_sdrs[] = {
+     0xff, 0xff, 0x00, 0x00, 0x00
+ };
+ 
++static const VMStateDescription vmstate_ipmi_sim = {
++    .name = TYPE_IPMI_BMC_SIMULATOR,
++    .version_id = 1,
++    .minimum_version_id = 1,
++    .fields      = (VMStateField[]) {
++        VMSTATE_UINT8(bmc_global_enables, IPMISimBmc),
++        VMSTATE_UINT8(msg_flags, IPMISimBmc),
++        VMSTATE_BOOL(watchdog_initialized, IPMISimBmc),
++        VMSTATE_UINT8(watchdog_use, IPMISimBmc),
++        VMSTATE_UINT8(watchdog_action, IPMISimBmc),
++        VMSTATE_UINT8(watchdog_pretimeout, IPMISimBmc),
++        VMSTATE_BOOL(watchdog_expired, IPMISimBmc),
++        VMSTATE_UINT16(watchdog_timeout, IPMISimBmc),
++        VMSTATE_BOOL(watchdog_running, IPMISimBmc),
++        VMSTATE_BOOL(watchdog_preaction_ran, IPMISimBmc),
++        VMSTATE_INT64(watchdog_expiry, IPMISimBmc),
++        VMSTATE_UINT8_ARRAY(evtbuf, IPMISimBmc, 16),
++        VMSTATE_UINT8(sensors[IPMI_WATCHDOG_SENSOR].status, IPMISimBmc),
++        VMSTATE_UINT8(sensors[IPMI_WATCHDOG_SENSOR].reading, IPMISimBmc),
++        VMSTATE_UINT16(sensors[IPMI_WATCHDOG_SENSOR].states, IPMISimBmc),
++        VMSTATE_UINT16(sensors[IPMI_WATCHDOG_SENSOR].assert_states, IPMISimBmc),
++        VMSTATE_UINT16(sensors[IPMI_WATCHDOG_SENSOR].deassert_states,
++                       IPMISimBmc),
++        VMSTATE_UINT16(sensors[IPMI_WATCHDOG_SENSOR].assert_enable, IPMISimBmc),
++        VMSTATE_END_OF_LIST()
++    }
++};
++
+ static int ipmi_sim_init(IPMIBmc *b)
+ {
+     unsigned int i;
+@@ -1525,6 +1553,9 @@ static int ipmi_sim_init(IPMIBmc *b)
+     register_cmds(ss);
+ 
+     ss->timer = qemu_new_timer_ns(vm_clock, ipmi_timeout, ss);
++
++    vmstate_register(NULL, 0, &vmstate_ipmi_sim, ss);
++
+     return 0;
+ }
+ 
+diff --git a/hw/isa_ipmi.c b/hw/isa_ipmi.c
+index f8afbb9..2e4cc27 100644
+--- a/hw/isa_ipmi.c
++++ b/hw/isa_ipmi.c
+@@ -126,12 +126,24 @@ static Property ipmi_isa_properties[] = {
+     DEFINE_PROP_END_OF_LIST(),
+ };
+ 
++static const VMStateDescription vmstate_isa_ipmi = {
++    .name = TYPE_ISA_IPMI,
++    .version_id = 1,
++    .minimum_version_id = 1,
++    .fields      = (VMStateField[]) {
++        VMSTATE_STRUCT_POINTER(intf, ISAIPMIDevice, vmstate_IPMIInterface,
++                               IPMIInterface *),
++        VMSTATE_END_OF_LIST()
++    }
++};
++
+ static void ipmi_isa_class_initfn(ObjectClass *klass, void *data)
+ {
+     DeviceClass *dc = DEVICE_CLASS(klass);
+     ISADeviceClass *ic = ISA_DEVICE_CLASS(klass);
+     ic->init = ipmi_isa_initfn;
+     dc->reset = ipmi_isa_reset;
++    dc->vmsd = &vmstate_isa_ipmi;
+     dc->props = ipmi_isa_properties;
+ }
+ 
+-- 
+1.7.4.1
+
+

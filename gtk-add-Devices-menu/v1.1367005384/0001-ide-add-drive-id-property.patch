@@ -1,0 +1,54 @@
+From patches Mon Sep 17 00:00:00 2001
+From: "Anthony Liguori" <aliguori@us.ibm.com>
+To: Anthony Liguori <aliguori@us.ibm.com>,
+ Andreas =?utf-8?Q?F=C3=A4rber?= <afaerber@suse.de>, qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, Kevin Wolf <kwolf@redhat.com>,
+ qemu-devel@nongnu.org
+Date: Fri, 26 Apr 2013 14:43:05 -0500
+Message-id: 1367005387-330-2-git-send-email-aliguori@us.ibm.com
+Subject: [PATCH 1/3] ide: add drive-id property
+
+This returns a string similar to what the guest would display in
+something like Linux's /dev/disk/by-id/ path.
+
+Signed-off-by: Anthony Liguori <aliguori@us.ibm.com>
+---
+ hw/ide/qdev.c | 15 +++++++++++++++
+ 1 file changed, 15 insertions(+)
+
+diff --git a/hw/ide/qdev.c b/hw/ide/qdev.c
+index 8a9a891..94b1664 100644
+--- a/hw/ide/qdev.c
++++ b/hw/ide/qdev.c
+@@ -270,6 +270,20 @@ static const TypeInfo ide_drive_info = {
+     .class_init    = ide_drive_class_init,
+ };
+ 
++static char *ide_device_get_model(Object *obj, Error **errp)
++{
++    IDEDevice *dev = IDE_DEVICE(obj);
++    IDEBus *bus = DO_UPCAST(IDEBus, qbus, dev->qdev.parent_bus);
++    IDEState *s = bus->ifs + dev->unit;
++
++    return g_strdup_printf("%s %s", s->drive_model_str, s->drive_serial_str);
++}
++
++static void ide_device_initfn(Object *obj)
++{
++    object_property_add_str(obj, "drive-id", ide_device_get_model, NULL, NULL);
++}
++
+ static void ide_device_class_init(ObjectClass *klass, void *data)
+ {
+     DeviceClass *k = DEVICE_CLASS(klass);
+@@ -285,6 +299,7 @@ static const TypeInfo ide_device_type_info = {
+     .abstract = true,
+     .class_size = sizeof(IDEDeviceClass),
+     .class_init = ide_device_class_init,
++    .instance_init = ide_device_initfn,
+ };
+ 
+ static void ide_register_types(void)
+-- 
+1.8.0
+

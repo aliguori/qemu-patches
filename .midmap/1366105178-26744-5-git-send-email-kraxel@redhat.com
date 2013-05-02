@@ -1,0 +1,1 @@
+../console-console-overhaul-continued/v4.1366130354/0004-hw-vmware_vgac-various-vmware-vga-fixes.patch

@@ -1,0 +1,1 @@
+../qmp-hmp-interfaces-for-internal-snapshot-info/v12.1365890189/0013-block-move-bdrv_snapshot_dump-and-dump_human_image_info-to-block-qapic.patch

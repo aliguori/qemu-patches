@@ -1,0 +1,669 @@
+From patches Mon Sep 17 00:00:00 2001
+From: peter.crosthwaite@xilinx.com
+To: qemu-devel@nongnu.org
+Cc: edgar.iglesias@gmail.com
+Date: Tue, 16 Apr 2013 10:28:35 +1000
+Message-id: 85a7a68be6520e059a9ae453173e713b13a1647a.1366069170.git.peter.crosthwaite@xilinx.com
+Subject: [PATCH 16/16] stream: Remove app argument hack
+
+From: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+
+The uint32_t *app argument doesn't exist in real hardware. It was a hack in
+xilinx_axidma/enet to fake the (secondary) control stream connection. Removed
+the argument and added the second stream to axienet/dma.
+
+Signed-off-by: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+---
+changed since v3:
+Rebased against now synchronous stream control API
+Macrofied stream control packet lengths
+
+ hw/core/stream.c                    |    4 +-
+ hw/dma/xilinx_axidma.c              |   99 ++++++++++++++++++++++++----------
+ hw/microblaze/petalogix_ml605_mmu.c |   25 +++++----
+ hw/net/xilinx_axienet.c             |  100 +++++++++++++++++++++++++++++-----
+ include/hw/stream.h                 |    5 +-
+ include/hw/xilinx.h                 |   21 +++++---
+ 6 files changed, 187 insertions(+), 67 deletions(-)
+
+diff --git a/hw/core/stream.c b/hw/core/stream.c
+index 5397a8d..e6a05a5 100644
+--- a/hw/core/stream.c
++++ b/hw/core/stream.c
+@@ -1,11 +1,11 @@
+ #include "hw/stream.h"
+ 
+ size_t
+-stream_push(StreamSlave *sink, uint8_t *buf, size_t len, uint32_t *app)
++stream_push(StreamSlave *sink, uint8_t *buf, size_t len)
+ {
+     StreamSlaveClass *k =  STREAM_SLAVE_GET_CLASS(sink);
+ 
+-    return k->push(sink, buf, len, app);
++    return k->push(sink, buf, len);
+ }
+ 
+ bool
+diff --git a/hw/dma/xilinx_axidma.c b/hw/dma/xilinx_axidma.c
+index a5bf102..1c23762 100644
+--- a/hw/dma/xilinx_axidma.c
++++ b/hw/dma/xilinx_axidma.c
+@@ -35,6 +35,7 @@
+ 
+ #define TYPE_XILINX_AXI_DMA "xlnx.axi-dma"
+ #define TYPE_XILINX_AXI_DMA_DATA_STREAM "xilinx-axi-dma-data-stream"
++#define TYPE_XILINX_AXI_DMA_CONTROL_STREAM "xilinx-axi-dma-control-stream"
+ 
+ #define XILINX_AXI_DMA(obj) \
+      OBJECT_CHECK(XilinxAXIDMA, (obj), TYPE_XILINX_AXI_DMA)
+@@ -43,12 +44,19 @@
+      OBJECT_CHECK(XilinxAXIDMAStreamSlave, (obj),\
+      TYPE_XILINX_AXI_DMA_DATA_STREAM)
+ 
++#define XILINX_AXI_DMA_CONTROL_STREAM(obj) \
++     OBJECT_CHECK(XilinxAXIDMAStreamSlave, (obj),\
++     TYPE_XILINX_AXI_DMA_CONTROL_STREAM)
++
+ #define R_DMACR             (0x00 / 4)
+ #define R_DMASR             (0x04 / 4)
+ #define R_CURDESC           (0x08 / 4)
+ #define R_TAILDESC          (0x10 / 4)
+ #define R_MAX               (0x30 / 4)
+ 
++#define CONTROL_PAYLOAD_WORDS 5
++#define CONTROL_PAYLOAD_SIZE (CONTROL_PAYLOAD_WORDS * (sizeof(uint32_t)))
++
+ typedef struct XilinxAXIDMA XilinxAXIDMA;
+ typedef struct XilinxAXIDMAStreamSlave XilinxAXIDMAStreamSlave;
+ 
+@@ -73,7 +81,7 @@ struct SDesc {
+     uint64_t reserved;
+     uint32_t control;
+     uint32_t status;
+-    uint32_t app[6];
++    uint8_t app[CONTROL_PAYLOAD_SIZE];
+ };
+ 
+ enum {
+@@ -101,6 +109,7 @@ struct Stream {
+     int pos;
+     unsigned int complete_cnt;
+     uint32_t regs[R_MAX];
++    uint8_t app[20];
+ };
+ 
+ struct XilinxAXIDMAStreamSlave {
+@@ -113,8 +122,10 @@ struct XilinxAXIDMA {
+     SysBusDevice busdev;
+     MemoryRegion iomem;
+     uint32_t freqhz;
+-    StreamSlave *tx_dev;
++    StreamSlave *tx_data_dev;
++    StreamSlave *tx_control_dev;
+     XilinxAXIDMAStreamSlave rx_data_dev;
++    XilinxAXIDMAStreamSlave rx_control_dev;
+ 
+     struct Stream streams[2];
+ 
+@@ -185,7 +196,6 @@ static void stream_desc_show(struct SDesc *d)
+ static void stream_desc_load(struct Stream *s, hwaddr addr)
+ {
+     struct SDesc *d = &s->desc;
+-    int i;
+ 
+     cpu_physical_memory_read(addr, (void *) d, sizeof *d);
+ 
+@@ -194,24 +204,17 @@ static void stream_desc_load(struct Stream *s, hwaddr addr)
+     d->nxtdesc = le64_to_cpu(d->nxtdesc);
+     d->control = le32_to_cpu(d->control);
+     d->status = le32_to_cpu(d->status);
+-    for (i = 0; i < ARRAY_SIZE(d->app); i++) {
+-        d->app[i] = le32_to_cpu(d->app[i]);
+-    }
+ }
+ 
+ static void stream_desc_store(struct Stream *s, hwaddr addr)
+ {
+     struct SDesc *d = &s->desc;
+-    int i;
+ 
+     /* Convert from host endianness into LE.  */
+     d->buffer_address = cpu_to_le64(d->buffer_address);
+     d->nxtdesc = cpu_to_le64(d->nxtdesc);
+     d->control = cpu_to_le32(d->control);
+     d->status = cpu_to_le32(d->status);
+-    for (i = 0; i < ARRAY_SIZE(d->app); i++) {
+-        d->app[i] = cpu_to_le32(d->app[i]);
+-    }
+     cpu_physical_memory_write(addr, (void *) d, sizeof *d);
+ }
+ 
+@@ -263,13 +266,12 @@ static void stream_complete(struct Stream *s)
+     }
+ }
+ 
+-static void stream_process_mem2s(struct Stream *s,
+-                                 StreamSlave *tx_dev)
++static void stream_process_mem2s(struct Stream *s, StreamSlave *tx_data_dev,
++                                 StreamSlave *tx_control_dev)
+ {
+     uint32_t prev_d;
+     unsigned char txbuf[16 * 1024];
+     unsigned int txlen;
+-    uint32_t app[6];
+ 
+     if (!stream_running(s) || stream_idle(s)) {
+         return;
+@@ -285,7 +287,7 @@ static void stream_process_mem2s(struct Stream *s,
+ 
+         if (stream_desc_sof(&s->desc)) {
+             s->pos = 0;
+-            memcpy(app, s->desc.app, sizeof app);
++            stream_push(tx_control_dev, s->desc.app, sizeof(s->desc.app));
+         }
+ 
+         txlen = s->desc.control & SDESC_CTRL_LEN_MASK;
+@@ -299,7 +301,7 @@ static void stream_process_mem2s(struct Stream *s,
+         s->pos += txlen;
+ 
+         if (stream_desc_eof(&s->desc)) {
+-            stream_push(tx_dev, txbuf, s->pos, app);
++            stream_push(tx_data_dev, txbuf, s->pos);
+             s->pos = 0;
+             stream_complete(s);
+         }
+@@ -319,7 +321,7 @@ static void stream_process_mem2s(struct Stream *s,
+ }
+ 
+ static size_t stream_process_s2mem(struct Stream *s, unsigned char *buf,
+-                                   size_t len, uint32_t *app)
++                                   size_t len)
+ {
+     uint32_t prev_d;
+     unsigned int rxlen;
+@@ -350,12 +352,8 @@ static size_t stream_process_s2mem(struct Stream *s, unsigned char *buf,
+ 
+         /* Update the descriptor.  */
+         if (!len) {
+-            int i;
+-
+             stream_complete(s);
+-            for (i = 0; i < 5; i++) {
+-                s->desc.app[i] = app[i];
+-            }
++            memcpy(s->desc.app, s->app, sizeof(s->desc.app));
+             s->desc.status |= SDESC_STATUS_EOF;
+         }
+ 
+@@ -386,6 +384,22 @@ static void xilinx_axidma_reset(DeviceState *dev)
+     }
+ }
+ 
++static size_t
++xilinx_axidma_control_stream_push(StreamSlave *obj, unsigned char *buf,
++                                  size_t len)
++{
++    XilinxAXIDMAStreamSlave *cs = XILINX_AXI_DMA_CONTROL_STREAM(obj);
++    struct Stream *s = &cs->dma->streams[1];
++
++    if (len != CONTROL_PAYLOAD_SIZE) {
++        hw_error("AXI DMA requires %d byte control stream payload\n",
++                 (int)CONTROL_PAYLOAD_SIZE);
++    }
++
++    memcpy(s->app, buf, len);
++    return len;
++}
++
+ static bool
+ xilinx_axidma_data_stream_can_push(StreamSlave *obj,
+                                    StreamCanPushNotifyFn notify,
+@@ -404,17 +418,13 @@ xilinx_axidma_data_stream_can_push(StreamSlave *obj,
+ }
+ 
+ static size_t
+-xilinx_axidma_data_stream_push(StreamSlave *obj, unsigned char *buf, size_t len,
+-                               uint32_t *app)
++xilinx_axidma_data_stream_push(StreamSlave *obj, unsigned char *buf, size_t len)
+ {
+     XilinxAXIDMAStreamSlave *ds = XILINX_AXI_DMA_DATA_STREAM(obj);
+     struct Stream *s = &ds->dma->streams[1];
+     size_t ret;
+ 
+-    if (!app) {
+-        hw_error("No stream app data!\n");
+-    }
+-    ret = stream_process_s2mem(s, buf, len, app);
++    ret = stream_process_s2mem(s, buf, len);
+     stream_update_irq(s);
+     return ret;
+ }
+@@ -495,7 +505,7 @@ static void axidma_write(void *opaque, hwaddr addr,
+             s->regs[addr] = value;
+             s->regs[R_DMASR] &= ~DMASR_IDLE; /* Not idle.  */
+             if (!sid) {
+-                stream_process_mem2s(s, d->tx_dev);
++                stream_process_mem2s(s, d->tx_data_dev, d->tx_control_dev);
+             }
+             break;
+         default:
+@@ -521,14 +531,19 @@ static void xilinx_axidma_realize(DeviceState *dev, Error **errp)
+ {
+     XilinxAXIDMA *s = XILINX_AXI_DMA(dev);
+     XilinxAXIDMAStreamSlave *ds = XILINX_AXI_DMA_DATA_STREAM(&s->rx_data_dev);
++    XilinxAXIDMAStreamSlave *cs = XILINX_AXI_DMA_CONTROL_STREAM(
++                                                            &s->rx_control_dev);
+     Error *local_errp = NULL;
+ 
+     object_property_add_link(OBJECT(ds), "dma", TYPE_XILINX_AXI_DMA,
+                              (Object **)&ds->dma, &local_errp);
++    object_property_add_link(OBJECT(cs), "dma", TYPE_XILINX_AXI_DMA,
++                             (Object **)&cs->dma, &local_errp);
+     if (local_errp) {
+         goto xilinx_axidma_realize_fail;
+     }
+     object_property_set_link(OBJECT(ds), OBJECT(s), "dma", &local_errp);
++    object_property_set_link(OBJECT(cs), OBJECT(s), "dma", &local_errp);
+     if (local_errp) {
+         goto xilinx_axidma_realize_fail;
+     }
+@@ -556,12 +571,21 @@ static void xilinx_axidma_init(Object *obj)
+     Error *errp = NULL;
+ 
+     object_property_add_link(obj, "axistream-connected", TYPE_STREAM_SLAVE,
+-                             (Object **) &s->tx_dev, NULL);
++                             (Object **) &s->tx_data_dev, &errp);
++    assert_no_error(errp);
++    object_property_add_link(obj, "axistream-control-connected",
++                             TYPE_STREAM_SLAVE,
++                             (Object **) &s->tx_control_dev, &errp);
++    assert_no_error(errp);
+ 
+     object_initialize(&s->rx_data_dev, TYPE_XILINX_AXI_DMA_DATA_STREAM);
++    object_initialize(&s->rx_control_dev, TYPE_XILINX_AXI_DMA_CONTROL_STREAM);
+     object_property_add_child(OBJECT(s), "axistream-connected-target",
+                               (Object *)&s->rx_data_dev, &errp);
+     assert_no_error(errp);
++    object_property_add_child(OBJECT(s), "axistream-control-connected-target",
++                              (Object *)&s->rx_control_dev, &errp);
++    assert_no_error(errp);
+ 
+     sysbus_init_irq(sbd, &s->streams[0].irq);
+     sysbus_init_irq(sbd, &s->streams[1].irq);
+@@ -590,6 +614,10 @@ static StreamSlaveClass xilinx_axidma_data_stream_class = {
+     .can_push = xilinx_axidma_data_stream_can_push,
+ };
+ 
++static StreamSlaveClass xilinx_axidma_control_stream_class = {
++    .push = xilinx_axidma_control_stream_push,
++};
++
+ static void xilinx_axidma_stream_class_init(ObjectClass *klass, void *data)
+ {
+     StreamSlaveClass *ssc = STREAM_SLAVE_CLASS(klass);
+@@ -618,10 +646,23 @@ static const TypeInfo xilinx_axidma_data_stream_info = {
+     }
+ };
+ 
++static const TypeInfo xilinx_axidma_control_stream_info = {
++    .name          = TYPE_XILINX_AXI_DMA_CONTROL_STREAM,
++    .parent        = TYPE_OBJECT,
++    .instance_size = sizeof(struct XilinxAXIDMAStreamSlave),
++    .class_init    = xilinx_axidma_stream_class_init,
++    .class_data    = &xilinx_axidma_control_stream_class,
++    .interfaces = (InterfaceInfo[]) {
++        { TYPE_STREAM_SLAVE },
++        { }
++    }
++};
++
+ static void xilinx_axidma_register_types(void)
+ {
+     type_register_static(&axidma_info);
+     type_register_static(&xilinx_axidma_data_stream_info);
++    type_register_static(&xilinx_axidma_control_stream_info);
+ }
+ 
+ type_init(xilinx_axidma_register_types)
+diff --git a/hw/microblaze/petalogix_ml605_mmu.c b/hw/microblaze/petalogix_ml605_mmu.c
+index 94b6590..ccd5e51 100644
+--- a/hw/microblaze/petalogix_ml605_mmu.c
++++ b/hw/microblaze/petalogix_ml605_mmu.c
+@@ -79,7 +79,7 @@ petalogix_ml605_init(QEMUMachineInitArgs *args)
+     const char *cpu_model = args->cpu_model;
+     MemoryRegion *address_space_mem = get_system_memory();
+     DeviceState *dev, *dma, *eth0;
+-    Object *peer;
++    Object *ds, *cs;
+     MicroBlazeCPU *cpu;
+     SysBusDevice *busdev;
+     CPUMBState *env;
+@@ -140,15 +140,20 @@ petalogix_ml605_init(QEMUMachineInitArgs *args)
+     object_property_add_child(qdev_get_machine(), "xilinx-dma", OBJECT(dma),
+                               NULL);
+ 
+-    peer = object_property_get_link(OBJECT(dma),
+-                                    "axistream-connected-target", NULL);
+-    xilinx_axiethernet_init(eth0, &nd_table[0], STREAM_SLAVE(peer),
+-                            0x82780000, irq[3], 0x1000, 0x1000);
+-
+-    peer = object_property_get_link(OBJECT(eth0),
+-                                    "axistream-connected-target", NULL);
+-    xilinx_axidma_init(dma, STREAM_SLAVE(peer), 0x84600000, irq[1], irq[0],
+-                       100 * 1000000);
++    ds = object_property_get_link(OBJECT(dma),
++                                  "axistream-connected-target", NULL);
++    cs = object_property_get_link(OBJECT(dma),
++                                  "axistream-control-connected-target", NULL);
++    xilinx_axiethernet_init(eth0, &nd_table[0], STREAM_SLAVE(ds),
++                            STREAM_SLAVE(cs), 0x82780000, irq[3], 0x1000,
++                            0x1000);
++
++    ds = object_property_get_link(OBJECT(eth0),
++                                  "axistream-connected-target", NULL);
++    cs = object_property_get_link(OBJECT(eth0),
++                                  "axistream-control-connected-target", NULL);
++    xilinx_axidma_init(dma, STREAM_SLAVE(ds), STREAM_SLAVE(cs), 0x84600000,
++                       irq[1], irq[0], 100 * 1000000);
+ 
+     {
+         SSIBus *spi;
+diff --git a/hw/net/xilinx_axienet.c b/hw/net/xilinx_axienet.c
+index 544c3ec..8989e95 100644
+--- a/hw/net/xilinx_axienet.c
++++ b/hw/net/xilinx_axienet.c
+@@ -34,6 +34,7 @@
+ 
+ #define TYPE_XILINX_AXI_ENET "xlnx.axi-ethernet"
+ #define TYPE_XILINX_AXI_ENET_DATA_STREAM "xilinx-axienet-data-stream"
++#define TYPE_XILINX_AXI_ENET_CONTROL_STREAM "xilinx-axienet-control-stream"
+ 
+ #define XILINX_AXI_ENET(obj) \
+      OBJECT_CHECK(XilinxAXIEnet, (obj), TYPE_XILINX_AXI_ENET)
+@@ -42,12 +43,19 @@
+      OBJECT_CHECK(XilinxAXIEnetStreamSlave, (obj),\
+      TYPE_XILINX_AXI_ENET_DATA_STREAM)
+ 
++#define XILINX_AXI_ENET_CONTROL_STREAM(obj) \
++     OBJECT_CHECK(XilinxAXIEnetStreamSlave, (obj),\
++     TYPE_XILINX_AXI_ENET_CONTROL_STREAM)
++
+ /* Advertisement control register. */
+ #define ADVERTISE_10HALF        0x0020  /* Try for 10mbps half-duplex  */
+ #define ADVERTISE_10FULL        0x0040  /* Try for 10mbps full-duplex  */
+ #define ADVERTISE_100HALF       0x0080  /* Try for 100mbps half-duplex */
+ #define ADVERTISE_100FULL       0x0100  /* Try for 100mbps full-duplex */
+ 
++#define CONTROL_PAYLOAD_WORDS 5
++#define CONTROL_PAYLOAD_SIZE (CONTROL_PAYLOAD_WORDS * (sizeof(uint32_t)))
++
+ struct PHY {
+     uint32_t regs[32];
+ 
+@@ -329,8 +337,10 @@ struct XilinxAXIEnet {
+     SysBusDevice busdev;
+     MemoryRegion iomem;
+     qemu_irq irq;
+-    StreamSlave *tx_dev;
++    StreamSlave *tx_data_dev;
++    StreamSlave *tx_control_dev;
+     XilinxAXIEnetStreamSlave rx_data_dev;
++    XilinxAXIEnetStreamSlave rx_control_dev;
+     NICState *nic;
+     NICConf conf;
+ 
+@@ -381,11 +391,14 @@ struct XilinxAXIEnet {
+     /* 32K x 1 lookup filter.  */
+     uint32_t ext_mtable[1024];
+ 
++    uint32_t hdr[CONTROL_PAYLOAD_WORDS];
+ 
+     uint8_t *rxmem;
+-    uint32_t *rxapp;
+     uint32_t rxsize;
+     uint32_t rxpos;
++
++    uint8_t rxapp[CONTROL_PAYLOAD_SIZE];
++    uint32_t rxappsize;
+ };
+ 
+ static void axienet_rx_reset(XilinxAXIEnet *s)
+@@ -670,14 +683,22 @@ static void axienet_eth_rx_notify(void *opaque)
+ {
+     XilinxAXIEnet *s = XILINX_AXI_ENET(opaque);
+ 
+-    while (s->rxsize && stream_can_push(s->tx_dev, axienet_eth_rx_notify, s)) {
+-        size_t ret = stream_push(s->tx_dev, (void *)s->rxmem + s->rxpos,
+-                                 s->rxsize, s->rxapp);
++    while (s->rxappsize && stream_can_push(s->tx_control_dev,
++                                           axienet_eth_rx_notify, s)) {
++        size_t ret = stream_push(s->tx_control_dev,
++                                 (void *)s->rxapp + CONTROL_PAYLOAD_SIZE
++                                 - s->rxappsize, s->rxappsize);
++        s->rxappsize -= ret;
++    }
++
++    while (s->rxsize && stream_can_push(s->tx_data_dev,
++                                        axienet_eth_rx_notify, s)) {
++        size_t ret = stream_push(s->tx_data_dev, (void *)s->rxmem + s->rxpos,
++                                 s->rxsize);
+         s->rxsize -= ret;
+         s->rxpos += ret;
+         if (!s->rxsize) {
+             s->regs[R_IS] |= IS_RX_COMPLETE;
+-            g_free(s->rxapp);
+         }
+     }
+     enet_update_irq(s);
+@@ -689,7 +710,7 @@ static ssize_t eth_rx(NetClientState *nc, const uint8_t *buf, size_t size)
+     static const unsigned char sa_bcast[6] = {0xff, 0xff, 0xff,
+                                               0xff, 0xff, 0xff};
+     static const unsigned char sa_ipmcast[3] = {0x01, 0x00, 0x52};
+-    uint32_t app[6] = {0};
++    uint32_t app[CONTROL_PAYLOAD_WORDS] = {0};
+     int promisc = s->fmi & (1 << 31);
+     int unicast, broadcast, multicast, ip_multicast = 0;
+     uint32_t csum32;
+@@ -822,7 +843,11 @@ static ssize_t eth_rx(NetClientState *nc, const uint8_t *buf, size_t size)
+ 
+     s->rxsize = size;
+     s->rxpos = 0;
+-    s->rxapp = g_memdup(app, sizeof(app));
++    for (i = 0; i < ARRAY_SIZE(app); ++i) {
++        app[i] = cpu_to_le32(app[i]);
++    }
++    s->rxappsize = CONTROL_PAYLOAD_SIZE;
++    memcpy(s->rxapp, app, s->rxappsize);
+     axienet_eth_rx_notify(s);
+ 
+     enet_update_irq(s);
+@@ -838,8 +863,27 @@ static void eth_cleanup(NetClientState *nc)
+ }
+ 
+ static size_t
+-xilinx_axienet_data_stream_push(StreamSlave *obj, uint8_t *buf, size_t size,
+-                                uint32_t *hdr)
++xilinx_axienet_control_stream_push(StreamSlave *obj, uint8_t *buf, size_t len)
++{
++    int i;
++    XilinxAXIEnetStreamSlave *cs = XILINX_AXI_ENET_CONTROL_STREAM(obj);
++    XilinxAXIEnet *s = cs->enet;
++
++    if (len != CONTROL_PAYLOAD_SIZE) {
++        hw_error("AXI Enet requires %d byte control stream payload\n",
++                 (int)CONTROL_PAYLOAD_SIZE);
++    }
++
++    memcpy(s->hdr, buf, len);
++
++    for (i = 0; i < ARRAY_SIZE(s->hdr); ++i) {
++        s->hdr[i] = le32_to_cpu(s->hdr[i]);
++    }
++    return len;
++}
++
++static size_t
++xilinx_axienet_data_stream_push(StreamSlave *obj, uint8_t *buf, size_t size)
+ {
+     XilinxAXIEnetStreamSlave *ds = XILINX_AXI_ENET_DATA_STREAM(obj);
+     XilinxAXIEnet *s = ds->enet;
+@@ -856,16 +900,16 @@ xilinx_axienet_data_stream_push(StreamSlave *obj, uint8_t *buf, size_t size,
+         }
+     }
+ 
+-    if (hdr[0] & 1) {
+-        unsigned int start_off = hdr[1] >> 16;
+-        unsigned int write_off = hdr[1] & 0xffff;
++    if (s->hdr[0] & 1) {
++        unsigned int start_off = s->hdr[1] >> 16;
++        unsigned int write_off = s->hdr[1] & 0xffff;
+         uint32_t tmp_csum;
+         uint16_t csum;
+ 
+         tmp_csum = net_checksum_add(size - start_off,
+                                     (uint8_t *)buf + start_off);
+         /* Accumulate the seed.  */
+-        tmp_csum += hdr[2] & 0xffff;
++        tmp_csum += s->hdr[2] & 0xffff;
+ 
+         /* Fold the 32bit partial checksum.  */
+         csum = net_checksum_finish(tmp_csum);
+@@ -896,14 +940,19 @@ static void xilinx_enet_realize(DeviceState *dev, Error **errp)
+ {
+     XilinxAXIEnet *s = XILINX_AXI_ENET(dev);
+     XilinxAXIEnetStreamSlave *ds = XILINX_AXI_ENET_DATA_STREAM(&s->rx_data_dev);
++    XilinxAXIEnetStreamSlave *cs = XILINX_AXI_ENET_CONTROL_STREAM(
++                                                            &s->rx_control_dev);
+     Error *local_errp = NULL;
+ 
+     object_property_add_link(OBJECT(ds), "enet", "xlnx.axi-ethernet",
+                              (Object **) &ds->enet, &local_errp);
++    object_property_add_link(OBJECT(cs), "enet", "xlnx.axi-ethernet",
++                             (Object **) &cs->enet, &local_errp);
+     if (local_errp) {
+         goto xilinx_enet_realize_fail;
+     }
+     object_property_set_link(OBJECT(ds), OBJECT(s), "enet", &local_errp);
++    object_property_set_link(OBJECT(cs), OBJECT(s), "enet", &local_errp);
+     if (local_errp) {
+         goto xilinx_enet_realize_fail;
+     }
+@@ -934,13 +983,21 @@ static void xilinx_enet_init(Object *obj)
+     Error *errp = NULL;
+ 
+     object_property_add_link(obj, "axistream-connected", TYPE_STREAM_SLAVE,
+-                             (Object **) &s->tx_dev, &errp);
++                             (Object **) &s->tx_data_dev, &errp);
++    assert_no_error(errp);
++    object_property_add_link(obj, "axistream-control-connected",
++                             TYPE_STREAM_SLAVE,
++                             (Object **) &s->tx_control_dev, &errp);
+     assert_no_error(errp);
+ 
+     object_initialize(&s->rx_data_dev, TYPE_XILINX_AXI_ENET_DATA_STREAM);
++    object_initialize(&s->rx_control_dev, TYPE_XILINX_AXI_ENET_CONTROL_STREAM);
+     object_property_add_child(OBJECT(s), "axistream-connected-target",
+                               (Object *)&s->rx_data_dev, &errp);
+     assert_no_error(errp);
++    object_property_add_child(OBJECT(s), "axistream-control-connected-target",
++                              (Object *)&s->rx_control_dev, &errp);
++    assert_no_error(errp);
+ 
+     sysbus_init_irq(sbd, &s->irq);
+ 
+@@ -992,10 +1049,23 @@ static const TypeInfo xilinx_enet_data_stream_info = {
+     }
+ };
+ 
++static const TypeInfo xilinx_enet_control_stream_info = {
++    .name          = TYPE_XILINX_AXI_ENET_CONTROL_STREAM,
++    .parent        = TYPE_OBJECT,
++    .instance_size = sizeof(struct XilinxAXIEnetStreamSlave),
++    .class_init    = xilinx_enet_stream_class_init,
++    .class_data    = xilinx_axienet_control_stream_push,
++    .interfaces = (InterfaceInfo[]) {
++            { TYPE_STREAM_SLAVE },
++            { }
++    }
++};
++
+ static void xilinx_enet_register_types(void)
+ {
+     type_register_static(&xilinx_enet_info);
+     type_register_static(&xilinx_enet_data_stream_info);
++    type_register_static(&xilinx_enet_control_stream_info);
+ }
+ 
+ type_init(xilinx_enet_register_types)
+diff --git a/include/hw/stream.h b/include/hw/stream.h
+index 5bc47a9..35eb083 100644
+--- a/include/hw/stream.h
++++ b/include/hw/stream.h
+@@ -43,12 +43,11 @@ typedef struct StreamSlaveClass {
+      * @buf: Data to write
+      * @len: Maximum number of bytes to write
+      */
+-    size_t (*push)(StreamSlave *obj, unsigned char *buf, size_t len,
+-                                                    uint32_t *app);
++    size_t (*push)(StreamSlave *obj, unsigned char *buf, size_t len);
+ } StreamSlaveClass;
+ 
+ size_t
+-stream_push(StreamSlave *sink, uint8_t *buf, size_t len, uint32_t *app);
++stream_push(StreamSlave *sink, uint8_t *buf, size_t len);
+ 
+ bool
+ stream_can_push(StreamSlave *sink, StreamCanPushNotifyFn notify,
+diff --git a/include/hw/xilinx.h b/include/hw/xilinx.h
+index 6c1ee21..0c0251a 100644
+--- a/include/hw/xilinx.h
++++ b/include/hw/xilinx.h
+@@ -55,16 +55,19 @@ xilinx_ethlite_create(NICInfo *nd, hwaddr base, qemu_irq irq,
+ }
+ 
+ static inline void
+-xilinx_axiethernet_init(DeviceState *dev, NICInfo *nd, StreamSlave *peer,
+-                        hwaddr base, qemu_irq irq, int txmem, int rxmem)
++xilinx_axiethernet_init(DeviceState *dev, NICInfo *nd, StreamSlave *ds,
++                        StreamSlave *cs, hwaddr base, qemu_irq irq, int txmem,
++                        int rxmem)
+ {
+     Error *errp = NULL;
+ 
+     qdev_set_nic_properties(dev, nd);
+     qdev_prop_set_uint32(dev, "rxmem", rxmem);
+     qdev_prop_set_uint32(dev, "txmem", txmem);
+-    object_property_set_link(OBJECT(dev), OBJECT(peer), "axistream-connected",
+-                             &errp);
++    object_property_set_link(OBJECT(dev), OBJECT(ds),
++                             "axistream-connected", &errp);
++    object_property_set_link(OBJECT(dev), OBJECT(cs),
++                             "axistream-control-connected", &errp);
+     assert_no_error(errp);
+     qdev_init_nofail(dev);
+     sysbus_mmio_map(SYS_BUS_DEVICE(dev), 0, base);
+@@ -72,14 +75,16 @@ xilinx_axiethernet_init(DeviceState *dev, NICInfo *nd, StreamSlave *peer,
+ }
+ 
+ static inline void
+-xilinx_axidma_init(DeviceState *dev, StreamSlave *peer, hwaddr base,
+-                   qemu_irq irq, qemu_irq irq2, int freqhz)
++xilinx_axidma_init(DeviceState *dev, StreamSlave *ds, StreamSlave *cs,
++                   hwaddr base, qemu_irq irq, qemu_irq irq2, int freqhz)
+ {
+     Error *errp = NULL;
+ 
+     qdev_prop_set_uint32(dev, "freqhz", freqhz);
+-    object_property_set_link(OBJECT(dev), OBJECT(peer), "axistream-connected",
+-                             &errp);
++    object_property_set_link(OBJECT(dev), OBJECT(ds),
++                             "axistream-connected", &errp);
++    object_property_set_link(OBJECT(dev), OBJECT(cs),
++                             "axistream-control-connected", &errp);
+     assert_no_error(errp);
+     qdev_init_nofail(dev);
+ 
+-- 
+1.7.0.4
+
+

@@ -1,0 +1,36 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+To: qemu-devel@nongnu.org
+Cc: qemu-trivial@nongnu.org, peter.maydell@linaro.org, edgar.iglesias@gmail.com,
+ dantesu@faraday-tech.com, Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+Date: Thu,  4 Apr 2013 11:04:11 +1000
+Message-id: d4f0f38d2fdbed4823a84c0d71880a5bfa41936c.1365037290.git.peter.crosthwaite@xilinx.com
+Subject: [PATCH 1/2] petalogix_ml605_mmu: Cleanup ssi_create_slave()
+
+With the recent m25p80 cleanup there is no need to use
+ssi_create_slave_no_init() anymore. Just use ssi_create_slave().
+
+Signed-off-by: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+---
+
+ hw/microblaze/petalogix_ml605_mmu.c |    3 +--
+ 1 files changed, 1 insertions(+), 2 deletions(-)
+
+diff --git a/hw/microblaze/petalogix_ml605_mmu.c b/hw/microblaze/petalogix_ml605_mmu.c
+index cfc0220..07dc808 100644
+--- a/hw/microblaze/petalogix_ml605_mmu.c
++++ b/hw/microblaze/petalogix_ml605_mmu.c
+@@ -158,8 +158,7 @@ petalogix_ml605_init(QEMUMachineInitArgs *args)
+         for (i = 0; i < NUM_SPI_FLASHES; i++) {
+             qemu_irq cs_line;
+ 
+-            dev = ssi_create_slave_no_init(spi, "n25q128");
+-            qdev_init_nofail(dev);
++            dev = ssi_create_slave(spi, "n25q128");
+             cs_line = qdev_get_gpio_in(dev, 0);
+             sysbus_connect_irq(busdev, i+1, cs_line);
+         }
+-- 
+1.7.0.4
+
+

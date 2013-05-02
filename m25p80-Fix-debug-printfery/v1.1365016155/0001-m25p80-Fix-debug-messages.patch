@@ -1,0 +1,46 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+To: qemu-trivial@nongnu.org, qemu-devel@nongnu.org,
+ "Edgar E. Iglesias" <edgar.iglesias@gmail.com>,
+ Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+Cc: qemu-trivial@nongnu.org, qemu-devel@nongnu.org,
+ Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+Date: Wed,  3 Apr 2013 14:09:16 +1000
+Message-id: ef1ea44a6c6f5d9846c3492006094044bbd805c3.1364961975.git.peter.crosthwaite@xilinx.com
+Subject: [PATCH 1/4] m25p80: Fix debug messages.
+
+Some dodgy casts were making a mess of these msgs.
+
+Signed-off-by: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+---
+
+ hw/m25p80.c |    6 +++---
+ 1 files changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/hw/m25p80.c b/hw/m25p80.c
+index 55e9d0d..34b476b 100644
+--- a/hw/m25p80.c
++++ b/hw/m25p80.c
+@@ -538,15 +538,15 @@ static uint32_t m25p80_transfer8(SSISlave *ss, uint32_t tx)
+     switch (s->state) {
+ 
+     case STATE_PAGE_PROGRAM:
+-        DB_PRINT("page program cur_addr=%lx data=%x\n", s->cur_addr,
+-                 (uint8_t)tx);
++        DB_PRINT("page program cur_addr=%lx data=%x\n", (unsigned)s->cur_addr,
++                 (unsigned)(uint8_t)tx);
+         flash_write8(s, s->cur_addr, (uint8_t)tx);
+         s->cur_addr++;
+         break;
+ 
+     case STATE_READ:
+         r = s->storage[s->cur_addr];
+-        DB_PRINT("READ 0x%lx=%x\n", s->cur_addr, r);
++        DB_PRINT("READ 0x%lx=%x\n", (unsigned)s->cur_addr, (unsigned)r);
+         s->cur_addr = (s->cur_addr + 1) % s->size;
+         break;
+ 
+-- 
+1.7.0.4
+
+

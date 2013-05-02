@@ -1,0 +1,115 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Fam Zheng <famz@redhat.com>
+To: Fam Zheng <famz@redhat.com>, Kevin Wolf <kwolf@redhat.com>,
+ qemu-devel@nongnu.org
+Cc: kwolf@redhat.com, Fam Zheng <famz@redhat.com>, qemu-devel@nongnu.org,
+ stefanha@redhat.com
+Date: Wed, 17 Apr 2013 20:58:58 +0800
+Message-id: 1366203538-28104-1-git-send-email-famz@redhat.com
+Subject: [PATCH 1/1] qemu-iotests: Test subformats for vmdk
+
+Added format options for testing vmdk subformats:
+
+    $ ./check -h
+    Usage: ./check [options] [testlist]
+
+    common options
+        -v          verbose
+
+    check options
+        ...
+        -vpc                test vpc
+        -vmdk               test vmdk (identical to -vmdk-monolithicSparse)
+        -vmdk-monolithicSparse
+                            test vmdk monolithic sparse
+        -vmdk-monolithicFlat
+                            test vmdk monolithic flat
+        -vmdk-twoGbMaxExtentSparse
+                            test vmdk two gb splitted sparse
+        -vmdk-twoGbMaxExtentFlat
+                            test vmdk two gb splitted sparse
+        -rbd                test rbd
+        ...
+
+Signed-off-by: Fam Zheng <famz@redhat.com>
+---
+ tests/qemu-iotests/common    | 31 +++++++++++++++++++++++++++++--
+ tests/qemu-iotests/common.rc |  4 ++++
+ 2 files changed, 33 insertions(+), 2 deletions(-)
+
+diff --git a/tests/qemu-iotests/common b/tests/qemu-iotests/common
+index b3aad89..b7f23bf 100644
+--- a/tests/qemu-iotests/common
++++ b/tests/qemu-iotests/common
+@@ -133,7 +133,15 @@ check options
+     -qed                test qed
+     -vdi                test vdi
+     -vpc                test vpc
+-    -vmdk               test vmdk
++    -vmdk               test vmdk (identical to -vmdk-monolithicSparse)
++    -vmdk-monolithicSparse
++                        test vmdk monolithic sparse
++    -vmdk-monolithicFlat
++                        test vmdk monolithic flat
++    -vmdk-twoGbMaxExtentSparse
++                        test vmdk two gb splitted sparse
++    -vmdk-twoGbMaxExtentFlat
++                        test vmdk two gb splitted sparse
+     -rbd                test rbd
+     -sheepdog           test sheepdog
+     -nbd                test nbd
+@@ -184,8 +192,27 @@ testlist options
+ 	    xpand=false
+ 	    ;;
+ 
+-	-vmdk)
++	-vmdk|-vmdk-monolithicSparse)
+ 	    IMGFMT=vmdk
++	    export SUBFMT=monolithicSparse
++	    xpand=false
++	    ;;
++
++	-vmdk-monolithicFlat)
++	    IMGFMT=vmdk
++	    export SUBFMT=monolithicFlat
++	    xpand=false
++	    ;;
++
++	-vmdk-twoGbMaxExtentSparse)
++	    IMGFMT=vmdk
++	    export SUBFMT=twoGbMaxExtentSparse
++	    xpand=false
++	    ;;
++
++	-vmdk-twoGbMaxExtentFlat)
++	    IMGFMT=vmdk
++	    export SUBFMT=twoGbMaxExtentFlat
+ 	    xpand=false
+ 	    ;;
+ 
+diff --git a/tests/qemu-iotests/common.rc b/tests/qemu-iotests/common.rc
+index e522d61..d786319 100644
+--- a/tests/qemu-iotests/common.rc
++++ b/tests/qemu-iotests/common.rc
+@@ -108,6 +108,9 @@ _make_test_img()
+     if [ \( "$IMGFMT" = "qcow2" -o "$IMGFMT" = "qed" \) -a -n "$CLUSTER_SIZE" ]; then
+         optstr=$(_optstr_add "$optstr" "cluster_size=$CLUSTER_SIZE")
+     fi
++    if [ -n "$SUBFMT" ]; then
++        optstr=$(_optstr_add "$optstr" "subformat=$SUBFMT")
++    fi
+ 
+     if [ -n "$optstr" ]; then
+         extra_img_options="-o $optstr $extra_img_options"
+@@ -124,6 +127,7 @@ _make_test_img()
+             -e "s# compat='[^']*'##g" \
+             -e "s# compat6=\\(on\\|off\\)##g" \
+             -e "s# static=\\(on\\|off\\)##g" \
++            -e "s# subformat='[^']*'##g" \
+             -e "s# lazy_refcounts=\\(on\\|off\\)##g"
+ 
+     # Start an NBD server on the image file, which is what we'll be talking to
+-- 
+1.8.1.4
+
+

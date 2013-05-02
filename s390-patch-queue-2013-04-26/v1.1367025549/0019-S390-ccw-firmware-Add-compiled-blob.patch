@@ -1,0 +1,99 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Alexander Graf <agraf@suse.de>
+To: qemu-ppc@nongnu.org
+Cc: Blue Swirl <blauwirbel@gmail.com>, Aurelien Jarno <aurelien@aurel32.net>,
+ qemu-devel@nongnu.org
+Date: Fri, 26 Apr 2013 20:19:28 +0200
+Message-id: 1367000373-7972-20-git-send-email-agraf@suse.de
+Subject: [PATCH 19/24] S390: ccw firmware: Add compiled blob
+
+Now that we have all the source code ready, add a compiled blob into
+the QEMU source tree, so that people without access to an s390 compiler
+can run the s390-ccw firmware.
+
+Signed-off-by: Alexander Graf <agraf@suse.de>
+---
+ Makefile             |    1 +
+ pc-bios/s390-ccw.img |  Bin 0 -> 9432 bytes
+ 2 files changed, 1 insertions(+), 0 deletions(-)
+ create mode 100644 pc-bios/s390-ccw.img
+
+diff --git a/Makefile b/Makefile
+index e652764..8aca92f 100644
+--- a/Makefile
++++ b/Makefile
+@@ -295,6 +295,7 @@ qemu-icon.bmp \
+ bamboo.dtb petalogix-s3adsp1800.dtb petalogix-ml605.dtb \
+ multiboot.bin linuxboot.bin kvmvapic.bin \
+ s390-zipl.rom \
++s390-ccw.img \
+ spapr-rtas.bin slof.bin \
+ palcode-clipper
+ else
+diff --git a/pc-bios/s390-ccw.img b/pc-bios/s390-ccw.img
+new file mode 100644
+index 0000000000000000000000000000000000000000..149cf70140e9e690960b49337b4e5f419c452a86
+GIT binary patch
+literal 9432
+zcmeHNeQaCR6+h2${M>x;8lu+Fh~7jIq|h3-Nw+ps<GCMcszt4VqNW4Z=BtTE8VB3y
+zx(ba*bRw{onu?-{{^JR<#{^TeFhnyI^{r#<0~pyy2h%iR^r%2GXwMKtRv>S`bD!-d
+z-9Jp)fAf{zJNKS@zV7dybFbt0fo+}b9*;uB=AmWiONN?RGM?w_E^X|RRHqH(Bb_Q}
+z3C1j2?#^qHs2O)uphVSqI|VA`SkLE53Q1Jk9TliM;&(da_KSL6cifO-I!4MO3RaUl
+zU!YQtb^c2|^7bV!MlS1JJI8j_OvNG!R+9N>1<HE2VXR8-mw)-cyl6?Xgg^;_5&|Uz
+zN(ht?C?QZnpoBmPff52G1WE{ec?7cmv`47PvYq|Teda~{F@K)lUelN*%06IkkaNwL
+zOOt=s2U6m=afav#C9Q;0_S5DV_!;A{<4pX46n!%73Ea@7rD>`)MN^F=#s$?IK`Jwj
+zQpID6{SzaJ@h?a*UU9OffTt(Ti;m-*>k?^V>t&Dgn|@u}Xl$jWGL|D8OP3gP=XYb~
+zsFN{fo%f~w!!o7;jI-I}woXmv46OdjvcJHJEWs|qrk$Sl(k5v?XyVHN?*kXg?6gLR
+z$}g=Pkx|@#l1wim+!Icj0xMIU1lFxOBbJt0PATI$@?dtaB~mb9O{M|>Duns{(z1fc
+zlGJiRouM(dya$$5=XT?FL|8$cwHgk+(;h<nw8MCnG~*4$=Cw$<uZ33&vO>ZS886-C
+zMsDmNch!b*v*Un2Wh9+{$cUTSC%G5~W&fhl>^PSGF?*?_#_aKrGUQcf5w!xX52cnz
+zO3q+C^|ZYD9iy3JbKVQ5QX;H<l%5v!7-Sy-?}Dmk&)HphJXg9IVyr?uSn>RO<|N+l
+zvNg~5OcVR|*9&EnWEK%E`y(Sd|7W1B&d*4l*DawTHmP&3#Oj-Qoh04Ha?V*xn+Z^Z
+z@iMKJdS`(pRDf5L6`BDu#wsO)9zmvwwi-83C1W@L3?iL_<ymABS=z0(<27y}1z0Zy
+zzP53L^C?#JfsAv6aVYz-#Gw<2u9m&+lADnIu%+h^r?JX$T)XP5oE?-a`W7rbD=mE&
+zy}tty1@?b~{#i2u%TFS5zi$tat=9!&ZzeBj1*jeoS^!TKo;o~Qmx$1mpa#@QXgoyq
+z>b$C2Gxng1dD(YPlHj%9f+%alnx+KSu2^@HU^D4lGIe-qGTNvHUj4r7^^i_Rn==RM
+z2fcKHbWd%|iEH%=^eTa9m2nNx7DdozB|^puMEw=#QkOQv5!4kbReJZT^K8BR6C*%1
+zhM#=8rsK;#-Oo0Q7H1vH%@50-KjYkI_#KBm1f~L}rR7kEf!a4KbFI17u*l&w5PTY#
+z<0h*Ax3FdAuA5pXdGdtV9LnjC>xk&Nt;UVcTtwtHJu#Nss7G>}!EZe=mTQ}8k@AGE
+z66<S$0WE)XpPjbTVPU5OE2h@VS#4ayEbsc<Ny2G!l&U#0?C2R;6(V~sm*%QCS!F*1
+zsZV6wvraDioE@Pi<2HqW_IW(d<9QlSIXnd{4O{88bfnHQt^q5gdFZj}hp1_K88vo<
+zOkcJU--A}`>ol(=OfRZEWFlX|^-^^pGO=ggv8F=!UeeMQ%r52G$d5w)ypDERN55UG
+z>e5ZF<hrbsb1mxOP>n0?+D6|`{tivl7}w(b1?_?d?njs^T>DfBDZ~#cPhQG{IB<G(
+zn5IuRHIH09_8m2UnsLCMX0WFLVl<w@^RlrQmUfV4iJYIB!l4{Rv>c%>{GAse*ZZ(Z
+zOTa;OqXzGWMjImUl=Byiy-JznN96c*Xs?7V1$>-Gkl#90p3^wzI?q``M_gT`3t$e6
+z_i8$y$UDOkI~^fAjT|epP&e3zjYJPNmD7VnTP=;XaK5mHfW}cL3m%^sIN>7Tpx*qv
+z9@qyLI8}8CUAP$(sGVAmN^GPnvnNSDH&4iWLdmT}7NyurZY8C%r*k8mM;sSw|5aX(
+zJb!wC;oF58R!#v)+(U@<U96VgbY#Zrc3Pe#J@OQ+?Lr1mTu;s(F+<3HXI#+A?Asq9
+zPCm!gd0xZ9vAain&nYpS%N<;OIL9|q3*Q&mDO4e_dS3bn@u~wi>6-mKB-Vv>(7h!0
+zX}(eVkKvB<cX}*gzkr-xM&~DLe0sK?b2IxIXLUrRX(H&;ElOkWr~TAmiL}PKj1c_r
+ztpsj@?W<w?DcIJ+OW$xNmfJXq(*bJIabmGWi|nVUsYA10KrBDwh$E9}VFWZ}lKres
+z_Gymyi?<NdQCb45n^8Zfk!?Wvgx7vi`dAAeFLEwQ+4C%ma~);rX4q$^7VGg0y~DDf
+zJ&IjAR><${)fA$t{GE24hqHVN&jdVI!UAeVp8lt8o4rF?P?c*d@Jr+OdGBi`UO|1-
+z(M`o{hoAW#qk$Y`>{VP5t}V>pI31wX*f(iUT6#%FwFOaqsG^xR`M<u&nEh-!DwRl`
+zn!<&MMjleez$mnxF>xpwPex;FdWP;5ef@``z5U`qY;?G<p@OKrJ37?gCz3HS6zlF2
+zyY3JN;<1Bbushx-`l5+@E9l6MNGDNr_)zyyv`-xD9*FkR0auGvqQe6s(LZpoe>hoD
+z;KxUYhnasQIx++wuKRuQ{_ehlL_w1!+C(ALB2{gV?5j346q)E?Ea-6le@BP%bi+DV
+z81p`zyjx<ULw#a6mJ|d1NzpSD>n*OjH#U4AIxrgV1{%W^bXoG-@o2JNB$D09(F9{L
+z7)vA>ognSFd6(E0kH_MqtSGw$E|Pev9p@8dBc(u_K+k~w1@wK#`4nR%;5c);L3Pj{
+zf_6F1zqW$nGw&trm6Aqwp~e)`aXycL+Msvia}n;H&(DH}kkxab`(cw?9lvleAFipo
+zDy{IqZS1?AyJ`k6x7D{FFMrh6USk$PAzF<o_?L209^FYPcTD|(|NBcGsd%_@yy~Iq
+z_L@1V#qzvPQZw`#Q+VI`AM%|wrq7+^IG*ONn(^fAE1?DQkd$_L9nzkfDeGi;w9R-}
+z=UpCvpJIykT>G)&zrtW&@iJ4*csDUcdu@UJ_L}$0m<Kxw$4+Xdoc9M!@wK}v<N@Xs
+z=~vD8xMt9l4GZi%QUTngC3h0>D))0&&8QtN3;)5yoecitJO+O^Q?&hgJ6Nj>m3i#%
+zEO#LHbEX)#E%Mh{^VZ^hQa)fQHRHFLqCI|v{K9>8B}(rS0wo0gpAp~#2WJ(PZQpq(
+zWp@7Qo^5}7Y5kKwJ=OZw;V-_ieC*VQ?OV3AiRL@*yknc_j1G?;UL{(CEx}fC*FbOY
+zn$~?SYkK0{!@Ywdj!y>(+>K)G`gI$>+Hw!=N{sB;j(adMm`KKx-8~dc_8(4CuqTnA
+zAnw@y;K1-`uxB(n)VC(uN5OckuRGaI!T!O02jbla`}Ym@#V?O2*c&^@pA?FnAjcHk
+z71^EmU+iBcj1;a%c{Qn-g4z6WPfI2XoIK6n6LPc^@4{GK1Ngj=Zz50Ap#sOH1-o*@
+zzk?}UTJl&Q%m2;<Uq7Vsdbm3lwc=#~F8)p|#xM2pdzwjC`kFjd3inXKNFiPxuf<bX
+ze_r4H-3gKVI~2?(S#UvH=>Jymuh6d?ab;KJsRy517PW=`@wY@#KeR}S8uIra;cu`-
+st>BO8?RW~~EA>CjYvn(36m1mbnewyX`Yy_#)9`VA)W496enFr94f-tkLjV8(
+
+literal 0
+HcmV?d00001
+
+-- 
+1.6.0.2
+
+

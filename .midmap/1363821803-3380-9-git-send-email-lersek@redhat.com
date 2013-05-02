@@ -1,0 +1,1 @@
+../build-ACPI-MADT-for-fw_cfg-clients/v1.1363843392/0008-extract-unify-the-constant-0xfee00000-as-APIC_DEFAULT_ADDRESS.patch

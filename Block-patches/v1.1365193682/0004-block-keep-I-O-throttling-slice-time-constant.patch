@@ -1,0 +1,121 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Kevin Wolf <kwolf@redhat.com>
+To: anthony@codemonkey.ws
+Cc: kwolf@redhat.com, qemu-devel@nongnu.org
+Date: Fri,  5 Apr 2013 15:28:06 +0200
+Message-id: 1365168490-29616-5-git-send-email-kwolf@redhat.com
+Subject: [PATCH 4/8] block: keep I/O throttling slice time constant
+
+From: Stefan Hajnoczi <stefanha@redhat.com>
+
+It is not necessary to adjust the slice time at runtime.  We already
+extend the current slice in order to carry over accounting into the next
+slice.  Changing the actual slice time value introduces oscillations.
+
+The guest may experience large changes in throughput or IOPS from one
+moment to the next when slice times are adjusted.
+
+Reported-by: Benoît Canet <benoit@irqsave.net>
+Signed-off-by: Stefan Hajnoczi <stefanha@redhat.com>
+Tested-By: Benoit Canet <benoit@irqsave.net>
+Signed-off-by: Kevin Wolf <kwolf@redhat.com>
+---
+ block.c                   | 19 +++++++++----------
+ blockdev.c                |  1 -
+ include/block/block_int.h |  1 -
+ 3 files changed, 9 insertions(+), 12 deletions(-)
+
+diff --git a/block.c b/block.c
+index 25976b5..00eca27 100644
+--- a/block.c
++++ b/block.c
+@@ -140,7 +140,6 @@ void bdrv_io_limits_disable(BlockDriverState *bs)
+ 
+     bs->slice_start = 0;
+     bs->slice_end   = 0;
+-    bs->slice_time  = 0;
+ }
+ 
+ static void bdrv_block_timer(void *opaque)
+@@ -1432,7 +1431,6 @@ static void bdrv_move_feature_fields(BlockDriverState *bs_dest,
+     bs_dest->enable_write_cache = bs_src->enable_write_cache;
+ 
+     /* i/o timing parameters */
+-    bs_dest->slice_time         = bs_src->slice_time;
+     bs_dest->slice_start        = bs_src->slice_start;
+     bs_dest->slice_end          = bs_src->slice_end;
+     bs_dest->slice_submitted    = bs_src->slice_submitted;
+@@ -3749,6 +3747,7 @@ static bool bdrv_exceed_bps_limits(BlockDriverState *bs, int nb_sectors,
+                  bool is_write, double elapsed_time, uint64_t *wait)
+ {
+     uint64_t bps_limit = 0;
++    uint64_t extension;
+     double   bytes_limit, bytes_base, bytes_res;
+     double   slice_time, wait_time;
+ 
+@@ -3796,8 +3795,10 @@ static bool bdrv_exceed_bps_limits(BlockDriverState *bs, int nb_sectors,
+      * info can be kept until the timer fire, so it is increased and tuned
+      * based on the result of experiment.
+      */
+-    bs->slice_time = wait_time * BLOCK_IO_SLICE_TIME * 10;
+-    bs->slice_end += bs->slice_time - 3 * BLOCK_IO_SLICE_TIME;
++    extension = wait_time * NANOSECONDS_PER_SECOND;
++    extension = DIV_ROUND_UP(extension, BLOCK_IO_SLICE_TIME) *
++                BLOCK_IO_SLICE_TIME;
++    bs->slice_end += extension;
+     if (wait) {
+         *wait = wait_time * BLOCK_IO_SLICE_TIME * 10;
+     }
+@@ -3848,8 +3849,8 @@ static bool bdrv_exceed_iops_limits(BlockDriverState *bs, bool is_write,
+         wait_time = 0;
+     }
+ 
+-    bs->slice_time = wait_time * BLOCK_IO_SLICE_TIME * 10;
+-    bs->slice_end += bs->slice_time - 3 * BLOCK_IO_SLICE_TIME;
++    /* Exceeded current slice, extend it by another slice time */
++    bs->slice_end += BLOCK_IO_SLICE_TIME;
+     if (wait) {
+         *wait = wait_time * BLOCK_IO_SLICE_TIME * 10;
+     }
+@@ -3868,12 +3869,10 @@ static bool bdrv_exceed_io_limits(BlockDriverState *bs, int nb_sectors,
+     now = qemu_get_clock_ns(vm_clock);
+     if ((bs->slice_start < now)
+         && (bs->slice_end > now)) {
+-        bs->slice_end = now + bs->slice_time;
++        bs->slice_end = now + BLOCK_IO_SLICE_TIME;
+     } else {
+-        bs->slice_time  =  5 * BLOCK_IO_SLICE_TIME;
+         bs->slice_start = now;
+-        bs->slice_end   = now + bs->slice_time;
+-
++        bs->slice_end   = now + BLOCK_IO_SLICE_TIME;
+         memset(&bs->slice_submitted, 0, sizeof(bs->slice_submitted));
+     }
+ 
+diff --git a/blockdev.c b/blockdev.c
+index 8cdc9ce..6dc999d 100644
+--- a/blockdev.c
++++ b/blockdev.c
+@@ -1069,7 +1069,6 @@ void qmp_block_set_io_throttle(const char *device, int64_t bps, int64_t bps_rd,
+     }
+ 
+     bs->io_limits = io_limits;
+-    bs->slice_time = BLOCK_IO_SLICE_TIME;
+ 
+     if (!bs->io_limits_enabled && bdrv_io_limits_enabled(bs)) {
+         bdrv_io_limits_enable(bs);
+diff --git a/include/block/block_int.h b/include/block/block_int.h
+index 83941d8..9aa98b5 100644
+--- a/include/block/block_int.h
++++ b/include/block/block_int.h
+@@ -252,7 +252,6 @@ struct BlockDriverState {
+     unsigned int copy_on_read_in_flight;
+ 
+     /* the time for latest disk I/O */
+-    int64_t slice_time;
+     int64_t slice_start;
+     int64_t slice_end;
+     BlockIOLimit io_limits;
+-- 
+1.8.1.4
+

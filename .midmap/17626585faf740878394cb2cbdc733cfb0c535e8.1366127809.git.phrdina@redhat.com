@@ -1,0 +1,1 @@
+../covert-savevm-loadvm-and-delvm-into-qapi/v1.1366153512/0003-savevm-update-bdrv_snapshot_find-to-find-snapshot-by-id-or-name.patch

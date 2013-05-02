@@ -1,0 +1,58 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: blauwirbel@gmail.com, sw@weilnetz.de, Anthony Liguori <aliguori@us.ibm.com>
+Date: Mon, 29 Apr 2013 12:11:22 +0200
+Message-id: 1367230284-24612-3-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 2/4] win32: move Makefile dependencies on version-obj-y to
+ rules.mak
+
+This makes the test on $(LIBTOOL) work.  Otherwise, LIBTOOL
+is /bin/false by the time the test is done.
+
+Fixes Win32 compilation without a working cross-libtool.
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ Makefile  | 3 +--
+ rules.mak | 3 +++
+ 2 files changed, 4 insertions(+), 2 deletions(-)
+
+diff --git a/Makefile b/Makefile
+index 58e3527..f91f3b0 100644
+--- a/Makefile
++++ b/Makefile
+@@ -170,8 +170,7 @@ version.o: $(SRC_PATH)/version.rc config-host.h | version.lo
+ version.lo: $(SRC_PATH)/version.rc config-host.h
+ 
+ version-obj-$(CONFIG_WIN32) += version.o
+-version-lobj-$(CONFIG_WIN32) += $(if $(LIBTOOL),version.lo)
+-Makefile: $(version-obj-y) $(version-lobj-y)
++version-lobj-$(CONFIG_WIN32) += version.lo
+ 
+ 
+ ######################################################################
+diff --git a/rules.mak b/rules.mak
+index 279525d..197a9d7 100644
+--- a/rules.mak
++++ b/rules.mak
+@@ -22,12 +22,15 @@ QEMU_CFLAGS += -I$(<D) -I$(@D)
+ %.o: %.rc
+ 	$(call quiet-command,$(WINDRES) -I. -o $@ $<,"  RC    $(TARGET_DIR)$@")
+ 
++Makefile: $(version-obj-y)
++
+ ifeq ($(LIBTOOL),)
+ LIBTOOL = /bin/false
+ LINK = $(call quiet-command,$(CC) $(QEMU_CFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ \
+        $(sort $(filter %.o, $1)) $(filter-out %.o, $1) $(version-obj-y) \
+        $(LIBS),"  LINK  $(TARGET_DIR)$@")
+ else
++Makefile: $(version-lobj-y)
+ LIBTOOL += $(if $(V),,--quiet)
+ %.lo: %.c
+ 	$(call quiet-command,$(LIBTOOL) --mode=compile --tag=CC $(CC) $(QEMU_INCLUDES) $(QEMU_CFLAGS) $(QEMU_DGFLAGS) $(CFLAGS) -c -o $@ $<,"  lt CC $@")
+-- 
+1.8.2
+
+

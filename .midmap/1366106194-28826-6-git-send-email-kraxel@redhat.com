@@ -1,0 +1,1 @@
+../spice-patch-queue/v1.1366131385/0005-virtio-console-Remove-any-pending-watches-on-close.patch

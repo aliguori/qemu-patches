@@ -1,0 +1,1 @@
+../target-i386-CPU-hot-add-with-cpu-add-QMP-command/v2.1365197812/0020-qdev-set-devices-parent-before-calling-realize-down-inheritance-chain.patch

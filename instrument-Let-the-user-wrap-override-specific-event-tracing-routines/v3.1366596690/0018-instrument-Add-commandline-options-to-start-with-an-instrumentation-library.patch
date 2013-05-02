@@ -1,0 +1,503 @@
+From patches Mon Sep 17 00:00:00 2001
+From: =?utf-8?q?Llu=C3=ADs_Vilanova_=3Cvilanova=40ac=2Eupc=2Eedu=3E?=
+To: qemu-devel@nongnu.org
+Cc: 
+Date: Sun, 21 Apr 2013 21:13:11 +0200
+Message-id: 20130421191310.8947.2747.stgit@fimbulvetr.bsc.es
+Subject: [PATCH 18/24] instrument: Add commandline options to start with an
+ instrumentation library
+
+Add commandline options to control initial loading of dynamic instrumentation
+library.
+
+Signed-off-by: Lluís Vilanova <vilanova@ac.upc.edu>
+---
+ bsd-user/main.c          |   22 +++++++++++
+ bsd-user/syscall.c       |    5 +++
+ instrument/Makefile.objs |    2 +
+ instrument/cmdline.c     |   91 ++++++++++++++++++++++++++++++++++++++++++++++
+ instrument/cmdline.h     |   52 ++++++++++++++++++++++++++
+ linux-user/main.c        |   31 ++++++++++++++++
+ linux-user/syscall.c     |    4 ++
+ qemu-options.hx          |   18 +++++++++
+ vl.c                     |   41 +++++++++++++++++++++
+ 9 files changed, 266 insertions(+)
+ create mode 100644 instrument/cmdline.c
+ create mode 100644 instrument/cmdline.h
+
+diff --git a/bsd-user/main.c b/bsd-user/main.c
+index cc84981..2393be9 100644
+--- a/bsd-user/main.c
++++ b/bsd-user/main.c
+@@ -33,6 +33,9 @@
+ #include "tcg.h"
+ #include "qemu/timer.h"
+ #include "qemu/envlist.h"
++#include "instrument/cmdline.h"
++#include "instrument/control.h"
++
+ 
+ int singlestep;
+ #if defined(CONFIG_USE_GUEST_BASE)
+@@ -688,6 +691,15 @@ static void usage(void)
+ #endif
+            "-bsd type         select emulated BSD type FreeBSD/NetBSD/OpenBSD (default)\n"
+            "\n"
++#if defined(CONFIG_TRACE_INSTRUMENT)
++           "Tracing options:\n"
++#if defined(CONFIG_TRACE_INSTRUMENT_DYNAMIC)
++           "-instr path       load a dynamic trace instrumentation library\n"
++#endif
++           "-instr-arg string\n"
++           "                  argument to trace instrumentation library (can be given multiple times)\n"
++           "\n"
++#endif
+            "Debug options:\n"
+            "-d item1[,...]    enable logging of specified items\n"
+            "                  (use '-d help' for a list of log items)\n"
+@@ -743,6 +755,9 @@ int main(int argc, char **argv)
+     char **target_environ, **wrk;
+     envlist_t *envlist = NULL;
+     bsd_type = target_openbsd;
++    char *instrument_path = NULL;
++    int instrument_argc = 0;
++    char **instrument_argv = NULL;
+ 
+     if (argc <= 1)
+         usage();
+@@ -852,6 +867,10 @@ int main(int argc, char **argv)
+             singlestep = 1;
+         } else if (!strcmp(r, "strace")) {
+             do_strace = 1;
++        } else if (instr_type() == INSTR_TYPE_DYNAMIC && !strcmp(r, "instr")) {
++            instrument_path = argv[optind++];
++        } else if (instr_type() != INSTR_TYPE_NONE && !strcmp(r, "instr-arg")) {
++            instr_parse_args(argv[optind++], &instrument_argc, &instrument_argv);
+         } else
+         {
+             usage();
+@@ -1135,6 +1154,9 @@ int main(int argc, char **argv)
+         gdbserver_start (gdbstub_port);
+         gdb_handlesig(env, 0);
+     }
++
++    instr_init(instrument_path, instrument_argc, instrument_argv);
++
+     cpu_loop(env);
+     /* never exits */
+     return 0;
+diff --git a/bsd-user/syscall.c b/bsd-user/syscall.c
+index 18b43f1..dbb6816 100644
+--- a/bsd-user/syscall.c
++++ b/bsd-user/syscall.c
+@@ -35,6 +35,8 @@
+ 
+ #include "qemu.h"
+ #include "qemu-common.h"
++#include "instrument/cmdline.h"
++
+ 
+ //#define DEBUG
+ 
+@@ -334,6 +336,7 @@ abi_long do_freebsd_syscall(void *cpu_env, int num, abi_long arg1,
+         _mcleanup();
+ #endif
+         gdb_exit(cpu_env, arg1);
++        instr_fini();
+         /* XXX: should free thread stack and CPU env */
+         _exit(arg1);
+         ret = 0; /* avoid warning */
+@@ -429,6 +432,7 @@ abi_long do_netbsd_syscall(void *cpu_env, int num, abi_long arg1,
+         _mcleanup();
+ #endif
+         gdb_exit(cpu_env, arg1);
++        instr_fini();
+         /* XXX: should free thread stack and CPU env */
+         _exit(arg1);
+         ret = 0; /* avoid warning */
+@@ -501,6 +505,7 @@ abi_long do_openbsd_syscall(void *cpu_env, int num, abi_long arg1,
+         _mcleanup();
+ #endif
+         gdb_exit(cpu_env, arg1);
++        instr_fini();
+         /* XXX: should free thread stack and CPU env */
+         _exit(arg1);
+         ret = 0; /* avoid warning */
+diff --git a/instrument/Makefile.objs b/instrument/Makefile.objs
+index 2122272..3116520 100644
+--- a/instrument/Makefile.objs
++++ b/instrument/Makefile.objs
+@@ -65,6 +65,8 @@ endif
+ ######################################################################
+ # Control code
+ 
++target-obj-y += cmdline.o
++
+ target-obj-y += control.o
+ 
+ common-obj-$(CONFIG_SOFTMMU) += qmp.o
+diff --git a/instrument/cmdline.c b/instrument/cmdline.c
+new file mode 100644
+index 0000000..add9c63
+--- /dev/null
++++ b/instrument/cmdline.c
+@@ -0,0 +1,91 @@
++/*
++ * Control dynamic trace instrumentation during program (de)initialization.
++ *
++ * Copyright (C) 2012-2013 Lluís Vilanova <vilanova@ac.upc.edu>
++ *
++ * This work is licensed under the terms of the GNU GPL, version 2 or later.
++ * See the COPYING file in the top-level directory.
++ */
++
++#include "instrument/cmdline.h"
++
++#include <dlfcn.h>
++
++#include "qemu-common.h"
++#include "instrument/control.h"
++
++#if defined(CONFIG_TRACE_INSTRUMENT_STATIC)
++#include "instrument/qemu-instr/events.h"
++#endif
++
++
++static int64_t handle = -1;
++
++
++void instr_parse_args(const char *args, int *argc, const char ***argv)
++{
++    *argv = realloc(*argv, sizeof(**argv) * (*argc + 1));
++    (*argv)[*argc] = args;
++    (*argc)++;
++}
++
++void instr_init(const char *path, int argc, const char **argv)
++{
++    if (atexit(instr_fini) != 0) {
++        fprintf(stderr, "error: atexit: %s\n", strerror(errno));
++        abort();
++    }
++
++    if (path == NULL) {
++#if defined(CONFIG_TRACE_INSTRUMENT_STATIC)
++        handle = 0;
++        qi_init(argc, argv);
++#endif
++        return;
++    }
++
++    InstrLoadError err = instr_load(path, argc, argv, &handle);
++    switch (err) {
++    case INSTR_LOAD_OK:
++        return;
++    case INSTR_LOAD_UNAVAILABLE:
++        fprintf(stderr, "error: instrument: not available\n");
++        break;
++    case INSTR_LOAD_ERROR:
++        assert(instr_type() == INSTR_TYPE_DYNAMIC);
++        fprintf(stderr, "error: instrument: error loading library: %s\n", dlerror());
++        break;
++    }
++
++    exit(1);
++}
++
++void instr_fini(void)
++{
++    if (handle >= 0) {
++        return;
++    }
++
++#if defined(CONFIG_TRACE_INSTRUMENT_STATIC)
++    qi_fini();
++    return;
++#endif
++
++    InstrUnloadError err = instr_unload(handle);
++    switch (err) {
++    case INSTR_UNLOAD_OK:
++        return;
++    case INSTR_UNLOAD_UNAVAILABLE:
++        fprintf(stderr, "error: not available\n");
++        break;
++    case INSTR_UNLOAD_INVALID:
++        /* the user might have already unloaded it */
++        return;
++    case INSTR_UNLOAD_ERROR:
++        assert(instr_type() == INSTR_TYPE_DYNAMIC);
++        fprintf(stderr, "error: error unloading library: %s\n", dlerror());
++        break;
++    }
++
++    exit(1);
++}
+diff --git a/instrument/cmdline.h b/instrument/cmdline.h
+new file mode 100644
+index 0000000..b096793
+--- /dev/null
++++ b/instrument/cmdline.h
+@@ -0,0 +1,52 @@
++/*
++ * Control dynamic trace instrumentation during program (de)initialization.
++ *
++ * Copyright (C) 2012-2013 Lluís Vilanova <vilanova@ac.upc.edu>
++ *
++ * This work is licensed under the terms of the GNU GPL, version 2 or later.
++ * See the COPYING file in the top-level directory.
++ */
++
++#ifndef INSTRUMENT__CMDLINE_H
++#define INSTRUMENT__CMDLINE_H
++
++/**
++ * instr_parse_args:
++ * @args: Input arguments.
++ * @argc: Output argument count.
++ * @argv: Output argument array.
++ *
++ * Adds element @args into the argument array.
++ */
++void instr_parse_args(const char *args, int *argc, const char ***argv);
++
++/**
++ * instr_init:
++ * @path: Path to dynamic trace instrumentation library.
++ * @argc: Number of arguments to the library's #qi_init routine.
++ * @argv: Arguments to the library's #qi_init routine.
++ *
++ * Load and initialize the given instrumentation library.
++ *
++ * Automatically installs #instr_fini as an atexit callback.
++ *
++ * If path is %NULL and we're running with static instrumentation, the library
++ * is not loaded but just initialized.
++ *
++ * Pre-condition: There is no library already loaded.
++ */
++void instr_init(const char *path, int argc, const char **argv);
++
++/**
++ * instr_fini:
++ *
++ * Deinitialize and unload the current instrumentation library.
++ *
++ * If we're running with static instrumentation, the library is not unloaded but
++ * just deinitialized.
++ *
++ * Pre-condition: There is an already loaded library.
++ */
++void instr_fini(void);
++
++#endif  /* INSTRUMENT__CMDLINE_H */
+diff --git a/linux-user/main.c b/linux-user/main.c
+index 4e92a0b..d6f4720 100644
+--- a/linux-user/main.c
++++ b/linux-user/main.c
+@@ -34,6 +34,9 @@
+ #include "qemu/timer.h"
+ #include "qemu/envlist.h"
+ #include "elf.h"
++#include "instrument/cmdline.h"
++#include "instrument/control.h"
++
+ 
+ char *exec_path;
+ 
+@@ -3327,6 +3330,23 @@ static void handle_arg_reserved_va(const char *arg)
+ }
+ #endif
+ 
++static const char *instrument_path;
++#if defined(CONFIG_TRACE_INSTRUMENT_DYNAMIC)
++static void handle_arg_instrument(const char *arg)
++{
++    instrument_path = arg;
++}
++#endif
++
++static int instrument_argc = 0;
++static const char **instrument_argv = NULL;
++#if defined(CONFIG_TRACE_INSTRUMENT)
++static void handle_arg_instrument_arg(const char *arg)
++{
++    instr_parse_args(arg, &instrument_argc, &instrument_argv);
++}
++#endif
++
+ static void handle_arg_singlestep(const char *arg)
+ {
+     singlestep = 1;
+@@ -3378,6 +3398,14 @@ static const struct qemu_argument arg_table[] = {
+     {"R",          "QEMU_RESERVED_VA", true,  handle_arg_reserved_va,
+      "size",       "reserve 'size' bytes for guest virtual address space"},
+ #endif
++#if defined(CONFIG_TRACE_INSTRUMENT_DYNAMIC)
++    {"instr",      "QEMU_INSTR",       true,  handle_arg_instrument,
++     "path",       "load a dynamic trace instrumentation library"},
++#endif
++#if defined(CONFIG_TRACE_INSTRUMENT)
++    {"instr-arg",  "QEMU_INSTR_ARGS", true,  handle_arg_instrument_arg,
++     "string",     "argument to trace instrumentation library (can be given multiple times)"},
++#endif
+     {"d",          "QEMU_LOG",         true,  handle_arg_log,
+      "item[,...]", "enable logging of specified items "
+      "(use '-d help' for a list of items)"},
+@@ -4071,6 +4099,9 @@ int main(int argc, char **argv, char **envp)
+         }
+         gdb_handlesig(env, 0);
+     }
++
++    instr_init(instrument_path, instrument_argc, instrument_argv);
++
+     cpu_loop(env);
+     /* never exits */
+     return 0;
+diff --git a/linux-user/syscall.c b/linux-user/syscall.c
+index 1f07621..d55af6c 100644
+--- a/linux-user/syscall.c
++++ b/linux-user/syscall.c
+@@ -109,6 +109,8 @@ int __clone2(int (*fn)(void *), void *child_stack_base,
+ #include "cpu-uname.h"
+ 
+ #include "qemu.h"
++#include "instrument/cmdline.h"
++
+ 
+ #if defined(CONFIG_USE_NPTL)
+ #define CLONE_NPTL_FLAGS2 (CLONE_SETTLS | \
+@@ -5248,6 +5250,7 @@ abi_long do_syscall(void *cpu_env, int num, abi_long arg1,
+         _mcleanup();
+ #endif
+         gdb_exit(cpu_env, arg1);
++        instr_fini();
+         _exit(arg1);
+         ret = 0; /* avoid warning */
+         break;
+@@ -7028,6 +7031,7 @@ abi_long do_syscall(void *cpu_env, int num, abi_long arg1,
+         _mcleanup();
+ #endif
+         gdb_exit(cpu_env, arg1);
++        instr_fini();
+         ret = get_errno(exit_group(arg1));
+         break;
+ #endif
+diff --git a/qemu-options.hx b/qemu-options.hx
+index 7cd6002..0f36c1c 100644
+--- a/qemu-options.hx
++++ b/qemu-options.hx
+@@ -3021,6 +3021,24 @@ the @var{simple} tracing backend.
+ @end table
+ ETEXI
+ 
++DEF("instr", HAS_ARG, QEMU_OPTION_instr,
++    "-instr file=<file>[,arg=<string>]\n"
++    "                load an instrumentation library\n",
++    QEMU_ARCH_ALL)
++STEXI
++@item -instr file=@var{file}[,arg=@var{string}]
++@findex -instr
++
++Load a dynamic trace instrumentation library.
++
++@table @option
++@item file=@var{file}
++Load the given dynamic trace instrumentation library.
++@item arg=@var{string}
++String argument passed as to the library's @code{qi_init} routine (can be given multiple times).
++@end table
++ETEXI
++
+ HXCOMM Internal use
+ DEF("qtest", HAS_ARG, QEMU_OPTION_qtest, "", QEMU_ARCH_ALL)
+ DEF("qtest-log", HAS_ARG, QEMU_OPTION_qtest_log, "", QEMU_ARCH_ALL)
+diff --git a/vl.c b/vl.c
+index d694a90..e773bb4 100644
+--- a/vl.c
++++ b/vl.c
+@@ -163,6 +163,7 @@ int main(int argc, char **argv)
+ 
+ #include "trace.h"
+ #include "trace/control.h"
++#include "instrument/cmdline.h"
+ #include "qemu/queue.h"
+ #include "sysemu/cpus.h"
+ #include "sysemu/arch_init.h"
+@@ -352,6 +353,22 @@ static QemuOptsList qemu_trace_opts = {
+     },
+ };
+ 
++static QemuOptsList qemu_instr_opts = {
++    .name = "instr",
++    .implied_opt_name = "instr",
++    .head = QTAILQ_HEAD_INITIALIZER(qemu_instr_opts.head),
++    .desc = {
++        {
++            .name = "file",
++            .type = QEMU_OPT_STRING,
++        },{
++            .name = "arg",
++            .type = QEMU_OPT_STRING,
++        },
++        { /* end of list */ }
++    },
++};
++
+ static QemuOptsList qemu_option_rom_opts = {
+     .name = "option-rom",
+     .implied_opt_name = "romfile",
+@@ -2883,6 +2900,9 @@ int main(int argc, char **argv, char **envp)
+     };
+     const char *trace_events = NULL;
+     const char *trace_file = NULL;
++    const char *instrument_path = NULL;
++    int instrument_argc = 0;
++    const char **instrument_argv = NULL;
+ 
+     atexit(qemu_run_exit_notifiers);
+     error_set_progname(argv[0]);
+@@ -2908,6 +2928,7 @@ int main(int argc, char **argv, char **envp)
+     qemu_add_opts(&qemu_global_opts);
+     qemu_add_opts(&qemu_mon_opts);
+     qemu_add_opts(&qemu_trace_opts);
++    qemu_add_opts(&qemu_instr_opts);
+     qemu_add_opts(&qemu_option_rom_opts);
+     qemu_add_opts(&qemu_machine_opts);
+     qemu_add_opts(&qemu_boot_opts);
+@@ -3820,6 +3841,24 @@ int main(int argc, char **argv, char **envp)
+                 trace_file = qemu_opt_get(opts, "file");
+                 break;
+             }
++            case QEMU_OPTION_instr:
++            {
++                olist = qemu_find_opts("instr");
++                if (!olist) {
++                    exit(1);
++                }
++                opts = qemu_opts_parse(olist, optarg, 0);
++                if (!opts) {
++                    exit(1);
++                }
++                const char * path = qemu_opt_get(opts, "file");
++                if (path != NULL) {
++                    instrument_path = path;
++                }
++                instr_parse_args(qemu_opt_get(opts, "arg"),
++                                 &instrument_argc, &instrument_argv);
++                break;
++            }
+             case QEMU_OPTION_readconfig:
+                 {
+                     int ret = qemu_read_config_file(optarg);
+@@ -4414,6 +4453,8 @@ int main(int argc, char **argv, char **envp)
+         }
+     }
+ 
++    instr_init(instrument_path, instrument_argc, instrument_argv);
++
+     if (incoming) {
+         Error *local_err = NULL;
+         qemu_start_incoming_migration(incoming, &local_err);
+
+

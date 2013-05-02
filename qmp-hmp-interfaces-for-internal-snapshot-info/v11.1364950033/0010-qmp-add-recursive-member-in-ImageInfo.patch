@@ -1,0 +1,67 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Wenchao Xia <xiawenc@linux.vnet.ibm.com>
+To: Markus Armbruster <armbru@redhat.com>,
+ Wenchao Xia <xiawenc@linux.vnet.ibm.com>, qemu-devel@nongnu.org
+Cc: kwolf@redhat.com, Wenchao Xia <xiawenc@linux.vnet.ibm.com>,
+ qemu-devel@nongnu.org, stefanha@gmail.com, armbru@redhat.com,
+ lcapitulino@redhat.com, pbonzini@redhat.com
+Date: Tue,  2 Apr 2013 19:47:23 +0800
+Message-id: 1364903250-10429-11-git-send-email-xiawenc@linux.vnet.ibm.com
+Subject: [PATCH 10/17] qmp: add recursive member in ImageInfo
+
+  New member *backing-image is added to reflect the backing chain
+status.
+
+Signed-off-by: Wenchao Xia <xiawenc@linux.vnet.ibm.com>
+Reviewed-by: Kevin Wolf <kwolf@redhat.com>
+Reviewed-by: Eric Blake <eblake@redhat.com>
+---
+ block/qapi.c     |    6 +++++-
+ qapi-schema.json |    5 ++++-
+ 2 files changed, 9 insertions(+), 2 deletions(-)
+
+diff --git a/block/qapi.c b/block/qapi.c
+index 5e91ab8..fa61c85 100644
+--- a/block/qapi.c
++++ b/block/qapi.c
+@@ -123,7 +123,11 @@ int bdrv_query_snapshot_info_list(BlockDriverState *bs,
+     return 0;
+ }
+ 
+-/* return 0 on success, and @p_info will be set only on success. */
++/*
++ * return 0 on success, and @p_info will be set only on success,
++ * (*pinfo)->has_backing_image will be false and (*pinfo)->backing_image will
++ * be NULL.
++ */
+ int bdrv_query_image_info(BlockDriverState *bs,
+                           ImageInfo **p_info,
+                           Error **errp)
+diff --git a/qapi-schema.json b/qapi-schema.json
+index 225afef..ad9dd82 100644
+--- a/qapi-schema.json
++++ b/qapi-schema.json
+@@ -233,6 +233,8 @@
+ #
+ # @snapshots: #optional list of VM snapshots
+ #
++# @backing-image: #optional info of the backing image (since 1.5)
++#
+ # Since: 1.3
+ #
+ ##
+@@ -242,7 +244,8 @@
+            '*actual-size': 'int', 'virtual-size': 'int',
+            '*cluster-size': 'int', '*encrypted': 'bool',
+            '*backing-filename': 'str', '*full-backing-filename': 'str',
+-           '*backing-filename-format': 'str', '*snapshots': ['SnapshotInfo'] } }
++           '*backing-filename-format': 'str', '*snapshots': ['SnapshotInfo'],
++           '*backing-image': 'ImageInfo' } }
+ 
+ ##
+ # @ImageCheck:
+-- 
+1.7.1
+
+
+

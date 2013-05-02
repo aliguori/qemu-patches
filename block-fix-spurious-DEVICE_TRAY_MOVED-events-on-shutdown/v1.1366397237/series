@@ -1,0 +1,3 @@
+0000-block-fix-spurious-DEVICE_TRAY_MOVED-events-on-shutdown.txt
+0001-block-make-bdrv_dev_change_media_cb-public.patch
+0002-block-move-bdrv_dev_change_media_cb-to-callers-that-really-need-it.patch

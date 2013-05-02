@@ -1,0 +1,4 @@
+0000-Add-GDB-qAttached-support.txt
+0001-Add-GDB-qAttached-support.patch
+0002-Revert-gdbstub-Do-not-kill-target-in-system-emulation-mode.patch
+0003-New-option--gdb-opts.patch

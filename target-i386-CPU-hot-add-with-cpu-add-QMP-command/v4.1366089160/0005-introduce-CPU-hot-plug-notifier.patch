@@ -1,0 +1,74 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Igor Mammedov <imammedo@redhat.com>
+To: Igor Mammedov <imammedo@redhat.com>, qemu-devel@nongnu.org,
+ Gleb Natapov <gleb@redhat.com>
+Cc: Anthony Liguori <aliguori@us.ibm.com>, ehabkost@redhat.com, mst@redhat.com,
+ jan.kiszka@siemens.com, claudio.fontana@huawei.com, qemu-devel@nongnu.org,
+ aderumier@odiso.com, lcapitulino@redhat.com, jfrei@linux.vnet.ibm.com,
+ yang.z.zhang@intel.com, pbonzini@redhat.com, eblake@redhat.com,
+ afaerber@suse.de, lig.fnst@cn.fujitsu.com, rth@twiddle.net
+Date: Tue, 16 Apr 2013 00:12:45 +0200
+Message-id: 1366063976-4909-6-git-send-email-imammedo@redhat.com
+Subject: [PATCH 05/16] introduce CPU hot-plug notifier
+
+hot-added CPU will be distributed to acpi_piix4 and rtc_cmos
+
+Signed-off-by: Igor Mammedov <imammedo@redhat.com>
+Reviewed-by: Paolo Bonzini <pbonzini@redhat.com>
+Reviewed-by: Eduardo Habkost <ehabkost@redhat.com>
+---
+v2:
+  * move notifier to qom/cpu.c and call it from CPUClass.realize() on hotplug
+  * remove get_firmware_id() since it belong to other patch
+---
+ include/sysemu/sysemu.h |  3 +++
+ qom/cpu.c               | 12 ++++++++++++
+ 2 files changed, 15 insertions(+)
+
+diff --git a/include/sysemu/sysemu.h b/include/sysemu/sysemu.h
+index 6578782..a8c3de1 100644
+--- a/include/sysemu/sysemu.h
++++ b/include/sysemu/sysemu.h
+@@ -152,6 +152,9 @@ void do_pci_device_hot_remove(Monitor *mon, const QDict *qdict);
+ /* generic hotplug */
+ void drive_hot_add(Monitor *mon, const QDict *qdict);
+ 
++/* CPU hotplug */
++void qemu_register_cpu_added_notifier(Notifier *notifier);
++
+ /* pcie aer error injection */
+ void pcie_aer_inject_error_print(Monitor *mon, const QObject *data);
+ int do_pcie_aer_inject_error(Monitor *mon,
+diff --git a/qom/cpu.c b/qom/cpu.c
+index 40a4259..819986e 100644
+--- a/qom/cpu.c
++++ b/qom/cpu.c
+@@ -21,6 +21,17 @@
+ #include "qom/cpu.h"
+ #include "qemu-common.h"
+ #include "sysemu/kvm.h"
++#include "qemu/notify.h"
++#include "sysemu/sysemu.h"
++
++/* CPU hot-plug notifiers */
++static NotifierList cpu_added_notifiers =
++    NOTIFIER_LIST_INITIALIZER(cpu_add_notifiers);
++
++void qemu_register_cpu_added_notifier(Notifier *notifier)
++{
++    notifier_list_add(&cpu_added_notifiers, notifier);
++}
+ 
+ void cpu_reset_interrupt(CPUState *cpu, int mask)
+ {
+@@ -61,6 +72,7 @@ static void cpu_common_realizefn(DeviceState *dev, Error **errp)
+     if (dev->hotplugged) {
+         cpu_synchronize_post_init(CPU(dev));
+         resume_vcpu(CPU(dev));
++        notifier_list_notify(&cpu_added_notifiers, dev);
+     }
+ }
+ 
+-- 
+1.8.2
+

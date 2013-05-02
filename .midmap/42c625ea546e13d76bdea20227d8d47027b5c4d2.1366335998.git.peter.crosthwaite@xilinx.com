@@ -1,0 +1,1 @@
+../Xilinx-SPIPS-fixes-round-2/v2.1366390969/0004-xilinx_spips-Add-verbose-LQSPI-debug-output.patch

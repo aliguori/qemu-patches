@@ -1,0 +1,56 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Dominik Dingel <dingel@linux.vnet.ibm.com>
+To: qemu-devel@nongnu.org
+Cc: Christian Borntraeger <borntraeger@de.ibm.com>,
+ Dominik Dingel <dingel@linux.vnet.ibm.com>
+Date: Tue, 30 Apr 2013 19:15:57 +0200
+Message-id: 1367342159-21545-3-git-send-email-dingel@linux.vnet.ibm.com
+Subject: [PATCH 2/4] S390: Add virtio-blk boot
+
+If no kernel IPL entry is specified, boot the bios and pass if available
+device information for the first boot device (as given by the boot index).
+
+The provided information will be used in the next commit from the BIOS.
+
+Signed-off-by: Dominik Dingel <dingel@linux.vnet.ibm.com>
+
+diff --git a/hw/s390x/ipl.c b/hw/s390x/ipl.c
+index d14c548..5c26873 100644
+--- a/hw/s390x/ipl.c
++++ b/hw/s390x/ipl.c
+@@ -16,6 +16,8 @@
+ #include "elf.h"
+ #include "hw/loader.h"
+ #include "hw/sysbus.h"
++#include "hw/s390x/virtio-ccw.h"
++#include "hw/s390x/css.h"
+ 
+ #define KERN_IMAGE_START                0x010000UL
+ #define KERN_PARM_AREA                  0x010480UL
+@@ -150,6 +152,22 @@ static void s390_ipl_reset(DeviceState *dev)
+ 
+     env->psw.addr = ipl->start_addr;
+     env->psw.mask = IPL_PSW_MASK;
++    
++    if (!ipl->kernel) {
++        /* booting firmware, tell what device to boot from */
++        DeviceState *dev_st = get_boot_device(0);
++        VirtioCcwDevice *ccw_dev = (VirtioCcwDevice *) object_dynamic_cast(
++                OBJECT(&(dev_st->parent_obj)), "virtio-blk-ccw");
++        
++        if (ccw_dev) {
++            env->regs[7] = ccw_dev->sch->cssid << 24 |
++                           ccw_dev->sch->ssid << 16 |
++                           ccw_dev->sch->devno;
++        } else {
++            env->regs[7] = -1;
++        }
++    }
++    
+     s390_add_running_cpu(cpu);
+ }
+ 
+-- 
+1.7.1
+
+

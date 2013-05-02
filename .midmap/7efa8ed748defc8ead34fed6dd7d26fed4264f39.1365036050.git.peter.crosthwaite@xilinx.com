@@ -1,0 +1,1 @@
+../DTC-as-submodule/v4.1365090105/0001-configure-Put-cross-compile-flags-in-EXTRA_CFLAGS.patch

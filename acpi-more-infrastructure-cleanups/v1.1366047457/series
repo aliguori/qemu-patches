@@ -1,0 +1,4 @@
+0000-acpi-more-infrastructure-cleanups.txt
+0001-acpi-move-declarations-from-pch-to-acpih.patch
+0002-acpi-add-acpi_table_add_hdr.patch
+0003-acpih-make-it-self-contained.patch

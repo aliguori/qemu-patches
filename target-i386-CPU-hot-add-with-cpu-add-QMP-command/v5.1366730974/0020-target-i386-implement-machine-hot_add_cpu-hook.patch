@@ -1,0 +1,73 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Igor Mammedov <imammedo@redhat.com>
+To: Igor Mammedov <imammedo@redhat.com>, qemu-devel@nongnu.org,
+ Andreas =?iso-8859-1?Q?F=E4rber?= <afaerber@suse.de>
+Cc: peter.maydell@linaro.org, gleb@redhat.com, mst@redhat.com,
+ jan.kiszka@siemens.com, qemu-devel@nongnu.org, lcapitulino@redhat.com,
+ blauwirbel@gmail.com, Igor Mammedov <imammedo@redhat.com>, kraxel@redhat.com,
+ eblake@redhat.com, Anthony Liguori <aliguori@us.ibm.com>, quintela@redhat.com,
+ armbru@redhat.com, yang.z.zhang@intel.com, ehabkost@redhat.com,
+ stefano.stabellini@eu.citrix.com, aderumier@odiso.com,
+ anthony.perard@citrix.com, alex.williamson@redhat.com, rth@twiddle.net,
+ kwolf@redhat.com, claudio.fontana@huawei.com, pbonzini@redhat.com,
+ afaerber@suse.de
+Date: Tue, 23 Apr 2013 10:29:54 +0200
+Message-id: 1366705795-24732-21-git-send-email-imammedo@redhat.com
+Subject: [PATCH 20/21] target-i386: implement machine->hot_add_cpu hook
+
+Signed-off-by: Igor Mammedov <imammedo@redhat.com>
+---
+ hw/i386/pc.c |   22 ++++++++++++++++++++++
+ 1 files changed, 22 insertions(+), 0 deletions(-)
+
+diff --git a/hw/i386/pc.c b/hw/i386/pc.c
+index 5e50127..b649ed5 100644
+--- a/hw/i386/pc.c
++++ b/hw/i386/pc.c
+@@ -54,6 +54,7 @@
+ #include "qemu/config-file.h"
+ #include "hw/acpi/acpi.h"
+ #include "hw/cpu/icc_bus.h"
++#include "hw/boards.h"
+ 
+ /* debug PC/ISA interrupts */
+ //#define DEBUG_IRQ
+@@ -914,6 +915,25 @@ static X86CPU *pc_new_cpu(const char *cpu_model, int64_t apic_id, Error **errp)
+     return cpu;
+ }
+ 
++static void do_cpu_hot_add(const int64_t id, Error **errp)
++{
++    int64_t apic_id = x86_cpu_apic_id_from_index(id);
++
++    if (cpu_exists(apic_id)) {
++        error_setg(errp, "Unable to add CPU: %" PRIi64
++                   ", it already exists", id);
++        return;
++    }
++
++    if (id >= max_cpus) {
++        error_setg(errp, "Unable to add CPU: %" PRIi64
++                   ", max allowed: %d", id, max_cpus - 1);
++        return;
++    }
++
++    pc_new_cpu(machine_args->cpu_model, apic_id, errp);
++}
++
+ void pc_cpus_init(const char *cpu_model)
+ {
+     int i;
+@@ -928,7 +948,9 @@ void pc_cpus_init(const char *cpu_model)
+ #else
+         cpu_model = "qemu32";
+ #endif
++        machine_args->cpu_model = cpu_model;
+     }
++    current_machine->hot_add_cpu = do_cpu_hot_add;
+ 
+     icc_bridge = SYS_BUS_DEVICE(object_resolve_path_type("icc-bridge",
+                                                  TYPE_ICC_BRIDGE, NULL));
+-- 
+1.7.1
+

@@ -1,0 +1,1 @@
+../Xilinx-SPIPS-fixes-round-2/v3.1366661479/0010-xilinx_spips-Fix-CTRL-register-RW-bits.patch

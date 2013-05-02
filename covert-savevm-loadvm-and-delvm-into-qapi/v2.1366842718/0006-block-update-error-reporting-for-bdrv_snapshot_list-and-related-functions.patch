@@ -1,0 +1,292 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Pavel Hrdina <phrdina@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: kwolf@redhat.com, xiawenc@linux.vnet.ibm.com, phrdina@redhat.com,
+ armbru@redhat.com, lcapitulino@redhat.com
+Date: Wed, 24 Apr 2013 17:32:04 +0200
+Message-id: d34cda9c416e84981c4740488726762ca11928bc.1366817130.git.phrdina@redhat.com
+Subject: [PATCH 06/12] block: update error reporting for bdrv_snapshot_list()
+ and related functions
+
+Now the bdrv_snapshot_list function returns only number of snapshots. In case
+that there is any error, the proper error message is set and return value is 0.
+The return value is no longer for testing for errors because there should be only
+one error reporting.
+
+Signed-off-by: Pavel Hrdina <phrdina@redhat.com>
+Reviewed-by: Eric Blake <eblake@redhat.com>
+---
+ block.c                   | 22 ++++++++++++++--------
+ block/qcow2-snapshot.c    |  4 +++-
+ block/qcow2.h             |  4 +++-
+ block/rbd.c               | 10 ++++++++--
+ block/sheepdog.c          | 20 +++++++++++---------
+ include/block/block.h     |  3 ++-
+ include/block/block_int.h |  3 ++-
+ qemu-img.c                | 11 ++++++++---
+ savevm.c                  | 15 +++++++++------
+ 9 files changed, 60 insertions(+), 32 deletions(-)
+
+diff --git a/block.c b/block.c
+index c36d3d5..ff4d619 100644
+--- a/block.c
++++ b/block.c
+@@ -3458,16 +3458,22 @@ void bdrv_snapshot_delete(BlockDriverState *bs,
+ }
+ 
+ int bdrv_snapshot_list(BlockDriverState *bs,
+-                       QEMUSnapshotInfo **psn_info)
++                       QEMUSnapshotInfo **psn_info,
++                       Error **errp)
+ {
+     BlockDriver *drv = bs->drv;
+-    if (!drv)
+-        return -ENOMEDIUM;
+-    if (drv->bdrv_snapshot_list)
+-        return drv->bdrv_snapshot_list(bs, psn_info);
+-    if (bs->file)
+-        return bdrv_snapshot_list(bs->file, psn_info);
+-    return -ENOTSUP;
++
++    if (!drv) {
++        error_setg(errp, "Device has no medium");
++        return 0;
++    } else if (drv->bdrv_snapshot_list) {
++        return drv->bdrv_snapshot_list(bs, psn_info, errp);
++    } else if (bs->file) {
++        return bdrv_snapshot_list(bs->file, psn_info, errp);
++    } else {
++        error_setg(errp, "Snapshots are not supported");
++        return 0;
++    }
+ }
+ 
+ int bdrv_snapshot_load_tmp(BlockDriverState *bs,
+diff --git a/block/qcow2-snapshot.c b/block/qcow2-snapshot.c
+index 67a57fc..f15ca52 100644
+--- a/block/qcow2-snapshot.c
++++ b/block/qcow2-snapshot.c
+@@ -603,7 +603,9 @@ void qcow2_snapshot_delete(BlockDriverState *bs,
+ #endif
+ }
+ 
+-int qcow2_snapshot_list(BlockDriverState *bs, QEMUSnapshotInfo **psn_tab)
++int qcow2_snapshot_list(BlockDriverState *bs,
++                        QEMUSnapshotInfo **psn_tab,
++                        Error **errp)
+ {
+     BDRVQcowState *s = bs->opaque;
+     QEMUSnapshotInfo *sn_tab, *sn_info;
+diff --git a/block/qcow2.h b/block/qcow2.h
+index b70387c..ae62953 100644
+--- a/block/qcow2.h
++++ b/block/qcow2.h
+@@ -389,7 +389,9 @@ void qcow2_snapshot_goto(BlockDriverState *bs,
+ void qcow2_snapshot_delete(BlockDriverState *bs,
+                            const char *snapshot_id,
+                            Error **errp);
+-int qcow2_snapshot_list(BlockDriverState *bs, QEMUSnapshotInfo **psn_tab);
++int qcow2_snapshot_list(BlockDriverState *bs,
++                        QEMUSnapshotInfo **psn_tab,
++                        Error **errp);
+ int qcow2_snapshot_load_tmp(BlockDriverState *bs, const char *snapshot_name);
+ 
+ void qcow2_free_snapshots(BlockDriverState *bs);
+diff --git a/block/rbd.c b/block/rbd.c
+index 5047b59..11a95e3 100644
+--- a/block/rbd.c
++++ b/block/rbd.c
+@@ -928,7 +928,8 @@ static void qemu_rbd_snap_rollback(BlockDriverState *bs,
+ }
+ 
+ static int qemu_rbd_snap_list(BlockDriverState *bs,
+-                              QEMUSnapshotInfo **psn_tab)
++                              QEMUSnapshotInfo **psn_tab,
++                              Error **errp)
+ {
+     BDRVRBDState *s = bs->opaque;
+     QEMUSnapshotInfo *sn_info, *sn_tab = NULL;
+@@ -944,7 +945,12 @@ static int qemu_rbd_snap_list(BlockDriverState *bs,
+         }
+     } while (snap_count == -ERANGE);
+ 
+-    if (snap_count <= 0) {
++    if (snap_count < 0) {
++        error_setg_errno(errp, -snap_count, "Failed to find snapshots");
++        snap_count = 0;
++    }
++
++    if (snap_count == 0) {
+         goto done;
+     }
+ 
+diff --git a/block/sheepdog.c b/block/sheepdog.c
+index 868ab89..bd1bf8f 100644
+--- a/block/sheepdog.c
++++ b/block/sheepdog.c
+@@ -1943,7 +1943,9 @@ static void sd_snapshot_delete(BlockDriverState *bs,
+     error_setg(errp, "Deleting snapshot is not supported");
+ }
+ 
+-static int sd_snapshot_list(BlockDriverState *bs, QEMUSnapshotInfo **psn_tab)
++static int sd_snapshot_list(BlockDriverState *bs,
++                            QEMUSnapshotInfo **psn_tab,
++                            Error **errp)
+ {
+     BDRVSheepdogState *s = bs->opaque;
+     SheepdogReq req;
+@@ -1961,7 +1963,7 @@ static int sd_snapshot_list(BlockDriverState *bs, QEMUSnapshotInfo **psn_tab)
+ 
+     fd = connect_to_sdog(s);
+     if (fd < 0) {
+-        ret = fd;
++        error_setg_errno(errp, -fd, "Failed to connect to sdog");
+         goto out;
+     }
+ 
+@@ -1977,6 +1979,7 @@ static int sd_snapshot_list(BlockDriverState *bs, QEMUSnapshotInfo **psn_tab)
+ 
+     closesocket(fd);
+     if (ret) {
++        error_setg_errno(errp, -ret, "Failed to read VDIs");
+         goto out;
+     }
+ 
+@@ -1988,7 +1991,7 @@ static int sd_snapshot_list(BlockDriverState *bs, QEMUSnapshotInfo **psn_tab)
+ 
+     fd = connect_to_sdog(s);
+     if (fd < 0) {
+-        ret = fd;
++        error_setg_errno(errp, -fd, "Failed to connect to sdog");
+         goto out;
+     }
+ 
+@@ -2022,15 +2025,14 @@ static int sd_snapshot_list(BlockDriverState *bs, QEMUSnapshotInfo **psn_tab)
+     }
+ 
+     closesocket(fd);
+-out:
+-    *psn_tab = sn_tab;
+-
+-    g_free(vdi_inuse);
+-
+     if (ret < 0) {
+-        return ret;
++        error_setg_errno(errp, -ret, "Failed to read VDI object");
++        return 0;
+     }
+ 
++out:
++    *psn_tab = sn_tab;
++    g_free(vdi_inuse);
+     return found;
+ }
+ 
+diff --git a/include/block/block.h b/include/block/block.h
+index 3dccecc..b100937 100644
+--- a/include/block/block.h
++++ b/include/block/block.h
+@@ -342,7 +342,8 @@ void bdrv_snapshot_delete(BlockDriverState *bs,
+                           const char *snapshot_id,
+                           Error **errp);
+ int bdrv_snapshot_list(BlockDriverState *bs,
+-                       QEMUSnapshotInfo **psn_info);
++                       QEMUSnapshotInfo **psn_info,
++                       Error **errp);
+ int bdrv_snapshot_load_tmp(BlockDriverState *bs,
+                            const char *snapshot_name);
+ char *bdrv_snapshot_dump(char *buf, int buf_size, QEMUSnapshotInfo *sn);
+diff --git a/include/block/block_int.h b/include/block/block_int.h
+index db67841..72f52ea 100644
+--- a/include/block/block_int.h
++++ b/include/block/block_int.h
+@@ -161,7 +161,8 @@ struct BlockDriver {
+                                  const char *snapshot_id,
+                                  Error **errp);
+     int (*bdrv_snapshot_list)(BlockDriverState *bs,
+-                              QEMUSnapshotInfo **psn_info);
++                              QEMUSnapshotInfo **psn_info,
++                              Error **errp);
+     int (*bdrv_snapshot_load_tmp)(BlockDriverState *bs,
+                                   const char *snapshot_name);
+     int (*bdrv_get_info)(BlockDriverState *bs, BlockDriverInfo *bdi);
+diff --git a/qemu-img.c b/qemu-img.c
+index 4aca51f..db9fe2a 100644
+--- a/qemu-img.c
++++ b/qemu-img.c
+@@ -1559,10 +1559,12 @@ static void dump_snapshots(BlockDriverState *bs)
+     QEMUSnapshotInfo *sn_tab, *sn;
+     int nb_sns, i;
+     char buf[256];
++    Error *local_err = NULL;
+ 
+-    nb_sns = bdrv_snapshot_list(bs, &sn_tab);
+-    if (nb_sns <= 0)
++    nb_sns = bdrv_snapshot_list(bs, &sn_tab, &local_err);
++    if (qemu_img_handle_error(local_err) || nb_sns == 0) {
+         return;
++    }
+     printf("Snapshot list:\n");
+     printf("%s\n", bdrv_snapshot_dump(buf, sizeof(buf), NULL));
+     for(i = 0; i < nb_sns; i++) {
+@@ -1594,7 +1596,10 @@ static void collect_snapshots(BlockDriverState *bs , ImageInfo *info)
+     int i, sn_count;
+     QEMUSnapshotInfo *sn_tab = NULL;
+     SnapshotInfoList *info_list, *cur_item = NULL;
+-    sn_count = bdrv_snapshot_list(bs, &sn_tab);
++    Error *local_err = NULL;
++    sn_count = bdrv_snapshot_list(bs, &sn_tab, &local_err);
++
++    qemu_img_handle_error(local_err);
+ 
+     for (i = 0; i < sn_count; i++) {
+         info->has_snapshots = true;
+diff --git a/savevm.c b/savevm.c
+index f280aae..25fc7cc 100644
+--- a/savevm.c
++++ b/savevm.c
+@@ -2268,14 +2268,15 @@ static bool bdrv_snapshot_find(BlockDriverState *bs, QEMUSnapshotInfo *sn_info,
+                                bool old_match)
+ {
+     QEMUSnapshotInfo *sn_tab, *sn;
++    Error *local_err = NULL;
+     int nb_sns, i;
+     bool found = false;
+ 
+     assert(name || id);
+ 
+-    nb_sns = bdrv_snapshot_list(bs, &sn_tab);
+-    if (nb_sns < 0) {
+-        error_setg_errno(errp, -nb_sns, "Failed to get a snapshot list");
++    nb_sns = bdrv_snapshot_list(bs, &sn_tab, &local_err);
++    if (error_is_set(&local_err)) {
++        error_propagate(errp, local_err);
+         return found;
+     }
+ 
+@@ -2634,6 +2635,7 @@ void do_info_snapshots(Monitor *mon, const QDict *qdict)
+     int total;
+     int *available_snapshots;
+     char buf[256];
++    Error *local_err = NULL;
+ 
+     bs = bdrv_snapshots();
+     if (!bs) {
+@@ -2641,9 +2643,10 @@ void do_info_snapshots(Monitor *mon, const QDict *qdict)
+         return;
+     }
+ 
+-    nb_sns = bdrv_snapshot_list(bs, &sn_tab);
+-    if (nb_sns < 0) {
+-        monitor_printf(mon, "bdrv_snapshot_list: error %d\n", nb_sns);
++    nb_sns = bdrv_snapshot_list(bs, &sn_tab, &local_err);
++    if (error_is_set(&local_err)) {
++        qerror_report_err(local_err);
++        error_free(local_err);
+         return;
+     }
+ 
+-- 
+1.8.1.4
+
+

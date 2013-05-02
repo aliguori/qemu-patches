@@ -1,0 +1,67 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Kevin Wolf <kwolf@redhat.com>
+To: Stefan Hajnoczi <stefanha@redhat.com>, Kevin Wolf <kwolf@redhat.com>,
+ qemu-devel@nongnu.org
+Cc: kwolf@redhat.com, qemu-devel@nongnu.org, stefanha@redhat.com
+Date: Fri, 12 Apr 2013 22:47:53 +0200
+Message-id: 1365799688-19918-1-git-send-email-kwolf@redhat.com
+Subject: [PATCH 00/15] block: Overriding the backing file with -drive
+
+This is the next part of the driver-specific options. Looks like we're getting
+closer to pass file descriptors for the whole backing file chain. In fact, I
+hope we're now only lacking QMP support before we can actually use it. :-)
+
+This series adds support for the backing.* options namespace, and allows to use
+the file.filename option to configure the filename string for non-top-level
+BlockDriverStates. In the end you can use things like:
+
+    -drive file=test.qcow2,backing.file.filename=/dev/fdset/1,
+    backing.backing.file.driver=nbd,backing.backing.file.host=localhost
+
+
+On another note, I'm still not sure whether I should leave all of this work
+enabled for 1.5, or if we wouldn't be better off with disabling it for the
+release so that we have some additional months before we commit to the
+interface. Any opinions?
+
+
+Kevin Wolf (15):
+  block: Fail gracefully when using a format driver on protocol level
+  block: Add driver-specific options for backing files
+  block: Enable filename option
+  raw-posix: Use bdrv_open options instead of filename
+  raw-win32: Use bdrv_open options instead of filename
+  blkdebug: Use bdrv_open options instead of filename
+  blkverify: Use bdrv_open options instead of filename
+  curl: Use bdrv_open options instead of filename
+  gluster: Use bdrv_open options instead of filename
+  iscsi: Use bdrv_open options instead of filename
+  rbd: Use bdrv_open options instead of filename
+  sheepdog: Use bdrv_open options instead of filename
+  vvfat: Use bdrv_open options instead of filename
+  block: Remove filename parameter from .bdrv_file_open()
+  block: Allow overriding backing.file.filename
+
+ block.c                    |  65 ++++++++++++--
+ block/blkdebug.c           | 102 ++++++++++++++++------
+ block/blkverify.c          |  93 ++++++++++++++++----
+ block/curl.c               | 152 +++++++++++++++++++++-----------
+ block/gluster.c            |  34 +++++++-
+ block/iscsi.c              |  40 ++++++++-
+ block/mirror.c             |   2 +-
+ block/nbd.c                |   3 +-
+ block/raw-posix.c          |  70 ++++++++++-----
+ block/raw-win32.c          |  59 ++++++++++---
+ block/rbd.c                |  32 ++++++-
+ block/sheepdog.c           |  33 ++++++-
+ block/vvfat.c              | 211 +++++++++++++++++++++++++++++++++------------
+ include/block/block.h      |   2 +-
+ include/block/block_int.h  |   3 +-
+ tests/qemu-iotests/051     |   7 ++
+ tests/qemu-iotests/051.out |  10 +++
+ 17 files changed, 713 insertions(+), 205 deletions(-)
+
+-- 
+1.8.1.4
+
+

@@ -1,0 +1,35 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+To: peter.maydell@linaro.org, qemu-devel@nongnu.org
+Cc: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+Date: Wed,  3 Apr 2013 14:27:33 +1000
+Message-id: cover.1364962908.git.peter.crosthwaite@xilinx.com
+Subject: [PATCH 00/15] Xilinx SPIPS fixes round 2
+
+Updates to the Zynq SPI controller. Some QOMifying cleanup, followed by
+a number of bugs/incompletnesses found by some (very) rigourous test
+vectors.
+
+
+Peter Crosthwaite (15):
+  xilinx_spips: seperate SPI and QSPI as two classes
+  xilinx_spips: Make interrupts clear on read
+  xilinx_spips: Inhibit interrupts in LQSPI mode
+  xilinx_spips: Add verbose LQSPI debug output
+  xilinx_spips: lqspi: Dont trash config register
+  xilinx_spips: Fix QSPI FIFO size
+  xilinx_spips: Trash LQ page cache on mode change
+  xilinx_spips: Add automatic start support
+  xilinx_spips: Implement automatic CS
+  xilinx_spips: Fix CTRL register RW bits
+  xilinx_spips: Fix striping behaviour
+  xilinx_spips: Debug msgs for Snoop state
+  xilinx_spips: Multiple debug verbosity levels
+  xilinx_spips: lqspi: Push more data to tx-fifo
+  xilinx_spips: lqspi: Fix byte/misaligned access
+
+ hw/arm/xilinx_zynq.c |    2 +-
+ hw/xilinx_spips.c    |  265 +++++++++++++++++++++++++++++++++++++-------------
+ 2 files changed, 200 insertions(+), 67 deletions(-)
+
+

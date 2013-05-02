@@ -1,0 +1,60 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Hans de Goede <hdegoede@redhat.com>
+To: Gerd Hoffmann <kraxel@redhat.com>
+Cc: Hans de Goede <hdegoede@redhat.com>, Alon Levy <alevy@redhat.com>,
+ qemu-devel@nongnu.org
+Date: Fri,  5 Apr 2013 11:30:23 +0200
+Message-id: 1365154225-9443-6-git-send-email-hdegoede@redhat.com
+Subject: [PATCH 5/7] spice-qemu-char: Remove intermediate buffer
+
+From: Alon Levy <alevy@redhat.com>
+
+virtio-serial's buffer is valid when it calls us, and we don't
+access it otherwise: vmc_read is only called in response to wakeup,
+or else we set datalen=0 and throttle. Then vmc_read is called back,
+we return 0 (not accessing the buffer) and set the timer to unthrottle.
+
+Also make datalen int and not ssize_t (to fit spice_chr_write signature).
+
+HdG: Update to apply to spice-qemu-char with new gio-channel based
+flowcontrol support.
+
+Signed-off-by: Hans de Goede <hdegoede@redhat.com>
+---
+ spice-qemu-char.c | 12 +++---------
+ 1 file changed, 3 insertions(+), 9 deletions(-)
+
+diff --git a/spice-qemu-char.c b/spice-qemu-char.c
+index 097a8c8..7e6bd2d 100644
+--- a/spice-qemu-char.c
++++ b/spice-qemu-char.c
+@@ -14,9 +14,8 @@ typedef struct SpiceCharDriver {
+     char                  *subtype;
+     bool                  active;
+     bool                  blocked;
+-    uint8_t               *buffer;
+-    uint8_t               *datapos;
+-    ssize_t               bufsize, datalen;
++    const uint8_t         *datapos;
++    int                   datalen;
+     QLIST_ENTRY(SpiceCharDriver) next;
+ } SpiceCharDriver;
+ 
+@@ -186,12 +185,7 @@ static int spice_chr_write(CharDriverState *chr, const uint8_t *buf, int len)
+     int read_bytes;
+ 
+     assert(s->datalen == 0);
+-    if (s->bufsize < len) {
+-        s->bufsize = len;
+-        s->buffer = g_realloc(s->buffer, s->bufsize);
+-    }
+-    memcpy(s->buffer, buf, len);
+-    s->datapos = s->buffer;
++    s->datapos = buf;
+     s->datalen = len;
+     spice_server_char_device_wakeup(&s->sin);
+     read_bytes = len - s->datalen;
+-- 
+1.8.1.4
+
+

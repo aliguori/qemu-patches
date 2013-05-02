@@ -1,0 +1,443 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Alex Williamson <alex.williamson@redhat.com>
+To: Alex Williamson <alex.williamson@redhat.com>, mst@redhat.com
+Cc: qemu-devel@nongnu.org
+Date: Mon, 25 Mar 2013 15:48:52 -0600
+Message-id: 20130325214245.22077.44755.stgit@bling.home
+Subject: [PATCH 1/1] pcie: PCIe link negotiation
+
+Enable PCIe devices to negotiate links.
+
+Signed-off-by: Alex Williamson <alex.williamson@redhat.com>
+---
+
+v2:
+ - Stick with the capabilities of the hardware we're emulating for
+   ioh3420 & xio3130 bandwidth (and pre-enable more)
+ - Use qemu_fls
+ - Fixes for multifunction devices
+ - Use device current link settings as targets
+
+ hw/ioh3420.c            |   12 ++
+ hw/pci/pcie.c           |  246 +++++++++++++++++++++++++++++++++++++++++++++--
+ hw/pci/pcie.h           |    7 +
+ hw/pci/pcie_regs.h      |   19 +++-
+ hw/usb/hcd-xhci.c       |    3 -
+ hw/xio3130_downstream.c |    3 -
+ hw/xio3130_upstream.c   |    3 -
+ 7 files changed, 276 insertions(+), 17 deletions(-)
+
+diff --git a/hw/ioh3420.c b/hw/ioh3420.c
+index 5cff61e..11fcf64 100644
+--- a/hw/ioh3420.c
++++ b/hw/ioh3420.c
+@@ -115,7 +115,17 @@ static int ioh3420_initfn(PCIDevice *d)
+     if (rc < 0) {
+         goto err_bridge;
+     }
+-    rc = pcie_cap_init(d, IOH_EP_EXP_OFFSET, PCI_EXP_TYPE_ROOT_PORT, p->port);
++
++    /*
++     * On real hardware there are 8 possible root ports grouped into 2 sets
++     * of 4, corresponding to functions 0-7 of the device.  Each set of 4
++     * can be configured as 4 x1 ports, 2 x2 ports or 1 x4 port.  Until we
++     * find something that breaks, let's allow each port to be configured
++     * to the maximum x4 width to present the most virtual bandwidth.  Real
++     * hardware only supports 2.5GT/s.
++     */
++    rc = pcie_cap_init(d, IOH_EP_EXP_OFFSET, PCI_EXP_TYPE_ROOT_PORT, p->port,
++                       PCI_EXP_LNK_MLW_4, PCI_EXP_LNK_LS_25);
+     if (rc < 0) {
+         goto err_msi;
+     }
+diff --git a/hw/pci/pcie.c b/hw/pci/pcie.c
+index 62bd0b8..ecd25d5 100644
+--- a/hw/pci/pcie.c
++++ b/hw/pci/pcie.c
+@@ -37,11 +37,171 @@
+ #define PCIE_DEV_PRINTF(dev, fmt, ...)                                  \
+     PCIE_DPRINTF("%s:%x "fmt, (dev)->name, (dev)->devfn, ## __VA_ARGS__)
+ 
++static uint16_t pcie_link_max_width(PCIDevice *dev)
++{
++    uint8_t *exp_cap;
++    uint32_t lnkcap;
++
++    exp_cap = dev->config + dev->exp.exp_cap;
++    lnkcap = pci_get_long(exp_cap + PCI_EXP_LNKCAP);
++
++    return lnkcap & PCI_EXP_LNKCAP_MLW;
++}
++
++static uint16_t pcie_link_current_width(PCIDevice *dev)
++{
++    uint8_t *exp_cap;
++    uint16_t lnksta;
++
++    exp_cap = dev->config + dev->exp.exp_cap;
++    lnksta = pci_get_word(exp_cap + PCI_EXP_LNKSTA);
++
++    return lnksta & PCI_EXP_LNKCAP_MLW;
++}
++
++static uint8_t pcie_link_speed_mask(PCIDevice *dev)
++{
++    uint8_t *exp_cap, speeds, mask;
++    uint16_t ver;
++    uint32_t lnkcap, lnkcap2 = 0;
++
++    exp_cap = dev->config + dev->exp.exp_cap;
++    lnkcap = pci_get_long(exp_cap + PCI_EXP_LNKCAP);
++    ver = pci_get_word(exp_cap + PCI_EXP_FLAGS) & PCI_EXP_FLAGS_VERS;
++    if (ver >= PCI_EXP_FLAGS_VER2 &&
++        dev->exp.exp_cap + PCI_EXP_LNKCAP2 < PCI_CONFIG_SPACE_SIZE) {
++        lnkcap2 = pci_get_long(exp_cap + PCI_EXP_LNKCAP2);
++    }
++
++    mask = (1 << (lnkcap & PCI_EXP_LNKCAP_SLS)) - 1;
++
++    /*
++     * If LNKCAP2 reports supported link speeds, then LNKCAP indexes
++     * the highest supported speed.  Mask out the rest and return.
++     */
++    speeds = (lnkcap2 & PCI_EXP_LINKCAP2_SLSV) >> 1;
++    if (speeds) {
++        return speeds & mask;
++    }
++
++    /*
++     * Otherwise LNKCAP returns the maximum speed and the device supports
++     * all speeds below it.  This is really only valid for 2.5 & 5GT/s
++     */
++    return mask;
++}
++
++static uint8_t pcie_link_current_speed(PCIDevice *dev)
++{
++    uint8_t *exp_cap;
++    uint16_t lnksta;
++
++    exp_cap = dev->config + dev->exp.exp_cap;
++    lnksta = pci_get_long(exp_cap + PCI_EXP_LNKSTA);
++
++    if (!(lnksta & PCI_EXP_LNKCAP_SLS)) {
++        return 0;
++    }
++
++    return 1 << ((lnksta & PCI_EXP_LNKCAP_SLS) - 1);
++}
++
++/*
++ * Negotiate the upstream link for PCIDevice @dev setting both the upstream
++ * and downstream LNKSTA.  If @dev already reports link width and/or speed
++ * in LNKSTA they will be used as the preferred link parameters.  LNKSTA
++ * is always set, using the preferred parameters if possible, followed by
++ * the best available link, followed by unknown (0) if an accurate value
++ * is not possible.  The caller can read LNKSTA from @dev to determine the
++ * resulting link parameters.
++ */
++void pcie_negotiate_link(PCIDevice *dev)
++{
++    PCIDevice *parent;
++    uint16_t flags, width = 0;
++    uint8_t type, speed = 0;
++
++    /* Skip non-express buses and Root Complex buses. */
++    if (!pci_bus_is_express(dev->bus) || pci_bus_is_root(dev->bus)) {
++        goto unknown;
++    }
++
++    /*
++     * Downstream ports don't negotiate with upstream ports, their link
++     * is negotiated by whatever is attached downstream to them.  The
++     * same is true of root ports, but root ports are always attached to
++     * the root complex, so fall out above.
++     */
++    flags = pci_get_word(dev->config + dev->exp.exp_cap + PCI_EXP_FLAGS);
++    type = (flags & PCI_EXP_FLAGS_TYPE) >> PCI_EXP_FLAGS_TYPE_SHIFT;
++    if (type == PCI_EXP_TYPE_DOWNSTREAM) {
++        goto unknown;
++    }
++
++    /*
++     * Multifunction devices don't negotiate independent speeds, let
++     * function 0 do the negotiation and copy the results.
++     */
++    if (PCI_FUNC(dev->devfn)) {
++        PCIDevice *sibling;
++        uint16_t val;
++
++        sibling = pci_find_device(dev->bus, pci_bus_num(dev->bus),
++                                  PCI_DEVFN(PCI_SLOT(dev->devfn), 0));
++        if (!sibling || !pci_is_express(sibling) || !sibling->exp.exp_cap) {
++            goto unknown;
++        }
++
++        val = pci_get_word(sibling->config + sibling->exp.exp_cap +
++                           PCI_EXP_LNKSTA);
++
++        pci_set_word_by_mask(dev->config + dev->exp.exp_cap + PCI_EXP_LNKSTA,
++                             PCI_EXP_LNKCAP_MLW | PCI_EXP_LNKCAP_SLS, val);
++        return;
++    }
++
++    parent = dev->bus->parent_dev;
++
++    assert(pci_is_express(dev) && dev->exp.exp_cap &&
++           pci_is_express(parent) && parent->exp.exp_cap);
++
++    /*
++     * If LNKSTA reports a current/width speed and those values are actually
++     * compatibile with the device as reported by LNKCAP, use them as the
++     * target parameters.  If the target values are incompatible, fall back
++     * to regular negotiation.
++     */
++    if (pcie_link_current_width(dev) &&
++        pcie_link_current_width(dev) <= pcie_link_max_width(dev) &&
++        pcie_link_current_width(dev) <= pcie_link_max_width(parent)) {
++        width = pcie_link_current_width(dev);
++    } else {
++        width = MIN(pcie_link_max_width(dev), pcie_link_max_width(parent));
++    }
++
++    if (pcie_link_current_speed(dev) & pcie_link_speed_mask(dev)) {
++        speed = qemu_fls(pcie_link_current_speed(dev) &
++                         pcie_link_speed_mask(parent));
++    }
++    if (!speed) {
++        speed = qemu_fls(pcie_link_speed_mask(dev) &
++                         pcie_link_speed_mask(parent));
++    }
++
++    pci_set_word_by_mask(parent->config + parent->exp.exp_cap + PCI_EXP_LNKSTA,
++                         PCI_EXP_LNKCAP_MLW | PCI_EXP_LNKCAP_SLS,
++                         width | speed);
++unknown:
++    pci_set_word_by_mask(dev->config + dev->exp.exp_cap + PCI_EXP_LNKSTA,
++                         PCI_EXP_LNKCAP_MLW | PCI_EXP_LNKCAP_SLS,
++                         width | speed);
++}
+ 
+ /***************************************************************************
+  * pci express capability helper functions
+  */
+-int pcie_cap_init(PCIDevice *dev, uint8_t offset, uint8_t type, uint8_t port)
++int pcie_cap_init(PCIDevice *dev, uint8_t offset, uint8_t type, uint8_t port,
++                  uint16_t width, uint8_t speed)
+ {
+     int pos;
+     uint8_t *exp_cap;
+@@ -71,14 +231,79 @@ int pcie_cap_init(PCIDevice *dev, uint8_t offset, uint8_t type, uint8_t port)
+      */
+     pci_set_long(exp_cap + PCI_EXP_DEVCAP, PCI_EXP_DEVCAP_RBER);
+ 
+-    pci_set_long(exp_cap + PCI_EXP_LNKCAP,
+-                 (port << PCI_EXP_LNKCAP_PN_SHIFT) |
+-                 PCI_EXP_LNKCAP_ASPMS_0S |
+-                 PCI_EXP_LNK_MLW_1 |
+-                 PCI_EXP_LNK_LS_25);
++    /* Root Complex devices don't report link fields */
++    if (type != PCI_EXP_TYPE_RC_END) {
++        /*
++         * Multifunction devices associated with an Upstream Port must report
++         * the same value for width/speed/port for all functions.  Therefore,
++         * if we're not function 0 and we're not creating a new link (root or
++         * downstream port) then copy the capabilities from function 0.  If
++         * it's a regular PCI bus, all bets are off, just use what we're told.
++         */
++        if (PCI_FUNC(dev->devfn) && pci_bus_is_express(dev->bus) &&
++            type != PCI_EXP_TYPE_ROOT_PORT && type != PCI_EXP_TYPE_DOWNSTREAM) {
++            PCIDevice *sibling;
++            uint32_t lnkcap;
++
++            speed = width = 0; /* unknown */
++
++            sibling = pci_find_device(dev->bus, pci_bus_num(dev->bus),
++                                      PCI_DEVFN(PCI_SLOT(dev->devfn), 0));
++            if (sibling && pci_is_express(sibling) && sibling->exp.exp_cap) {
++                lnkcap = pci_get_long(sibling->config +
++                                      sibling->exp.exp_cap + PCI_EXP_LNKCAP);
++                speed = lnkcap & PCI_EXP_LNKCAP_SLS;
++                width = lnkcap & PCI_EXP_LNKCAP_MLW;
++                port = (lnkcap & PCI_EXP_LNKCAP_PN) >> PCI_EXP_LNKCAP_PN_SHIFT;
++            }
++        }
++
++        /* User specifies the link port # */
++        pci_set_long(exp_cap + PCI_EXP_LNKCAP, port << PCI_EXP_LNKCAP_PN_SHIFT);
++
++        pci_long_test_and_set_mask(exp_cap + PCI_EXP_LNKCAP, width | speed);
++
++        /* Advertise L0s ASPM support */
++        pci_long_test_and_set_mask(exp_cap + PCI_EXP_LNKCAP,
++                                   PCI_EXP_LNKCAP_ASPMS_L0S);
+ 
+-    pci_set_word(exp_cap + PCI_EXP_LNKSTA,
+-                 PCI_EXP_LNK_MLW_1 | PCI_EXP_LNK_LS_25);
++        /*
++         * Link bandwidth notification is required for all root ports and
++         * downstream ports supporting links wider than x1.
++         */
++        if (width > PCI_EXP_LNK_MLW_1 && (type == PCI_EXP_TYPE_ROOT_PORT ||
++            type == PCI_EXP_TYPE_DOWNSTREAM)) {
++            pci_long_test_and_set_mask(exp_cap + PCI_EXP_LNKCAP,
++                                       PCI_EXP_LNKCAP_LBNC);
++        }
++
++        /* 8.0GT/s adds some requirements */
++        if (speed >= PCI_EXP_LNK_LS_80) {
++            /*
++             * 2.5 & 5.0GT/s can be fully described by LNKCAP, but 8.0GT/s
++             * is actually a reference to the highest bit supported in this
++             * register.  We assume the device supports all link speeds.
++             */
++            pci_long_test_and_set_mask(exp_cap + PCI_EXP_LNKCAP2,
++                                       PCI_EXP_LNK2_LS_25 |
++                                       PCI_EXP_LNK2_LS_50 |
++                                       PCI_EXP_LNK2_LS_80);
++
++            /*
++             * Supporting 8.0GT/s requires that we advertise Data Link Layer
++             * Active on all downstream ports supporting hotplug or speeds
++             * greater than 5GT/s
++             */
++            if (type == PCI_EXP_TYPE_DOWNSTREAM) {
++                pci_long_test_and_set_mask(exp_cap + PCI_EXP_LNKCAP,
++                                           PCI_EXP_LNKCAP_DLLLARC);
++                pci_word_test_and_set_mask(exp_cap + PCI_EXP_LNKSTA,
++                                           PCI_EXP_LNKSTA_DLLLA);
++            }
++        }
++
++        pcie_negotiate_link(dev);
++    }
+ 
+     pci_set_long(exp_cap + PCI_EXP_DEVCAP2,
+                  PCI_EXP_DEVCAP2_EFF | PCI_EXP_DEVCAP2_EETLPP);
+@@ -87,7 +312,8 @@ int pcie_cap_init(PCIDevice *dev, uint8_t offset, uint8_t type, uint8_t port)
+     return pos;
+ }
+ 
+-int pcie_endpoint_cap_init(PCIDevice *dev, uint8_t offset)
++int pcie_endpoint_cap_init(PCIDevice *dev, uint8_t offset, uint16_t width,
++                           uint8_t speed)
+ {
+     uint8_t type = PCI_EXP_TYPE_ENDPOINT;
+ 
+@@ -100,7 +326,7 @@ int pcie_endpoint_cap_init(PCIDevice *dev, uint8_t offset)
+         type = PCI_EXP_TYPE_RC_END;
+     }
+ 
+-    return pcie_cap_init(dev, offset, type, 0);
++    return pcie_cap_init(dev, offset, type, 0, width, speed);
+ }
+ 
+ void pcie_cap_exit(PCIDevice *dev)
+diff --git a/hw/pci/pcie.h b/hw/pci/pcie.h
+index c010007..051dd76 100644
+--- a/hw/pci/pcie.h
++++ b/hw/pci/pcie.h
+@@ -94,9 +94,12 @@ struct PCIExpressDevice {
+ };
+ 
+ /* PCI express capability helper functions */
+-int pcie_cap_init(PCIDevice *dev, uint8_t offset, uint8_t type, uint8_t port);
+-int pcie_endpoint_cap_init(PCIDevice *dev, uint8_t offset);
++int pcie_cap_init(PCIDevice *dev, uint8_t offset, uint8_t type, uint8_t port,
++                  uint16_t width, uint8_t speed);
++int pcie_endpoint_cap_init(PCIDevice *dev, uint8_t offset, uint16_t width,
++                           uint8_t speed);
+ void pcie_cap_exit(PCIDevice *dev);
++void pcie_negotiate_link(PCIDevice *dev);
+ uint8_t pcie_cap_get_type(const PCIDevice *dev);
+ void pcie_cap_flags_set_vector(PCIDevice *dev, uint8_t vector);
+ uint8_t pcie_cap_flags_get_vector(PCIDevice *dev);
+diff --git a/hw/pci/pcie_regs.h b/hw/pci/pcie_regs.h
+index 4d123d9..cfc1213 100644
+--- a/hw/pci/pcie_regs.h
++++ b/hw/pci/pcie_regs.h
+@@ -34,13 +34,23 @@
+ /* PCI_EXP_LINK{CAP, STA} */
+ /* link speed */
+ #define PCI_EXP_LNK_LS_25               1
++#define PCI_EXP_LNK_LS_50               2
++#define PCI_EXP_LNK_LS_80               3
+ 
+ #define PCI_EXP_LNK_MLW_SHIFT           (ffs(PCI_EXP_LNKCAP_MLW) - 1)
+ #define PCI_EXP_LNK_MLW_1               (1 << PCI_EXP_LNK_MLW_SHIFT)
++#define PCI_EXP_LNK_MLW_2               (2 << PCI_EXP_LNK_MLW_SHIFT)
++#define PCI_EXP_LNK_MLW_4               (4 << PCI_EXP_LNK_MLW_SHIFT)
++#define PCI_EXP_LNK_MLW_8               (8 << PCI_EXP_LNK_MLW_SHIFT)
++#define PCI_EXP_LNK_MLW_12              (12 << PCI_EXP_LNK_MLW_SHIFT)
++#define PCI_EXP_LNK_MLW_16              (16 << PCI_EXP_LNK_MLW_SHIFT)
++#define PCI_EXP_LNK_MLW_32              (32 << PCI_EXP_LNK_MLW_SHIFT)
+ 
+ /* PCI_EXP_LINKCAP */
+ #define PCI_EXP_LNKCAP_ASPMS_SHIFT      (ffs(PCI_EXP_LNKCAP_ASPMS) - 1)
+-#define PCI_EXP_LNKCAP_ASPMS_0S         (1 << PCI_EXP_LNKCAP_ASPMS_SHIFT)
++#define PCI_EXP_LNKCAP_ASPMS_L0S        (1 << PCI_EXP_LNKCAP_ASPMS_SHIFT)
++#define PCI_EXP_LNKCAP_ASPMS_L1         (2 << PCI_EXP_LNKCAP_ASPMS_SHIFT)
++#define PCI_EXP_LNKCAP_ASPMS_L0SL1      (3 << PCI_EXP_LNKCAP_ASPMS_SHIFT)
+ 
+ #define PCI_EXP_LNKCAP_PN_SHIFT         (ffs(PCI_EXP_LNKCAP_PN) - 1)
+ 
+@@ -72,6 +82,13 @@
+ 
+ #define PCI_EXP_DEVCTL2_EETLPPB         0x80
+ 
++#define PCI_EXP_LNKCAP2         44      /* Link Capabilities 2 */
++#define  PCI_EXP_LINKCAP2_SLSV  0x000000fe /* Supported Link Speeds Vector */
++#define PCI_EXP_LNKSTA2         50      /* Link Status 2 */
++#define PCI_EXP_LNK2_LS_25              (1 << 1)
++#define PCI_EXP_LNK2_LS_50              (1 << 2)
++#define PCI_EXP_LNK2_LS_80              (1 << 3)
++
+ /* ARI */
+ #define PCI_ARI_VER                     1
+ #define PCI_ARI_SIZEOF                  8
+diff --git a/hw/usb/hcd-xhci.c b/hw/usb/hcd-xhci.c
+index 5aa342b..5f57807 100644
+--- a/hw/usb/hcd-xhci.c
++++ b/hw/usb/hcd-xhci.c
+@@ -3332,7 +3332,8 @@ static int usb_xhci_initfn(struct PCIDevice *dev)
+                      PCI_BASE_ADDRESS_SPACE_MEMORY|PCI_BASE_ADDRESS_MEM_TYPE_64,
+                      &xhci->mem);
+ 
+-    ret = pcie_endpoint_cap_init(&xhci->pci_dev, 0xa0);
++    ret = pcie_endpoint_cap_init(&xhci->pci_dev, 0xa0, PCI_EXP_LNK_MLW_1,
++                                 PCI_EXP_LNK_LS_25);
+     assert(ret >= 0);
+ 
+     if (xhci->flags & (1 << XHCI_FLAG_USE_MSI)) {
+diff --git a/hw/xio3130_downstream.c b/hw/xio3130_downstream.c
+index b868f56..0264676 100644
+--- a/hw/xio3130_downstream.c
++++ b/hw/xio3130_downstream.c
+@@ -79,8 +79,9 @@ static int xio3130_downstream_initfn(PCIDevice *d)
+     if (rc < 0) {
+         goto err_bridge;
+     }
++
+     rc = pcie_cap_init(d, XIO3130_EXP_OFFSET, PCI_EXP_TYPE_DOWNSTREAM,
+-                       p->port);
++                       p->port, PCI_EXP_LNK_MLW_1, PCI_EXP_LNK_LS_25);
+     if (rc < 0) {
+         goto err_msi;
+     }
+diff --git a/hw/xio3130_upstream.c b/hw/xio3130_upstream.c
+index cd5d97d..2ed5cd1 100644
+--- a/hw/xio3130_upstream.c
++++ b/hw/xio3130_upstream.c
+@@ -75,8 +75,9 @@ static int xio3130_upstream_initfn(PCIDevice *d)
+     if (rc < 0) {
+         goto err_bridge;
+     }
++
+     rc = pcie_cap_init(d, XIO3130_EXP_OFFSET, PCI_EXP_TYPE_UPSTREAM,
+-                       p->port);
++                       p->port, PCI_EXP_LNK_MLW_1, PCI_EXP_LNK_LS_25);
+     if (rc < 0) {
+         goto err_msi;
+     }
+
+

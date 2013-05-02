@@ -1,0 +1,1 @@
+../qdev-dont-ref-parent-bus/v1.1365462973/0001-qdev-dont-ref-parent-bus.patch

@@ -1,0 +1,68 @@
+From patches Mon Sep 17 00:00:00 2001
+From: =?utf-8?q?Andreas_F=C3=A4rber_=3Cafaerber=40suse=2Ede=3E?=
+To: qemu-devel@nongnu.org
+Cc: Igor Mammedov <imammedo@redhat.com>,
+ =?UTF-8?q?Andreas=20F=C3=A4rber?= <afaerber@suse.de>,
+ "Michael S. Tsirkin" <mst@redhat.com>
+Date: Thu,  2 May 2013 15:35:34 +0200
+Message-id: 1367501755-32272-9-git-send-email-afaerber@suse.de
+Subject: [PATCH 08/29] cpu: Add qemu_for_each_cpu()
+
+From: "Michael S. Tsirkin" <mst@redhat.com>
+
+Wrapper to avoid open-coded loops and to make CPUState iteration
+independent of CPUArchState.
+
+Signed-off-by: Michael S. Tsirkin <mst@redhat.com>
+Signed-off-by: Igor Mammedov <imammedo@redhat.com>
+Signed-off-by: Andreas Färber <afaerber@suse.de>
+---
+ exec.c            | 10 ++++++++++
+ include/qom/cpu.h |  9 +++++++++
+ 2 files changed, 19 insertions(+)
+
+diff --git a/exec.c b/exec.c
+index fa1e0c3..19725db 100644
+--- a/exec.c
++++ b/exec.c
+@@ -265,6 +265,16 @@ CPUState *qemu_get_cpu(int index)
+     return env ? cpu : NULL;
+ }
+ 
++void qemu_for_each_cpu(void (*func)(CPUState *cpu, void *data), void *data)
++{
++    CPUArchState *env = first_cpu;
++
++    while (env) {
++        func(ENV_GET_CPU(env), data);
++        env = env->next_cpu;
++    }
++}
++
+ void cpu_exec_init(CPUArchState *env)
+ {
+     CPUState *cpu = ENV_GET_CPU(env);
+diff --git a/include/qom/cpu.h b/include/qom/cpu.h
+index 1b4de17..a28e5ff 100644
+--- a/include/qom/cpu.h
++++ b/include/qom/cpu.h
+@@ -216,6 +216,15 @@ bool cpu_is_stopped(CPUState *cpu);
+ void run_on_cpu(CPUState *cpu, void (*func)(void *data), void *data);
+ 
+ /**
++ * qemu_for_each_cpu:
++ * @func: The function to be executed.
++ * @data: Data to pass to the function.
++ *
++ * Executes @func for each CPU.
++ */
++void qemu_for_each_cpu(void (*func)(CPUState *cpu, void *data), void *data);
++
++/**
+  * qemu_get_cpu:
+  * @index: The CPUState@cpu_index value of the CPU to obtain.
+  *
+-- 
+1.8.1.4
+
+

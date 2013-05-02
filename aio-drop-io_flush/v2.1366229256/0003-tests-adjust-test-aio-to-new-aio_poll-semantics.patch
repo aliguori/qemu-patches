@@ -1,0 +1,91 @@
+From patches Mon Sep 17 00:00:00 2001
+From: "Stefan Hajnoczi" <stefanha@redhat.com>
+To: Stefan Hajnoczi <stefanha@redhat.com>, qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, Paolo Bonzini <pbonzini@redhat.com>,
+ pingfank@linux.vnet.ibm.com, Kevin Wolf <kwolf@redhat.com>,
+ qemu-devel@nongnu.org, Stefan Hajnoczi <stefanha@redhat.com>
+Date: Wed, 17 Apr 2013 15:07:39 +0200
+Message-id: 1366204073-8468-4-git-send-email-stefanha@redhat.com
+Subject: [PATCH 03/17] tests: adjust test-aio to new aio_poll() semantics
+
+aio_poll(ctx, true) will soon block if any fd handlers have been set.
+Previously it would only block when .io_flush() returned true.
+
+This means that callers must check their wait condition *before*
+aio_poll() to avoid deadlock.
+
+Signed-off-by: Stefan Hajnoczi <stefanha@redhat.com>
+Reviewed-by: Polo Bonzini <pbonzini@redhat.com>
+---
+ tests/test-aio.c | 26 +++++++++++++++++---------
+ 1 file changed, 17 insertions(+), 9 deletions(-)
+
+diff --git a/tests/test-aio.c b/tests/test-aio.c
+index c173870..20bf5e6 100644
+--- a/tests/test-aio.c
++++ b/tests/test-aio.c
+@@ -15,6 +15,13 @@
+ 
+ AioContext *ctx;
+ 
++typedef struct {
++    EventNotifier e;
++    int n;
++    int active;
++    bool auto_set;
++} EventNotifierTestData;
++
+ /* Wait until there are no more BHs or AIO requests */
+ static void wait_for_aio(void)
+ {
+@@ -23,6 +30,14 @@ static void wait_for_aio(void)
+     }
+ }
+ 
++/* Wait until event notifier becomes inactive */
++static void wait_until_inactive(EventNotifierTestData *data)
++{
++    while (data->active > 0) {
++        aio_poll(ctx, true);
++    }
++}
++
+ /* Simple callbacks for testing.  */
+ 
+ typedef struct {
+@@ -50,13 +65,6 @@ static void bh_delete_cb(void *opaque)
+     }
+ }
+ 
+-typedef struct {
+-    EventNotifier e;
+-    int n;
+-    int active;
+-    bool auto_set;
+-} EventNotifierTestData;
+-
+ static int event_active_cb(EventNotifier *e)
+ {
+     EventNotifierTestData *data = container_of(e, EventNotifierTestData, e);
+@@ -281,7 +289,7 @@ static void test_flush_event_notifier(void)
+     g_assert_cmpint(data.active, ==, 9);
+     g_assert(aio_poll(ctx, false));
+ 
+-    wait_for_aio();
++    wait_until_inactive(&data);
+     g_assert_cmpint(data.n, ==, 10);
+     g_assert_cmpint(data.active, ==, 0);
+     g_assert(!aio_poll(ctx, false));
+@@ -325,7 +333,7 @@ static void test_wait_event_notifier_noflush(void)
+     g_assert_cmpint(data.n, ==, 2);
+ 
+     event_notifier_set(&dummy.e);
+-    wait_for_aio();
++    wait_until_inactive(&dummy);
+     g_assert_cmpint(data.n, ==, 2);
+     g_assert_cmpint(dummy.n, ==, 1);
+     g_assert_cmpint(dummy.active, ==, 0);
+-- 
+1.8.1.4
+
+

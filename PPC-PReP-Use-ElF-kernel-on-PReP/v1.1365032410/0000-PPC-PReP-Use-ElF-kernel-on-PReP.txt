@@ -1,0 +1,31 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Fabien Chouteau <chouteau@adacore.com>
+To: qemu-devel@nongnu.org, =?ISO-8859-1?Q?Andreas_F=E4rber?= <afaerber@suse.de>,
+ Fabien Chouteau <chouteau@adacore.com>
+Cc: "qemu-devel@nongnu.org qemu-devel" <qemu-devel@nongnu.org>,
+ Alexander Graf <agraf@suse.de>, agraf@suse.de,
+ =?iso-8859-1?Q?Andreas_F=E4rber?= <afaerber@suse.de>,
+ "qemu-ppc@nongnu.org" <qemu-ppc@nongnu.org>, qemu-ppc@nongnu.org,
+ "qemu-ppc@nongnu.org list:PowerPC" <qemu-ppc@nongnu.org>
+Date: Wed,  3 Apr 2013 18:40:10 +0200
+Message-id: 1365007213-27603-1-git-send-email-chouteau@adacore.com
+Subject: [PATCH 0/3] PPC PReP: Use ElF kernel on PReP
+
+This patches serie implements ELF kernel support in PPC PReP board.
+
+ - Being able to load an ELF file
+ - Use the entry point to set nip value a reset
+ - Allow to run the board without bios
+
+Fabien Chouteau (3):
+  PPC PReP: Load ELF kernel
+  PPC PReP: Use kernel entry to set nip at reset
+  PPC PReP: can run without bios image
+
+ hw/ppc/prep.c |   67 ++++++++++++++++++++++++++++++++++++++++++++++-----------
+ 1 file changed, 54 insertions(+), 13 deletions(-)
+
+-- 
+1.7.9.5
+
+

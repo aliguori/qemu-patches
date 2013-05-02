@@ -1,0 +1,72 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Pavel Hrdina <phrdina@redhat.com>
+To: Markus Armbruster <armbru@redhat.com>, qemu-devel@nongnu.org,
+ Pavel Hrdina <phrdina@redhat.com>
+Cc: qemu-devel@nongnu.org, phrdina@redhat.com, armbru@redhat.com,
+ lcapitulino@redhat.com
+Date: Fri, 29 Mar 2013 15:12:30 +0100
+Message-id: 00094f70bb9dcc5e680e721f0758fdb590e45d81.1364565637.git.phrdina@redhat.com
+Subject: [PATCH 03/11] savevm: add error parameter to qemu_savevm_state_begin()
+
+Signed-off-by: Pavel Hrdina <phrdina@redhat.com>
+Reviewed-by: Eric Blake <eblake@redhat.com>
+---
+ include/sysemu/sysemu.h | 3 ++-
+ migration.c             | 2 +-
+ savevm.c                | 5 +++--
+ 3 files changed, 6 insertions(+), 4 deletions(-)
+
+diff --git a/include/sysemu/sysemu.h b/include/sysemu/sysemu.h
+index 6578782..2f35a05 100644
+--- a/include/sysemu/sysemu.h
++++ b/include/sysemu/sysemu.h
+@@ -74,7 +74,8 @@ void qemu_announce_self(void);
+ 
+ bool qemu_savevm_state_blocked(Error **errp);
+ void qemu_savevm_state_begin(QEMUFile *f,
+-                             const MigrationParams *params);
++                             const MigrationParams *params,
++                             Error **errp);
+ int qemu_savevm_state_iterate(QEMUFile *f);
+ void qemu_savevm_state_complete(QEMUFile *f);
+ void qemu_savevm_state_cancel(void);
+diff --git a/migration.c b/migration.c
+index 7fb2147..d517dd6 100644
+--- a/migration.c
++++ b/migration.c
+@@ -505,7 +505,7 @@ static void *migration_thread(void *opaque)
+     bool old_vm_running = false;
+ 
+     DPRINTF("beginning savevm\n");
+-    qemu_savevm_state_begin(s->file, &s->params);
++    qemu_savevm_state_begin(s->file, &s->params, NULL);
+ 
+     while (s->state == MIG_STATE_ACTIVE) {
+         int64_t current_time;
+diff --git a/savevm.c b/savevm.c
+index dc1f4a4..56da096 100644
+--- a/savevm.c
++++ b/savevm.c
+@@ -1731,7 +1731,8 @@ bool qemu_savevm_state_blocked(Error **errp)
+ }
+ 
+ void qemu_savevm_state_begin(QEMUFile *f,
+-                             const MigrationParams *params)
++                             const MigrationParams *params,
++                             Error **errp)
+ {
+     SaveStateEntry *se;
+     int ret;
+@@ -1921,7 +1922,7 @@ static int qemu_savevm_state(QEMUFile *f)
+     }
+ 
+     qemu_mutex_unlock_iothread();
+-    qemu_savevm_state_begin(f, &params);
++    qemu_savevm_state_begin(f, &params, NULL);
+     qemu_mutex_lock_iothread();
+ 
+     while (qemu_file_get_error(f) == 0) {
+-- 
+1.8.1.4
+
+

@@ -1,0 +1,60 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Pavel Hrdina <phrdina@redhat.com>
+To: Eric Blake <eblake@redhat.com>, qemu-devel@nongnu.org
+Cc: kwolf@redhat.com, phrdina@redhat.com, qemu-devel@nongnu.org,
+ armbru@redhat.com, lcapitulino@redhat.com, Pavel Hrdina <phrdina@redhat.com>,
+ xiawenc@linux.vnet.ibm.com
+Date: Wed, 24 Apr 2013 17:31:59 +0200
+Message-id: f00f8aeaa6e7f11d66bddc3593f6af0b45915150.1366817130.git.phrdina@redhat.com
+Subject: [PATCH 01/12] qemu-img: introduce qemu_img_handle_error()
+
+Later in the patch series we will use this function a few times.
+This will avoid duplicating the code.
+
+Signed-off-by: Pavel Hrdina <phrdina@redhat.com>
+Reviewed-by: Eric Blake <eblake@redhat.com>
+Reviewed-by: Wenchao Xia <xiawenc@linux.vnet.ibm.com>
+---
+ qemu-img.c | 17 +++++++++++------
+ 1 file changed, 11 insertions(+), 6 deletions(-)
+
+diff --git a/qemu-img.c b/qemu-img.c
+index cd096a1..ab83fbe 100644
+--- a/qemu-img.c
++++ b/qemu-img.c
+@@ -322,6 +322,16 @@ static int add_old_style_options(const char *fmt, QEMUOptionParameter *list,
+     return 0;
+ }
+ 
++static int qemu_img_handle_error(Error *err)
++{
++    if (error_is_set(&err)) {
++        error_report("%s", error_get_pretty(err));
++        error_free(err);
++        return 1;
++    }
++    return 0;
++}
++
+ static int img_create(int argc, char **argv)
+ {
+     int c;
+@@ -400,13 +410,8 @@ static int img_create(int argc, char **argv)
+ 
+     bdrv_img_create(filename, fmt, base_filename, base_fmt,
+                     options, img_size, BDRV_O_FLAGS, &local_err, quiet);
+-    if (error_is_set(&local_err)) {
+-        error_report("%s", error_get_pretty(local_err));
+-        error_free(local_err);
+-        return 1;
+-    }
+ 
+-    return 0;
++    return qemu_img_handle_error(local_err);
+ }
+ 
+ static void dump_json_image_check(ImageCheck *check, bool quiet)
+-- 
+1.8.1.4
+
+

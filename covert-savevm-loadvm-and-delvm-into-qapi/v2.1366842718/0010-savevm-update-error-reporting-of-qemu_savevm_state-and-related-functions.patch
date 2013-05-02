@@ -1,0 +1,196 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Pavel Hrdina <phrdina@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: kwolf@redhat.com, xiawenc@linux.vnet.ibm.com, phrdina@redhat.com,
+ armbru@redhat.com, lcapitulino@redhat.com
+Date: Wed, 24 Apr 2013 17:32:08 +0200
+Message-id: 4c63abcaa4ffbb1e36a27521812c780fe084731b.1366817130.git.phrdina@redhat.com
+Subject: [PATCH 10/12] savevm: update error reporting of qemu_savevm_state()
+ and related functions
+
+Signed-off-by: Pavel Hrdina <phrdina@redhat.com>
+---
+ include/sysemu/sysemu.h |  7 ++++---
+ migration.c             |  6 +++---
+ savevm.c                | 38 +++++++++++++++++++-------------------
+ 3 files changed, 26 insertions(+), 25 deletions(-)
+
+diff --git a/include/sysemu/sysemu.h b/include/sysemu/sysemu.h
+index 913f49f..0e3f30a 100644
+--- a/include/sysemu/sysemu.h
++++ b/include/sysemu/sysemu.h
+@@ -72,9 +72,10 @@ void qemu_announce_self(void);
+ 
+ bool qemu_savevm_state_blocked(Error **errp);
+ void qemu_savevm_state_begin(QEMUFile *f,
+-                             const MigrationParams *params);
+-int qemu_savevm_state_iterate(QEMUFile *f);
+-void qemu_savevm_state_complete(QEMUFile *f);
++                             const MigrationParams *params,
++                             Error **errp);
++int qemu_savevm_state_iterate(QEMUFile *f, Error **errp);
++void qemu_savevm_state_complete(QEMUFile *f, Error **errp);
+ void qemu_savevm_state_cancel(void);
+ uint64_t qemu_savevm_state_pending(QEMUFile *f, uint64_t max_size);
+ void qemu_loadvm_state(QEMUFile *f, Error **errp);
+diff --git a/migration.c b/migration.c
+index 0279911..15ecd3f 100644
+--- a/migration.c
++++ b/migration.c
+@@ -508,7 +508,7 @@ static void *migration_thread(void *opaque)
+     bool old_vm_running = false;
+ 
+     DPRINTF("beginning savevm\n");
+-    qemu_savevm_state_begin(s->file, &s->params);
++    qemu_savevm_state_begin(s->file, &s->params, NULL);
+ 
+     while (s->state == MIG_STATE_ACTIVE) {
+         int64_t current_time;
+@@ -519,7 +519,7 @@ static void *migration_thread(void *opaque)
+             pending_size = qemu_savevm_state_pending(s->file, max_size);
+             DPRINTF("pending size %lu max %lu\n", pending_size, max_size);
+             if (pending_size && pending_size >= max_size) {
+-                qemu_savevm_state_iterate(s->file);
++                qemu_savevm_state_iterate(s->file, NULL);
+             } else {
+                 DPRINTF("done iterating\n");
+                 qemu_mutex_lock_iothread();
+@@ -528,7 +528,7 @@ static void *migration_thread(void *opaque)
+                 old_vm_running = runstate_is_running();
+                 vm_stop_force_state(RUN_STATE_FINISH_MIGRATE);
+                 qemu_file_set_rate_limit(s->file, INT_MAX);
+-                qemu_savevm_state_complete(s->file);
++                qemu_savevm_state_complete(s->file, NULL);
+                 qemu_mutex_unlock_iothread();
+                 if (!qemu_file_get_error(s->file)) {
+                     migrate_finish_set_state(s, MIG_STATE_COMPLETED);
+diff --git a/savevm.c b/savevm.c
+index 6458621..749d49d 100644
+--- a/savevm.c
++++ b/savevm.c
+@@ -1795,7 +1795,8 @@ bool qemu_savevm_state_blocked(Error **errp)
+ }
+ 
+ void qemu_savevm_state_begin(QEMUFile *f,
+-                             const MigrationParams *params)
++                             const MigrationParams *params,
++                             Error **errp)
+ {
+     SaveStateEntry *se;
+     int ret;
+@@ -1836,6 +1837,7 @@ void qemu_savevm_state_begin(QEMUFile *f,
+         ret = se->ops->save_live_setup(f, se->opaque);
+         if (ret < 0) {
+             qemu_file_set_error(f, ret);
++            error_setg_errno(errp, -ret, "Failed to begin vmstate save");
+             break;
+         }
+     }
+@@ -1847,7 +1849,7 @@ void qemu_savevm_state_begin(QEMUFile *f,
+  *   0 : We haven't finished, caller have to go again
+  *   1 : We have finished, we can go to complete phase
+  */
+-int qemu_savevm_state_iterate(QEMUFile *f)
++int qemu_savevm_state_iterate(QEMUFile *f, Error **errp)
+ {
+     SaveStateEntry *se;
+     int ret = 1;
+@@ -1874,6 +1876,7 @@ int qemu_savevm_state_iterate(QEMUFile *f)
+ 
+         if (ret < 0) {
+             qemu_file_set_error(f, ret);
++            error_setg_errno(errp, -ret, "Failed to iterate vmstate save");
+         }
+         if (ret <= 0) {
+             /* Do not proceed to the next vmstate before this one reported
+@@ -1886,7 +1889,7 @@ int qemu_savevm_state_iterate(QEMUFile *f)
+     return ret;
+ }
+ 
+-void qemu_savevm_state_complete(QEMUFile *f)
++void qemu_savevm_state_complete(QEMUFile *f, Error **errp)
+ {
+     SaveStateEntry *se;
+     int ret;
+@@ -1911,6 +1914,7 @@ void qemu_savevm_state_complete(QEMUFile *f)
+         trace_savevm_section_end(se->section_id);
+         if (ret < 0) {
+             qemu_file_set_error(f, ret);
++            error_setg_errno(errp, -ret, "Failed to complete vmstate save");
+             return;
+         }
+     }
+@@ -1972,37 +1976,33 @@ void qemu_savevm_state_cancel(void)
+     }
+ }
+ 
+-static int qemu_savevm_state(QEMUFile *f)
++static void qemu_savevm_state(QEMUFile *f, Error **errp)
+ {
+-    int ret;
+     MigrationParams params = {
+         .blk = 0,
+         .shared = 0
+     };
+ 
+-    if (qemu_savevm_state_blocked(NULL)) {
+-        return -EINVAL;
++    if (qemu_savevm_state_blocked(errp)) {
++        return;
+     }
+ 
+     qemu_mutex_unlock_iothread();
+-    qemu_savevm_state_begin(f, &params);
++    qemu_savevm_state_begin(f, &params, errp);
+     qemu_mutex_lock_iothread();
+ 
+     while (qemu_file_get_error(f) == 0) {
+-        if (qemu_savevm_state_iterate(f) > 0) {
++        if (qemu_savevm_state_iterate(f, errp) > 0) {
+             break;
+         }
+     }
+ 
+-    ret = qemu_file_get_error(f);
+-    if (ret == 0) {
+-        qemu_savevm_state_complete(f);
+-        ret = qemu_file_get_error(f);
++    if (!qemu_file_get_error(f)) {
++        qemu_savevm_state_complete(f, errp);
+     }
+-    if (ret != 0) {
++    if (qemu_file_get_error(f)) {
+         qemu_savevm_state_cancel();
+     }
+-    return ret;
+ }
+ 
+ static int qemu_save_device_state(QEMUFile *f)
+@@ -2358,7 +2358,6 @@ void do_savevm(Monitor *mon, const QDict *qdict)
+ {
+     BlockDriverState *bs, *bs1;
+     QEMUSnapshotInfo sn1, *sn = &sn1, old_sn1, *old_sn = &old_sn1;
+-    int ret;
+     QEMUFile *f;
+     int saved_vm_running;
+     uint64_t vm_state_size;
+@@ -2423,11 +2422,12 @@ void do_savevm(Monitor *mon, const QDict *qdict)
+         monitor_printf(mon, "Could not open VM state file\n");
+         goto the_end;
+     }
+-    ret = qemu_savevm_state(f);
++    qemu_savevm_state(f, &local_err);
+     vm_state_size = qemu_ftell(f);
+     qemu_fclose(f);
+-    if (ret < 0) {
+-        monitor_printf(mon, "Error %d while writing VM\n", ret);
++    if (error_is_set(&local_err)) {
++        qerror_report_err(local_err);
++        error_free(local_err);
+         goto the_end;
+     }
+ 
+-- 
+1.8.1.4
+
+

@@ -1,0 +1,64 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Igor Mammedov <imammedo@redhat.com>
+To: Igor Mammedov <imammedo@redhat.com>, qemu-devel@nongnu.org,
+ afaerber@suse.de
+Cc: qemu-devel@nongnu.org, qemu-devel <qemu-devel@nongnu.org>,
+ ehabkost@redhat.com, afaerber@suse.de
+Date: Mon, 25 Feb 2013 02:02:59 +0100
+Message-id: 1361754189-29809-1-git-send-email-imammedo@redhat.com
+Subject: [PATCH 00/10] target-i386: convert CPU features into properties
+
+It's a simplified rewrite of previous series, since then cleanups from it
+were applied to master and I left out kvm_check_features_against_host() and
+listflags() patches as not directly related to make series simpler.
+They could follow as separate cleanups later.
+Also setting defaults with static properties left to post CPU subclasses
+conversion when it could be done in a more straightforward way and only
+once.
+
+v6-v7:
+* convert globals check_cpuid, enforce_cpuid and  hyperv_* to fields of
+  CPUState
+* Make PropertyInfo-s static
+* maintain legacy kvmclock semantic in cpu_x86_parse_featurestr()
+* existing properties code are not moved around, just fixed signatures where
+  it's needed and used visitors. 
+
+v5-v6:
+* when converting feature names to property names, replace '_' with '-'
+* separate patches converting existing dynamic properties into one, were
+  squashed into one [1/9] and change tested with virt-test(next).
+* patches that were touching +-foo features are squashed into one [9/9],
+  to avoid behavior change between them(f-kvmclock property).
+* the rest of conversions were basicaly rebased on top of current qom-cpu-next
+  tree, with small corrections
+
+git for testing: https://github.com/imammedo/qemu/tree/x86-cpu-properties.v7
+
+
+Igor Mammedov (10):
+  qdev: add qdev property for bool type
+  target-i386: cpu: convert existing dynamic properties into static
+    properties
+  target-i386: move hyperv_* static globals to CPUState
+  target-i386: convert 'hv_spinlocks' to static property
+  target-i386: convert 'hv_relaxed' to static property
+  target-i386: convert 'hv_vapic' to static property
+  target-i386: convert 'check' and 'enforce' to static properties
+  target-i386: cleanup 'foo' feature handling'
+  target-i386: cleanup 'foo=val' feature handling
+  target-i386: set [+-]feature using static properties
+
+ hw/qdev-properties.c      |   33 +++
+ hw/qdev-properties.h      |   10 +
+ target-i386/Makefile.objs |    2 +-
+ target-i386/cpu.c         |  588 +++++++++++++++++++++++++++++----------------
+ target-i386/cpu.h         |    9 +
+ target-i386/hyperv.c      |   64 -----
+ target-i386/hyperv.h      |   45 ----
+ target-i386/kvm.c         |   36 ++-
+ 8 files changed, 462 insertions(+), 325 deletions(-)
+ delete mode 100644 target-i386/hyperv.c
+ delete mode 100644 target-i386/hyperv.h
+
+

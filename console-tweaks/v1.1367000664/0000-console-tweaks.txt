@@ -1,0 +1,37 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Gerd Hoffmann <kraxel@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Gerd Hoffmann <kraxel@redhat.com>
+Date: Fri, 26 Apr 2013 13:24:24 +0200
+Message-id: 1366975466-21509-1-git-send-email-kraxel@redhat.com
+Subject: [PATCH 0/2] console tweaks
+
+  Hi,
+
+Two little console tweaks.  One gtk bugfix, and one small usability
+improvement.
+
+please review,
+  Gerd
+
+The following changes since commit e3351000cd682200835763caca87adf708ed1c65:
+
+  Makefile: Use QEMU_FLAGS for DTC compilation (2013-04-26 02:48:10 +0200)
+
+are available in the git repository at:
+
+  git://git.kraxel.org/qemu pixman.v14
+
+for you to fetch changes up to eedf9a7a762ab3307a22c00844d9ccbc6afeb252:
+
+  console: nicer initial screen (2013-04-26 11:52:22 +0200)
+
+----------------------------------------------------------------
+Gerd Hoffmann (2):
+      gtk: fix cursor unref
+      console: nicer initial screen
+
+ ui/console.c |   19 +++++++++++--------
+ ui/gtk.c     |    2 +-
+ 2 files changed, 12 insertions(+), 9 deletions(-)
+

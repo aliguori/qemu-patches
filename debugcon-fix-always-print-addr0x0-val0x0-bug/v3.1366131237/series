@@ -1,0 +1,3 @@
+0001-debugcon-fix-always-print-addr0x0-val0x0-bug.patch
+0002-debugcon-make-debug-message-more-readable.patch
+0003-debugcon-fix-compiler-warning-when-open-DEBUG_DEBUGCON.patch

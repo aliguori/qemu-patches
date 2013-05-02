@@ -1,0 +1,52 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Gerd Hoffmann <kraxel@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Hans de Goede <hdegoede@redhat.com>, Gerd Hoffmann <kraxel@redhat.com>
+Date: Tue, 16 Apr 2013 11:56:34 +0200
+Message-id: 1366106194-28826-10-git-send-email-kraxel@redhat.com
+Subject: [PATCH 9/9] spice-qemu-char: vmc_write: Don't write more bytes then
+ we're asked too
+
+From: Hans de Goede <hdegoede@redhat.com>
+
+This one took me eons to debug, but I've finally found it now, oh well.
+
+The usage of the MIN macro in this line:
+    last_out = MIN(len, qemu_chr_be_can_write(scd->chr));
+
+Causes qemu_chr_be_can_write to be called *twice*, since the MIN macro
+evaluates its arguments twice (bad MIN macro, bad!). And the result of
+the call can change between the 2 calls since the guest may have consumed
+some data from the virtio ringbuffer between the calls!
+
+When this happens it is possible for qemu_chr_be_can_write to return less
+then len in the call made for the comparision, and then to return more then
+len in the actual call for the return-value of MIN, after which we will end
+up writing len data + some extra garbage, not good.
+
+This patch fixes this by only calling qemu_chr_be_can_write once.
+
+Signed-off-by: Hans de Goede <hdegoede@redhat.com>
+Signed-off-by: Gerd Hoffmann <kraxel@redhat.com>
+---
+ spice-qemu-char.c |    3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/spice-qemu-char.c b/spice-qemu-char.c
+index ff95fcb..f10970c 100644
+--- a/spice-qemu-char.c
++++ b/spice-qemu-char.c
+@@ -35,7 +35,8 @@ static int vmc_write(SpiceCharDeviceInstance *sin, const uint8_t *buf, int len)
+     uint8_t* p = (uint8_t*)buf;
+ 
+     while (len > 0) {
+-        last_out = MIN(len, qemu_chr_be_can_write(scd->chr));
++        int can_write = qemu_chr_be_can_write(scd->chr);
++        last_out = MIN(len, can_write);
+         if (last_out <= 0) {
+             break;
+         }
+-- 
+1.7.9.7
+
+

@@ -1,0 +1,1 @@
+../QMP-queue/v1.1365171127/0001-qstring-add-qstring_get_length.patch

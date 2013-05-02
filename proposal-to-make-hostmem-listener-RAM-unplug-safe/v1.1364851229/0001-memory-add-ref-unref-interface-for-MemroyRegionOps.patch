@@ -1,0 +1,86 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Liu Ping Fan <qemulist@gmail.com>
+To: Liu Ping Fan <qemulist@gmail.com>, Stefan Hajnoczi <stefanha@gmail.com>,
+ qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, Paolo Bonzini <pbonzini@redhat.com>,
+ Stefan Hajnoczi <stefanha@gmail.com>, qemu-devel@nongnu.org,
+ Marcelo Tosatti <mtosatti@redhat.com>,
+ Peter Maydell <peter.maydell@linaro.org>, Jan Kiszka <jan.kiszka@siemens.com>,
+ Vasilis Liaskovitis <vasilis.liaskovitis@profitbricks.com>
+Date: Mon, 1 Apr 2013 16:20:30 +0800
+Message-id: 1364804434-7980-2-git-send-email-qemulist@gmail.com
+Subject: [PATCH 1/5] memory: add ref/unref interface for MemroyRegionOps
+
+From: Liu Ping Fan <pingfank@linux.vnet.ibm.com>
+
+This pair of interface are optinal, except for those device which is
+used outside the biglock's protection for hot unplug. Currently,
+HostMem used by virtio-blk dataplane is outside biglock, so the RAM
+device should implement this.
+
+Signed-off-by: Liu Ping Fan <pingfank@linux.vnet.ibm.com>
+---
+ include/exec/memory.h |   10 ++++++++++
+ memory.c              |   18 ++++++++++++++++++
+ 2 files changed, 28 insertions(+), 0 deletions(-)
+
+diff --git a/include/exec/memory.h b/include/exec/memory.h
+index 2322732..4289e62 100644
+--- a/include/exec/memory.h
++++ b/include/exec/memory.h
+@@ -55,6 +55,12 @@ struct MemoryRegionIORange {
+  * Memory region callbacks
+  */
+ struct MemoryRegionOps {
++
++    /* ref/unref pair is optional;  ref.
++     * inc refcnt of object who store MemoryRegion
++     */
++    void (*ref)(void);
++    void (*unref)(void);
+     /* Read from the memory region. @addr is relative to @mr; @size is
+      * in bytes. */
+     uint64_t (*read)(void *opaque,
+@@ -228,6 +234,10 @@ struct MemoryListener {
+     QTAILQ_ENTRY(MemoryListener) link;
+ };
+ 
++/**/
++bool memory_region_ref(MemoryRegion *mr);
++bool memory_region_unref(MemoryRegion *mr);
++
+ /**
+  * memory_region_init: Initialize a memory region
+  *
+diff --git a/memory.c b/memory.c
+index 75ca281..c29998d 100644
+--- a/memory.c
++++ b/memory.c
+@@ -786,6 +786,24 @@ static bool memory_region_wrong_endianness(MemoryRegion *mr)
+ #endif
+ }
+ 
++bool memory_region_ref(MemoryRegion *mr)
++{
++    if (mr->ops && mr->ops->ref) {
++        mr->ops->ref();
++        return true;
++    }
++    return false;
++}
++
++bool memory_region_unref(MemoryRegion *mr)
++{
++    if (mr->ops && mr->ops->unref) {
++        mr->ops->unref();
++        return true;
++    }
++    return false;
++}
++
+ void memory_region_init(MemoryRegion *mr,
+                         const char *name,
+                         uint64_t size)
+-- 
+1.7.4.4
+

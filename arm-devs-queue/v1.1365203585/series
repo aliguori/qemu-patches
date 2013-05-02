@@ -1,0 +1,15 @@
+0000-arm-devs-queue.txt
+0001-hw-arm-nseries-dont-print-to-stdout-or-stderr.patch
+0002-pl050-Dont-send-always-constant-is_mouse-field.patch
+0003-hw-arm_mptimer-Save-the-timer-state.patch
+0004-vmstateh-introduce-VMSTATE_BUFFER_POINTER_UNSAFE-macro.patch
+0005-hw-sdc-fix-migration-of-dynamically-allocated-buffer-buf.patch
+0006-hw-onenandc-fix-migration-of-dynamically-allocated-buffer-otp.patch
+0007-vmstate-Add-support-for-two-dimensional-arrays.patch
+0008-arm_gic-Fix-sizes-of-state-fields-in-preparation-for-vmstate-support.patch
+0009-hw-arm_gic_common-Use-vmstate-struct-rather-than-save-load-functions.patch
+0010-pflash_cfi01-Drop-unused-bypass-field.patch
+0011-pflash_cfi01-Implement-migration-support.patch
+0012-pl330-Dont-inhibit-ES-bits-on-INTEN.patch
+0013-cadence_uart-Flush-queued-characters-on-reset.patch
+0014-hw-nandc-Fix-nand-erase-operation.patch

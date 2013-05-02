@@ -1,0 +1,12 @@
+0000-Fix-versatile_pci-now-without-breaking-linux.txt
+0001-versatile_pci-Fix-hardcoded-tabs.patch
+0002-versatile_pci-Expose-PCI-I-O-region-on-Versatile-PB.patch
+0003-versatile_pci-Update-to-realize-and-instance-init-functions.patch
+0004-versatile_pci-Change-to-subclassing-TYPE_PCI_HOST_BRIDGE.patch
+0005-versatile_pci-Use-separate-PCI-I-O-space-rather-than-system-I-O-space.patch
+0006-versatile_pci-Put-the-host-bridge-PCI-device-at-slot-29.patch
+0007-versatile_pci-Implement-the-correct-PCI-IRQ-mapping.patch
+0008-versatile_pci-Implement-the-PCI-controllers-control-registers.patch
+0009-arm-realview-Fix-mapping-of-PCI-regions.patch
+0010-versatile_pci-Expose-PCI-memory-space-to-system.patch
+0011-hw-versatile_pci-Drop-unnecessary-vpb_pci_config_addr.patch

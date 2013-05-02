@@ -1,0 +1,87 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: 
+Date: Thu,  4 Apr 2013 21:23:12 +0200
+Message-id: 1365103395-11547-33-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 32/35] hw: move hw/kvm/ to hw/i386/kvm
+
+Peter requested the KVM GIC to be in hw/intc.
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ hw/i386/Makefile.objs          | 5 +----
+ hw/i386/kvm/Makefile.objs      | 1 +
+ hw/{ => i386}/kvm/apic.c       | 0
+ hw/{ => i386}/kvm/clock.c      | 0
+ hw/{ => i386}/kvm/i8254.c      | 0
+ hw/{ => i386}/kvm/i8259.c      | 0
+ hw/{ => i386}/kvm/ioapic.c     | 0
+ hw/{ => i386}/kvm/pci-assign.c | 0
+ hw/kvm/Makefile.objs           | 1 -
+ 9 files changed, 2 insertions(+), 5 deletions(-)
+ create mode 100644 hw/i386/kvm/Makefile.objs
+ rename hw/{ => i386}/kvm/apic.c (100%)
+ rename hw/{ => i386}/kvm/clock.c (100%)
+ rename hw/{ => i386}/kvm/i8254.c (100%)
+ rename hw/{ => i386}/kvm/i8259.c (100%)
+ rename hw/{ => i386}/kvm/ioapic.c (100%)
+ rename hw/{ => i386}/kvm/pci-assign.c (100%)
+ delete mode 100644 hw/kvm/Makefile.objs
+
+diff --git a/hw/i386/Makefile.objs b/hw/i386/Makefile.objs
+index c1d73a8..205d22e 100644
+--- a/hw/i386/Makefile.objs
++++ b/hw/i386/Makefile.objs
+@@ -1,7 +1,4 @@
+-obj-y += kvm/
+-
+-obj-y := $(addprefix ../,$(obj-y))
+-
++obj-$(CONFIG_KVM) += kvm/
+ obj-y += multiboot.o smbios.o
+ obj-y += pc.o pc_piix.o pc_q35.o
+ obj-$(CONFIG_XEN) += xen_domainbuild.o xen_machine_pv.o
+diff --git a/hw/i386/kvm/Makefile.objs b/hw/i386/kvm/Makefile.objs
+new file mode 100644
+index 0000000..d8bce20
+--- /dev/null
++++ b/hw/i386/kvm/Makefile.objs
+@@ -0,0 +1 @@
++obj-y += clock.o apic.o i8259.o ioapic.o i8254.o pci-assign.o
+diff --git a/hw/kvm/apic.c b/hw/i386/kvm/apic.c
+similarity index 100%
+rename from hw/kvm/apic.c
+rename to hw/i386/kvm/apic.c
+diff --git a/hw/kvm/clock.c b/hw/i386/kvm/clock.c
+similarity index 100%
+rename from hw/kvm/clock.c
+rename to hw/i386/kvm/clock.c
+diff --git a/hw/kvm/i8254.c b/hw/i386/kvm/i8254.c
+similarity index 100%
+rename from hw/kvm/i8254.c
+rename to hw/i386/kvm/i8254.c
+diff --git a/hw/kvm/i8259.c b/hw/i386/kvm/i8259.c
+similarity index 100%
+rename from hw/kvm/i8259.c
+rename to hw/i386/kvm/i8259.c
+diff --git a/hw/kvm/ioapic.c b/hw/i386/kvm/ioapic.c
+similarity index 100%
+rename from hw/kvm/ioapic.c
+rename to hw/i386/kvm/ioapic.c
+diff --git a/hw/kvm/pci-assign.c b/hw/i386/kvm/pci-assign.c
+similarity index 100%
+rename from hw/kvm/pci-assign.c
+rename to hw/i386/kvm/pci-assign.c
+diff --git a/hw/kvm/Makefile.objs b/hw/kvm/Makefile.objs
+deleted file mode 100644
+index f620d7f..0000000
+--- a/hw/kvm/Makefile.objs
++++ /dev/null
+@@ -1 +0,0 @@
+-obj-$(CONFIG_KVM) += clock.o apic.o i8259.o ioapic.o i8254.o pci-assign.o
+-- 
+1.8.1.4
+
+
+

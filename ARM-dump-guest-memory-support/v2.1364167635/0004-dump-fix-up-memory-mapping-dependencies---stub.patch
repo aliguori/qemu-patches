@@ -1,0 +1,59 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Rabin Vincent <rabin@rab.in>
+To: qemu-devel@nongnu.org
+Cc: Rabin Vincent <rabin@rab.in>
+Date: Sun, 24 Mar 2013 18:27:19 +0100
+Message-id: 1364146041-27041-5-git-send-email-rabin@rab.in
+Subject: [PATCH 4/6] dump: fix up memory mapping dependencies / stub
+
+dump.c won't build without the functions from memory_mapping.c (and
+memory_mapping-stub.c does not help there), so build memory_mapping.c
+when CONFIG_HAVE_CORE_DUMP is set.
+
+  dump.c:84: undefined reference to `memory_mapping_list_free'
+  dump.c:819: undefined reference to `memory_mapping_list_init'
+  dump.c:827: undefined reference to `memory_mapping_filter'
+
+Allow memory_mapping-stub.c to instead be used for targets which do not
+set CONFIG_HAVE_GET_MEMORY_MAPPING.
+
+Signed-off-by: Rabin Vincent <rabin@rab.in>
+---
+ Makefile.target       |    3 +--
+ memory_mapping-stub.c |    5 -----
+ 2 files changed, 1 insertion(+), 7 deletions(-)
+
+diff --git a/Makefile.target b/Makefile.target
+index 2bd6d14..629f48a 100644
+--- a/Makefile.target
++++ b/Makefile.target
+@@ -115,8 +115,7 @@ obj-$(CONFIG_FDT) += device_tree.o
+ obj-$(CONFIG_KVM) += kvm-all.o
+ obj-$(CONFIG_NO_KVM) += kvm-stub.o
+ obj-y += memory.o savevm.o cputlb.o
+-obj-$(CONFIG_HAVE_GET_MEMORY_MAPPING) += memory_mapping.o
+-obj-$(CONFIG_HAVE_CORE_DUMP) += dump.o
++obj-$(CONFIG_HAVE_CORE_DUMP) += dump.o memory_mapping.o
+ obj-$(CONFIG_NO_GET_MEMORY_MAPPING) += memory_mapping-stub.o
+ obj-$(CONFIG_NO_CORE_DUMP) += dump-stub.o
+ LIBS+=-lz
+diff --git a/memory_mapping-stub.c b/memory_mapping-stub.c
+index 24d5d67..6dd9e36 100644
+--- a/memory_mapping-stub.c
++++ b/memory_mapping-stub.c
+@@ -15,11 +15,6 @@
+ #include "exec/cpu-all.h"
+ #include "sysemu/memory_mapping.h"
+ 
+-int qemu_get_guest_memory_mapping(MemoryMappingList *list)
+-{
+-    return -2;
+-}
+-
+ int cpu_get_memory_mapping(MemoryMappingList *list,
+ 					                                          CPUArchState *env)
+ {
+-- 
+1.7.10.4
+
+

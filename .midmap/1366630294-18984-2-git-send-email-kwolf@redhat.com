@@ -1,0 +1,1 @@
+../Block-patches/v1.1366655474/0001-qcow2-allow-sub-cluster-compressed-write-to-last-cluster.patch

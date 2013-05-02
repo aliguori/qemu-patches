@@ -1,0 +1,74 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Alexander Graf <agraf@suse.de>
+To: qemu-ppc@nongnu.org
+Cc: Blue Swirl <blauwirbel@gmail.com>, Aurelien Jarno <aurelien@aurel32.net>,
+ qemu-devel@nongnu.org
+Date: Fri, 26 Apr 2013 20:21:46 +0200
+Message-id: 1367000509-8833-28-git-send-email-agraf@suse.de
+Subject: [PATCH 27/30] target-ppc: emulate lfiwax instruction
+
+From: Aurelien Jarno <aurelien@aurel32.net>
+
+Needed for Power ISA version 2.05 compliance.
+
+Reviewed-by: Richard Henderson <rth@twiddle.net>
+Signed-off-by: Aurelien Jarno <aurelien@aurel32.net>
+Signed-off-by: Alexander Graf <agraf@suse.de>
+---
+ target-ppc/translate.c |   18 ++++++++++++++++--
+ 1 files changed, 16 insertions(+), 2 deletions(-)
+
+diff --git a/target-ppc/translate.c b/target-ppc/translate.c
+index 1989818..4f92d8f 100644
+--- a/target-ppc/translate.c
++++ b/target-ppc/translate.c
+@@ -2531,7 +2531,6 @@ static inline void gen_qemu_ld32u(DisasContext *ctx, TCGv arg1, TCGv arg2)
+     }
+ }
+ 
+-#if defined(TARGET_PPC64)
+ static inline void gen_qemu_ld32s(DisasContext *ctx, TCGv arg1, TCGv arg2)
+ {
+     if (unlikely(ctx->le_mode)) {
+@@ -2541,7 +2540,6 @@ static inline void gen_qemu_ld32s(DisasContext *ctx, TCGv arg1, TCGv arg2)
+     } else
+         tcg_gen_qemu_ld32s(arg1, arg2, ctx->mem_idx);
+ }
+-#endif
+ 
+ static inline void gen_qemu_ld64(DisasContext *ctx, TCGv_i64 arg1, TCGv arg2)
+ {
+@@ -3300,6 +3298,21 @@ GEN_LDFS(lfd, ld64, 0x12, PPC_FLOAT);
+  /* lfs lfsu lfsux lfsx */
+ GEN_LDFS(lfs, ld32fs, 0x10, PPC_FLOAT);
+ 
++/* lfiwax */
++static void gen_lfiwax(DisasContext *ctx)
++{
++    TCGv EA;
++    if (unlikely(!ctx->fpu_enabled)) {
++        gen_exception(ctx, POWERPC_EXCP_FPU);
++        return;
++    }
++    gen_set_access_type(ctx, ACCESS_FLOAT);
++    EA = tcg_temp_new();
++    gen_addr_reg_index(ctx, EA);
++    gen_qemu_ld32s(ctx, cpu_fpr[rD(ctx->opcode)], EA);
++    tcg_temp_free(EA);
++}
++
+ /***                         Floating-point store                          ***/
+ #define GEN_STF(name, stop, opc, type)                                        \
+ static void glue(gen_, name)(DisasContext *ctx)                                       \
+@@ -9014,6 +9027,7 @@ GEN_LDXF(name, ldop, 0x17, op | 0x00, type)
+ 
+ GEN_LDFS(lfd, ld64, 0x12, PPC_FLOAT)
+ GEN_LDFS(lfs, ld32fs, 0x10, PPC_FLOAT)
++GEN_HANDLER_E(lfiwax, 0x1f, 0x17, 0x1a, 0x00000001, PPC_NONE, PPC2_ISA205),
+ 
+ #undef GEN_STF
+ #undef GEN_STUF
+-- 
+1.6.0.2
+
+

@@ -1,0 +1,48 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Eric Blake <eblake@redhat.com>
+To: Eric Blake <eblake@redhat.com>, qemu-devel@nongnu.org
+Cc: qemu-trivial@nongnu.org, pbonzini@redhat.com,
+ Stefan Hajnoczi <stefanha@redhat.com>, phrdina@redhat.com, quintela@redhat.com
+Date: Tue, 16 Apr 2013 15:50:41 -0600
+Message-id: 1366149041-626-1-git-send-email-eblake@redhat.com
+Subject: [PATCH 1/1] migration: reflect incoming failure to shell
+
+Management apps like libvirt don't know to pay attention to
+stderr unless there is a non-zero exit status.
+
+* migration.c (process_incoming_migration_co): Exit with non-zero
+status on failure.
+
+Signed-off-by: Eric Blake <eblake@redhat.com>
+Reviewed-by: Anthony Liguori <aliguori@us.ibm.com>
+---
+
+Noticed while reviewing:
+https://lists.gnu.org/archive/html/qemu-devel/2013-04/msg03293.html
+and it seems blatant enough to fix now, rather than waiting for
+Pavel's series to stabilize.
+
+Side note: libvirt explicitly forbids all use of exit({0,1}), and
+instead encourages exit(EXIT_{SUCCESS,FAILURE}), precisely because
+it makes it harder to slip in unintentional successful exits.
+
+ migration.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/migration.c b/migration.c
+index 3b4b467..3eb0fad 100644
+--- a/migration.c
++++ b/migration.c
+@@ -99,7 +99,7 @@ static void process_incoming_migration_co(void *opaque)
+     qemu_fclose(f);
+     if (ret < 0) {
+         fprintf(stderr, "load of migration failed\n");
+-        exit(0);
++        exit(EXIT_FAILURE);
+     }
+     qemu_announce_self();
+     DPRINTF("successfully loaded vm state\n");
+-- 
+1.8.1.4
+
+

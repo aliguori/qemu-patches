@@ -1,0 +1,36 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Dominik Dingel <dingel@linux.vnet.ibm.com>
+To: qemu-devel@nongnu.org
+Cc: Christian Borntraeger <borntraeger@de.ibm.com>,
+ Alexander Graf <agraf@suse.de>, Dominik Dingel <dingel@linux.vnet.ibm.com>
+Date: Mon, 29 Apr 2013 16:52:03 +0200
+Message-id: 1367247128-22409-1-git-send-email-dingel@linux.vnet.ibm.com
+Subject: [PATCH 0/5] Enhance s390 BIOS to enable boot device selection
+
+This patchset allows the s390 platform to boot from a specified virtio-ccw-blk device, passed on the commandline. 
+
+v1 -> v2
+- no loadparm will be used
+- the virtio devices will not be automatically inserted in the boot order
+- if there is no boot device in the boot order we will fallback to the first device
+- assign the boot value in the start block 
+- refactoring of the s390_ipl_cpu function
+
+Dominik Dingel (5):
+  S390: Add virtio-blk boot
+  S390: BIOS check for file
+  S390: BIOS create link to src folder for .img file
+  S390: BIOS boot from given device
+  S390: Sync Blob with source changes
+
+ configure                |    1 +
+ hw/s390x/ipl.c           |   30 +++++++++++++++++++++++++++---
+ pc-bios/s390-ccw.img     |  Bin 9432 -> 17528 bytes
+ pc-bios/s390-ccw/main.c  |   25 +++++++++++++++++++------
+ pc-bios/s390-ccw/start.S |    2 ++
+ 5 files changed, 49 insertions(+), 9 deletions(-)
+
+-- 
+1.7.9.5
+
+

@@ -1,0 +1,124 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Liu Ping Fan <qemulist@gmail.com>
+To: Liu Ping Fan <qemulist@gmail.com>, Jan Kiszka <jan.kiszka@siemens.com>,
+ qemu-devel@nongnu.org, liu ping fan <qemulist@gmail.com>
+Cc: Paolo Bonzini <pbonzini@redhat.com>,
+ Anthony Liguori <anthony@codemonkey.ws>,
+ "qemu-devel@nongnu.org" <qemu-devel@nongnu.org>,
+ mdroth <mdroth@linux.vnet.ibm.com>, Jan Kiszka <jan.kiszka@siemens.com>,
+ Stefan Hajnoczi <stefanha@redhat.com>
+Date: Wed, 17 Apr 2013 16:39:23 +0800
+Message-id: 1366187964-14265-15-git-send-email-qemulist@gmail.com
+Subject: [PATCH 14/15] slirp: handle race condition
+
+From: Liu Ping Fan <pingfank@linux.vnet.ibm.com>
+
+Slirp and its peer can run on different context at the same time.
+Using lock to protect
+
+Signed-off-by: Liu Ping Fan <pingfank@linux.vnet.ibm.com>
+---
+ slirp/slirp.c |   16 ++++++++++++++--
+ slirp/slirp.h |    3 +++
+ 2 files changed, 17 insertions(+), 2 deletions(-)
+
+diff --git a/slirp/slirp.c b/slirp/slirp.c
+index 883b7bd..6bfcc67 100644
+--- a/slirp/slirp.c
++++ b/slirp/slirp.c
+@@ -206,6 +206,7 @@ Slirp *slirp_init(int restricted, struct in_addr vnetwork,
+ 
+     slirp_init_once();
+ 
++    qemu_mutex_init(&slirp->lock);
+     slirp->restricted = restricted;
+ 
+     if_init(slirp);
+@@ -248,6 +249,7 @@ void slirp_cleanup(Slirp *slirp)
+ 
+     ip_cleanup(slirp);
+     m_cleanup(slirp);
++    qemu_mutex_destroy(&slirp->lock);
+ 
+     g_free(slirp->vdnssearch);
+     g_free(slirp->tftp_prefix);
+@@ -411,6 +413,7 @@ gboolean slirp_handler(gpointer data)
+     struct socket *so, *so_next;
+     int ret;
+ 
++    qemu_mutex_lock(&slirp->lock);
+     /*
+      * See if anything has timed out
+      */
+@@ -594,6 +597,7 @@ gboolean slirp_handler(gpointer data)
+     }
+ 
+     if_start(slirp);
++    qemu_mutex_unlock(&slirp->lock);
+     return true;
+ }
+ 
+@@ -665,6 +669,7 @@ void slirp_input(Slirp *slirp, const uint8_t *pkt, int pkt_len)
+         return;
+ 
+     proto = ntohs(*(uint16_t *)(pkt + 12));
++    qemu_mutex_lock(&slirp->lock);
+     switch(proto) {
+     case ETH_P_ARP:
+         arp_input(slirp, pkt, pkt_len);
+@@ -688,6 +693,7 @@ void slirp_input(Slirp *slirp, const uint8_t *pkt, int pkt_len)
+     default:
+         break;
+     }
++    qemu_mutex_unlock(&slirp->lock);
+ }
+ 
+ /* Output the IP packet to the ethernet device. Returns 0 if the packet must be
+@@ -860,15 +866,21 @@ void slirp_socket_recv(Slirp *slirp, struct in_addr guest_addr, int guest_port,
+                        const uint8_t *buf, int size)
+ {
+     int ret;
+-    struct socket *so = slirp_find_ctl_socket(slirp, guest_addr, guest_port);
++    struct socket *so;
++
++    qemu_mutex_lock(&slirp->lock);
++    so = slirp_find_ctl_socket(slirp, guest_addr, guest_port);
+ 
+-    if (!so)
++    if (!so) {
++        qemu_mutex_unlock(&slirp->lock);
+         return;
++    }
+ 
+     ret = soreadbuf(so, (const char *)buf, size);
+ 
+     if (ret > 0)
+         tcp_output(sototcpcb(so));
++    qemu_mutex_unlock(&slirp->lock);
+ }
+ 
+ static void slirp_tcp_save(QEMUFile *f, struct tcpcb *tp)
+diff --git a/slirp/slirp.h b/slirp/slirp.h
+index 008360e..7ab0c70 100644
+--- a/slirp/slirp.h
++++ b/slirp/slirp.h
+@@ -135,6 +135,7 @@ void free(void *ptr);
+ 
+ #include "qemu/queue.h"
+ #include "qemu/sockets.h"
++#include "qemu/thread.h"
+ 
+ #include "libslirp.h"
+ #include "ip.h"
+@@ -207,6 +208,8 @@ struct Slirp {
+     u_int last_slowtimo;
+     int do_slowtimo;
+ 
++    /* lock to protect slirp running both on frontend or SlirpState context */
++    QemuMutex lock;
+     /* virtual network configuration */
+     struct in_addr vnetwork_addr;
+     struct in_addr vnetwork_mask;
+-- 
+1.7.4.4
+

@@ -1,0 +1,45 @@
+From patches Mon Sep 17 00:00:00 2001
+From: =?utf-8?q?Andreas_F=C3=A4rber_=3Cafaerber=40suse=2Ede=3E?=
+To: qemu-devel@nongnu.org
+Cc: Igor Mammedov <imammedo@redhat.com>,
+ =?UTF-8?q?Andreas=20F=C3=A4rber?= <afaerber@suse.de>
+Date: Thu,  2 May 2013 15:35:47 +0200
+Message-id: 1367501755-32272-22-git-send-email-afaerber@suse.de
+Subject: [PATCH 21/29] Add hot_add_cpu hook to QEMUMachine
+
+From: Igor Mammedov <imammedo@redhat.com>
+
+Hook should be set by machines that implement CPU hot-add
+via cpu-add QMP command.
+
+Signed-off-by: Igor Mammedov <imammedo@redhat.com>
+Reviewed-by: Eduardo Habkost <ehabkost@redhat.com>
+Signed-off-by: Andreas Färber <afaerber@suse.de>
+---
+ include/hw/boards.h | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/include/hw/boards.h b/include/hw/boards.h
+index 425bdc7..fb7c6f1 100644
+--- a/include/hw/boards.h
++++ b/include/hw/boards.h
+@@ -22,12 +22,15 @@ typedef void QEMUMachineInitFunc(QEMUMachineInitArgs *args);
+ 
+ typedef void QEMUMachineResetFunc(void);
+ 
++typedef void QEMUMachineHotAddCPUFunc(const int64_t id, Error **errp);
++
+ typedef struct QEMUMachine {
+     const char *name;
+     const char *alias;
+     const char *desc;
+     QEMUMachineInitFunc *init;
+     QEMUMachineResetFunc *reset;
++    QEMUMachineHotAddCPUFunc *hot_add_cpu;
+     BlockInterfaceType block_default_type;
+     int max_cpus;
+     unsigned int no_serial:1,
+-- 
+1.8.1.4
+
+

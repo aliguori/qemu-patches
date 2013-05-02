@@ -1,0 +1,78 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Pavel Hrdina <phrdina@redhat.com>
+To: qemu-devel@nongnu.org, Pavel Hrdina <phrdina@redhat.com>
+Cc: qemu-devel@nongnu.org, phrdina@redhat.com, armbru@redhat.com,
+ lcapitulino@redhat.com
+Date: Fri, 29 Mar 2013 15:12:32 +0100
+Message-id: e8ecd237e473f6b881dba87a5009f780e87e483c.1364565637.git.phrdina@redhat.com
+Subject: [PATCH 05/11] savevm: add error parameter to
+ qemu_savevm_state_complete()
+
+Signed-off-by: Pavel Hrdina <phrdina@redhat.com>
+Reviewed-by: Eric Blake <eblake@redhat.com>
+---
+ include/sysemu/sysemu.h | 2 +-
+ migration.c             | 2 +-
+ savevm.c                | 5 +++--
+ 3 files changed, 5 insertions(+), 4 deletions(-)
+
+diff --git a/include/sysemu/sysemu.h b/include/sysemu/sysemu.h
+index af4f699..9e6a4a9 100644
+--- a/include/sysemu/sysemu.h
++++ b/include/sysemu/sysemu.h
+@@ -77,7 +77,7 @@ void qemu_savevm_state_begin(QEMUFile *f,
+                              const MigrationParams *params,
+                              Error **errp);
+ int qemu_savevm_state_iterate(QEMUFile *f, Error **errp);
+-void qemu_savevm_state_complete(QEMUFile *f);
++void qemu_savevm_state_complete(QEMUFile *f, Error **errp);
+ void qemu_savevm_state_cancel(void);
+ uint64_t qemu_savevm_state_pending(QEMUFile *f, uint64_t max_size);
+ int qemu_loadvm_state(QEMUFile *f);
+diff --git a/migration.c b/migration.c
+index e9d2f40..c891a45 100644
+--- a/migration.c
++++ b/migration.c
+@@ -525,7 +525,7 @@ static void *migration_thread(void *opaque)
+                 old_vm_running = runstate_is_running();
+                 vm_stop_force_state(RUN_STATE_FINISH_MIGRATE);
+                 qemu_file_set_rate_limit(s->file, INT_MAX);
+-                qemu_savevm_state_complete(s->file);
++                qemu_savevm_state_complete(s->file, NULL);
+                 qemu_mutex_unlock_iothread();
+                 if (!qemu_file_get_error(s->file)) {
+                     migrate_finish_set_state(s, MIG_STATE_COMPLETED);
+diff --git a/savevm.c b/savevm.c
+index 575f1b2..7598934 100644
+--- a/savevm.c
++++ b/savevm.c
+@@ -1823,7 +1823,7 @@ int qemu_savevm_state_iterate(QEMUFile *f, Error **errp)
+     return ret;
+ }
+ 
+-void qemu_savevm_state_complete(QEMUFile *f)
++void qemu_savevm_state_complete(QEMUFile *f, Error **errp)
+ {
+     SaveStateEntry *se;
+     int ret;
+@@ -1848,6 +1848,7 @@ void qemu_savevm_state_complete(QEMUFile *f)
+         trace_savevm_section_end(se->section_id);
+         if (ret < 0) {
+             qemu_file_set_error(f, ret);
++            error_setg(errp, "failed to complete vmstate save");
+             return;
+         }
+     }
+@@ -1933,7 +1934,7 @@ static int qemu_savevm_state(QEMUFile *f)
+ 
+     ret = qemu_file_get_error(f);
+     if (ret == 0) {
+-        qemu_savevm_state_complete(f);
++        qemu_savevm_state_complete(f, NULL);
+         ret = qemu_file_get_error(f);
+     }
+     if (ret != 0) {
+-- 
+1.8.1.4
+
+

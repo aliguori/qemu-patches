@@ -1,0 +1,239 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Igor Mammedov <imammedo@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, ehabkost@redhat.com, mst@redhat.com,
+ jan.kiszka@siemens.com, claudio.fontana@huawei.com, aderumier@odiso.com,
+ lcapitulino@redhat.com, jfrei@linux.vnet.ibm.com, yang.z.zhang@intel.com,
+ pbonzini@redhat.com, eblake@redhat.com, afaerber@suse.de,
+ lig.fnst@cn.fujitsu.com, rth@twiddle.net
+Date: Tue, 16 Apr 2013 00:12:55 +0200
+Message-id: 1366063976-4909-16-git-send-email-imammedo@redhat.com
+Subject: [PATCH 15/16] target-i386: move IOAPIC to ICC bus
+
+ * inherit IOAPICs from ICCDevice and attach them to ICC bus
+ * map IOAPIC's mmio at board level via indirect icc-bridge
+   mmio region that provides address space to IOAPIC via
+   icc-bus
+
+Signed-off-by: Igor Mammedov <imammedo@redhat.com>
+---
+ * do not create IOAPIC in icc-bridge and do not make it QOM child
+   of icc-bridge, just attach it to icc-bus.
+---
+ hw/cpu/icc_bus.c                  |  6 ++++++
+ hw/i386/kvm/ioapic.c              |  2 +-
+ hw/i386/pc.c                      | 10 ++++++----
+ hw/intc/ioapic_common.c           | 15 +++++++++++----
+ include/exec/memory.h             | 10 ++++++++++
+ include/hw/i386/icc_bus.h         |  1 +
+ include/hw/i386/ioapic_internal.h |  6 +++---
+ memory.c                          | 11 +++++++++++
+ 8 files changed, 49 insertions(+), 12 deletions(-)
+
+diff --git a/hw/cpu/icc_bus.c b/hw/cpu/icc_bus.c
+index 5078c38..d241438 100644
+--- a/hw/cpu/icc_bus.c
++++ b/hw/cpu/icc_bus.c
+@@ -63,6 +63,7 @@ static const TypeInfo icc_device_info = {
+ typedef struct ICCBridgeState {
+     SysBusDevice busdev;
+     MemoryRegion apic_container;
++    MemoryRegion ioapic_container;
+ } ICCBridgeState;
+ #define ICC_BRIGDE(obj) OBJECT_CHECK(ICCBridgeState, (obj), TYPE_ICC_BRIDGE)
+ 
+@@ -82,6 +83,11 @@ static void icc_bridge_initfn(Object *obj)
+                        APIC_SPACE_SIZE);
+     sysbus_init_mmio(sb, &s->apic_container);
+     ibus->apic_address_space = &s->apic_container;
++
++    /* must be second registered region, board maps it by 1 index */
++    memory_region_init(&s->ioapic_container, "icc-ioapic-container", 0x1000);
++    sysbus_init_mmio(sb, &s->ioapic_container);
++    ibus->ioapic_address_space = &s->ioapic_container;
+ }
+ 
+ static const TypeInfo icc_bridge_info = {
+diff --git a/hw/i386/kvm/ioapic.c b/hw/i386/kvm/ioapic.c
+index a3bd519..b80d41a 100644
+--- a/hw/i386/kvm/ioapic.c
++++ b/hw/i386/kvm/ioapic.c
+@@ -96,7 +96,7 @@ static void kvm_ioapic_put(IOAPICCommonState *s)
+ 
+     kioapic->id = s->id;
+     kioapic->ioregsel = s->ioregsel;
+-    kioapic->base_address = s->busdev.mmio[0].addr;
++    kioapic->base_address = memory_region_get_address(&s->io_memory);
+     kioapic->irr = s->irr;
+     for (i = 0; i < IOAPIC_NUM_PINS; i++) {
+         kioapic->redirtbl[i].bits = s->ioredtbl[i];
+diff --git a/hw/i386/pc.c b/hw/i386/pc.c
+index 31b5294..a5c19a2 100644
+--- a/hw/i386/pc.c
++++ b/hw/i386/pc.c
+@@ -1217,20 +1217,22 @@ void ioapic_init_gsi(GSIState *gsi_state, const char *parent_name)
+     DeviceState *dev;
+     SysBusDevice *d;
+     unsigned int i;
++    BusState *b = BUS(object_resolve_path_type("icc-bus", TYPE_ICC_BUS, NULL));
+ 
+     if (kvm_irqchip_in_kernel()) {
+-        dev = qdev_create(NULL, "kvm-ioapic");
++        dev = qdev_create(b, "kvm-ioapic");
+     } else {
+-        dev = qdev_create(NULL, "ioapic");
++        dev = qdev_create(b, "ioapic");
+     }
+     if (parent_name) {
+         object_property_add_child(object_resolve_path(parent_name, NULL),
+                                   "ioapic", OBJECT(dev), NULL);
+     }
+     qdev_init_nofail(dev);
+-    d = SYS_BUS_DEVICE(dev);
+-    sysbus_mmio_map(d, 0, IO_APIC_DEFAULT_ADDRESS);
+ 
++    d = SYS_BUS_DEVICE(object_resolve_path_type("icc-bridge", TYPE_ICC_BRIDGE,
++                                                NULL));
++    sysbus_mmio_map(d, 1, IO_APIC_DEFAULT_ADDRESS);
+     for (i = 0; i < IOAPIC_NUM_PINS; i++) {
+         gsi_state->ioapic_irq[i] = qdev_get_gpio_in(dev, i);
+     }
+diff --git a/hw/intc/ioapic_common.c b/hw/intc/ioapic_common.c
+index 5c5bb3c..72c48a8 100644
+--- a/hw/intc/ioapic_common.c
++++ b/hw/intc/ioapic_common.c
+@@ -57,11 +57,13 @@ static int ioapic_dispatch_post_load(void *opaque, int version_id)
+     return 0;
+ }
+ 
+-static int ioapic_init_common(SysBusDevice *dev)
++static int ioapic_init_common(ICCDevice *dev)
+ {
+     IOAPICCommonState *s = IOAPIC_COMMON(dev);
++    DeviceState *d = DEVICE(dev);
+     IOAPICCommonClass *info;
+     static int ioapic_no;
++    static bool mmio_registered;
+ 
+     if (ioapic_no >= MAX_IOAPICS) {
+         return -1;
+@@ -70,7 +72,12 @@ static int ioapic_init_common(SysBusDevice *dev)
+     info = IOAPIC_COMMON_GET_CLASS(s);
+     info->init(s, ioapic_no);
+ 
+-    sysbus_init_mmio(&s->busdev, &s->io_memory);
++    if (!mmio_registered) {
++        MemoryRegion *as = ICC_BUS(d->parent_bus)->ioapic_address_space;
++        memory_region_add_subregion(as, 0, &s->io_memory);
++        mmio_registered = true;
++    }
++
+     ioapic_no++;
+ 
+     return 0;
+@@ -95,7 +102,7 @@ static const VMStateDescription vmstate_ioapic_common = {
+ 
+ static void ioapic_common_class_init(ObjectClass *klass, void *data)
+ {
+-    SysBusDeviceClass *sc = SYS_BUS_DEVICE_CLASS(klass);
++    ICCDeviceClass *sc = ICC_DEVICE_CLASS(klass);
+     DeviceClass *dc = DEVICE_CLASS(klass);
+ 
+     sc->init = ioapic_init_common;
+@@ -105,7 +112,7 @@ static void ioapic_common_class_init(ObjectClass *klass, void *data)
+ 
+ static const TypeInfo ioapic_common_type = {
+     .name = TYPE_IOAPIC_COMMON,
+-    .parent = TYPE_SYS_BUS_DEVICE,
++    .parent = TYPE_ICC_DEVICE,
+     .instance_size = sizeof(IOAPICCommonState),
+     .class_size = sizeof(IOAPICCommonClass),
+     .class_init = ioapic_common_class_init,
+diff --git a/include/exec/memory.h b/include/exec/memory.h
+index 2322732..826e401 100644
+--- a/include/exec/memory.h
++++ b/include/exec/memory.h
+@@ -711,6 +711,16 @@ void memory_region_set_enabled(MemoryRegion *mr, bool enabled);
+ void memory_region_set_address(MemoryRegion *mr, hwaddr addr);
+ 
+ /*
++ * memory_region_get_address: get current the address of a region
++ *
++ * Returns the absolute address of a region.
++ * May be used on regions that are currently part of a memory hierarchy.
++ *
++ * @mr: the region being queried
++ */
++hwaddr memory_region_get_address(MemoryRegion *mr);
++
++/*
+  * memory_region_set_alias_offset: dynamically update a memory alias's offset
+  *
+  * Dynamically updates the offset into the target region that an alias points
+diff --git a/include/hw/i386/icc_bus.h b/include/hw/i386/icc_bus.h
+index 1b07619..d92c6ab 100644
+--- a/include/hw/i386/icc_bus.h
++++ b/include/hw/i386/icc_bus.h
+@@ -31,6 +31,7 @@
+ typedef struct ICCBus {
+     BusState qbus;
+     MemoryRegion *apic_address_space;
++    MemoryRegion *ioapic_address_space;
+ } ICCBus;
+ #define ICC_BUS(obj) OBJECT_CHECK(ICCBus, (obj), TYPE_ICC_BUS)
+ 
+diff --git a/include/hw/i386/ioapic_internal.h b/include/hw/i386/ioapic_internal.h
+index 25576c8..4768c5b 100644
+--- a/include/hw/i386/ioapic_internal.h
++++ b/include/hw/i386/ioapic_internal.h
+@@ -24,7 +24,7 @@
+ 
+ #include "hw/hw.h"
+ #include "exec/memory.h"
+-#include "hw/sysbus.h"
++#include "hw/i386/icc_bus.h"
+ 
+ #define MAX_IOAPICS                     1
+ 
+@@ -82,14 +82,14 @@ typedef struct IOAPICCommonState IOAPICCommonState;
+      OBJECT_GET_CLASS(IOAPICCommonClass, (obj), TYPE_IOAPIC_COMMON)
+ 
+ typedef struct IOAPICCommonClass {
+-    SysBusDeviceClass parent_class;
++    ICCDeviceClass parent_class;
+     void (*init)(IOAPICCommonState *s, int instance_no);
+     void (*pre_save)(IOAPICCommonState *s);
+     void (*post_load)(IOAPICCommonState *s);
+ } IOAPICCommonClass;
+ 
+ struct IOAPICCommonState {
+-    SysBusDevice busdev;
++    ICCDevice busdev;
+     MemoryRegion io_memory;
+     uint8_t id;
+     uint8_t ioregsel;
+diff --git a/memory.c b/memory.c
+index 75ca281..0651050 100644
+--- a/memory.c
++++ b/memory.c
+@@ -1413,6 +1413,17 @@ void memory_region_set_address(MemoryRegion *mr, hwaddr addr)
+     memory_region_transaction_commit();
+ }
+ 
++hwaddr memory_region_get_address(MemoryRegion *mr)
++{
++    hwaddr addr = mr->addr;
++
++    while (mr->parent) {
++        mr = mr->parent;
++        addr += mr->addr;
++    }
++    return addr;
++}
++
+ void memory_region_set_alias_offset(MemoryRegion *mr, hwaddr offset)
+ {
+     assert(mr->alias);
+-- 
+1.8.2
+

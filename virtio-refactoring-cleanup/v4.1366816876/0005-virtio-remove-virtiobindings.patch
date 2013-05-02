@@ -1,0 +1,583 @@
+From patches Mon Sep 17 00:00:00 2001
+From: fred.konrad@greensocs.com
+To: Anthony Liguori <aliguori@us.ibm.com>, qemu-devel@nongnu.org
+Cc: peter.maydell@linaro.org, Alexander Graf <agraf@suse.de>,
+ Paolo Bonzini <pbonzini@redhat.com>, mark.burton@greensocs.com,
+ Kevin Wolf <kwolf@redhat.com>, "Michael S. Tsirkin" <mst@redhat.com>,
+ Richard Henderson <rth@twiddle.net>, cornelia.huck@de.ibm.com,
+ Stefan Hajnoczi <stefanha@redhat.com>, fred.konrad@greensocs.com
+Date: Wed, 24 Apr 2013 10:21:21 +0200
+Message-id: 1366791683-5350-6-git-send-email-fred.konrad@greensocs.com
+Subject: [PATCH 5/7] virtio: remove virtiobindings.
+
+From: KONRAD Frederic <fred.konrad@greensocs.com>
+
+This remove virtio-bindings, and use class instead.
+
+Signed-off-by: KONRAD Frederic <fred.konrad@greensocs.com>
+---
+ hw/block/dataplane/virtio-blk.c | 15 ++++++++-----
+ hw/net/vhost_net.c              | 17 ++++++++------
+ hw/s390x/s390-virtio-bus.c      |  8 -------
+ hw/s390x/virtio-ccw.c           |  8 -------
+ hw/scsi/vhost-scsi.c            | 14 +++++++-----
+ hw/virtio/vhost.c               | 31 +++++++++++++++-----------
+ hw/virtio/virtio-bus.c          | 17 --------------
+ hw/virtio/virtio-pci.c          | 13 -----------
+ hw/virtio/virtio.c              | 49 +++++++++++++++++++++++------------------
+ include/hw/virtio/virtio-bus.h  |  4 ----
+ include/hw/virtio/virtio.h      | 19 ----------------
+ 11 files changed, 73 insertions(+), 122 deletions(-)
+
+diff --git a/hw/block/dataplane/virtio-blk.c b/hw/block/dataplane/virtio-blk.c
+index 5baef23..0356665 100644
+--- a/hw/block/dataplane/virtio-blk.c
++++ b/hw/block/dataplane/virtio-blk.c
+@@ -23,6 +23,7 @@
+ #include "hw/virtio/virtio-blk.h"
+ #include "virtio-blk.h"
+ #include "block/aio.h"
++#include "hw/virtio/virtio-bus.h"
+ 
+ enum {
+     SEG_MAX = 126,                  /* maximum number of I/O segments */
+@@ -455,6 +456,8 @@ void virtio_blk_data_plane_destroy(VirtIOBlockDataPlane *s)
+ 
+ void virtio_blk_data_plane_start(VirtIOBlockDataPlane *s)
+ {
++    BusState *qbus = BUS(qdev_get_parent_bus(DEVICE(s->vdev)));
++    VirtioBusClass *k = VIRTIO_BUS_GET_CLASS(qbus);
+     VirtQueue *vq;
+     int i;
+ 
+@@ -470,8 +473,7 @@ void virtio_blk_data_plane_start(VirtIOBlockDataPlane *s)
+     s->ctx = aio_context_new();
+ 
+     /* Set up guest notifier (irq) */
+-    if (s->vdev->binding->set_guest_notifiers(s->vdev->binding_opaque, 1,
+-                                              true) != 0) {
++    if (k->set_guest_notifiers(qbus->parent, 1, true) != 0) {
+         fprintf(stderr, "virtio-blk failed to set guest notifier, "
+                 "ensure -enable-kvm is set\n");
+         exit(1);
+@@ -479,8 +481,7 @@ void virtio_blk_data_plane_start(VirtIOBlockDataPlane *s)
+     s->guest_notifier = virtio_queue_get_guest_notifier(vq);
+ 
+     /* Set up virtqueue notify */
+-    if (s->vdev->binding->set_host_notifier(s->vdev->binding_opaque,
+-                                            0, true) != 0) {
++    if (k->set_host_notifier(qbus->parent, 0, true) != 0) {
+         fprintf(stderr, "virtio-blk failed to set host notifier\n");
+         exit(1);
+     }
+@@ -508,6 +509,8 @@ void virtio_blk_data_plane_start(VirtIOBlockDataPlane *s)
+ 
+ void virtio_blk_data_plane_stop(VirtIOBlockDataPlane *s)
+ {
++    BusState *qbus = BUS(qdev_get_parent_bus(DEVICE(s->vdev)));
++    VirtioBusClass *k = VIRTIO_BUS_GET_CLASS(qbus);
+     if (!s->started || s->stopping) {
+         return;
+     }
+@@ -527,12 +530,12 @@ void virtio_blk_data_plane_stop(VirtIOBlockDataPlane *s)
+     ioq_cleanup(&s->ioqueue);
+ 
+     aio_set_event_notifier(s->ctx, &s->host_notifier, NULL, NULL);
+-    s->vdev->binding->set_host_notifier(s->vdev->binding_opaque, 0, false);
++    k->set_host_notifier(qbus->parent, 0, false);
+ 
+     aio_context_unref(s->ctx);
+ 
+     /* Clean up guest notifier (irq) */
+-    s->vdev->binding->set_guest_notifiers(s->vdev->binding_opaque, 1, false);
++    k->set_guest_notifiers(qbus->parent, 1, false);
+ 
+     vring_teardown(&s->vring);
+     s->started = false;
+diff --git a/hw/net/vhost_net.c b/hw/net/vhost_net.c
+index 8c5384c..006576d 100644
+--- a/hw/net/vhost_net.c
++++ b/hw/net/vhost_net.c
+@@ -37,6 +37,7 @@
+ #include <stdio.h>
+ 
+ #include "hw/virtio/vhost.h"
++#include "hw/virtio/virtio-bus.h"
+ 
+ struct vhost_net {
+     struct vhost_dev dev;
+@@ -211,9 +212,12 @@ static void vhost_net_stop_one(struct vhost_net *net,
+ int vhost_net_start(VirtIODevice *dev, NetClientState *ncs,
+                     int total_queues)
+ {
++    BusState *qbus = BUS(qdev_get_parent_bus(DEVICE(dev)));
++    VirtioBusState *vbus = VIRTIO_BUS(qbus);
++    VirtioBusClass *k = VIRTIO_BUS_GET_CLASS(vbus);
+     int r, i = 0;
+ 
+-    if (!dev->binding->set_guest_notifiers) {
++    if (!k->set_guest_notifiers) {
+         error_report("binding does not support guest notifiers");
+         r = -ENOSYS;
+         goto err;
+@@ -227,9 +231,7 @@ int vhost_net_start(VirtIODevice *dev, NetClientState *ncs,
+         }
+     }
+ 
+-    r = dev->binding->set_guest_notifiers(dev->binding_opaque,
+-                                          total_queues * 2,
+-                                          true);
++    r = k->set_guest_notifiers(qbus->parent, total_queues * 2, true);
+     if (r < 0) {
+         error_report("Error binding guest notifier: %d", -r);
+         goto err;
+@@ -247,11 +249,12 @@ err:
+ void vhost_net_stop(VirtIODevice *dev, NetClientState *ncs,
+                     int total_queues)
+ {
++    BusState *qbus = BUS(qdev_get_parent_bus(DEVICE(dev)));
++    VirtioBusState *vbus = VIRTIO_BUS(qbus);
++    VirtioBusClass *k = VIRTIO_BUS_GET_CLASS(vbus);
+     int i, r;
+ 
+-    r = dev->binding->set_guest_notifiers(dev->binding_opaque,
+-                                          total_queues * 2,
+-                                          false);
++    r = k->set_guest_notifiers(qbus->parent, total_queues * 2, false);
+     if (r < 0) {
+         fprintf(stderr, "vhost guest notifier cleanup failed: %d\n", r);
+         fflush(stderr);
+diff --git a/hw/s390x/s390-virtio-bus.c b/hw/s390x/s390-virtio-bus.c
+index f7a2f4b..cf51a85 100644
+--- a/hw/s390x/s390-virtio-bus.c
++++ b/hw/s390x/s390-virtio-bus.c
+@@ -55,8 +55,6 @@ static const TypeInfo s390_virtio_bus_info = {
+     .instance_size = sizeof(VirtIOS390Bus),
+ };
+ 
+-static const VirtIOBindings virtio_s390_bindings;
+-
+ static ram_addr_t s390_virtio_device_num_vq(VirtIOS390Device *dev);
+ 
+ /* length of VirtIO device pages */
+@@ -140,7 +138,6 @@ static int s390_virtio_device_init(VirtIOS390Device *dev, VirtIODevice *vdev)
+ 
+     bus->dev_offs += dev_len;
+ 
+-    virtio_bind_device(vdev, &virtio_s390_bindings, DEVICE(dev));
+     dev->host_features = virtio_bus_get_vdev_features(&dev->bus,
+                                                       dev->host_features);
+     s390_virtio_device_sync(dev);
+@@ -466,11 +463,6 @@ static unsigned virtio_s390_get_features(DeviceState *d)
+ 
+ /**************** S390 Virtio Bus Device Descriptions *******************/
+ 
+-static const VirtIOBindings virtio_s390_bindings = {
+-    .notify = virtio_s390_notify,
+-    .get_features = virtio_s390_get_features,
+-};
+-
+ static Property s390_virtio_net_properties[] = {
+     DEFINE_NIC_PROPERTIES(VirtIONetS390, vdev.nic_conf),
+     DEFINE_VIRTIO_NET_FEATURES(VirtIOS390Device, host_features),
+diff --git a/hw/s390x/virtio-ccw.c b/hw/s390x/virtio-ccw.c
+index e14351c..56e4872 100644
+--- a/hw/s390x/virtio-ccw.c
++++ b/hw/s390x/virtio-ccw.c
+@@ -53,8 +53,6 @@ static const TypeInfo virtual_css_bus_info = {
+     .class_init = virtual_css_bus_class_init,
+ };
+ 
+-static const VirtIOBindings virtio_ccw_bindings;
+-
+ VirtIODevice *virtio_ccw_get_vdev(SubchDev *sch)
+ {
+     VirtIODevice *vdev = NULL;
+@@ -521,7 +519,6 @@ static int virtio_ccw_device_init(VirtioCcwDevice *dev, VirtIODevice *vdev)
+     sch->id.cu_type = VIRTIO_CCW_CU_TYPE;
+     sch->id.cu_model = dev->vdev->device_id;
+ 
+-    virtio_bind_device(vdev, &virtio_ccw_bindings, DEVICE(dev));
+     /* Only the first 32 feature bits are used. */
+     dev->host_features[0] = virtio_bus_get_vdev_features(&dev->bus,
+                                                          dev->host_features[0]);
+@@ -777,11 +774,6 @@ static void virtio_ccw_reset(DeviceState *d)
+ 
+ /**************** Virtio-ccw Bus Device Descriptions *******************/
+ 
+-static const VirtIOBindings virtio_ccw_bindings = {
+-    .notify = virtio_ccw_notify,
+-    .get_features = virtio_ccw_get_features,
+-};
+-
+ static Property virtio_ccw_net_properties[] = {
+     DEFINE_PROP_STRING("devno", VirtioCcwDevice, bus_id),
+     DEFINE_VIRTIO_NET_FEATURES(VirtioCcwDevice, host_features[0]),
+diff --git a/hw/scsi/vhost-scsi.c b/hw/scsi/vhost-scsi.c
+index 3c93172..d7a1c33 100644
+--- a/hw/scsi/vhost-scsi.c
++++ b/hw/scsi/vhost-scsi.c
+@@ -22,6 +22,7 @@
+ #include "hw/virtio/vhost-scsi.h"
+ #include "hw/virtio/vhost.h"
+ #include "hw/virtio/virtio-scsi.h"
++#include "hw/virtio/virtio-bus.h"
+ 
+ static int vhost_scsi_set_endpoint(VHostSCSI *s)
+ {
+@@ -52,8 +53,10 @@ static int vhost_scsi_start(VHostSCSI *s)
+ {
+     int ret, abi_version, i;
+     VirtIODevice *vdev = VIRTIO_DEVICE(s);
++    BusState *qbus = BUS(qdev_get_parent_bus(DEVICE(vdev)));
++    VirtioBusClass *k = VIRTIO_BUS_GET_CLASS(qbus);
+ 
+-    if (!vdev->binding->set_guest_notifiers) {
++    if (!k->set_guest_notifiers) {
+         error_report("binding does not support guest notifiers");
+         return -ENOSYS;
+     }
+@@ -88,7 +91,7 @@ static int vhost_scsi_start(VHostSCSI *s)
+         goto err_vhost_stop;
+     }
+ 
+-    ret = vdev->binding->set_guest_notifiers(vdev->binding_opaque, s->dev.nvqs, true);
++    ret = k->set_guest_notifiers(qbus->parent, s->dev.nvqs, true);
+     if (ret < 0) {
+         error_report("Error binding guest notifier");
+         goto err_endpoint;
+@@ -116,11 +119,12 @@ err_notifiers:
+ static void vhost_scsi_stop(VHostSCSI *s)
+ {
+     VirtIODevice *vdev = VIRTIO_DEVICE(s);
++    BusState *qbus = BUS(qdev_get_parent_bus(DEVICE(vdev)));
++    VirtioBusClass *k = VIRTIO_BUS_GET_CLASS(qbus);
+     int ret = 0;
+ 
+-    if (!vdev->binding->set_guest_notifiers) {
+-        ret = vdev->binding->set_guest_notifiers(vdev->binding_opaque,
+-                                                 s->dev.nvqs, false);
++    if (!k->set_guest_notifiers) {
++        ret = k->set_guest_notifiers(qbus->parent, s->dev.nvqs, false);
+         if (ret < 0) {
+                 error_report("vhost guest notifier cleanup failed: %d\n", ret);
+         }
+diff --git a/hw/virtio/vhost.c b/hw/virtio/vhost.c
+index 40feab4..fbabf99 100644
+--- a/hw/virtio/vhost.c
++++ b/hw/virtio/vhost.c
+@@ -19,6 +19,7 @@
+ #include "qemu/range.h"
+ #include <linux/vhost.h>
+ #include "exec/address-spaces.h"
++#include "hw/virtio/virtio-bus.h"
+ 
+ static void vhost_dev_sync_region(struct vhost_dev *dev,
+                                   MemoryRegionSection *section,
+@@ -892,9 +893,13 @@ void vhost_dev_cleanup(struct vhost_dev *hdev)
+ 
+ bool vhost_dev_query(struct vhost_dev *hdev, VirtIODevice *vdev)
+ {
+-    return !vdev->binding->query_guest_notifiers ||
+-        vdev->binding->query_guest_notifiers(vdev->binding_opaque) ||
+-        hdev->force;
++    BusState *qbus = BUS(qdev_get_parent_bus(DEVICE(vdev)));
++    VirtioBusState *vbus = VIRTIO_BUS(qbus);
++    VirtioBusClass *k = VIRTIO_BUS_GET_CLASS(vbus);
++
++    return !k->query_guest_notifiers ||
++           k->query_guest_notifiers(qbus->parent) ||
++           hdev->force;
+ }
+ 
+ /* Stop processing guest IO notifications in qemu.
+@@ -902,17 +907,18 @@ bool vhost_dev_query(struct vhost_dev *hdev, VirtIODevice *vdev)
+  */
+ int vhost_dev_enable_notifiers(struct vhost_dev *hdev, VirtIODevice *vdev)
+ {
++    BusState *qbus = BUS(qdev_get_parent_bus(DEVICE(vdev)));
++    VirtioBusState *vbus = VIRTIO_BUS(qbus);
++    VirtioBusClass *k = VIRTIO_BUS_GET_CLASS(vbus);
+     int i, r;
+-    if (!vdev->binding->set_host_notifier) {
++    if (!k->set_host_notifier) {
+         fprintf(stderr, "binding does not support host notifiers\n");
+         r = -ENOSYS;
+         goto fail;
+     }
+ 
+     for (i = 0; i < hdev->nvqs; ++i) {
+-        r = vdev->binding->set_host_notifier(vdev->binding_opaque,
+-                                             hdev->vq_index + i,
+-                                             true);
++        r = k->set_host_notifier(qbus->parent, hdev->vq_index + i, true);
+         if (r < 0) {
+             fprintf(stderr, "vhost VQ %d notifier binding failed: %d\n", i, -r);
+             goto fail_vq;
+@@ -922,9 +928,7 @@ int vhost_dev_enable_notifiers(struct vhost_dev *hdev, VirtIODevice *vdev)
+     return 0;
+ fail_vq:
+     while (--i >= 0) {
+-        r = vdev->binding->set_host_notifier(vdev->binding_opaque,
+-                                             hdev->vq_index + i,
+-                                             false);
++        r = k->set_host_notifier(qbus->parent, hdev->vq_index + i, false);
+         if (r < 0) {
+             fprintf(stderr, "vhost VQ %d notifier cleanup error: %d\n", i, -r);
+             fflush(stderr);
+@@ -942,12 +946,13 @@ fail:
+  */
+ void vhost_dev_disable_notifiers(struct vhost_dev *hdev, VirtIODevice *vdev)
+ {
++    BusState *qbus = BUS(qdev_get_parent_bus(DEVICE(vdev)));
++    VirtioBusState *vbus = VIRTIO_BUS(qbus);
++    VirtioBusClass *k = VIRTIO_BUS_GET_CLASS(vbus);
+     int i, r;
+ 
+     for (i = 0; i < hdev->nvqs; ++i) {
+-        r = vdev->binding->set_host_notifier(vdev->binding_opaque,
+-                                             hdev->vq_index + i,
+-                                             false);
++        r = k->set_host_notifier(qbus->parent, hdev->vq_index + i, false);
+         if (r < 0) {
+             fprintf(stderr, "vhost VQ %d notifier cleanup failed: %d\n", i, -r);
+             fflush(stderr);
+diff --git a/hw/virtio/virtio-bus.c b/hw/virtio/virtio-bus.c
+index dd10849..aab72ff 100644
+--- a/hw/virtio/virtio-bus.c
++++ b/hw/virtio/virtio-bus.c
+@@ -48,23 +48,6 @@ int virtio_bus_plug_device(VirtIODevice *vdev)
+ 
+     bus->vdev = vdev;
+ 
+-    /*
+-     * The lines below will disappear when we drop VirtIOBindings, at the end
+-     * of the series.
+-     */
+-    bus->bindings.notify = klass->notify;
+-    bus->bindings.save_config = klass->save_config;
+-    bus->bindings.save_queue = klass->save_queue;
+-    bus->bindings.load_config = klass->load_config;
+-    bus->bindings.load_queue = klass->load_queue;
+-    bus->bindings.load_done = klass->load_done;
+-    bus->bindings.get_features = klass->get_features;
+-    bus->bindings.query_guest_notifiers = klass->query_guest_notifiers;
+-    bus->bindings.set_guest_notifiers = klass->set_guest_notifiers;
+-    bus->bindings.set_host_notifier = klass->set_host_notifier;
+-    bus->bindings.vmstate_change = klass->vmstate_change;
+-    virtio_bind_device(bus->vdev, &bus->bindings, qbus->parent);
+-
+     if (klass->device_plugged != NULL) {
+         klass->device_plugged(qbus->parent);
+     }
+diff --git a/hw/virtio/virtio-pci.c b/hw/virtio/virtio-pci.c
+index a624b03..41bb41e 100644
+--- a/hw/virtio/virtio-pci.c
++++ b/hw/virtio/virtio-pci.c
+@@ -879,19 +879,6 @@ static void virtio_pci_vmstate_change(DeviceState *d, bool running)
+     }
+ }
+ 
+-static const VirtIOBindings virtio_pci_bindings = {
+-    .notify = virtio_pci_notify,
+-    .save_config = virtio_pci_save_config,
+-    .load_config = virtio_pci_load_config,
+-    .save_queue = virtio_pci_save_queue,
+-    .load_queue = virtio_pci_load_queue,
+-    .get_features = virtio_pci_get_features,
+-    .query_guest_notifiers = virtio_pci_query_guest_notifiers,
+-    .set_host_notifier = virtio_pci_set_host_notifier,
+-    .set_guest_notifiers = virtio_pci_set_guest_notifiers,
+-    .vmstate_change = virtio_pci_vmstate_change,
+-};
+-
+ #ifdef CONFIG_VIRTFS
+ static int virtio_9p_init_pci(VirtIOPCIProxy *vpci_dev)
+ {
+diff --git a/hw/virtio/virtio.c b/hw/virtio/virtio.c
+index de54b41..e66dab1 100644
+--- a/hw/virtio/virtio.c
++++ b/hw/virtio/virtio.c
+@@ -507,8 +507,11 @@ int virtqueue_pop(VirtQueue *vq, VirtQueueElement *elem)
+ /* virtio device */
+ static void virtio_notify_vector(VirtIODevice *vdev, uint16_t vector)
+ {
+-    if (vdev->binding->notify) {
+-        vdev->binding->notify(vdev->binding_opaque, vector);
++    BusState *qbus = qdev_get_parent_bus(DEVICE(vdev));
++    VirtioBusClass *k = VIRTIO_BUS_GET_CLASS(qbus);
++
++    if (k->notify) {
++        k->notify(qbus->parent, vector);
+     }
+ }
+ 
+@@ -789,10 +792,13 @@ void virtio_notify_config(VirtIODevice *vdev)
+ 
+ void virtio_save(VirtIODevice *vdev, QEMUFile *f)
+ {
++    BusState *qbus = qdev_get_parent_bus(DEVICE(vdev));
++    VirtioBusClass *k = VIRTIO_BUS_GET_CLASS(qbus);
+     int i;
+ 
+-    if (vdev->binding->save_config)
+-        vdev->binding->save_config(vdev->binding_opaque, f);
++    if (k->save_config) {
++        k->save_config(qbus->parent, f);
++    }
+ 
+     qemu_put_8s(f, &vdev->status);
+     qemu_put_8s(f, &vdev->isr);
+@@ -815,16 +821,18 @@ void virtio_save(VirtIODevice *vdev, QEMUFile *f)
+         qemu_put_be32(f, vdev->vq[i].vring.num);
+         qemu_put_be64(f, vdev->vq[i].pa);
+         qemu_put_be16s(f, &vdev->vq[i].last_avail_idx);
+-        if (vdev->binding->save_queue)
+-            vdev->binding->save_queue(vdev->binding_opaque, i, f);
++        if (k->save_queue) {
++            k->save_queue(qbus->parent, i, f);
++        }
+     }
+ }
+ 
+ int virtio_set_features(VirtIODevice *vdev, uint32_t val)
+ {
++    BusState *qbus = qdev_get_parent_bus(DEVICE(vdev));
++    VirtioBusClass *vbusk = VIRTIO_BUS_GET_CLASS(qbus);
+     VirtioDeviceClass *k = VIRTIO_DEVICE_GET_CLASS(vdev);
+-    uint32_t supported_features =
+-        vdev->binding->get_features(vdev->binding_opaque);
++    uint32_t supported_features = vbusk->get_features(qbus->parent);
+     bool bad = (val & ~supported_features) != 0;
+ 
+     val &= supported_features;
+@@ -840,9 +848,11 @@ int virtio_load(VirtIODevice *vdev, QEMUFile *f)
+     int num, i, ret;
+     uint32_t features;
+     uint32_t supported_features;
++    BusState *qbus = qdev_get_parent_bus(DEVICE(vdev));
++    VirtioBusClass *k = VIRTIO_BUS_GET_CLASS(qbus);
+ 
+-    if (vdev->binding->load_config) {
+-        ret = vdev->binding->load_config(vdev->binding_opaque, f);
++    if (k->load_config) {
++        ret = k->load_config(qbus->parent, f);
+         if (ret)
+             return ret;
+     }
+@@ -853,7 +863,7 @@ int virtio_load(VirtIODevice *vdev, QEMUFile *f)
+     qemu_get_be32s(f, &features);
+ 
+     if (virtio_set_features(vdev, features) < 0) {
+-        supported_features = vdev->binding->get_features(vdev->binding_opaque);
++        supported_features = k->get_features(qbus->parent);
+         error_report("Features 0x%x unsupported. Allowed features: 0x%x",
+                      features, supported_features);
+         return -1;
+@@ -889,8 +899,8 @@ int virtio_load(VirtIODevice *vdev, QEMUFile *f)
+                          i, vdev->vq[i].last_avail_idx);
+                 return -1;
+ 	}
+-        if (vdev->binding->load_queue) {
+-            ret = vdev->binding->load_queue(vdev->binding_opaque, i, f);
++        if (k->load_queue) {
++            ret = k->load_queue(qbus->parent, i, f);
+             if (ret)
+                 return ret;
+         }
+@@ -916,6 +926,8 @@ void virtio_cleanup(VirtIODevice *vdev)
+ static void virtio_vmstate_change(void *opaque, int running, RunState state)
+ {
+     VirtIODevice *vdev = opaque;
++    BusState *qbus = qdev_get_parent_bus(DEVICE(vdev));
++    VirtioBusClass *k = VIRTIO_BUS_GET_CLASS(qbus);
+     bool backend_run = running && (vdev->status & VIRTIO_CONFIG_S_DRIVER_OK);
+     vdev->vm_running = running;
+ 
+@@ -923,8 +935,8 @@ static void virtio_vmstate_change(void *opaque, int running, RunState state)
+         virtio_set_status(vdev, vdev->status);
+     }
+ 
+-    if (vdev->binding->vmstate_change) {
+-        vdev->binding->vmstate_change(vdev->binding_opaque, backend_run);
++    if (k->vmstate_change) {
++        k->vmstate_change(qbus->parent, backend_run);
+     }
+ 
+     if (!backend_run) {
+@@ -969,13 +981,6 @@ VirtIODevice *virtio_common_init(const char *name, uint16_t device_id,
+     return vdev;
+ }
+ 
+-void virtio_bind_device(VirtIODevice *vdev, const VirtIOBindings *binding,
+-                        DeviceState *opaque)
+-{
+-    vdev->binding = binding;
+-    vdev->binding_opaque = opaque;
+-}
+-
+ hwaddr virtio_queue_get_desc_addr(VirtIODevice *vdev, int n)
+ {
+     return vdev->vq[n].vring.desc;
+diff --git a/include/hw/virtio/virtio-bus.h b/include/hw/virtio/virtio-bus.h
+index ec82238..9ed60f9 100644
+--- a/include/hw/virtio/virtio-bus.h
++++ b/include/hw/virtio/virtio-bus.h
+@@ -70,10 +70,6 @@ struct VirtioBusState {
+      * Only one VirtIODevice can be plugged on the bus.
+      */
+     VirtIODevice *vdev;
+-    /*
+-     * This will be removed at the end of the series.
+-     */
+-    VirtIOBindings bindings;
+ };
+ 
+ int virtio_bus_plug_device(VirtIODevice *vdev);
+diff --git a/include/hw/virtio/virtio.h b/include/hw/virtio/virtio.h
+index 25ec4a3..e72e348 100644
+--- a/include/hw/virtio/virtio.h
++++ b/include/hw/virtio/virtio.h
+@@ -90,20 +90,6 @@ typedef struct VirtQueueElement
+     struct iovec out_sg[VIRTQUEUE_MAX_SIZE];
+ } VirtQueueElement;
+ 
+-typedef struct {
+-    void (*notify)(DeviceState *d, uint16_t vector);
+-    void (*save_config)(DeviceState *d, QEMUFile *f);
+-    void (*save_queue)(DeviceState *d, int n, QEMUFile *f);
+-    int (*load_config)(DeviceState *d, QEMUFile *f);
+-    int (*load_queue)(DeviceState *d, int n, QEMUFile *f);
+-    int (*load_done)(DeviceState *d, QEMUFile *f);
+-    unsigned (*get_features)(DeviceState *d);
+-    bool (*query_guest_notifiers)(DeviceState *d);
+-    int (*set_guest_notifiers)(DeviceState *d, int nvqs, bool assigned);
+-    int (*set_host_notifier)(DeviceState *d, int n, bool assigned);
+-    void (*vmstate_change)(DeviceState *d, bool running);
+-} VirtIOBindings;
+-
+ #define VIRTIO_PCI_QUEUE_MAX 64
+ 
+ #define VIRTIO_NO_VECTOR 0xffff
+@@ -129,8 +115,6 @@ struct VirtIODevice
+     uint16_t config_vector;
+     int nvectors;
+     VirtQueue *vq;
+-    const VirtIOBindings *binding;
+-    DeviceState *binding_opaque;
+     uint16_t device_id;
+     bool vm_running;
+     VMChangeStateEntry *vmstate;
+@@ -223,9 +207,6 @@ void virtio_reset(void *opaque);
+ void virtio_update_irq(VirtIODevice *vdev);
+ int virtio_set_features(VirtIODevice *vdev, uint32_t val);
+ 
+-void virtio_bind_device(VirtIODevice *vdev, const VirtIOBindings *binding,
+-                        DeviceState *opaque);
+-
+ /* Base devices.  */
+ typedef struct VirtIOBlkConf VirtIOBlkConf;
+ struct virtio_net_conf;
+-- 
+1.7.11.7
+

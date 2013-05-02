@@ -1,0 +1,4 @@
+0000-sparc64-fixes.txt
+0001-sparc64-allow-64-IRQ-lines.patch
+0002-sparc64-fix-loosing-interrupts.patch
+0003-sparc64-use-direct-interrupt-mapping-for-PCI-devices.patch

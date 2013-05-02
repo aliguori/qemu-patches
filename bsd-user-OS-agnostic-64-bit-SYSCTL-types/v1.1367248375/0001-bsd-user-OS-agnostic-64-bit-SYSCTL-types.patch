@@ -1,0 +1,43 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Ed Maste <emaste@freebsd.org>
+To: qemu-devel@nongnu.org
+Cc: Ed Maste <emaste@freebsd.org>
+Date: Mon, 29 Apr 2013 10:12:55 -0400
+Message-id: 1367244775-94775-1-git-send-email-emaste@freebsd.org
+Subject: [PATCH 1/1] bsd-user: OS-agnostic 64-bit SYSCTL types
+
+Use existence of type as #ifdef condition rather than FreeBSD-specific
+version check, as suggested by Patrick Welche.
+
+Also handle the signed (CTLTYPE_S64) case identically to the unsigned
+(CTLTYPE_U64) case, per later patches in the FreeBSD ports tree
+(emulators/qemu-devel/files/patch-z-arm-bsd-user-001).
+
+Signed-off-by: Ed Maste <emaste@freebsd.org>
+---
+ bsd-user/syscall.c | 7 ++++---
+ 1 file changed, 4 insertions(+), 3 deletions(-)
+
+diff --git a/bsd-user/syscall.c b/bsd-user/syscall.c
+index 69e3466..34b8dfc 100644
+--- a/bsd-user/syscall.c
++++ b/bsd-user/syscall.c
+@@ -211,10 +211,11 @@ static int sysctl_oldcvt(void *holdp, size_t holdlen, uint32_t kind)
+         *(uint64_t *)holdp = tswap64(*(unsigned long *)holdp);
+         break;
+ #endif
+-#if !defined(__FreeBSD_version) || __FreeBSD_version < 900031
+-    case CTLTYPE_QUAD:
+-#else
++#ifdef CTLTYPE_U64:
++    case CTLTYPE_S64:
+     case CTLTYPE_U64:
++#else
++    case CTLTYPE_QUAD:
+ #endif
+         *(uint64_t *)holdp = tswap64(*(uint64_t *)holdp);
+         break;
+-- 
+1.7.11.5
+
+

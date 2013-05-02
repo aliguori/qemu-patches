@@ -1,0 +1,114 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Dong Xu Wang <wdongxu@linux.vnet.ibm.com>
+To: qemu-devel@nongnu.org, Dong Xu Wang <wdongxu@linux.vnet.ibm.com>
+Cc: kwol@redhat.com, wdongxu@cn.ibm.com,
+ Dong Xu Wang <wdongxu@linux.vnet.ibm.com>, stefanha@redhat.com,
+ qemu-devel@nongnu.org
+Date: Wed, 10 Apr 2013 16:11:47 +0800
+Message-id: 1365581513-3475-1-git-send-email-wdongxu@linux.vnet.ibm.com
+Subject: [PATCH 0/6] add-cow file format
+
+It will introduce a new file format: add-cow.
+
+The add-cow file format makes it possible to perform copy-on-write on top of
+a raw disk image.  When we know that no backing file clusters remain visible
+(e.g. we have streamed the entire image and copied all data from the backing
+file), then it is possible to discard the add-cow file and use the raw image
+file directly.
+
+This feature adds the copy-on-write feature to raw files (which cannot support
+it natively) while allowing us to get full performance again later when we no
+longer need copy-on-write.
+
+add-cow can benefit from other available functions, such as path_has_protocol
+and qed_read_string, so we will make them public.
+
+snapshot_blkdev are not supported now for add-cow. Will add it in futher patches.
+
+These patches are using QemuOpts parser, former patches could be found here:
+http://patchwork.ozlabs.org/patch/235300/
+
+
+v17 -> v18:
+1) remove version field.
+2) header size is maximum value and cluster size value.
+3) fix type.
+4) move struct to source file.
+5) cluster_size->table_size.
+6) use error_report, not fprintf.
+7) remove version field from header.
+8) header_size is MAX(cluster_size, 4096).
+9) introduce s->cluster_sectors.
+10) use BLKDBG_L2_LOAD/UPDATE.
+11) add 037 and 038 tests.
+
+v16->v17):
+1) Use stringify.
+
+v15->v16):
+1) Rebased on QEMU upstream source tree.
+2) Judge if opts is null in add_cow_create function.
+
+v14->v15:
+1) Fix typo and make some sentences more readable in docs.
+2) Introduce STRINGIZER macro.
+
+v13->v14:
+1) Make some sentences more clear in docs.
+2) Make MAGIC from 8 bytes to 4 bytes.
+3) Fix some bugs.
+
+v12->v13:
+1) Use QemuOpts, not QEMUOptionParameter
+2) cluster_size configuable
+3) Refactor block-cache.c
+4) Correct qemu-iotests script.
+5) Other bug fix.
+
+v11->v12:
+1) Removed un-used feature bit.
+2) Share cache code with qcow2.c.
+3) Remove snapshot_blkdev support, will add it in another patch.
+5) COW Bitmap field in add-cow file will be multiple of 65536.
+6) fix grammer and typo.
+
+Dong Xu Wang (6):
+  docs: document for add-cow file format
+  make path_has_protocol non static
+  qed_read_string to bdrv_read_string
+  rename qcow2-cache.c to block-cache.c
+  add-cow file format core code.
+  qemu-iotests: add add-cow iotests support
+
+ block.c                      |  29 +-
+ block/Makefile.objs          |   4 +-
+ block/add-cow.c              | 741 +++++++++++++++++++++++++++++++++++++++++++
+ block/block-cache.c          | 339 ++++++++++++++++++++
+ block/qcow2-cache.c          | 323 -------------------
+ block/qcow2-cluster.c        |  52 +--
+ block/qcow2-refcount.c       |  62 ++--
+ block/qcow2.c                |  21 +-
+ block/qcow2.h                |  25 +-
+ block/qed.c                  |  34 +-
+ docs/specs/add-cow.txt       | 165 ++++++++++
+ include/block/block-cache.h  |  60 ++++
+ include/block/block.h        |   3 +
+ include/block/block_int.h    |   2 +
+ tests/qemu-iotests/017       |   2 +-
+ tests/qemu-iotests/020       |   2 +-
+ tests/qemu-iotests/037       |   2 +-
+ tests/qemu-iotests/038       |   2 +-
+ tests/qemu-iotests/common    |   6 +
+ tests/qemu-iotests/common.rc |  15 +-
+ trace-events                 |  13 +-
+ 21 files changed, 1452 insertions(+), 450 deletions(-)
+ create mode 100644 block/add-cow.c
+ create mode 100644 block/block-cache.c
+ delete mode 100644 block/qcow2-cache.c
+ create mode 100644 docs/specs/add-cow.txt
+ create mode 100644 include/block/block-cache.h
+
+-- 
+1.7.11.7
+
+

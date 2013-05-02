@@ -1,0 +1,112 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Gerd Hoffmann <kraxel@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Gerd Hoffmann <kraxel@redhat.com>
+Date: Tue, 16 Apr 2013 12:13:07 +0200
+Message-id: 1366107190-30853-5-git-send-email-kraxel@redhat.com
+Subject: [PATCH 4/7] xhci: fix portsc writes
+
+Check for port reset first and skip everything else then.
+Add sanity checks for PLS updates.
+Add PLC notification when entering PLS_U0 state.
+
+This gets host-initiated port resume going on win8.
+
+Signed-off-by: Gerd Hoffmann <kraxel@redhat.com>
+---
+ hw/usb/hcd-xhci.c |   42 +++++++++++++++++++++++++++++++++++-------
+ trace-events      |    1 +
+ 2 files changed, 36 insertions(+), 7 deletions(-)
+
+diff --git a/hw/usb/hcd-xhci.c b/hw/usb/hcd-xhci.c
+index 7f740d9..bb0cf1e 100644
+--- a/hw/usb/hcd-xhci.c
++++ b/hw/usb/hcd-xhci.c
+@@ -2592,6 +2592,7 @@ static void xhci_port_notify(XHCIPort *port, uint32_t bits)
+     if ((port->portsc & bits) == bits) {
+         return;
+     }
++    trace_usb_xhci_port_notify(port->portnr, bits);
+     port->portsc |= bits;
+     if (!xhci_running(port->xhci)) {
+         return;
+@@ -2798,29 +2799,56 @@ static void xhci_port_write(void *ptr, hwaddr reg,
+                             uint64_t val, unsigned size)
+ {
+     XHCIPort *port = ptr;
+-    uint32_t portsc;
++    uint32_t portsc, notify;
+ 
+     trace_usb_xhci_port_write(port->portnr, reg, val);
+ 
+     switch (reg) {
+     case 0x00: /* PORTSC */
++        /* write-1-to-start bits */
++        if (val & PORTSC_PR) {
++            xhci_port_reset(port);
++            break;
++        }
++
+         portsc = port->portsc;
++        notify = 0;
+         /* write-1-to-clear bits*/
+         portsc &= ~(val & (PORTSC_CSC|PORTSC_PEC|PORTSC_WRC|PORTSC_OCC|
+                            PORTSC_PRC|PORTSC_PLC|PORTSC_CEC));
+         if (val & PORTSC_LWS) {
+             /* overwrite PLS only when LWS=1 */
+-            uint32_t pls = get_field(val, PORTSC_PLS);
+-            set_field(&portsc, pls, PORTSC_PLS);
+-            trace_usb_xhci_port_link(port->portnr, pls);
++            uint32_t old_pls = get_field(port->portsc, PORTSC_PLS);
++            uint32_t new_pls = get_field(val, PORTSC_PLS);
++            switch (new_pls) {
++            case PLS_U0:
++                if (old_pls != PLS_U0) {
++                    set_field(&portsc, new_pls, PORTSC_PLS);
++                    trace_usb_xhci_port_link(port->portnr, new_pls);
++                    notify = PORTSC_PLC;
++                }
++                break;
++            case PLS_U3:
++                if (old_pls < PLS_U3) {
++                    set_field(&portsc, new_pls, PORTSC_PLS);
++                    trace_usb_xhci_port_link(port->portnr, new_pls);
++                }
++                break;
++            case PLS_RESUME:
++                /* windows does this for some reason, don't spam stderr */
++                break;
++            default:
++                fprintf(stderr, "%s: ignore pls write (old %d, new %d)\n",
++                        __func__, old_pls, new_pls);
++                break;
++            }
+         }
+         /* read/write bits */
+         portsc &= ~(PORTSC_PP|PORTSC_WCE|PORTSC_WDE|PORTSC_WOE);
+         portsc |= (val & (PORTSC_PP|PORTSC_WCE|PORTSC_WDE|PORTSC_WOE));
+         port->portsc = portsc;
+-        /* write-1-to-start bits */
+-        if (val & PORTSC_PR) {
+-            xhci_port_reset(port);
++        if (notify) {
++            xhci_port_notify(port, notify);
+         }
+         break;
+     case 0x04: /* PORTPMSC */
+diff --git a/trace-events b/trace-events
+index 412f7e4..54b7d90 100644
+--- a/trace-events
++++ b/trace-events
+@@ -362,6 +362,7 @@ usb_xhci_queue_event(uint32_t vector, uint32_t idx, const char *trb, const char
+ usb_xhci_fetch_trb(uint64_t addr, const char *name, uint64_t param, uint32_t status, uint32_t control) "addr %016" PRIx64 ", %s, p %016" PRIx64 ", s %08x, c 0x%08x"
+ usb_xhci_port_reset(uint32_t port) "port %d"
+ usb_xhci_port_link(uint32_t port, uint32_t pls) "port %d, pls %d"
++usb_xhci_port_notify(uint32_t port, uint32_t pls) "port %d, bits %x"
+ usb_xhci_slot_enable(uint32_t slotid) "slotid %d"
+ usb_xhci_slot_disable(uint32_t slotid) "slotid %d"
+ usb_xhci_slot_address(uint32_t slotid) "slotid %d"
+-- 
+1.7.9.7
+
+

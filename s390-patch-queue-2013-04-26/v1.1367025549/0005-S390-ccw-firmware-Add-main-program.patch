@@ -1,0 +1,85 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Alexander Graf <agraf@suse.de>
+To: qemu-ppc@nongnu.org
+Cc: Blue Swirl <blauwirbel@gmail.com>, Aurelien Jarno <aurelien@aurel32.net>,
+ qemu-devel@nongnu.org
+Date: Fri, 26 Apr 2013 20:19:14 +0200
+Message-id: 1367000373-7972-6-git-send-email-agraf@suse.de
+Subject: [PATCH 05/24] S390: ccw firmware: Add main program
+
+This C file is the main driving piece of the s390 ccw firmware. It
+provides a search for a workable block device, sets it as the default
+to boot off of and boots from it.
+
+Signed-off-by: Alexander Graf <agraf@suse.de>
+---
+ pc-bios/s390-ccw/main.c |   56 +++++++++++++++++++++++++++++++++++++++++++++++
+ 1 files changed, 56 insertions(+), 0 deletions(-)
+ create mode 100644 pc-bios/s390-ccw/main.c
+
+diff --git a/pc-bios/s390-ccw/main.c b/pc-bios/s390-ccw/main.c
+new file mode 100644
+index 0000000..0913aac
+--- /dev/null
++++ b/pc-bios/s390-ccw/main.c
+@@ -0,0 +1,56 @@
++/*
++ * S390 virtio-ccw loading program
++ *
++ * Copyright (c) 2013 Alexander Graf <agraf@suse.de>
++ *
++ * This work is licensed under the terms of the GNU GPL, version 2 or (at
++ * your option) any later version. See the COPYING file in the top-level
++ * directory.
++ */
++
++#include "s390-ccw.h"
++
++struct subchannel_id blk_schid;
++char stack[PAGE_SIZE * 8] __attribute__((__aligned__(PAGE_SIZE)));
++
++void virtio_panic(const char *string)
++{
++    sclp_print(string);
++    while (1) { }
++}
++
++static void virtio_setup(void)
++{
++    struct irb irb;
++    int i;
++    int r;
++    bool found = false;
++
++    blk_schid.one = 1;
++
++    for (i = 0; i < 0x10000; i++) {
++        blk_schid.sch_no = i;
++        r = tsch(blk_schid, &irb);
++        if (r != 3) {
++            if (virtio_is_blk(blk_schid)) {
++                found = true;
++                break;
++            }
++        }
++    }
++
++    if (!found) {
++        virtio_panic("No virtio-blk device found!\n");
++    }
++
++    virtio_setup_block(blk_schid);
++}
++
++int main(void)
++{
++    sclp_setup();
++    virtio_setup();
++    if (zipl_load() < 0)
++        sclp_print("Failed to load OS from hard disk\n");
++    while (1) { }
++}
+-- 
+1.6.0.2
+
+

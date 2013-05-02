@@ -1,0 +1,302 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Jeff Cody <jcody@redhat.com>
+To: kwolf@redhat.com, Stefan Hajnoczi <stefanha@gmail.com>, stefanha@redhat.com,
+ qemu-devel@nongnu.org, Jeff Cody <jcody@redhat.com>
+Cc: kwolf@redhat.com, Stefan Hajnoczi <stefanha@gmail.com>,
+ qemu-devel@nongnu.org, stefanha@redhat.com
+Date: Tue, 23 Apr 2013 10:24:24 -0400
+Message-id: 4fe304399e0d00138fefcfffaae97ae5a16de552.1366726446.git.jcody@redhat.com
+Subject: [PATCH 5/5] block: add header update capability for VHDX images.
+
+This adds the ability to update the headers in a VHDX image, including
+generating a new MS-compatible GUID.
+
+As VHDX depends on uuid.h, VHDX is now a configurable build option.
+If VHDX support is enabled, that will also enable uuid as well.
+
+To enable/disable VHDX:  --enable-vhdx, --disable-vhdx
+
+Signed-off-by: Jeff Cody <jcody@redhat.com>
+---
+ block/Makefile.objs |   2 +-
+ block/vhdx.c        | 157 +++++++++++++++++++++++++++++++++++++++++++++++++++-
+ configure           |  13 +++++
+ 3 files changed, 169 insertions(+), 3 deletions(-)
+
+diff --git a/block/Makefile.objs b/block/Makefile.objs
+index 5f0358a..da0a990 100644
+--- a/block/Makefile.objs
++++ b/block/Makefile.objs
+@@ -2,7 +2,7 @@ block-obj-y += raw.o cow.o qcow.o vdi.o vmdk.o cloop.o dmg.o bochs.o vpc.o vvfat
+ block-obj-y += qcow2.o qcow2-refcount.o qcow2-cluster.o qcow2-snapshot.o qcow2-cache.o
+ block-obj-y += qed.o qed-gencb.o qed-l2-cache.o qed-table.o qed-cluster.o
+ block-obj-y += qed-check.o
+-block-obj-y += vhdx.o
++block-obj-$(CONFIG_VHDX) += vhdx.o
+ block-obj-y += parallels.o blkdebug.o blkverify.o
+ block-obj-$(CONFIG_WIN32) += raw-win32.o win32-aio.o
+ block-obj-$(CONFIG_POSIX) += raw-posix.o
+diff --git a/block/vhdx.c b/block/vhdx.c
+index ca4a298..272304d 100644
+--- a/block/vhdx.c
++++ b/block/vhdx.c
+@@ -21,6 +21,7 @@
+ #include "qemu/crc32c.h"
+ #include "block/vhdx.h"
+ 
++#include <uuid/uuid.h>
+ 
+ /* Several metadata and region table data entries are identified by
+  * guids in  a MS-specific GUID format. */
+@@ -156,11 +157,40 @@ typedef struct BDRVVHDXState {
+     vhdx_bat_entry *bat;
+     uint64_t bat_offset;
+ 
++    ms_guid session_guid;
++
++
+     vhdx_parent_locator_header parent_header;
+     vhdx_parent_locator_entry *parent_entries;
+ 
+ } BDRVVHDXState;
+ 
++/* Calculates new checksum.
++ *
++ * Zero is substituted during crc calculation for the original crc field
++ * crc_offset: byte offset in buf of the buffer crc
++ * buf: buffer pointer
++ * size: size of buffer (must be > crc_offset+4)
++ *
++ * Note: The resulting checksum is in the CPU endianness, not necessarily
++ *       in the file format endianness (LE).  Any header export to disk should
++ *       make sure that vhdx_header_le_export() is used to convert to the
++ *       correct endianness
++ */
++static uint32_t vhdx_update_checksum(uint8_t *buf, size_t size, int crc_offset)
++{
++    uint32_t crc;
++
++    assert(buf != NULL);
++    assert(size > (crc_offset+4));
++
++    memset(buf+crc_offset, 0, sizeof(crc));
++    crc =  crc32c(0xffffffff, buf, size);
++    memcpy(buf+crc_offset, &crc, sizeof(crc));
++
++    return crc;
++}
++
+ uint32_t vhdx_checksum_calc(uint32_t crc, uint8_t *buf, size_t size,
+                             int crc_offset)
+ {
+@@ -212,6 +242,24 @@ bool vhdx_checksum_is_valid(uint8_t *buf, size_t size, int crc_offset)
+ 
+ 
+ /*
++ * This generates a UUID that is compliant with the MS GUIDs used
++ * in the VHDX spec (and elsewhere).
++ *
++ * We can do this with uuid_generate if uuid.h is present,
++ * however not all systems have uuid and the generation is
++ * pretty straightforward for the DCE + random usage case
++ *
++ */
++static void vhdx_guid_generate(ms_guid *guid)
++{
++    uuid_t uuid;
++    assert(guid != NULL);
++
++    uuid_generate(uuid);
++    memcpy(guid, uuid, 16);
++}
++
++/*
+  * Per the MS VHDX Specification, for every VHDX file:
+  *      - The header section is fixed size - 1 MB
+  *      - The header section is always the first "object"
+@@ -249,6 +297,107 @@ static void vhdx_header_le_import(vhdx_header *h)
+     le64_to_cpus(&h->log_offset);
+ }
+ 
++/* All VHDX structures on disk are little endian */
++static void vhdx_header_le_export(vhdx_header *orig_h, vhdx_header *new_h)
++{
++    assert(orig_h != NULL);
++    assert(new_h != NULL);
++
++    new_h->signature       = cpu_to_le32(orig_h->signature);
++    new_h->checksum        = cpu_to_le32(orig_h->checksum);
++    new_h->sequence_number = cpu_to_le64(orig_h->sequence_number);
++
++    memcpy(&new_h->file_write_guid, &orig_h->file_write_guid, sizeof(ms_guid));
++    memcpy(&new_h->data_write_guid, &orig_h->data_write_guid, sizeof(ms_guid));
++    memcpy(&new_h->log_guid,        &orig_h->log_guid,        sizeof(ms_guid));
++
++    cpu_to_leguids(&new_h->file_write_guid);
++    cpu_to_leguids(&new_h->data_write_guid);
++    cpu_to_leguids(&new_h->log_guid);
++
++    new_h->log_version     = cpu_to_le16(orig_h->log_version);
++    new_h->version         = cpu_to_le16(orig_h->version);
++    new_h->log_length      = cpu_to_le32(orig_h->log_length);
++    new_h->log_offset      = cpu_to_le64(orig_h->log_offset);
++}
++
++/* Update the VHDX headers
++ *
++ * This follows the VHDX spec procedures for header updates.
++ *
++ *  - non-current header is updated with largest sequence number
++ */
++static int vhdx_update_header(BlockDriverState *bs, BDRVVHDXState *s, bool rw)
++{
++    int ret = 0;
++    int hdr_idx = 0;
++    uint64_t header_offset = VHDX_HEADER1_OFFSET;
++
++    vhdx_header *active_header;
++    vhdx_header *inactive_header;
++    vhdx_header header_le;
++    uint8_t *buffer;
++
++    /* operate on the non-current header */
++    if (s->curr_header == 0) {
++        hdr_idx = 1;
++        header_offset = VHDX_HEADER2_OFFSET;
++    }
++
++    active_header   = s->headers[s->curr_header];
++    inactive_header = s->headers[hdr_idx];
++
++    inactive_header->sequence_number = active_header->sequence_number + 1;
++
++    /* a new file guid must be generate before any file write, including
++     * headers */
++    memcpy(&inactive_header->file_write_guid, &s->session_guid,
++           sizeof(ms_guid));
++
++    /* a new data guid only needs to be generate before any guest-visisble
++     * writes, so update it if the image is opened r/w. */
++    if (rw) {
++        vhdx_guid_generate(&inactive_header->data_write_guid);
++    }
++
++    /* the header checksum is not over just the packed size of vhdx_header,
++     * but rather over the entire 'reserved' range for the header, which is
++     * 4KB (VHDX_HEADER_SIZE). */
++
++    buffer = qemu_blockalign(bs, VHDX_HEADER_SIZE);
++    /* we can't assume the extra reserved bytes are 0 */
++    ret = bdrv_pread(bs->file, header_offset, buffer, VHDX_HEADER_SIZE);
++    if (ret < 0) {
++        goto fail;
++    }
++    /* overwrite the actual vhdx_header portion */
++    memcpy(buffer, inactive_header, sizeof(vhdx_header));
++    inactive_header->checksum = vhdx_update_checksum(buffer,
++                                                     VHDX_HEADER_SIZE, 4);
++    vhdx_header_le_export(inactive_header, &header_le);
++    bdrv_pwrite_sync(bs->file, header_offset, &header_le, sizeof(vhdx_header));
++    s->curr_header = hdr_idx;
++
++fail:
++    qemu_vfree(buffer);
++    return ret;
++}
++
++/*
++ * The VHDX spec calls for header updates to be performed twice, so that both
++ * the current and non-current header have valid info
++ */
++static int vhdx_update_headers(BlockDriverState *bs, BDRVVHDXState *s, bool rw)
++{
++    int ret;
++
++    ret = vhdx_update_header(bs, s, rw);
++    if (ret < 0) {
++        return ret;
++    }
++    ret = vhdx_update_header(bs, s, rw);
++    return ret;
++}
+ 
+ /* opens the specified header block from the VHDX file header section */
+ static int vhdx_parse_header(BlockDriverState *bs, BDRVVHDXState *s)
+@@ -680,6 +829,11 @@ static int vhdx_open(BlockDriverState *bs, QDict *options, int flags)
+ 
+     qemu_co_mutex_init(&s->lock);
+ 
++    /* This is used for any header updates, for the file_write_guid.
++     * The spec dictates that a new value should be used for the first
++     * header update */
++    vhdx_guid_generate(&s->session_guid);
++
+     ret = vhdx_parse_header(bs, s);
+     if (ret) {
+         goto fail;
+@@ -716,8 +870,7 @@ static int vhdx_open(BlockDriverState *bs, QDict *options, int flags)
+     }
+ 
+     if (flags & BDRV_O_RDWR) {
+-        ret = -ENOTSUP;
+-        goto fail;
++        vhdx_update_headers(bs, s, false);
+     }
+ 
+     /* TODO: differencing files, write */
+diff --git a/configure b/configure
+index 51a6c56..9b048ab 100755
+--- a/configure
++++ b/configure
+@@ -242,6 +242,7 @@ gtk=""
+ gtkabi="2.0"
+ tpm="no"
+ libssh2=""
++vhdx="no"
+ 
+ # parse CC options first
+ for opt do
+@@ -934,6 +935,11 @@ for opt do
+   ;;
+   --enable-libssh2) libssh2="yes"
+   ;;
++  --enable-vhdx) vhdx="yes" ;
++                 uuid="yes"
++  ;;
++  --disable-vhdx) vhdx="no"
++  ;;
+   *) echo "ERROR: unknown option $opt"; show_help="yes"
+   ;;
+   esac
+@@ -1201,6 +1207,8 @@ echo "  --gcov=GCOV              use specified gcov [$gcov_tool]"
+ echo "  --enable-tpm             enable TPM support"
+ echo "  --disable-libssh2        disable ssh block device support"
+ echo "  --enable-libssh2         enable ssh block device support"
++echo "  --disable-vhdx           disables support for the Microsoft VHDX image format"
++echo "  --enable-vhdx            enable support for the Microsoft VHDX image format"
+ echo ""
+ echo "NOTE: The object files are built at the place where configure is launched"
+ exit 1
+@@ -3580,6 +3588,7 @@ echo "gcov enabled      $gcov"
+ echo "TPM support       $tpm"
+ echo "libssh2 support   $libssh2"
+ echo "TPM passthrough   $tpm_passthrough"
++echo "vhdx              $vhdx"
+ 
+ if test "$sdl_too_old" = "yes"; then
+ echo "-> Your SDL version is too old - please upgrade to have SDL support"
+@@ -3968,6 +3977,10 @@ if test "$virtio_blk_data_plane" = "yes" ; then
+   echo 'CONFIG_VIRTIO_BLK_DATA_PLANE=$(CONFIG_VIRTIO)' >> $config_host_mak
+ fi
+ 
++if test "$vhdx" = "yes" ; then
++  echo "CONFIG_VHDX=y" >> $config_host_mak
++fi
++
+ # USB host support
+ case "$usb" in
+ linux)
+-- 
+1.8.1.4
+
+

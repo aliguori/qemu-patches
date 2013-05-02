@@ -1,0 +1,38 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Peter Maydell <peter.maydell@linaro.org>
+To: Peter Maydell <peter.maydell@linaro.org>, qemu-devel@nongnu.org,
+ =?UTF-8?Q?Andreas_F=C3=A4rber?= <afaerber@suse.de>
+Cc: Anthony Liguori <aliguori@us.ibm.com>, Paolo Bonzini <pbonzini@redhat.com>,
+ patches@linaro.org, qemu-devel@nongnu.org,
+ David Gibson <david@gibson.dropbear.id.au>, Gerd Hoffmann <kraxel@redhat.com>
+Date: Tue, 9 Apr 2013 12:27:52 +0100
+Message-id: 1365506873-21324-2-git-send-email-peter.maydell@linaro.org
+Subject: [PATCH 1/2] hw/sm501: Use correct setter for sysbus-ohci dma-address
+ property
+
+The sysbus-ohci dma-address property is declared as a HEX64
+property, not a TADDR, so use the correct setter for it.
+
+Signed-off-by: Peter Maydell <peter.maydell@linaro.org>
+Tested-by: Aurelien Jarno <aurelien@aurel32.net>
+Acked-by: Andreas Färber <afaerber@suse.de>
+---
+ hw/display/sm501.c |    2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/hw/display/sm501.c b/hw/display/sm501.c
+index 6b660ac..3840bce 100644
+--- a/hw/display/sm501.c
++++ b/hw/display/sm501.c
+@@ -1430,7 +1430,7 @@ void sm501_init(MemoryRegion *address_space_mem, uint32_t base,
+     /* bridge to usb host emulation module */
+     dev = qdev_create(NULL, "sysbus-ohci");
+     qdev_prop_set_uint32(dev, "num-ports", 2);
+-    qdev_prop_set_taddr(dev, "dma-offset", base);
++    qdev_prop_set_uint64(dev, "dma-offset", base);
+     qdev_init_nofail(dev);
+     sysbus_mmio_map(SYS_BUS_DEVICE(dev), 0,
+                     base + MMIO_BASE_OFFSET + SM501_USB_HOST);
+-- 
+1.7.9.5
+

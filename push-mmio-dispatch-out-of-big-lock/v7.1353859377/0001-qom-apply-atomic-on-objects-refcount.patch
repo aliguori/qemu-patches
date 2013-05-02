@@ -1,0 +1,45 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Liu Ping Fan <qemulist@gmail.com>
+To: Liu Ping Fan <qemulist@gmail.com>, qemu-devel@nongnu.org,
+ Richard Henderson <rth@twiddle.net>
+Cc: Paolo Bonzini <pbonzini@redhat.com>, gleb@redhat.com,
+ Anthony Liguori <anthony@codemonkey.ws>, Stefan Hajnoczi <stefanha@gmail.com>,
+ qemu-devel@nongnu.org, Marcelo Tosatti <mtosatti@redhat.com>,
+ Peter Maydell <peter.maydell@linaro.org>, Jan Kiszka <jan.kiszka@siemens.com>
+Date: Sun, 25 Nov 2012 10:02:58 +0800
+Message-id: 1353808984-22368-2-git-send-email-qemulist@gmail.com
+Subject: [PATCH 1/7] qom: apply atomic on object's refcount
+
+From: Liu Ping Fan <pingfank@linux.vnet.ibm.com>
+
+Signed-off-by: Liu Ping Fan <pingfank@linux.vnet.ibm.com>
+---
+ qom/object.c |    5 ++---
+ 1 files changed, 2 insertions(+), 3 deletions(-)
+
+diff --git a/qom/object.c b/qom/object.c
+index e3e9242..1a697b3 100644
+--- a/qom/object.c
++++ b/qom/object.c
+@@ -600,16 +600,15 @@ GSList *object_class_get_list(const char *implements_type,
+ 
+ void object_ref(Object *obj)
+ {
+-    obj->ref++;
++     __sync_fetch_and_add(&obj->ref, 1);
+ }
+ 
+ void object_unref(Object *obj)
+ {
+     g_assert(obj->ref > 0);
+-    obj->ref--;
+ 
+     /* parent always holds a reference to its children */
+-    if (obj->ref == 0) {
++    if (__sync_fetch_and_sub(&obj->ref, 1) == 1) {
+         object_finalize(obj);
+     }
+ }
+-- 
+1.7.4.4
+

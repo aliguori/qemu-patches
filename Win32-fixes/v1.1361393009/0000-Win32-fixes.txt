@@ -1,0 +1,27 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: jacob.kroon@gmail.com, Stefan Weil <sw@weilnetz.de>
+Date: Wed, 20 Feb 2013 14:43:29 +0100
+Message-id: 1361367811-13288-1-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 0/2] Win32 fixes
+
+The first patch is a fix for the Win32 slowness we are introducing on
+every release.  Basically, by adding more threads we're making things
+works in reality.
+
+The second patch should fix the failures observed with the Win32 timer
+(ChangeTimerQueueTimer).
+
+Paolo Bonzini (2):
+  win32: do not set CPU affinity
+  qemu-timer: move timeBeginPeriod/timeEndPeriod to os-win32
+
+ os-win32.c   | 29 ++++++++++-------------------
+ qemu-timer.c | 26 ++++++--------------------
+ 2 files changed, 16 insertions(+), 39 deletions(-)
+
+-- 
+1.8.1.2
+
+

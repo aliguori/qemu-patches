@@ -1,0 +1,290 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Pavel Hrdina <phrdina@redhat.com>
+To: Markus Armbruster <armbru@redhat.com>, qemu-devel@nongnu.org,
+ Pavel Hrdina <phrdina@redhat.com>
+Cc: phrdina@redhat.com, Kevin Wolf <kwolf@redhat.com>, qemu-devel@nongnu.org,
+ armbru@redhat.com, Pavel Hrdina <phrdina@redhat.com>, lcapitulino@redhat.com
+Date: Fri, 29 Mar 2013 15:12:28 +0100
+Message-id: bc56a3e11b76988e41f88fab5b0471db7358a1c6.1364565637.git.phrdina@redhat.com
+Subject: [PATCH 01/11] block: add error parameter to bdrv_snapshot_create()
+ and related functions
+
+Signed-off-by: Pavel Hrdina <phrdina@redhat.com>
+Reviewed-by: Eric Blake <eblake@redhat.com>
+---
+ block.c                   | 22 ++++++++++++++++------
+ block/qcow2-snapshot.c    |  9 ++++++++-
+ block/qcow2.h             |  4 +++-
+ block/rbd.c               |  8 ++++++--
+ block/sheepdog.c          | 17 +++++++++--------
+ include/block/block.h     |  3 ++-
+ include/block/block_int.h |  3 ++-
+ qemu-img.c                |  2 +-
+ savevm.c                  |  2 +-
+ 9 files changed, 48 insertions(+), 22 deletions(-)
+
+diff --git a/block.c b/block.c
+index 0ae2e93..17231d2 100644
+--- a/block.c
++++ b/block.c
+@@ -3305,15 +3305,25 @@ BlockDriverState *bdrv_snapshots(void)
+ }
+ 
+ int bdrv_snapshot_create(BlockDriverState *bs,
+-                         QEMUSnapshotInfo *sn_info)
++                         QEMUSnapshotInfo *sn_info,
++                         Error **errp)
+ {
+     BlockDriver *drv = bs->drv;
+-    if (!drv)
++
++    if (!drv) {
++        error_setg(errp, "device '%s' has no medium",
++                   bdrv_get_device_name(bs));
+         return -ENOMEDIUM;
+-    if (drv->bdrv_snapshot_create)
+-        return drv->bdrv_snapshot_create(bs, sn_info);
+-    if (bs->file)
+-        return bdrv_snapshot_create(bs->file, sn_info);
++    }
++    if (drv->bdrv_snapshot_create) {
++        return drv->bdrv_snapshot_create(bs, sn_info, errp);
++    }
++    if (bs->file) {
++        return bdrv_snapshot_create(bs->file, sn_info, errp);
++    }
++
++    error_setg(errp, "snapshot is not supported for '%s'",
++               bdrv_get_format_name(bs));
+     return -ENOTSUP;
+ }
+ 
+diff --git a/block/qcow2-snapshot.c b/block/qcow2-snapshot.c
+index 992a5c8..b34179e 100644
+--- a/block/qcow2-snapshot.c
++++ b/block/qcow2-snapshot.c
+@@ -315,7 +315,9 @@ static int find_snapshot_by_id_or_name(BlockDriverState *bs, const char *name)
+ }
+ 
+ /* if no id is provided, a new one is constructed */
+-int qcow2_snapshot_create(BlockDriverState *bs, QEMUSnapshotInfo *sn_info)
++int qcow2_snapshot_create(BlockDriverState *bs,
++                          QEMUSnapshotInfo *sn_info,
++                          Error **errp)
+ {
+     BDRVQcowState *s = bs->opaque;
+     QCowSnapshot *new_snapshot_list = NULL;
+@@ -334,6 +336,7 @@ int qcow2_snapshot_create(BlockDriverState *bs, QEMUSnapshotInfo *sn_info)
+ 
+     /* Check that the ID is unique */
+     if (find_snapshot_by_id(bs, sn_info->id_str) >= 0) {
++        error_setg(errp, "parameter 'name' has to be unique ID");
+         return -EEXIST;
+     }
+ 
+@@ -351,6 +354,7 @@ int qcow2_snapshot_create(BlockDriverState *bs, QEMUSnapshotInfo *sn_info)
+     l1_table_offset = qcow2_alloc_clusters(bs, s->l1_size * sizeof(uint64_t));
+     if (l1_table_offset < 0) {
+         ret = l1_table_offset;
++        error_setg(errp, "failed to allocate L1 table");
+         goto fail;
+     }
+ 
+@@ -365,6 +369,7 @@ int qcow2_snapshot_create(BlockDriverState *bs, QEMUSnapshotInfo *sn_info)
+     ret = bdrv_pwrite(bs->file, sn->l1_table_offset, l1_table,
+                       s->l1_size * sizeof(uint64_t));
+     if (ret < 0) {
++        error_setg(errp, "failed to save L1 table");
+         goto fail;
+     }
+ 
+@@ -378,6 +383,7 @@ int qcow2_snapshot_create(BlockDriverState *bs, QEMUSnapshotInfo *sn_info)
+      */
+     ret = qcow2_update_snapshot_refcount(bs, s->l1_table_offset, s->l1_size, 1);
+     if (ret < 0) {
++        error_setg(errp, "failed to update snapshot refcount");
+         goto fail;
+     }
+ 
+@@ -395,6 +401,7 @@ int qcow2_snapshot_create(BlockDriverState *bs, QEMUSnapshotInfo *sn_info)
+     if (ret < 0) {
+         g_free(s->snapshots);
+         s->snapshots = old_snapshot_list;
++        error_setg(errp, "failed to write new snapshots");
+         goto fail;
+     }
+ 
+diff --git a/block/qcow2.h b/block/qcow2.h
+index bf8db2a..9d93b83 100644
+--- a/block/qcow2.h
++++ b/block/qcow2.h
+@@ -382,7 +382,9 @@ int qcow2_discard_clusters(BlockDriverState *bs, uint64_t offset,
+ int qcow2_zero_clusters(BlockDriverState *bs, uint64_t offset, int nb_sectors);
+ 
+ /* qcow2-snapshot.c functions */
+-int qcow2_snapshot_create(BlockDriverState *bs, QEMUSnapshotInfo *sn_info);
++int qcow2_snapshot_create(BlockDriverState *bs,
++                          QEMUSnapshotInfo *sn_info,
++                          Error **errp);
+ int qcow2_snapshot_goto(BlockDriverState *bs, const char *snapshot_id);
+ int qcow2_snapshot_delete(BlockDriverState *bs, const char *snapshot_id);
+ int qcow2_snapshot_list(BlockDriverState *bs, QEMUSnapshotInfo **psn_tab);
+diff --git a/block/rbd.c b/block/rbd.c
+index 1a8ea6d..cdbee18 100644
+--- a/block/rbd.c
++++ b/block/rbd.c
+@@ -816,12 +816,14 @@ static int qemu_rbd_truncate(BlockDriverState *bs, int64_t offset)
+ }
+ 
+ static int qemu_rbd_snap_create(BlockDriverState *bs,
+-                                QEMUSnapshotInfo *sn_info)
++                                QEMUSnapshotInfo *sn_info,
++                                Error **errp)
+ {
+     BDRVRBDState *s = bs->opaque;
+     int r;
+ 
+     if (sn_info->name[0] == '\0') {
++        error_setg(errp, "parameter 'name' cannot be empty");
+         return -EINVAL; /* we need a name for rbd snapshots */
+     }
+ 
+@@ -831,16 +833,18 @@ static int qemu_rbd_snap_create(BlockDriverState *bs,
+      */
+     if (sn_info->id_str[0] != '\0' &&
+         strcmp(sn_info->id_str, sn_info->name) != 0) {
++        error_setg(errp, "ID and name have to be equal");
+         return -EINVAL;
+     }
+ 
+     if (strlen(sn_info->name) >= sizeof(sn_info->id_str)) {
++        error_setg(errp, "parameter 'name' has to be shorter than 127 chars");
+         return -ERANGE;
+     }
+ 
+     r = rbd_snap_create(s->image, sn_info->name);
+     if (r < 0) {
+-        error_report("failed to create snap: %s", strerror(-r));
++        error_setg_errno(errp, -r, "failed to create snapshot");
+         return r;
+     }
+ 
+diff --git a/block/sheepdog.c b/block/sheepdog.c
+index bb67c4c..e38bdf5 100644
+--- a/block/sheepdog.c
++++ b/block/sheepdog.c
+@@ -1767,7 +1767,9 @@ static int coroutine_fn sd_co_flush_to_disk(BlockDriverState *bs)
+     return acb->ret;
+ }
+ 
+-static int sd_snapshot_create(BlockDriverState *bs, QEMUSnapshotInfo *sn_info)
++static int sd_snapshot_create(BlockDriverState *bs,
++                              QEMUSnapshotInfo *sn_info,
++                              Error **errp)
+ {
+     BDRVSheepdogState *s = bs->opaque;
+     int ret, fd;
+@@ -1780,9 +1782,8 @@ static int sd_snapshot_create(BlockDriverState *bs, QEMUSnapshotInfo *sn_info)
+             s->name, sn_info->vm_state_size, s->is_snapshot);
+ 
+     if (s->is_snapshot) {
+-        error_report("You can't create a snapshot of a snapshot VDI, "
+-                     "%s (%" PRIu32 ").", s->name, s->inode.vdi_id);
+-
++        error_setg(errp, "you can't create a snapshot '%s' of a snapshot VDI "
++                   "%s (%" PRIu32 ")", sn_info->name, s->name, s->inode.vdi_id);
+         return -EINVAL;
+     }
+ 
+@@ -1801,21 +1802,21 @@ static int sd_snapshot_create(BlockDriverState *bs, QEMUSnapshotInfo *sn_info)
+     fd = connect_to_sdog(s);
+     if (fd < 0) {
+         ret = fd;
++        error_setg_errno(errp, errno, "failed to connect to sdog");
+         goto cleanup;
+     }
+ 
+     ret = write_object(fd, (char *)&s->inode, vid_to_vdi_oid(s->inode.vdi_id),
+                        s->inode.nr_copies, datalen, 0, false, s->cache_flags);
+     if (ret < 0) {
+-        error_report("failed to write snapshot's inode.");
++        error_setg_errno(errp, errno, "failed to write snapshot's inode");
+         goto cleanup;
+     }
+ 
+     ret = do_sd_create(s, s->name, s->inode.vdi_size, s->inode.vdi_id, &new_vid,
+                        1);
+     if (ret < 0) {
+-        error_report("failed to create inode for snapshot. %s",
+-                     strerror(errno));
++        error_setg_errno(errp, errno, "failed to create inode for snapshot");
+         goto cleanup;
+     }
+ 
+@@ -1825,7 +1826,7 @@ static int sd_snapshot_create(BlockDriverState *bs, QEMUSnapshotInfo *sn_info)
+                       s->inode.nr_copies, datalen, 0, s->cache_flags);
+ 
+     if (ret < 0) {
+-        error_report("failed to read new inode info. %s", strerror(errno));
++        error_setg_errno(errp, errno, "failed to read new inode info");
+         goto cleanup;
+     }
+ 
+diff --git a/include/block/block.h b/include/block/block.h
+index 9dc6aad..ee9399c 100644
+--- a/include/block/block.h
++++ b/include/block/block.h
+@@ -332,7 +332,8 @@ int bdrv_can_snapshot(BlockDriverState *bs);
+ int bdrv_is_snapshot(BlockDriverState *bs);
+ BlockDriverState *bdrv_snapshots(void);
+ int bdrv_snapshot_create(BlockDriverState *bs,
+-                         QEMUSnapshotInfo *sn_info);
++                         QEMUSnapshotInfo *sn_info,
++                         Error **errp);
+ int bdrv_snapshot_goto(BlockDriverState *bs,
+                        const char *snapshot_id);
+ int bdrv_snapshot_delete(BlockDriverState *bs, const char *snapshot_id);
+diff --git a/include/block/block_int.h b/include/block/block_int.h
+index 0986a2d..2feaa16 100644
+--- a/include/block/block_int.h
++++ b/include/block/block_int.h
+@@ -154,7 +154,8 @@ struct BlockDriver {
+                                  const uint8_t *buf, int nb_sectors);
+ 
+     int (*bdrv_snapshot_create)(BlockDriverState *bs,
+-                                QEMUSnapshotInfo *sn_info);
++                                QEMUSnapshotInfo *sn_info,
++                                Error **errp);
+     int (*bdrv_snapshot_goto)(BlockDriverState *bs,
+                               const char *snapshot_id);
+     int (*bdrv_snapshot_delete)(BlockDriverState *bs, const char *snapshot_id);
+diff --git a/qemu-img.c b/qemu-img.c
+index 31627b0..21d02bf 100644
+--- a/qemu-img.c
++++ b/qemu-img.c
+@@ -2012,7 +2012,7 @@ static int img_snapshot(int argc, char **argv)
+         sn.date_sec = tv.tv_sec;
+         sn.date_nsec = tv.tv_usec * 1000;
+ 
+-        ret = bdrv_snapshot_create(bs, &sn);
++        ret = bdrv_snapshot_create(bs, &sn, NULL);
+         if (ret) {
+             error_report("Could not create snapshot '%s': %d (%s)",
+                 snapshot_name, ret, strerror(-ret));
+diff --git a/savevm.c b/savevm.c
+index 406caa9..77c5291 100644
+--- a/savevm.c
++++ b/savevm.c
+@@ -2332,7 +2332,7 @@ void do_savevm(Monitor *mon, const QDict *qdict)
+         if (bdrv_can_snapshot(bs1)) {
+             /* Write VM state size only to the image that contains the state */
+             sn->vm_state_size = (bs == bs1 ? vm_state_size : 0);
+-            ret = bdrv_snapshot_create(bs1, sn);
++            ret = bdrv_snapshot_create(bs1, sn, NULL);
+             if (ret < 0) {
+                 monitor_printf(mon, "Error while creating snapshot on '%s'\n",
+                                bdrv_get_device_name(bs1));
+-- 
+1.8.1.4
+
+

@@ -1,0 +1,8 @@
+0000-virtio-net-refactoring.txt
+0001-virtio-add-two-functions-to-VirtioDeviceClass.patch
+0002-virtio-net-add-the-virtio-net-device.patch
+0003-virtio-net-pci-switch-to-the-new-API.patch
+0004-virtio-net-s390-switch-to-the-new-API.patch
+0005-virtio-net-ccw-switch-to-the-new-API.patch
+0006-virtio-net-cleanup-use-QOM-cast.patch
+0007-virtio-net-cleanup-init-and-exit-function.patch

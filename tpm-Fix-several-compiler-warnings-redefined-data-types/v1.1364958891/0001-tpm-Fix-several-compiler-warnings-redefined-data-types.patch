@@ -1,0 +1,68 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Stefan Weil <sw@weilnetz.de>
+To: Stefan Berger <stefanb@linux.vnet.ibm.com>, qemu-devel@nongnu.org,
+ Stefan Weil <sw@weilnetz.de>
+Cc: Anthony Liguori <aliguori@us.ibm.com>, Stefan Weil <sw@weilnetz.de>,
+ qemu-devel@nongnu.org, Stefan Berger <stefanb@linux.vnet.ibm.com>
+Date: Tue, 2 Apr 2013 22:14:51 +0200
+Message-id: 1364933691-21197-1-git-send-email-sw@weilnetz.de
+Subject: [PATCH 1/1] tpm: Fix several compiler warnings (redefined data types)
+
+Signed-off-by: Stefan Weil <sw@weilnetz.de>
+Reviewed-by: Stefan Berger <stefanb@linux.vnet.ibm.com>
+---
+ tpm/tpm_int.h |    9 ++-------
+ tpm/tpm_tis.h |    4 ++--
+ 2 files changed, 4 insertions(+), 9 deletions(-)
+
+diff --git a/tpm/tpm_int.h b/tpm/tpm_int.h
+index b4787ad..340bfd5 100644
+--- a/tpm/tpm_int.h
++++ b/tpm/tpm_int.h
+@@ -15,11 +15,8 @@
+ #include "exec/memory.h"
+ #include "tpm/tpm_tis.h"
+ 
+-struct TPMDriverOps;
+-typedef struct TPMDriverOps TPMDriverOps;
+-
+ /* overall state of the TPM interface */
+-typedef struct TPMState {
++struct TPMState {
+     ISADevice busdev;
+     MemoryRegion mmio;
+ 
+@@ -32,12 +29,10 @@ typedef struct TPMState {
+ 
+     char *backend;
+     TPMBackend *be_driver;
+-} TPMState;
++};
+ 
+ #define TPM(obj) OBJECT_CHECK(TPMState, (obj), TYPE_TPM_TIS)
+ 
+-typedef void (TPMRecvDataCB)(TPMState *, uint8_t locty);
+-
+ struct TPMDriverOps {
+     enum TpmType type;
+     /* get a descriptive text of the backend to display to the user */
+diff --git a/tpm/tpm_tis.h b/tpm/tpm_tis.h
+index 0c8df80..7f216e5 100644
+--- a/tpm/tpm_tis.h
++++ b/tpm/tpm_tis.h
+@@ -35,10 +35,10 @@
+ #define TYPE_TPM_TIS                "tpm-tis"
+ 
+ 
+-typedef struct TPMSizedBuffer {
++struct TPMSizedBuffer {
+     uint32_t size;
+     uint8_t  *buffer;
+-} TPMSizedBuffer;
++};
+ 
+ typedef enum {
+     TPM_TIS_STATE_IDLE = 0,
+-- 
+1.7.10.4
+

@@ -1,0 +1,1 @@
+../new-formal-protocol-design/v1.1365480269/0004-introduce-qemu_ram_foreach_block.patch

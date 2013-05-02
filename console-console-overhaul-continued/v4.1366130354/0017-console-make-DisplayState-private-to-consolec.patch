@@ -1,0 +1,58 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Gerd Hoffmann <kraxel@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, Gerd Hoffmann <kraxel@redhat.com>
+Date: Tue, 16 Apr 2013 11:39:31 +0200
+Message-id: 1366105178-26744-18-git-send-email-kraxel@redhat.com
+Subject: [PATCH 17/24] console: make DisplayState private to console.c
+
+With gui_* being moved to console.c nobody outside console.c needs
+access to DisplayState fields any more.  Make the struct private.
+
+Signed-off-by: Gerd Hoffmann <kraxel@redhat.com>
+---
+ include/ui/console.h |    8 --------
+ ui/console.c         |    8 ++++++++
+ 2 files changed, 8 insertions(+), 8 deletions(-)
+
+diff --git a/include/ui/console.h b/include/ui/console.h
+index d92626b..50cd7b0 100644
+--- a/include/ui/console.h
++++ b/include/ui/console.h
+@@ -182,14 +182,6 @@ struct DisplayChangeListener {
+     QLIST_ENTRY(DisplayChangeListener) next;
+ };
+ 
+-struct DisplayState {
+-    struct QEMUTimer *gui_timer;
+-    bool have_gfx;
+-    bool have_text;
+-
+-    QLIST_HEAD(, DisplayChangeListener) listeners;
+-};
+-
+ DisplayState *init_displaystate(void);
+ DisplaySurface* qemu_create_displaysurface_from(int width, int height, int bpp,
+                                                 int linesize, uint8_t *data,
+diff --git a/ui/console.c b/ui/console.c
+index b618221..07fba67 100644
+--- a/ui/console.c
++++ b/ui/console.c
+@@ -157,6 +157,14 @@ struct QemuConsole {
+     QEMUTimer *kbd_timer;
+ };
+ 
++struct DisplayState {
++    struct QEMUTimer *gui_timer;
++    bool have_gfx;
++    bool have_text;
++
++    QLIST_HEAD(, DisplayChangeListener) listeners;
++};
++
+ static DisplayState *display_state;
+ static QemuConsole *active_console;
+ static QemuConsole *consoles[MAX_CONSOLES];
+-- 
+1.7.9.7
+

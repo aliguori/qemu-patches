@@ -1,0 +1,42 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Lei Li <lilei@linux.vnet.ibm.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, lagarcia@br.ibm.com,
+ eblake@redhat.com, kraxel@redhat.com, Lei Li <lilei@linux.vnet.ibm.com>
+Date: Thu, 25 Apr 2013 13:29:11 +0800
+Message-id: 1366867752-11578-4-git-send-email-lilei@linux.vnet.ibm.com
+Subject: [PATCH 3/4] vnc: Adjust lock state sync logic with
+ VNC_FEATURE_LED_STATE
+
+Signed-off-by: Lei Li <lilei@linux.vnet.ibm.com>
+---
+ ui/vnc.c |    5 +++++
+ 1 files changed, 5 insertions(+), 0 deletions(-)
+
+diff --git a/ui/vnc.c b/ui/vnc.c
+index 44189d7..9ffa75b 100644
+--- a/ui/vnc.c
++++ b/ui/vnc.c
+@@ -1613,7 +1613,11 @@ static void do_key_event(VncState *vs, int down, int keycode, int sym)
+         break;
+     }
+ 
++    /* Turn off the lock state sync logic if the client support the led
++       state extension.
++    */
+     if (down && vs->vd->lock_key_sync &&
++        !vnc_has_feature(vs, VNC_FEATURE_LED_STATE) &&
+         keycode_is_keypad(vs->vd->kbd_layout, keycode)) {
+         /* If the numlock state needs to change then simulate an additional
+            keypress before sending this one.  This will happen if the user
+@@ -1633,6 +1637,7 @@ static void do_key_event(VncState *vs, int down, int keycode, int sym)
+     }
+ 
+     if (down && vs->vd->lock_key_sync &&
++        !vnc_has_feature(vs, VNC_FEATURE_LED_STATE) &&
+         ((sym >= 'A' && sym <= 'Z') || (sym >= 'a' && sym <= 'z'))) {
+         /* If the capslock state needs to change then simulate an additional
+            keypress before sending this one.  This will happen if the user
+-- 
+1.7.7.6
+

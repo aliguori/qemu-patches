@@ -1,0 +1,96 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Bruce Rogers <brogers@suse.com>
+To: qemu-devel@nongnu.org, Bruce Rogers <brogers@suse.com>
+Cc: qemu-devel@nongnu.org, kraxel@redhat.com, Bruce Rogers <brogers@suse.com>,
+ qemu-stable@nongnu.org
+Date: Tue,  2 Apr 2013 12:41:40 -0600
+Message-id: 1364928100-487-1-git-send-email-brogers@suse.com
+Subject: [PATCH 1/1] acpi: initialize s4_val used in s4 shutdown
+
+While investigating why a 32 bit Windows 2003 guest wasn't able to
+successfully perform a shutdown /h, it was discovered that commit
+afafe4bbe0cf7d3318e1ac7b40925561f86a6bd4 inadvertently dropped the
+initialization of the s4_val used to handle s4 shutdown.
+Initialize the value as before.
+
+Signed-off-by: Bruce Rogers <brogers@suse.com>
+Reviewed-by: Gerd Hoffmann <kraxel@redhat.com>
+---
+ hw/acpi.c       |    3 ++-
+ hw/acpi.h       |    2 +-
+ hw/acpi_ich9.c  |    2 +-
+ hw/acpi_piix4.c |    2 +-
+ hw/vt82c686.c   |    2 +-
+ 5 files changed, 6 insertions(+), 5 deletions(-)
+
+diff --git a/hw/acpi.c b/hw/acpi.c
+index 53e47d5..e9b73cf 100644
+--- a/hw/acpi.c
++++ b/hw/acpi.c
+@@ -472,8 +472,9 @@ static const MemoryRegionOps acpi_pm_cnt_ops = {
+     .endianness = DEVICE_LITTLE_ENDIAN,
+ };
+ 
+-void acpi_pm1_cnt_init(ACPIREGS *ar, MemoryRegion *parent)
++void acpi_pm1_cnt_init(ACPIREGS *ar, MemoryRegion *parent, uint8_t s4_val)
+ {
++    ar->pm1.cnt.s4_val = s4_val;
+     ar->wakeup.notify = acpi_notify_wakeup;
+     qemu_register_wakeup_notifier(&ar->wakeup);
+     memory_region_init_io(&ar->pm1.cnt.io, &acpi_pm_cnt_ops, ar, "acpi-cnt", 2);
+diff --git a/hw/acpi.h b/hw/acpi.h
+index c3628d0..e18ef28 100644
+--- a/hw/acpi.h
++++ b/hw/acpi.h
+@@ -142,7 +142,7 @@ void acpi_pm1_evt_init(ACPIREGS *ar, acpi_update_sci_fn update_sci,
+                        MemoryRegion *parent);
+ 
+ /* PM1a_CNT: piix and ich9 don't implement PM1b CNT. */
+-void acpi_pm1_cnt_init(ACPIREGS *ar, MemoryRegion *parent);
++void acpi_pm1_cnt_init(ACPIREGS *ar, MemoryRegion *parent, uint8_t s4_val);
+ void acpi_pm1_cnt_update(ACPIREGS *ar,
+                          bool sci_enable, bool sci_disable);
+ void acpi_pm1_cnt_reset(ACPIREGS *ar);
+diff --git a/hw/acpi_ich9.c b/hw/acpi_ich9.c
+index 29f84ff..7b34a03 100644
+--- a/hw/acpi_ich9.c
++++ b/hw/acpi_ich9.c
+@@ -212,7 +212,7 @@ void ich9_pm_init(PCIDevice *lpc_pci, ICH9LPCPMRegs *pm,
+ 
+     acpi_pm_tmr_init(&pm->acpi_regs, ich9_pm_update_sci_fn, &pm->io);
+     acpi_pm1_evt_init(&pm->acpi_regs, ich9_pm_update_sci_fn, &pm->io);
+-    acpi_pm1_cnt_init(&pm->acpi_regs, &pm->io);
++    acpi_pm1_cnt_init(&pm->acpi_regs, &pm->io, 2);
+ 
+     acpi_gpe_init(&pm->acpi_regs, ICH9_PMIO_GPE0_LEN);
+     memory_region_init_io(&pm->io_gpe, &ich9_gpe_ops, pm, "apci-gpe0",
+diff --git a/hw/acpi_piix4.c b/hw/acpi_piix4.c
+index 7a4b712..48a32b5 100644
+--- a/hw/acpi_piix4.c
++++ b/hw/acpi_piix4.c
+@@ -418,7 +418,7 @@ static int piix4_pm_initfn(PCIDevice *dev)
+ 
+     acpi_pm_tmr_init(&s->ar, pm_tmr_timer, &s->io);
+     acpi_pm1_evt_init(&s->ar, pm_tmr_timer, &s->io);
+-    acpi_pm1_cnt_init(&s->ar, &s->io);
++    acpi_pm1_cnt_init(&s->ar, &s->io, s->s4_val);
+     acpi_gpe_init(&s->ar, GPE_LEN);
+ 
+     s->powerdown_notifier.notify = piix4_pm_powerdown_req;
+diff --git a/hw/vt82c686.c b/hw/vt82c686.c
+index 4529508..9d9b64e 100644
+--- a/hw/vt82c686.c
++++ b/hw/vt82c686.c
+@@ -360,7 +360,7 @@ static int vt82c686b_pm_initfn(PCIDevice *dev)
+ 
+     acpi_pm_tmr_init(&s->ar, pm_tmr_timer, &s->io);
+     acpi_pm1_evt_init(&s->ar, pm_tmr_timer, &s->io);
+-    acpi_pm1_cnt_init(&s->ar, &s->io);
++    acpi_pm1_cnt_init(&s->ar, &s->io, 2);
+ 
+     return 0;
+ }
+-- 
+1.7.7
+
+

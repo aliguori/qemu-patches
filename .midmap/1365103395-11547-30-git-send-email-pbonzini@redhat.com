@@ -1,0 +1,1 @@
+../hw--reorganization-part-2/v3.1365128560/0029-hw-move-NVRAM-interfaces-to-hw-nvram--configure-with-default-configs-.patch

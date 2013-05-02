@@ -1,0 +1,70 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Laszlo Ersek <lersek@redhat.com>
+To: seabios@seabios.org, qemu-devel@nongnu.org
+Cc: 
+Date: Mon,  8 Apr 2013 15:14:32 +0200
+Message-id: 1365426872-1856-1-git-send-email-lersek@redhat.com
+Subject: [PATCH 1/1] install the MADT from the "etc/acpi/APIC" fw_cfg file if
+ it's available
+
+
+Signed-off-by: Laszlo Ersek <lersek@redhat.com>
+---
+ src/acpi.c |   29 ++++++++++++++++++++++++++++-
+ 1 files changed, 28 insertions(+), 1 deletions(-)
+
+diff --git a/src/acpi.c b/src/acpi.c
+index bc4d8ea..9e128b2 100644
+--- a/src/acpi.c
++++ b/src/acpi.c
+@@ -393,6 +393,33 @@ build_madt(void)
+     return madt;
+ }
+ 
++static void*
++find_table(const char *sig, void *(*buildfn)(void))
++{
++    char buf[] = "etc/acpi/QUUX";
++    struct romfile_s *file;
++
++    snprintf(buf + (sizeof buf - 1 - 4), 4 + 1, "%s", sig);
++    file = romfile_find(buf);
++    if (file != NULL && file->size >= sizeof(struct acpi_table_header)) {
++        void *table;
++
++        table = malloc_high(file->size);
++        if (table == NULL)
++            warn_noalloc();
++        else {
++            if ((*file->copy)(file, table, file->size) == file->size) {
++                dprintf(4, "ACPI %s: using fw_cfg %s\n", sig, buf);
++                return table;
++            }
++            free(table);
++        }
++    }
++
++    dprintf(4, "ACPI %s: building default\n", sig);
++    return (*buildfn)();
++}
++
+ // Encode a hex value
+ static inline char getHex(u32 val) {
+     val &= 0x0f;
+@@ -792,7 +819,7 @@ acpi_setup(void)
+     struct fadt_descriptor_rev1 *fadt = build_fadt(pci);
+     ACPI_INIT_TABLE(fadt);
+     ACPI_INIT_TABLE(build_ssdt());
+-    ACPI_INIT_TABLE(build_madt());
++    ACPI_INIT_TABLE(find_table("APIC", build_madt));
+     ACPI_INIT_TABLE(build_hpet());
+     ACPI_INIT_TABLE(build_srat());
+     if (pci->device == PCI_DEVICE_ID_INTEL_ICH9_LPC)
+-- 
+1.7.1
+
+
+_______________________________________________
+SeaBIOS mailing list
+SeaBIOS@seabios.org
+http://www.seabios.org/mailman/listinfo/seabios

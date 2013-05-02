@@ -1,0 +1,1 @@
+../make-audio-card-configuration-uniform/v1.1366328636/0001-adlib-qdev-ify.patch

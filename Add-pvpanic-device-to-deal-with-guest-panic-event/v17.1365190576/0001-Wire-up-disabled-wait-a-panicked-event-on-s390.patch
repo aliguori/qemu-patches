@@ -1,0 +1,71 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Christian Borntraeger <borntraeger@de.ibm.com>
+To: Christian Borntraeger <borntraeger@de.ibm.com>,
+ Hu Tao <hutao@cn.fujitsu.com>, Alexander Graf <agraf@suse.de>
+Cc: Paolo Bonzini <pbonzini@redhat.com>, qemu-devel <qemu-devel@nongnu.org>,
+ Luiz Capitulino <lcapitulino@redhat.com>, Wen Congyang <wency@cn.fujitsu.com>,
+ Jan Kiszka <jan.kiszka@siemens.com>,
+ KAMEZAWA Hiroyuki <kamezawa.hiroyu@jp.fujitsu.com>,
+ Anthony Liguori <aliguori@us.ibm.com>, "Michael S. Tsirkin" <mst@redhat.com>,
+ Gleb Natapov <gleb@redhat.com>, Peter Maydell <peter.maydell@linaro.org>,
+ Blue Swirl <blauwirbel@gmail.com>, Alexander Graf <agraf@suse.de>,
+ Sasha Levin <levinsasha928@gmail.com>, Orit Wasserman <owasserm@redhat.com>,
+ Andrew Jones <drjones@redhat.com>, Markus Armbruster <armbru@redhat.com>,
+ Stefan Hajnoczi <stefanha@redhat.com>, Eric Blake <eblake@redhat.com>,
+ Juan Quintela <quintela@redhat.com>, Hu Tao <hutao@cn.fujitsu.com>,
+ "Daniel P. Berrange" <berrange@redhat.com>,
+ Marcelo Tosatti <mtosatti@redhat.com>,
+ Alex Williamson <alex.williamson@redhat.com>
+Date: Fri, 05 Apr 2013 10:42:38 +0200
+Message-id: 515E8E7E.8060504@de.ibm.com
+Subject: [PATCH 1/1] Wire up disabled wait a panicked event on s390
+
+On s390 the disabled wait state indicates a state of attention.
+For example Linux uses that state after a panic. Lets
+put the system into panicked state.
+
+An alternative implementation would be to state
+disabled-wait <address> instead of pause in the action field.
+(e.g. z/OS, z/VM and other classic OSes use the address of the
+disabled wait to indicate an error code).
+
+Signed-off-by: Christian Borntraeger <borntraeger@de.ibm.com>
+---
+ target-s390x/kvm.c | 17 ++++++++++++++---
+ 1 file changed, 14 insertions(+), 3 deletions(-)
+
+diff --git a/target-s390x/kvm.c b/target-s390x/kvm.c
+index 644f484..0c111f0 100644
+--- a/target-s390x/kvm.c
++++ b/target-s390x/kvm.c
+@@ -34,6 +34,8 @@
+ #include "sysemu/kvm.h"
+ #include "cpu.h"
+ #include "sysemu/device_tree.h"
++#include "qapi/qmp/qjson.h"
++#include "monitor/monitor.h"
+ 
+ /* #define DEBUG_KVM */
+ 
+@@ -705,9 +707,18 @@ static int handle_intercept(S390CPU *cpu)
+             r = handle_instruction(cpu, run);
+             break;
+         case ICPT_WAITPSW:
+-            if (s390_del_running_cpu(cpu) == 0 &&
+-                is_special_wait_psw(cs)) {
+-                qemu_system_shutdown_request();
++            /* disabled wait, since enabled wait is handled in kernel */
++            if (s390_del_running_cpu(cpu) == 0) {
++                if (is_special_wait_psw(cs)) {
++                    qemu_system_shutdown_request();
++                } else {
++                    QObject *data;
++
++                    data = qobject_from_jsonf("{ 'action': %s }", "pause");
++                    monitor_protocol_event(QEVENT_GUEST_PANICKED, data);
++                    qobject_decref(data);
++                    vm_stop(RUN_STATE_GUEST_PANICKED);
++                }
+             }
+             r = EXCP_HALTED;
+             break;

@@ -1,0 +1,1 @@
+../KVM-Dont-assume-that-mpstate-exists-with-in-kernel-PIC-always/v3.1367372904/0008-kvm-openpic-in-kernel-mpic-support.patch

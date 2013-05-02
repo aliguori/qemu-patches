@@ -1,0 +1,1 @@
+../virtio-rng-s390-add-properties/v1.1365970489/0001-virtio-rng-s390-add-properties.patch

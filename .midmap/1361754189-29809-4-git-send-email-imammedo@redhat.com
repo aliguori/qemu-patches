@@ -1,0 +1,1 @@
+../target-i386-convert-CPU-features-into-properties/v7.1361779379/0003-target-i386-move-hyperv_-static-globals-to-CPUState.patch

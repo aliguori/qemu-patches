@@ -1,0 +1,86 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: Paolo Bonzini <pbonzini@redhat.com>, qemu-devel@nongnu.org,
+ Markus Armbruster <armbru@redhat.com>
+Cc: kwolf@redhat.com, Anthony Liguori <aliguori@us.ibm.com>,
+ quintela@redhat.com, stefanha@gmail.com, pl@kamp.de, qemu-devel@nongnu.org,
+ owasserm@redhat.com
+Date: Mon, 8 Apr 2013 12:47:08 +0200
+Message-id: 1365418028-2546-1-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 1/1] migration: initialize RAM to zero
+
+Using qemu_memalign only leaves the RAM zero by chance, because libc
+will usually use mmap to satisfy our huge requests.  But memory will
+not be zero when using MALLOC_PERTURB_ with a nonzero value.  In the
+case of incoming migration, this breaks a recently-introduced
+invariant (commit f1c7279, migration: do not sent zero pages in
+bulk stage, 2013-03-26).
+
+To fix this, use mmap ourselves to get a well-aligned, always zero
+block for the RAM.  Mmap-ed memory is easy to "trim" at the sides.
+
+This also removes the need to do something special on valgrind
+(see commit c2a8238a, Support running QEMU on Valgrind, 2011-10-31).
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+Reviewed-by: Peter Lieven <pl@kamp.de>
+---
+ util/oslib-posix.c | 30 +++++++++++++-----------------
+ 1 file changed, 13 insertions(+), 17 deletions(-)
+
+diff --git a/util/oslib-posix.c b/util/oslib-posix.c
+index 433dd68..91f5aab 100644
+--- a/util/oslib-posix.c
++++ b/util/oslib-posix.c
+@@ -52,12 +52,8 @@ extern int daemon(int, int);
+ #include "sysemu/sysemu.h"
+ #include "trace.h"
+ #include "qemu/sockets.h"
++#include <sys/mman.h>
+ 
+-#if defined(CONFIG_VALGRIND)
+-static int running_on_valgrind = -1;
+-#else
+-#  define running_on_valgrind 0
+-#endif
+ #ifdef CONFIG_LINUX
+ #include <sys/syscall.h>
+ #endif
+@@ -108,22 +104,22 @@ void *qemu_memalign(size_t alignment, size_t size)
+ /* alloc shared memory pages */
+ void *qemu_vmalloc(size_t size)
+ {
+-    void *ptr;
+     size_t align = QEMU_VMALLOC_ALIGN;
++    size_t total = size + align - getpagesize();
++    void *ptr = mmap(0, total, PROT_READ | PROT_WRITE,
++                     MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
++    size_t offset = QEMU_ALIGN_UP((uintptr_t)ptr, align) - (uintptr_t)ptr;
+ 
+-#if defined(CONFIG_VALGRIND)
+-    if (running_on_valgrind < 0) {
+-        /* First call, test whether we are running on Valgrind.
+-           This is a substitute for RUNNING_ON_VALGRIND from valgrind.h. */
+-        const char *ld = getenv("LD_PRELOAD");
+-        running_on_valgrind = (ld != NULL && strstr(ld, "vgpreload"));
+-    }
+-#endif
++    ptr += offset;
++    total -= offset;
+ 
+-    if (size < align || running_on_valgrind) {
+-        align = getpagesize();
++    if (offset > 0) {
++        munmap(ptr - offset, offset);
++    }
++    if (total > size) {
++        munmap(ptr + size, total - size);
+     }
+-    ptr = qemu_memalign(align, size);
++
+     trace_qemu_vmalloc(size, ptr);
+     return ptr;
+ }
+-- 
+1.8.1.4
+

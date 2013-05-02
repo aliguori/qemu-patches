@@ -1,0 +1,22 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Hans de Goede <hdegoede@redhat.com>
+To: Gerd Hoffmann <kraxel@redhat.com>
+Cc: qemu-devel@nongnu.org
+Date: Tue,  9 Apr 2013 10:15:11 +0200
+Message-id: 1365495312-9070-1-git-send-email-hdegoede@redhat.com
+Subject: [PATCH 0/1] ehci_free_packet: Discard finished packets when the queue
+ is halted v2
+
+Hi Gerd,
+
+Here is a v2 of the patch I send yesterday, changed in v2 is that the warning
+is only printed when packets with a status of success are dropped, since on
+a regular stall or disconnect chances are all other packets in the queue 
+also have completed with an error status when we process the queue.
+
+This is a normal condition, on which we should not warn / log.
+
+Regards,
+
+Hans
+

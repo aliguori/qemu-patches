@@ -1,0 +1,21 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+To: qemu-trivial@nongnu.org, qemu-devel@nongnu.org
+Cc: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+Date: Wed,  3 Apr 2013 14:09:15 +1000
+Message-id: cover.1364961975.git.peter.crosthwaite@xilinx.com
+Subject: [PATCH 0/4] m25p80: Fix debug printfery
+
+Fix up the debug printfery m25p80 in various ways. 0 functional diff.
+
+
+Peter Crosthwaite (4):
+  m25p80: Fix debug messages.
+  m25p80: Convert guest errors to LOG_GUEST_ERROR
+  m25p80.c: Multiple debug verbosity levels
+  m25p80: Add debug message for no bdrv
+
+ hw/m25p80.c |   53 +++++++++++++++++++++++++++++------------------------
+ 1 files changed, 29 insertions(+), 24 deletions(-)
+
+

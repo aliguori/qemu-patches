@@ -1,0 +1,1 @@
+../target-i386-CPU-hot-add-with-cpu-add-QMP-command/v8.1367328839/0003-add-cpu-model-option-to--machine.patch

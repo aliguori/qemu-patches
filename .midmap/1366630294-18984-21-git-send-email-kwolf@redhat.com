@@ -1,0 +1,1 @@
+../Block-patches/v1.1366655474/0020-qemu-iotests-add-053-unaligned-compressed-image-size-test.patch

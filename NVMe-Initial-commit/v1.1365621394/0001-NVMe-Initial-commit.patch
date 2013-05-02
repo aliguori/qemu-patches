@@ -1,0 +1,1752 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Keith Busch <keith.busch@intel.com>
+To: Stefan Hajnoczi <stefanha@gmail.com>, Keith Busch <keith.busch@intel.com>,
+ qemu-devel@nongnu.org
+Cc: Keith Busch <keith.busch@intel.com>, qemu-devel@nongnu.org,
+ Keith Busch <keith.busch@gmail.com>, qemu-devel <qemu-devel@nongnu.org>
+Date: Wed, 10 Apr 2013 14:16:34 -0600
+Message-id: 1365624994-10219-1-git-send-email-keith.busch@intel.com
+Subject: [PATCH 1/1] NVMe: Initial commit
+
+Initial commit for emulated nvme pci storage device. Implements the
+minimum from the specification to work with existing drivers.
+
+Cc: Keith Busch <keith.busch@gmail.com>
+Signed-off-by: Keith Busch <keith.busch@intel.com>
+
+A lot of people are very interested in this, so I should have more time
+to dedicate working on submitting this upstream.  Thanks for the feedback
+on the last round. Only difference here besides the merge-up is making
+the serial option mandatory and a fix for > 4GB backing storage.
+---
+ MAINTAINERS              |    5 +
+ default-configs/pci.mak  |    1 +
+ hw/block/Makefile.objs   |    1 +
+ hw/block/nvme.c          |  944 ++++++++++++++++++++++++++++++++++++++++++++++
+ hw/block/nvme.h          |  712 ++++++++++++++++++++++++++++++++++
+ include/hw/pci/pci_ids.h |    1 +
+ 6 files changed, 1664 insertions(+), 0 deletions(-)
+ create mode 100644 hw/block/nvme.c
+ create mode 100644 hw/block/nvme.h
+
+diff --git a/MAINTAINERS b/MAINTAINERS
+index 4dfd8bf..fbd973e 100644
+--- a/MAINTAINERS
++++ b/MAINTAINERS
+@@ -609,6 +609,11 @@ S: Supported
+ F: hw/char/virtio-serial-bus.c
+ F: hw/char/virtio-console.c
+ 
++nvme
++M: Keith Busch <keith.busch@intel.com>
++S: Supported
++F: hw/nvme*
++
+ Xilinx EDK
+ M: Peter Crosthwaite <peter.crosthwaite@petalogix.com>
+ M: Edgar E. Iglesias <edgar.iglesias@gmail.com>
+diff --git a/default-configs/pci.mak b/default-configs/pci.mak
+index f5f100e..04a9dce 100644
+--- a/default-configs/pci.mak
++++ b/default-configs/pci.mak
+@@ -24,3 +24,4 @@ CONFIG_SERIAL=y
+ CONFIG_SERIAL_PCI=y
+ CONFIG_IPACK=y
+ CONFIG_WDT_IB6300ESB=y
++CONFIG_NVME_PCI=y
+diff --git a/hw/block/Makefile.objs b/hw/block/Makefile.objs
+index e4329a0..25acc67 100644
+--- a/hw/block/Makefile.objs
++++ b/hw/block/Makefile.objs
+@@ -8,6 +8,7 @@ common-obj-$(CONFIG_XEN_BACKEND) += xen_disk.o
+ common-obj-$(CONFIG_ECC) += ecc.o
+ common-obj-$(CONFIG_ONENAND) += onenand.o
+ common-obj-$(CONFIG_PC_SYSFW) += pc_sysfw.o
++common-obj-$(CONFIG_NVME_PCI) += nvme.o
+ 
+ obj-$(CONFIG_SH4) += tc58128.o
+ 
+diff --git a/hw/block/nvme.c b/hw/block/nvme.c
+new file mode 100644
+index 0000000..4f36248
+--- /dev/null
++++ b/hw/block/nvme.c
+@@ -0,0 +1,944 @@
++/*
++ * QEMU NVM Express Controller
++ *
++ * Copyright (c) 2012, Intel Corporation
++ *
++ * Written by Keith Busch <keith.busch@intel.com>
++ *
++ * This code is licensed under the GNU GPL v2 or later.
++ */
++
++/**
++ * Reference Specs: http://www.nvmexpress.org, 1.1, 1.0d
++ *
++ *  http://www.nvmexpress.org/index.php/download_file/view/102/1/
++ *  http://www.nvmexpress.org/index.php/download_file/view/100/1/
++ */
++
++/**
++ * Usage: add options:
++ *      -drive file=<file>,if=none,id=<drive_id>
++ *      -device nvme,drive=<drive_id>,serial=<serial>,id=<id[optional]>
++ */
++
++#include <hw/block/block.h>
++#include <hw/hw.h>
++#include <hw/pci/msix.h>
++#include <hw/pci/pci.h>
++
++#include "nvme.h"
++
++#define NVME_MAX_QS PCI_MSIX_FLAGS_QSIZE
++
++static void nvme_sq_process(void *opaque);
++
++static int nvme_check_sqid(NvmeCtrl *n, uint16_t sqid)
++{
++    return sqid < n->num_queues && n->sq[sqid] != NULL ? 0 : -1;
++}
++
++static int nvme_check_cqid(NvmeCtrl *n, uint16_t cqid)
++{
++    return cqid < n->num_queues && n->cq[cqid] != NULL ? 0 : -1;
++}
++
++static void nvme_inc_cq_tail(NvmeCQueue *cq)
++{
++    cq->tail++;
++    if (cq->tail >= cq->size) {
++        cq->tail = 0;
++        cq->phase = !cq->phase;
++    }
++}
++
++static void nvme_inc_sq_head(NvmeSQueue *sq)
++{
++    sq->head = (sq->head + 1) % sq->size;
++}
++
++static uint8_t nvme_cq_full(NvmeCQueue *cq)
++{
++    return (cq->tail + 1) % cq->size == cq->head;
++}
++
++static uint8_t nvme_sq_empty(NvmeSQueue *sq)
++{
++    return sq->head == sq->tail;
++}
++
++static void nvme_isr_notify(NvmeCtrl *n, NvmeCQueue *cq)
++{
++    if (cq->irq_enabled) {
++        if (msix_enabled(&(n->parent_obj))) {
++            msix_notify(&(n->parent_obj), cq->vector);
++        } else {
++            qemu_irq_pulse(n->parent_obj.irq[0]);
++        }
++    }
++}
++
++static uint16_t nvme_map_prp(QEMUSGList *qsg, uint64_t prp1, uint64_t prp2,
++    uint32_t len, NvmeCtrl *n)
++{
++    hwaddr trans_len = n->page_size - (prp1 % n->page_size);
++    trans_len = MIN(len, trans_len);
++    int num_prps = (len >> n->page_bits) + 1;
++
++    if (!prp1) {
++        return NVME_INVALID_FIELD | NVME_DNR;
++    }
++
++    qemu_sglist_init(qsg, num_prps, pci_dma_context(&n->parent_obj));
++    qemu_sglist_add(qsg, prp1, trans_len);
++    len -= trans_len;
++    if (len) {
++        if (!prp2) {
++            goto unmap;
++        }
++        if (len > n->page_size) {
++            uint64_t prp_list[n->max_prp_ents];
++            uint32_t nents, prp_trans;
++            int i = 0;
++
++            nents = (len + n->page_size - 1) >> n->page_bits;
++            prp_trans = MIN(n->max_prp_ents, nents) * sizeof(uint64_t);
++            pci_dma_read(&n->parent_obj, prp2, (void *)prp_list, prp_trans);
++            while (len != 0) {
++                uint64_t prp_ent = le64_to_cpu(prp_list[i]);
++
++                if (i == n->max_prp_ents - 1 && len > n->page_size) {
++                    if (!prp_ent || prp_ent & (n->page_size - 1)) {
++                        goto unmap;
++                    }
++
++                    i = 0;
++                    nents = (len + n->page_size - 1) >> n->page_bits;
++                    prp_trans = MIN(n->max_prp_ents, nents) * sizeof(uint64_t);
++                    pci_dma_read(&n->parent_obj, prp_ent, (void *)prp_list,
++                        prp_trans);
++                    prp_ent = le64_to_cpu(prp_list[i]);
++                }
++
++                if (!prp_ent || prp_ent & (n->page_size - 1)) {
++                    goto unmap;
++                }
++
++                trans_len = MIN(len, n->page_size);
++                qemu_sglist_add(qsg, prp_ent, trans_len);
++                len -= trans_len;
++                i++;
++            }
++        } else {
++            if (prp2 & (n->page_size - 1)) {
++                goto unmap;
++            }
++            qemu_sglist_add(qsg, prp2, len);
++        }
++    }
++    return NVME_SUCCESS;
++
++ unmap:
++    qemu_sglist_destroy(qsg);
++    return NVME_INVALID_FIELD | NVME_DNR;
++}
++
++static uint16_t nvme_dma_write_prp(NvmeCtrl *n, uint8_t *ptr, uint32_t len,
++    uint64_t prp1, uint64_t prp2)
++{
++    QEMUSGList qsg;
++
++    if (nvme_map_prp(&qsg, prp1, prp2, len, n)) {
++        return NVME_INVALID_FIELD | NVME_DNR;
++    }
++    if (dma_buf_write(ptr, len, &qsg)) {
++        qemu_sglist_destroy(&qsg);
++        return NVME_INVALID_FIELD | NVME_DNR;
++    }
++    qemu_sglist_destroy(&qsg);
++    return NVME_SUCCESS;
++}
++
++static uint16_t nvme_dma_read_prp(NvmeCtrl *n, uint8_t *ptr, uint32_t len,
++    uint64_t prp1, uint64_t prp2)
++{
++    QEMUSGList qsg;
++
++    if (nvme_map_prp(&qsg, prp1, prp2, len, n)) {
++        return NVME_INVALID_FIELD | NVME_DNR;
++    }
++    if (dma_buf_read(ptr, len, &qsg)) {
++        qemu_sglist_destroy(&qsg);
++        return NVME_INVALID_FIELD | NVME_DNR;
++    }
++    return NVME_SUCCESS;
++}
++static void nvme_post_cqes(void *opaque)
++{
++    NvmeCQueue *cq = opaque;
++    NvmeCtrl *n = cq->ctrl;
++    NvmeRequest *req, *next;
++
++    QTAILQ_FOREACH_SAFE(req, &cq->req_list, entry, next) {
++        NvmeSQueue *sq;
++        hwaddr addr;
++
++        if (nvme_cq_full(cq)) {
++            break;
++        }
++
++        QTAILQ_REMOVE(&cq->req_list, req, entry);
++        sq = req->sq;
++        req->cqe.status = cpu_to_le16((req->status << 1) | cq->phase);
++        req->cqe.sq_id = cpu_to_le16(sq->sqid);
++        req->cqe.sq_head = cpu_to_le16(sq->head);
++        addr = cq->dma_addr + cq->tail * n->cqe_size;
++        nvme_inc_cq_tail(cq);
++        pci_dma_write(&n->parent_obj, addr, (void *)&req->cqe,
++            sizeof(req->cqe));
++        QTAILQ_INSERT_TAIL(&sq->req_list, req, entry);
++    }
++    nvme_isr_notify(n, cq);
++}
++
++static void nvme_enqueue_req_completion(NvmeCQueue *cq, NvmeRequest *req)
++{
++    assert(cq->cqid == req->sq->cqid);
++    QTAILQ_REMOVE(&req->sq->out_req_list, req, entry);
++    QTAILQ_INSERT_TAIL(&cq->req_list, req, entry);
++    qemu_mod_timer(cq->timer, qemu_get_clock_ns(vm_clock) + 500);
++}
++
++static void nvme_rw_cb(void *opaque, int ret)
++{
++    NvmeRequest *req = opaque;
++    NvmeSQueue *sq = req->sq;
++    NvmeCtrl *n = sq->ctrl;
++    NvmeCQueue *cq = n->cq[sq->cqid];
++
++    qemu_sglist_destroy(&req->qsg);
++    if (!ret) {
++        req->status = NVME_SUCCESS << 1;
++    } else {
++        req->status = NVME_INTERNAL_DEV_ERROR << 1;
++    }
++    nvme_enqueue_req_completion(cq, req);
++}
++
++static uint16_t nvme_rw(NvmeCtrl *n, NvmeNamespace *ns, NvmeCmd *cmd,
++    NvmeRequest *req)
++{
++    NvmeRwCmd *rw = (NvmeRwCmd *)cmd;
++    uint32_t nlb  = le32_to_cpu(rw->nlb) + 1;
++    uint64_t slba = le64_to_cpu(rw->slba);
++    uint64_t prp1 = le64_to_cpu(rw->prp1);
++    uint64_t prp2 = le64_to_cpu(rw->prp2);
++
++    uint8_t lba_index  = NVME_ID_NS_FLBAS_INDEX(ns->id_ns.flbas);
++    uint8_t data_shift = ns->id_ns.lbaf[lba_index].ds;
++    uint64_t data_size = nlb << data_shift;
++    uint64_t aio_slba  = ns->start_block + (slba << (data_shift -
++        BDRV_SECTOR_BITS));
++
++    if ((slba + nlb) > ns->id_ns.nsze) {
++        return NVME_LBA_RANGE | NVME_DNR;
++    }
++    if (nvme_map_prp(&req->qsg, prp1, prp2, data_size, n)) {
++        return NVME_INVALID_FIELD | NVME_DNR;
++    }
++    assert((nlb << data_shift) == req->qsg.size);
++
++    req->aiocb = rw->opcode == NVME_CMD_WRITE ?
++        dma_bdrv_write(n->conf.bs, &req->qsg, aio_slba, nvme_rw_cb, req) :
++        dma_bdrv_read(n->conf.bs, &req->qsg, aio_slba, nvme_rw_cb, req);
++
++    return NVME_NO_COMPLETE;
++}
++
++static uint16_t nvme_io_cmd(NvmeCtrl *n, NvmeCmd *cmd, NvmeRequest *req)
++{
++    NvmeNamespace *ns;
++    uint32_t nsid = le32_to_cpu(cmd->nsid);
++
++    if (nsid == 0 || nsid > n->num_namespaces) {
++        return NVME_INVALID_NSID | NVME_DNR;
++    }
++
++    ns = &n->namespaces[nsid - 1];
++    switch (cmd->opcode) {
++    case NVME_CMD_FLUSH:
++        return NVME_SUCCESS;
++    case NVME_CMD_WRITE:
++    case NVME_CMD_READ:
++        return nvme_rw(n, ns, cmd, req);
++    default:
++        return NVME_INVALID_OPCODE | NVME_DNR;
++    }
++}
++
++static void nvme_free_sq(NvmeSQueue *sq, NvmeCtrl *n)
++{
++    n->sq[sq->sqid] = NULL;
++    qemu_del_timer(sq->timer);
++    qemu_free_timer(sq->timer);
++    g_free(sq->io_req);
++    if (sq->sqid) {
++        g_free(sq);
++    }
++}
++
++static uint16_t nvme_del_sq(NvmeCtrl *n, NvmeCmd *cmd)
++{
++    NvmeDeleteQ *c = (NvmeDeleteQ *)cmd;
++    NvmeRequest *req, *next;
++    NvmeSQueue *sq;
++    NvmeCQueue *cq;
++    uint16_t qid = le16_to_cpu(c->qid);
++
++    if (!qid || nvme_check_sqid(n, qid)) {
++        return NVME_INVALID_QID | NVME_DNR;
++    }
++
++    sq = n->sq[qid];
++    while (!QTAILQ_EMPTY(&sq->out_req_list)) {
++        req = QTAILQ_FIRST(&sq->out_req_list);
++        assert(req->aiocb);
++        bdrv_aio_cancel(req->aiocb);
++    }
++    if (!nvme_check_cqid(n, sq->cqid)) {
++        cq = n->cq[sq->cqid];
++        QTAILQ_REMOVE(&cq->sq_list, sq, entry);
++
++        nvme_post_cqes(cq);
++        QTAILQ_FOREACH_SAFE(req, &cq->req_list, entry, next) {
++            if (req->sq == sq) {
++                QTAILQ_REMOVE(&cq->req_list, req, entry);
++                QTAILQ_INSERT_TAIL(&sq->req_list, req, entry);
++            }
++        }
++    }
++
++    nvme_free_sq(sq, n);
++    return NVME_SUCCESS;
++}
++
++static void nvme_init_sq(NvmeSQueue *sq, NvmeCtrl *n, uint64_t dma_addr,
++    uint16_t sqid, uint16_t cqid, uint16_t size)
++{
++    int i;
++    NvmeCQueue *cq;
++
++    sq->ctrl = n;
++    sq->dma_addr = dma_addr;
++    sq->sqid = sqid;
++    sq->size = size;
++    sq->cqid = cqid;
++    sq->head = sq->tail = 0;
++    sq->io_req = g_malloc(sq->size * sizeof(*sq->io_req));
++
++    QTAILQ_INIT(&sq->req_list);
++    QTAILQ_INIT(&sq->out_req_list);
++    for (i = 0; i < sq->size; i++) {
++        sq->io_req[i].sq = sq;
++        QTAILQ_INSERT_TAIL(&(sq->req_list), &sq->io_req[i], entry);
++    }
++    sq->timer = qemu_new_timer_ns(vm_clock, nvme_sq_process, sq);
++
++    assert(n->cq[cqid]);
++    cq = n->cq[cqid];
++    QTAILQ_INSERT_TAIL(&(cq->sq_list), sq, entry);
++
++    n->sq[sqid] = sq;
++}
++
++static uint16_t nvme_create_sq(NvmeCtrl *n, NvmeCmd *cmd)
++{
++    NvmeSQueue *sq;
++    NvmeCreateSq *c = (NvmeCreateSq *)cmd;
++
++    uint16_t cqid = le16_to_cpu(c->cqid);
++    uint16_t sqid = le16_to_cpu(c->sqid);
++    uint16_t qsize = le16_to_cpu(c->qsize);
++    uint16_t qflags = le16_to_cpu(c->sq_flags);
++    uint64_t prp1 = le64_to_cpu(c->prp1);
++
++    if (!cqid || nvme_check_cqid(n, cqid)) {
++        return NVME_INVALID_CQID | NVME_DNR;
++    }
++    if (!sqid || (sqid && !nvme_check_sqid(n, sqid))) {
++        return NVME_INVALID_QID | NVME_DNR;
++    }
++    if (!qsize || qsize > NVME_CAP_MQES(n->bar.cap)) {
++        return NVME_MAX_QSIZE_EXCEEDED | NVME_DNR;
++    }
++    if (!prp1 || prp1 & (n->page_size - 1)) {
++        return NVME_INVALID_FIELD | NVME_DNR;
++    }
++    if (!(NVME_SQ_FLAGS_PC(qflags))) {
++        return NVME_INVALID_FIELD | NVME_DNR;
++    }
++    sq = g_malloc0(sizeof(*sq));
++    nvme_init_sq(sq, n, prp1, sqid, cqid, qsize + 1);
++    return NVME_SUCCESS;
++}
++
++static void nvme_free_cq(NvmeCQueue *cq, NvmeCtrl *n)
++{
++    n->cq[cq->cqid] = NULL;
++    qemu_del_timer(cq->timer);
++    qemu_free_timer(cq->timer);
++    msix_vector_unuse(&n->parent_obj, cq->vector);
++    if (cq->cqid) {
++        g_free(cq);
++    }
++}
++
++static uint16_t nvme_del_cq(NvmeCtrl *n, NvmeCmd *cmd)
++{
++    NvmeDeleteQ *c = (NvmeDeleteQ *)cmd;
++    NvmeCQueue *cq;
++    uint16_t qid = le16_to_cpu(c->qid);
++
++    if (!qid || nvme_check_cqid(n, qid)) {
++        return NVME_INVALID_CQID | NVME_DNR;
++    }
++
++    cq = n->cq[qid];
++    if (!QTAILQ_EMPTY(&cq->sq_list)) {
++        return NVME_INVALID_QUEUE_DEL;
++    }
++    nvme_free_cq(cq, n);
++    return NVME_SUCCESS;
++}
++
++static void nvme_init_cq(NvmeCQueue *cq, NvmeCtrl *n, uint64_t dma_addr,
++    uint16_t cqid, uint16_t vector, uint16_t size, uint16_t irq_enabled)
++{
++    cq->ctrl = n;
++    cq->cqid = cqid;
++    cq->size = size;
++    cq->dma_addr = dma_addr;
++    cq->phase = 1;
++    cq->irq_enabled = irq_enabled;
++    cq->vector = vector;
++    cq->head = cq->tail = 0;
++    QTAILQ_INIT(&cq->req_list);
++    QTAILQ_INIT(&cq->sq_list);
++    msix_vector_use(&n->parent_obj, cq->vector);
++    n->cq[cqid] = cq;
++    cq->timer = qemu_new_timer_ns(vm_clock, nvme_post_cqes, cq);
++}
++
++static uint16_t nvme_create_cq(NvmeCtrl *n, NvmeCmd *cmd)
++{
++    NvmeCQueue *cq;
++    NvmeCreateCq *c = (NvmeCreateCq *)cmd;
++    uint16_t cqid = le16_to_cpu(c->cqid);
++    uint16_t vector = le16_to_cpu(c->irq_vector);
++    uint16_t qsize = le16_to_cpu(c->qsize);
++    uint16_t qflags = le16_to_cpu(c->cq_flags);
++    uint64_t prp1 = le64_to_cpu(c->prp1);
++
++    if (!cqid || (cqid && !nvme_check_cqid(n, cqid))) {
++        return NVME_INVALID_CQID | NVME_DNR;
++    }
++    if (!qsize || qsize > NVME_CAP_MQES(n->bar.cap)) {
++        return NVME_MAX_QSIZE_EXCEEDED | NVME_DNR;
++    }
++    if (!prp1) {
++        return NVME_INVALID_FIELD | NVME_DNR;
++    }
++    if (vector > n->num_queues) {
++        return NVME_INVALID_IRQ_VECTOR;
++    }
++    if (!(NVME_CQ_FLAGS_PC(qflags))) {
++        return NVME_INVALID_FIELD | NVME_DNR;
++    }
++
++    cq = g_malloc0(sizeof(*cq));
++    nvme_init_cq(cq, n, prp1, cqid, vector, qsize + 1,
++        NVME_CQ_FLAGS_IEN(qflags));
++    return NVME_SUCCESS;
++}
++
++static uint16_t nvme_identify(NvmeCtrl *n, NvmeCmd *cmd)
++{
++    NvmeNamespace *ns;
++    NvmeIdentify *c = (NvmeIdentify *)cmd;
++    uint32_t cns  = le32_to_cpu(c->cns);
++    uint32_t nsid = le32_to_cpu(c->nsid);
++    uint64_t prp1 = le64_to_cpu(c->prp1);
++    uint64_t prp2 = le64_to_cpu(c->prp2);
++
++    if (cns) {
++        return nvme_dma_read_prp(n, (uint8_t *)&n->id_ctrl, sizeof(n->id_ctrl),
++            prp1, prp2);
++    }
++
++    if (nsid == 0 || nsid > n->num_namespaces) {
++        return NVME_INVALID_NSID | NVME_DNR;
++    }
++    ns = &n->namespaces[nsid - 1];
++    return nvme_dma_read_prp(n, (uint8_t *)&ns->id_ns, sizeof(ns->id_ns),
++        prp1, prp2);
++}
++
++static uint16_t nvme_get_feature(NvmeCtrl *n, NvmeCmd *cmd, NvmeRequest *req)
++{
++    NvmeRangeType *rt;
++    uint32_t dw10 = le32_to_cpu(cmd->cdw10);
++    uint32_t dw11 = le32_to_cpu(cmd->cdw11);
++    uint32_t nsid = le32_to_cpu(cmd->nsid);
++    uint64_t prp1 = le64_to_cpu(cmd->prp1);
++    uint64_t prp2 = le64_to_cpu(cmd->prp2);
++
++    switch (dw10) {
++    case NVME_LBA_RANGE_TYPE:
++        if (nsid == 0 || nsid > n->num_namespaces) {
++            return NVME_INVALID_NSID | NVME_DNR;
++        }
++        rt = n->namespaces[nsid - 1].lba_range;
++        return nvme_dma_read_prp(n, (uint8_t *)rt,
++            MIN(sizeof(*rt), (dw11 & 0x3f) * sizeof(*rt)),
++            prp1, prp2);
++    case NVME_NUMBER_OF_QUEUES:
++        req->cqe.result = cpu_to_le32(n->num_queues);
++        break;
++    default:
++        return NVME_INVALID_FIELD | NVME_DNR;
++    }
++    return NVME_SUCCESS;
++}
++
++static uint16_t nvme_set_feature(NvmeCtrl *n, NvmeCmd *cmd, NvmeRequest *req)
++{
++    NvmeRangeType *rt;
++    uint32_t dw10 = le32_to_cpu(cmd->cdw10);
++    uint32_t dw11 = le32_to_cpu(cmd->cdw11);
++    uint32_t nsid = le32_to_cpu(cmd->nsid);
++    uint64_t prp1 = le64_to_cpu(cmd->prp1);
++    uint64_t prp2 = le64_to_cpu(cmd->prp2);
++
++    switch (dw10) {
++    case NVME_LBA_RANGE_TYPE:
++        if (nsid == 0 || nsid > n->num_namespaces) {
++            return NVME_INVALID_NSID | NVME_DNR;
++        }
++        rt = n->namespaces[nsid - 1].lba_range;
++        return nvme_dma_write_prp(n, (uint8_t *)rt,
++            MIN(sizeof(*rt), (dw11 & 0x3f) * sizeof(*rt)),
++            prp1, prp2);
++    case NVME_NUMBER_OF_QUEUES:
++        req->cqe.result = cpu_to_le32(n->num_queues);
++        break;
++    default:
++        return NVME_INVALID_FIELD | NVME_DNR;
++    }
++    return NVME_SUCCESS;
++}
++
++static uint16_t nvme_admin_cmd(NvmeCtrl *n, NvmeCmd *cmd, NvmeRequest *req)
++{
++    switch (cmd->opcode) {
++    case NVME_ADM_CMD_DELETE_SQ:
++        return nvme_del_sq(n, cmd);
++    case NVME_ADM_CMD_CREATE_SQ:
++        return nvme_create_sq(n, cmd);
++    case NVME_ADM_CMD_DELETE_CQ:
++        return nvme_del_cq(n, cmd);
++    case NVME_ADM_CMD_CREATE_CQ:
++        return nvme_create_cq(n, cmd);
++    case NVME_ADM_CMD_IDENTIFY:
++        return nvme_identify(n, cmd);
++    case NVME_ADM_CMD_SET_FEATURES:
++        return nvme_set_feature(n, cmd, req);
++    case NVME_ADM_CMD_GET_FEATURES:
++        return nvme_get_feature(n, cmd, req);
++    default:
++        return NVME_INVALID_OPCODE | NVME_DNR;
++    }
++}
++
++static void nvme_sq_process(void *opaque)
++{
++    uint16_t status;
++    hwaddr addr;
++    NvmeCmd cmd;
++    NvmeRequest *req;
++    NvmeSQueue *sq = opaque;
++    NvmeCtrl *n = sq->ctrl;
++    NvmeCQueue *cq = n->cq[sq->cqid];
++
++    while (!(nvme_sq_empty(sq) || QTAILQ_EMPTY(&sq->req_list))) {
++        addr = sq->dma_addr + sq->head * n->sqe_size;
++        pci_dma_read(&n->parent_obj, addr, (void *)&cmd, sizeof(cmd));
++        nvme_inc_sq_head(sq);
++
++        req = QTAILQ_FIRST(&sq->req_list);
++        QTAILQ_REMOVE(&sq->req_list, req, entry);
++        QTAILQ_INSERT_TAIL(&sq->out_req_list, req, entry);
++        memset(&req->cqe, 0, sizeof(req->cqe));
++        req->cqe.cid = cmd.cid;
++
++        status = sq->sqid ? nvme_io_cmd(n, &cmd, req) :
++            nvme_admin_cmd(n, &cmd, req);
++        if (status != NVME_NO_COMPLETE) {
++            req->status = status;
++            nvme_enqueue_req_completion(cq, req);
++        }
++    }
++}
++
++static void nvme_clear_ctrl(NvmeCtrl *n)
++{
++    int i;
++
++    for (i = 0; i < n->num_queues; i++) {
++        if (n->sq[i] != NULL) {
++            nvme_free_sq(n->sq[i], n);
++        }
++    }
++    for (i = 0; i < n->num_queues; i++) {
++        if (n->cq[i] != NULL) {
++            nvme_free_cq(n->cq[i], n);
++        }
++    }
++    n->bar.cc = 0;
++}
++
++static int nvme_start_ctrl(NvmeCtrl *n)
++{
++    uint32_t page_bits = NVME_CC_MPS(n->bar.cc) + 12;
++    uint32_t page_size = 1 << page_bits;
++
++    if (n->cq[0] || n->sq[0] || !n->bar.asq || !n->bar.acq ||
++            n->bar.asq & (page_size - 1) || n->bar.acq & (page_size - 1) ||
++            NVME_CC_MPS(n->bar.cc) < NVME_CAP_MPSMIN(n->bar.cap) ||
++            NVME_CC_MPS(n->bar.cc) > NVME_CAP_MPSMAX(n->bar.cap) ||
++            NVME_CC_IOCQES(n->bar.cc) < NVME_CTRL_CQES_MIN(n->id_ctrl.cqes) ||
++            NVME_CC_IOCQES(n->bar.cc) > NVME_CTRL_CQES_MAX(n->id_ctrl.cqes) ||
++            NVME_CC_IOSQES(n->bar.cc) < NVME_CTRL_SQES_MIN(n->id_ctrl.sqes) ||
++            NVME_CC_IOSQES(n->bar.cc) > NVME_CTRL_SQES_MAX(n->id_ctrl.sqes) ||
++            !NVME_AQA_ASQS(n->bar.aqa) || NVME_AQA_ASQS(n->bar.aqa) > 4095 ||
++            !NVME_AQA_ACQS(n->bar.aqa) || NVME_AQA_ACQS(n->bar.aqa) > 4095) {
++        return -1;
++    }
++
++    n->page_bits = NVME_CC_MPS(n->bar.cc) + 12;
++    n->page_size = 1 << n->page_bits;
++    n->max_prp_ents = n->page_size / sizeof(uint64_t);
++    n->cqe_size = 1 << NVME_CC_IOCQES(n->bar.cc);
++    n->sqe_size = 1 << NVME_CC_IOSQES(n->bar.cc);
++    nvme_init_cq(&n->admin_cq, n, n->bar.acq, 0, 0,
++        NVME_AQA_ACQS(n->bar.aqa) + 1, 1);
++    nvme_init_sq(&n->admin_sq, n, n->bar.asq, 0, 0,
++        NVME_AQA_ASQS(n->bar.aqa) + 1);
++
++    return 0;
++}
++
++static void nvme_write_bar(NvmeCtrl *n, hwaddr offset, uint64_t data,
++    unsigned size)
++{
++    switch (offset) {
++    case 0xc:
++        n->bar.intms |= data & 0xffffffff;
++        n->bar.intmc = n->bar.intms;
++        break;
++    case 0x10:
++        n->bar.intms &= ~(data & 0xffffffff);
++        n->bar.intmc = n->bar.intms;
++        break;
++    case 0x14:
++        if (NVME_CC_EN(data) && !NVME_CC_EN(n->bar.cc)) {
++            n->bar.cc = data;
++            if (nvme_start_ctrl(n)) {
++                n->bar.csts = NVME_CSTS_FAILED;
++            } else {
++                n->bar.csts = NVME_CSTS_READY;
++            }
++        } else if (!NVME_CC_EN(data) && NVME_CC_EN(n->bar.cc)) {
++            nvme_clear_ctrl(n);
++            n->bar.csts &= ~NVME_CSTS_READY;
++        }
++        if (NVME_CC_SHN(data) && !(NVME_CC_SHN(n->bar.cc))) {
++                nvme_clear_ctrl(n);
++                n->bar.cc = data;
++                n->bar.csts |= NVME_CSTS_SHST_COMPLETE;
++        } else if (!NVME_CC_SHN(data) && NVME_CC_SHN(n->bar.cc)) {
++                n->bar.csts &= ~NVME_CSTS_SHST_COMPLETE;
++                n->bar.cc = data;
++        }
++        break;
++    case 0x24:
++        n->bar.aqa = data & 0xffffffff;
++        break;
++    case 0x28:
++        n->bar.asq = data;
++        break;
++    case 0x2c:
++        n->bar.asq |= data << 32;
++        break;
++    case 0x30:
++        n->bar.acq = data;
++        break;
++    case 0x34:
++        n->bar.acq |= data << 32;
++        break;
++    }
++}
++
++static uint64_t nvme_mmio_read(void *opaque, hwaddr addr, unsigned size)
++{
++    NvmeCtrl *n = (NvmeCtrl *)opaque;
++    uint8_t *ptr = (uint8_t *)&n->bar;
++    uint64_t val = 0;
++
++    if (addr < sizeof(n->bar)) {
++        memcpy(&val, ptr + addr, size);
++    }
++    return val;
++}
++
++static void nvme_process_db(NvmeCtrl *n, hwaddr addr, int val)
++{
++    uint32_t qid;
++
++    if (addr & ((1 << 2) - 1)) {
++        return;
++    }
++
++    if (((addr - 0x1000) >> 2) & 1) {
++        uint16_t new_head = val & 0xffff;
++        NvmeCQueue *cq;
++        int start_sqs;
++
++        qid = (addr - (0x1000 + (1 << 2))) >> 3;
++        if (nvme_check_cqid(n, qid)) {
++            return;
++        }
++
++        cq = n->cq[qid];
++        if (new_head >= cq->size) {
++            return;
++        }
++
++        start_sqs = nvme_cq_full(cq) ? 1 : 0;
++        cq->head = new_head;
++        if (start_sqs) {
++            NvmeSQueue *sq;
++            QTAILQ_FOREACH(sq, &cq->sq_list, entry) {
++                qemu_mod_timer(sq->timer, qemu_get_clock_ns(vm_clock) + 500);
++            }
++            qemu_mod_timer(cq->timer, qemu_get_clock_ns(vm_clock) + 500);
++        }
++
++        if (cq->tail != cq->head) {
++            nvme_isr_notify(n, cq);
++        }
++    } else {
++        uint16_t new_tail = val & 0xffff;
++        NvmeSQueue *sq;
++
++        qid = (addr - 0x1000) >> 3;
++        if (nvme_check_sqid(n, qid)) {
++            return;
++        }
++
++        sq = n->sq[qid];
++        if (new_tail >= sq->size) {
++            return;
++        }
++
++        sq->tail = new_tail;
++        qemu_mod_timer(sq->timer, qemu_get_clock_ns(vm_clock) + 500);
++    }
++}
++
++static void nvme_mmio_write(void *opaque, hwaddr addr, uint64_t data,
++    unsigned size)
++{
++    NvmeCtrl *n = (NvmeCtrl *)opaque;
++    if (addr < sizeof(n->bar)) {
++        nvme_write_bar(n, addr, data, size);
++    } else if (addr >= 0x1000) {
++        nvme_process_db(n, addr, data);
++    }
++}
++
++static const MemoryRegionOps nvme_mmio_ops = {
++    .read = nvme_mmio_read,
++    .write = nvme_mmio_write,
++    .endianness = DEVICE_LITTLE_ENDIAN,
++    .impl = {
++        .min_access_size = 2,
++        .max_access_size = 8,
++    },
++};
++
++static int nvme_init(PCIDevice *pci_dev)
++{
++    NvmeCtrl *n = NVME(pci_dev);
++    NvmeIdCtrl *id = &n->id_ctrl;
++
++    int i;
++    int64_t bs_size;
++    uint8_t *pci_conf;
++
++    if (!(n->conf.bs)) {
++        return -1;
++    }
++
++    bs_size =  bdrv_getlength(n->conf.bs);
++    if (bs_size <= 0) {
++        return -1;
++    }
++
++    blkconf_serial(&n->conf, &n->serial);
++    if (!n->serial) {
++        return -1;
++    }
++
++    pci_conf = pci_dev->config;
++    pci_conf[PCI_INTERRUPT_PIN] = 1;
++    pci_config_set_prog_interface(pci_dev->config, 0x2);
++    pci_config_set_class(pci_dev->config, PCI_CLASS_STORAGE_EXPRESS);
++
++    n->num_namespaces = 1;
++    n->num_queues = 64;
++    n->reg_size = 1 << qemu_fls(0x1004 + 2 * (n->num_queues + 1) * 4);
++    n->ns_size = bs_size / (uint64_t)n->num_namespaces;
++
++    n->namespaces = g_malloc0(sizeof(*n->namespaces)*n->num_namespaces);
++    n->sq = g_malloc0(sizeof(*n->sq)*n->num_queues);
++    n->cq = g_malloc0(sizeof(*n->cq)*n->num_queues);
++
++    memory_region_init_io(&n->iomem, &nvme_mmio_ops, n, "nvme", n->reg_size);
++    pci_register_bar(&n->parent_obj, 0,
++        PCI_BASE_ADDRESS_SPACE_MEMORY | PCI_BASE_ADDRESS_MEM_TYPE_64,
++        &n->iomem);
++    msix_init_exclusive_bar(&n->parent_obj, n->num_queues, 4);
++
++    id->vid = cpu_to_le16(pci_get_word(pci_conf + PCI_VENDOR_ID));
++    id->ssvid = cpu_to_le16(pci_get_word(pci_conf + PCI_SUBSYSTEM_VENDOR_ID));
++    strpadcpy((char *)id->mn, sizeof(id->mn), "QEMU NVMe Ctrl", ' ');
++    strpadcpy((char *)id->fr, sizeof(id->fr), "1.0", ' ');
++    strpadcpy((char *)id->sn, sizeof(id->sn), n->serial, ' ');
++    id->rab = 6;
++    id->ieee[0] = 0x00;
++    id->ieee[1] = 0x02;
++    id->ieee[2] = 0xb3;
++    id->cmic = 0;
++    id->mdts = 0;
++    id->oacs = cpu_to_le16(0);
++    id->acl = 0;
++    id->aerl = 0;
++    id->frmw = 7 << 1;
++    id->lpa = 1 << 0;
++    id->elpe = 0;
++    id->npss = 0;
++    id->sqes = (0x6 << 4) | 0x6;
++    id->cqes = (0x4 << 4) | 0x4;
++    id->nn = cpu_to_le32(n->num_namespaces);
++    id->oncs = cpu_to_le16(0);
++    id->fuses = cpu_to_le16(0);
++    id->fna = 0;
++    id->vwc = 0;
++    id->awun = cpu_to_le16(0);
++    id->awupf = cpu_to_le16(0);
++    id->psd[0].mp = cpu_to_le16(0x9c4);
++    id->psd[0].enlat = cpu_to_le32(0x10);
++    id->psd[0].exlat = cpu_to_le32(0x4);
++
++    n->bar.cap = 0;
++    NVME_CAP_SET_MQES(n->bar.cap, 0x7ff);
++    NVME_CAP_SET_CQR(n->bar.cap, 1);
++    NVME_CAP_SET_AMS(n->bar.cap, 1);
++    NVME_CAP_SET_TO(n->bar.cap, 0xf);
++    NVME_CAP_SET_DSTRD(n->bar.cap, 0);
++    NVME_CAP_SET_NSSRS(n->bar.cap, 0);
++    NVME_CAP_SET_CSS(n->bar.cap, 1);
++    NVME_CAP_SET_MPSMIN(n->bar.cap, 0);
++    NVME_CAP_SET_MPSMAX(n->bar.cap, 0);
++
++    n->bar.vs = 0x00010001;
++    n->bar.intmc = n->bar.intms = 0;
++
++    for (i = 0; i < n->num_namespaces; i++) {
++        NvmeNamespace *ns = &n->namespaces[i];
++        NvmeIdNs *id_ns = &ns->id_ns;
++        id_ns->nsfeat = 0;
++        id_ns->nlbaf = 0;
++        id_ns->flbas = 0;
++        id_ns->mc = 0;
++        id_ns->dpc = 0;
++        id_ns->dps = 0;
++        id_ns->lbaf[0].ds = BDRV_SECTOR_BITS;
++        id_ns->ncap  = id_ns->nuse = id_ns->nsze =
++            cpu_to_le64(n->ns_size >>
++                id_ns->lbaf[NVME_ID_NS_FLBAS_INDEX(ns->id_ns.flbas)].ds);
++        ns->start_block = (n->ns_size >> BDRV_SECTOR_BITS) * i;
++    }
++    return 0;
++}
++
++static void nvme_exit(PCIDevice *pci_dev)
++{
++    NvmeCtrl *n = NVME(pci_dev);
++
++    nvme_clear_ctrl(n);
++    g_free(n->namespaces);
++    g_free(n->cq);
++    g_free(n->sq);
++    msix_uninit_exclusive_bar(pci_dev);
++    memory_region_destroy(&n->iomem);
++}
++
++static Property nvme_props[] = {
++    DEFINE_BLOCK_PROPERTIES(NvmeCtrl, conf),
++    DEFINE_PROP_STRING("serial", NvmeCtrl, serial),
++    DEFINE_PROP_END_OF_LIST(),
++};
++
++static const VMStateDescription nvme_vmstate = {
++    .name = "nvme",
++    .version_id = 1,
++    .minimum_version_id = 1,
++    .minimum_version_id_old = 1,
++    .fields = (VMStateField[]) {
++        VMSTATE_PCI_DEVICE(parent_obj, NvmeCtrl),
++        VMSTATE_END_OF_LIST()
++    }
++};
++
++static void nvme_class_init(ObjectClass *oc, void *data)
++{
++    DeviceClass *dc = DEVICE_CLASS(oc);
++    PCIDeviceClass *pc = PCI_DEVICE_CLASS(oc);
++
++    pc->init = nvme_init;
++    pc->exit = nvme_exit;
++    pc->class_id = PCI_CLASS_STORAGE_EXPRESS;
++    pc->vendor_id = PCI_VENDOR_ID_INTEL;
++    pc->device_id = 0x5845;
++    pc->subsystem_vendor_id = PCI_VENDOR_ID_INTEL;
++    pc->subsystem_id = 0x1234;
++    pc->revision = 1;
++
++    dc->desc = "Non-Volatile Memory Express";
++    dc->props = nvme_props;
++    dc->vmsd = &nvme_vmstate;
++}
++
++static const TypeInfo nvme_info = {
++    .name          = "nvme",
++    .parent        = TYPE_PCI_DEVICE,
++    .instance_size = sizeof(NvmeCtrl),
++    .class_init    = nvme_class_init,
++};
++
++static void nvme_register_types(void)
++{
++    type_register_static(&nvme_info);
++}
++
++type_init(nvme_register_types)
+diff --git a/hw/block/nvme.h b/hw/block/nvme.h
+new file mode 100644
+index 0000000..4691c7a
+--- /dev/null
++++ b/hw/block/nvme.h
+@@ -0,0 +1,712 @@
++#ifndef HW_NVME_H
++#define HW_NVME_H
++
++typedef struct NvmeBar {
++    uint64_t    cap;
++    uint32_t    vs;
++    uint32_t    intms;
++    uint32_t    intmc;
++    uint32_t    cc;
++    uint32_t    rsvd1;
++    uint32_t    csts;
++    uint32_t    nssrc;
++    uint32_t    aqa;
++    uint64_t    asq;
++    uint64_t    acq;
++} NvmeBar;
++
++enum NvmeCapShift {
++    CAP_MQES_SHIFT     = 0,
++    CAP_CQR_SHIFT      = 16,
++    CAP_AMS_SHIFT      = 17,
++    CAP_TO_SHIFT       = 24,
++    CAP_DSTRD_SHIFT    = 32,
++    CAP_NSSRS_SHIFT    = 33,
++    CAP_CSS_SHIFT      = 37,
++    CAP_MPSMIN_SHIFT   = 48,
++    CAP_MPSMAX_SHIFT   = 52,
++};
++
++enum NvmeCapMask {
++    CAP_MQES_MASK      = 0xffff,
++    CAP_CQR_MASK       = 0x1,
++    CAP_AMS_MASK       = 0x3,
++    CAP_TO_MASK        = 0xff,
++    CAP_DSTRD_MASK     = 0xf,
++    CAP_NSSRS_MASK     = 0x1,
++    CAP_CSS_MASK       = 0xff,
++    CAP_MPSMIN_MASK    = 0xf,
++    CAP_MPSMAX_MASK    = 0xf,
++};
++
++#define NVME_CAP_MQES(cap)  (((cap) >> CAP_MQES_SHIFT)   & CAP_MQES_MASK)
++#define NVME_CAP_CQR(cap)   (((cap) >> CAP_CQR_SHIFT)    & CAP_CQR_MASK)
++#define NVME_CAP_AMS(cap)   (((cap) >> CAP_AMS_SHIFT)    & CAP_AMS_MASK)
++#define NVME_CAP_TO(cap)    (((cap) >> CAP_TO_SHIFT)     & CAP_TO_MASK)
++#define NVME_CAP_DSTRD(cap) (((cap) >> CAP_DSTRD_SHIFT)  & CAP_DSTRD_MASK)
++#define NVME_CAP_NSSRS(cap) (((cap) >> CAP_NSSRS_SHIFT)  & CAP_NSSRS_MASK)
++#define NVME_CAP_CSS(cap)   (((cap) >> CAP_CSS_SHIFT)    & CAP_CSS_MASK)
++#define NVME_CAP_MPSMIN(cap)(((cap) >> CAP_MPSMIN_SHIFT) & CAP_MPSMIN_MASK)
++#define NVME_CAP_MPSMAX(cap)(((cap) >> CAP_MPSMAX_SHIFT) & CAP_MPSMAX_MASK)
++
++#define NVME_CAP_SET_MQES(cap, val)   (cap |= (uint64_t)(val & CAP_MQES_MASK)  \
++                                                           << CAP_MQES_SHIFT)
++#define NVME_CAP_SET_CQR(cap, val)    (cap |= (uint64_t)(val & CAP_CQR_MASK)   \
++                                                           << CAP_CQR_SHIFT)
++#define NVME_CAP_SET_AMS(cap, val)    (cap |= (uint64_t)(val & CAP_AMS_MASK)   \
++                                                           << CAP_AMS_SHIFT)
++#define NVME_CAP_SET_TO(cap, val)     (cap |= (uint64_t)(val & CAP_TO_MASK)    \
++                                                           << CAP_TO_SHIFT)
++#define NVME_CAP_SET_DSTRD(cap, val)  (cap |= (uint64_t)(val & CAP_DSTRD_MASK) \
++                                                           << CAP_DSTRD_SHIFT)
++#define NVME_CAP_SET_NSSRS(cap, val)  (cap |= (uint64_t)(val & CAP_NSSRS_MASK) \
++                                                           << CAP_NSSRS_SHIFT)
++#define NVME_CAP_SET_CSS(cap, val)    (cap |= (uint64_t)(val & CAP_CSS_MASK)   \
++                                                           << CAP_CSS_SHIFT)
++#define NVME_CAP_SET_MPSMIN(cap, val) (cap |= (uint64_t)(val & CAP_MPSMIN_MASK)\
++                                                           << CAP_MPSMIN_SHIFT)
++#define NVME_CAP_SET_MPSMAX(cap, val) (cap |= (uint64_t)(val & CAP_MPSMAX_MASK)\
++                                                            << CAP_MPSMAX_SHIFT)
++
++enum NvmeCcShift {
++    CC_EN_SHIFT     = 0,
++    CC_CSS_SHIFT    = 4,
++    CC_MPS_SHIFT    = 7,
++    CC_AMS_SHIFT    = 11,
++    CC_SHN_SHIFT    = 14,
++    CC_IOSQES_SHIFT = 16,
++    CC_IOCQES_SHIFT = 20,
++};
++
++enum NvmeCcMask {
++    CC_EN_MASK      = 0x1,
++    CC_CSS_MASK     = 0x7,
++    CC_MPS_MASK     = 0xf,
++    CC_AMS_MASK     = 0x7,
++    CC_SHN_MASK     = 0x3,
++    CC_IOSQES_MASK  = 0xf,
++    CC_IOCQES_MASK  = 0xf,
++};
++
++#define NVME_CC_EN(cc)     ((cc >> CC_EN_SHIFT)     & CC_EN_MASK)
++#define NVME_CC_CSS(cc)    ((cc >> CC_CSS_SHIFT)    & CC_CSS_MASK)
++#define NVME_CC_MPS(cc)    ((cc >> CC_MPS_SHIFT)    & CC_MPS_MASK)
++#define NVME_CC_AMS(cc)    ((cc >> CC_AMS_SHIFT)    & CC_AMS_MASK)
++#define NVME_CC_SHN(cc)    ((cc >> CC_SHN_SHIFT)    & CC_SHN_MASK)
++#define NVME_CC_IOSQES(cc) ((cc >> CC_IOSQES_SHIFT) & CC_IOSQES_MASK)
++#define NVME_CC_IOCQES(cc) ((cc >> CC_IOCQES_SHIFT) & CC_IOCQES_MASK)
++
++enum NvmeCstsShift {
++    CSTS_RDY_SHIFT      = 0,
++    CSTS_CFS_SHIFT      = 1,
++    CSTS_SHST_SHIFT     = 2,
++    CSTS_NSSRO_SHIFT    = 4,
++};
++
++enum NvmeCstsMask {
++    CSTS_RDY_MASK   = 0x1,
++    CSTS_CFS_MASK   = 0x1,
++    CSTS_SHST_MASK  = 0x3,
++    CSTS_NSSRO_MASK = 0x1,
++};
++
++enum NvmeCsts {
++    NVME_CSTS_READY         = 1 << CSTS_RDY_SHIFT,
++    NVME_CSTS_FAILED        = 1 << CSTS_CFS_SHIFT,
++    NVME_CSTS_SHST_NORMAL   = 0 << CSTS_SHST_SHIFT,
++    NVME_CSTS_SHST_PROGRESS = 1 << CSTS_SHST_SHIFT,
++    NVME_CSTS_SHST_COMPLETE = 2 << CSTS_SHST_SHIFT,
++    NVME_CSTS_NSSRO         = 1 << CSTS_NSSRO_SHIFT,
++};
++
++#define NVME_CSTS_RDY(csts)     ((csts >> CSTS_RDY_SHIFT)   & CSTS_RDY_MASK)
++#define NVME_CSTS_CFS(csts)     ((csts >> CSTS_CFS_SHIFT)   & CSTS_CFS_MASK)
++#define NVME_CSTS_SHST(csts)    ((csts >> CSTS_SHST_SHIFT)  & CSTS_SHST_MASK)
++#define NVME_CSTS_NSSRO(csts)   ((csts >> CSTS_NSSRO_SHIFT) & CSTS_NSSRO_MASK)
++
++enum NvmeAqaShift {
++    AQA_ASQS_SHIFT  = 0,
++    AQA_ACQS_SHIFT  = 16,
++};
++
++enum NvmeAqaMask {
++    AQA_ASQS_MASK   = 0xfff,
++    AQA_ACQS_MASK   = 0xfff,
++};
++
++#define NVME_AQA_ASQS(aqa) ((aqa >> AQA_ASQS_SHIFT) & AQA_ASQS_MASK)
++#define NVME_AQA_ACQS(aqa) ((aqa >> AQA_ACQS_SHIFT) & AQA_ACQS_MASK)
++
++typedef struct NvmeCmd {
++    uint8_t     opcode;
++    uint8_t     fuse;
++    uint16_t    cid;
++    uint32_t    nsid;
++    uint64_t    res1;
++    uint64_t    mptr;
++    uint64_t    prp1;
++    uint64_t    prp2;
++    uint32_t    cdw10;
++    uint32_t    cdw11;
++    uint32_t    cdw12;
++    uint32_t    cdw13;
++    uint32_t    cdw14;
++    uint32_t    cdw15;
++} NvmeCmd;
++
++enum NvmeAdminCommands {
++    NVME_ADM_CMD_DELETE_SQ      = 0x00,
++    NVME_ADM_CMD_CREATE_SQ      = 0x01,
++    NVME_ADM_CMD_GET_LOG_PAGE   = 0x02,
++    NVME_ADM_CMD_DELETE_CQ      = 0x04,
++    NVME_ADM_CMD_CREATE_CQ      = 0x05,
++    NVME_ADM_CMD_IDENTIFY       = 0x06,
++    NVME_ADM_CMD_ABORT          = 0x08,
++    NVME_ADM_CMD_SET_FEATURES   = 0x09,
++    NVME_ADM_CMD_GET_FEATURES   = 0x0a,
++    NVME_ADM_CMD_ASYNC_EV_REQ   = 0x0c,
++    NVME_ADM_CMD_ACTIVATE_FW    = 0x10,
++    NVME_ADM_CMD_DOWNLOAD_FW    = 0x11,
++    NVME_ADM_CMD_FORMAT_NVM     = 0x80,
++    NVME_ADM_CMD_SECURITY_SEND  = 0x81,
++    NVME_ADM_CMD_SECURITY_RECV  = 0x82,
++};
++
++enum NvmeIoCommands {
++    NVME_CMD_FLUSH              = 0x00,
++    NVME_CMD_WRITE              = 0x01,
++    NVME_CMD_READ               = 0x02,
++    NVME_CMD_WRITE_UNCOR        = 0x04,
++    NVME_CMD_COMPARE            = 0x05,
++    NVME_CMD_DSM                = 0x09,
++};
++
++typedef struct NvmeDeleteQ {
++    uint8_t     opcode;
++    uint8_t     flags;
++    uint16_t    cid;
++    uint32_t    rsvd1[9];
++    uint16_t    qid;
++    uint16_t    rsvd10;
++    uint32_t    rsvd11[5];
++} NvmeDeleteQ;
++
++typedef struct NvmeCreateCq {
++    uint8_t     opcode;
++    uint8_t     flags;
++    uint16_t    cid;
++    uint32_t    rsvd1[5];
++    uint64_t    prp1;
++    uint64_t    rsvd8;
++    uint16_t    cqid;
++    uint16_t    qsize;
++    uint16_t    cq_flags;
++    uint16_t    irq_vector;
++    uint32_t    rsvd12[4];
++} NvmeCreateCq;
++
++#define NVME_CQ_FLAGS_PC(cq_flags)  (cq_flags & 0x1)
++#define NVME_CQ_FLAGS_IEN(cq_flags) ((cq_flags >> 1) & 0x1)
++
++typedef struct NvmeCreateSq {
++    uint8_t     opcode;
++    uint8_t     flags;
++    uint16_t    cid;
++    uint32_t    rsvd1[5];
++    uint64_t    prp1;
++    uint64_t    rsvd8;
++    uint16_t    sqid;
++    uint16_t    qsize;
++    uint16_t    sq_flags;
++    uint16_t    cqid;
++    uint32_t    rsvd12[4];
++} NvmeCreateSq;
++
++#define NVME_SQ_FLAGS_PC(sq_flags)      (sq_flags & 0x1)
++#define NVME_SQ_FLAGS_QPRIO(sq_flags)   ((sq_flags >> 1) & 0x3)
++
++enum NvmeQueueFlags {
++    NVME_Q_PC           = 1,
++    NVME_Q_PRIO_URGENT  = 0,
++    NVME_Q_PRIO_HIGH    = 1,
++    NVME_Q_PRIO_NORMAL  = 2,
++    NVME_Q_PRIO_LOW     = 3,
++};
++
++typedef struct NvmeIdentify {
++    uint8_t     opcode;
++    uint8_t     flags;
++    uint16_t    cid;
++    uint32_t    nsid;
++    uint64_t    rsvd2[2];
++    uint64_t    prp1;
++    uint64_t    prp2;
++    uint32_t    cns;
++    uint32_t    rsvd11[5];
++} NvmeIdentify;
++
++typedef struct NvmeRwCmd {
++    uint8_t     opcode;
++    uint8_t     flags;
++    uint16_t    cid;
++    uint32_t    nsid;
++    uint64_t    rsvd2;
++    uint64_t    mptr;
++    uint64_t    prp1;
++    uint64_t    prp2;
++    uint64_t    slba;
++    uint16_t    nlb;
++    uint16_t    control;
++    uint32_t    dsmgmt;
++    uint32_t    reftag;
++    uint16_t    apptag;
++    uint16_t    appmask;
++} NvmeRwCmd;
++
++enum {
++    NVME_RW_LR                  = 1 << 15,
++    NVME_RW_FUA                 = 1 << 14,
++    NVME_RW_DSM_FREQ_UNSPEC     = 0,
++    NVME_RW_DSM_FREQ_TYPICAL    = 1,
++    NVME_RW_DSM_FREQ_RARE       = 2,
++    NVME_RW_DSM_FREQ_READS      = 3,
++    NVME_RW_DSM_FREQ_WRITES     = 4,
++    NVME_RW_DSM_FREQ_RW         = 5,
++    NVME_RW_DSM_FREQ_ONCE       = 6,
++    NVME_RW_DSM_FREQ_PREFETCH   = 7,
++    NVME_RW_DSM_FREQ_TEMP       = 8,
++    NVME_RW_DSM_LATENCY_NONE    = 0 << 4,
++    NVME_RW_DSM_LATENCY_IDLE    = 1 << 4,
++    NVME_RW_DSM_LATENCY_NORM    = 2 << 4,
++    NVME_RW_DSM_LATENCY_LOW     = 3 << 4,
++    NVME_RW_DSM_SEQ_REQ         = 1 << 6,
++    NVME_RW_DSM_COMPRESSED      = 1 << 7,
++    NVME_RW_PRINFO_PRACT        = 1 << 13,
++    NVME_RW_PRINFO_PRCHK_GUARD  = 1 << 12,
++    NVME_RW_PRINFO_PRCHK_APP    = 1 << 11,
++    NVME_RW_PRINFO_PRCHK_REF    = 1 << 10,
++};
++
++typedef struct NvmeDsmCmd {
++    uint8_t     opcode;
++    uint8_t     flags;
++    uint16_t    cid;
++    uint32_t    nsid;
++    uint64_t    rsvd2[2];
++    uint64_t    prp1;
++    uint64_t    prp2;
++    uint32_t    nr;
++    uint32_t    attributes;
++    uint32_t    rsvd12[4];
++} NvmeDsmCmd;
++
++enum {
++    NVME_DSMGMT_IDR = 1 << 0,
++    NVME_DSMGMT_IDW = 1 << 1,
++    NVME_DSMGMT_AD  = 1 << 2,
++};
++
++typedef struct NvmeDsmRange {
++    uint32_t    cattr;
++    uint32_t    nlb;
++    uint64_t    slba;
++} NvmeDsmRange;
++
++enum NvmeAsyncEventRequest {
++    NVME_AER_TYPE_ERROR                     = 0,
++    NVME_AER_TYPE_SMART                     = 1,
++    NVME_AER_TYPE_IO_SPECIFIC               = 6,
++    NVME_AER_TYPE_VENDOR_SPECIFIC           = 7,
++    NVME_AER_INFO_ERR_INVALID_SQ            = 0,
++    NVME_AER_INFO_ERR_INVALID_DB            = 1,
++    NVME_AER_INFO_ERR_DIAG_FAIL             = 2,
++    NVME_AER_INFO_ERR_PERS_INTERNAL_ERR     = 3,
++    NVME_AER_INFO_ERR_TRANS_INTERNAL_ERR    = 4,
++    NVME_AER_INFO_ERR_FW_IMG_LOAD_ERR       = 5,
++    NVME_AER_INFO_SMART_RELIABILITY         = 0,
++    NVME_AER_INFO_SMART_TEMP_THRESH         = 1,
++    NVME_AER_INFO_SMART_SPARE_THRESH        = 2,
++};
++
++typedef struct NvmeAerResult {
++    uint8_t event_type;
++    uint8_t event_info;
++    uint8_t log_page;
++    uint8_t resv;
++} NvmeAerResult;
++
++typedef struct NvmeCqe {
++    uint32_t    result;
++    uint32_t    rsvd;
++    uint16_t    sq_head;
++    uint16_t    sq_id;
++    uint16_t    cid;
++    uint16_t    status;
++} NvmeCqe;
++
++enum NvmeStatusCodes {
++    NVME_SUCCESS                = 0x0000,
++    NVME_INVALID_OPCODE         = 0x0001,
++    NVME_INVALID_FIELD          = 0x0002,
++    NVME_CID_CONFLICT           = 0x0003,
++    NVME_DATA_TRAS_ERROR        = 0x0004,
++    NVME_POWER_LOSS_ABORT       = 0x0005,
++    NVME_INTERNAL_DEV_ERROR     = 0x0006,
++    NVME_CMD_ABORT_REQ          = 0x0007,
++    NVME_CMD_ABORT_SQ_DEL       = 0x0008,
++    NVME_CMD_ABORT_FAILED_FUSE  = 0x0009,
++    NVME_CMD_ABORT_MISSING_FUSE = 0x000a,
++    NVME_INVALID_NSID           = 0x000b,
++    NVME_CMD_SEQ_ERROR          = 0x000c,
++    NVME_LBA_RANGE              = 0x0080,
++    NVME_CAP_EXCEEDED           = 0x0081,
++    NVME_NS_NOT_READY           = 0x0082,
++    NVME_NS_RESV_CONFLICT       = 0x0083,
++    NVME_INVALID_CQID           = 0x0100,
++    NVME_INVALID_QID            = 0x0101,
++    NVME_MAX_QSIZE_EXCEEDED     = 0x0102,
++    NVME_ACL_EXCEEDED           = 0x0103,
++    NVME_RESERVED               = 0x0104,
++    NVME_AER_LIMIT_EXCEEDED     = 0x0105,
++    NVME_INVALID_FW_SLOT        = 0x0106,
++    NVME_INVALID_FW_IMAGE       = 0x0107,
++    NVME_INVALID_IRQ_VECTOR     = 0x0108,
++    NVME_INVALID_LOG_ID         = 0x0109,
++    NVME_INVALID_FORMAT         = 0x010a,
++    NVME_FW_REQ_RESET           = 0x010b,
++    NVME_INVALID_QUEUE_DEL      = 0x010c,
++    NVME_FID_NOT_SAVEABLE       = 0x010d,
++    NVME_FID_NOT_NSID_SPEC      = 0x010f,
++    NVME_FW_REQ_SUSYSTEM_RESET  = 0x0110,
++    NVME_CONFLICTING_ATTRS      = 0x0180,
++    NVME_INVALID_PROT_INFO      = 0x0181,
++    NVME_WRITE_TO_RO            = 0x0182,
++    NVME_WRITE_FAULT            = 0x0280,
++    NVME_UNRECOVERED_READ       = 0x0281,
++    NVME_E2E_GUARD_ERROR        = 0x0282,
++    NVME_E2E_APP_ERROR          = 0x0283,
++    NVME_E2E_REF_ERROR          = 0x0284,
++    NVME_CMP_FAILURE            = 0x0285,
++    NVME_ACCESS_DENIED          = 0x0286,
++    NVME_MORE                   = 0x2000,
++    NVME_DNR                    = 0x4000,
++    NVME_NO_COMPLETE            = 0xffff,
++};
++
++typedef struct NvmeFwSlotInfoLog {
++    uint8_t     afi;
++    uint8_t     reserved1[7];
++    uint8_t     frs1[8];
++    uint8_t     frs2[8];
++    uint8_t     frs3[8];
++    uint8_t     frs4[8];
++    uint8_t     frs5[8];
++    uint8_t     frs6[8];
++    uint8_t     frs7[8];
++    uint8_t     reserved2[448];
++} NvmeFwSlotInfoLog;
++
++typedef struct NvmeErrorLog {
++    uint64_t    error_count;
++    uint16_t    sqid;
++    uint16_t    cid;
++    uint16_t    status_field;
++    uint16_t    param_error_location;
++    uint64_t    lba;
++    uint32_t    nsid;
++    uint8_t     vs;
++    uint8_t     resv[35];
++} NvmeErrorLog;
++
++typedef struct NvmeSmartLog {
++    uint8_t     critical_warning;
++    uint8_t     temperature[2];
++    uint8_t     available_spare;
++    uint8_t     available_spare_threshold;
++    uint8_t     percentage_used;
++    uint8_t     reserved1[26];
++    uint64_t    data_units_read[2];
++    uint64_t    data_units_written[2];
++    uint64_t    host_read_commands[2];
++    uint64_t    host_write_commands[2];
++    uint64_t    controller_busy_time[2];
++    uint64_t    power_cycles[2];
++    uint64_t    power_on_hours[2];
++    uint64_t    unsafe_shutdowns[2];
++    uint64_t    media_errors[2];
++    uint64_t    number_of_error_log_entries[2];
++    uint8_t     reserved2[320];
++} NvmeSmartLog;
++
++enum NvmeSmartWarn {
++    NVME_SMART_SPARE                  = 1 << 0,
++    NVME_SMART_TEMPERATURE            = 1 << 1,
++    NVME_SMART_RELIABILITY            = 1 << 2,
++    NVME_SMART_MEDIA_READ_ONLY        = 1 << 3,
++    NVME_SMART_FAILED_VOLATILE_MEDIA  = 1 << 4,
++};
++
++enum LogIdentifier {
++    NVME_LOG_ERROR_INFO     = 0x01,
++    NVME_LOG_SMART_INFO     = 0x02,
++    NVME_LOG_FW_SLOT_INFO   = 0x03,
++};
++
++typedef struct NvmePSD {
++    uint16_t    mp;
++    uint16_t    reserved;
++    uint32_t    enlat;
++    uint32_t    exlat;
++    uint8_t     rrt;
++    uint8_t     rrl;
++    uint8_t     rwt;
++    uint8_t     rwl;
++    uint8_t     resv[16];
++} NvmePSD;
++
++typedef struct NvmeIdCtrl {
++    uint16_t    vid;
++    uint16_t    ssvid;
++    uint8_t     sn[20];
++    uint8_t     mn[40];
++    uint8_t     fr[8];
++    uint8_t     rab;
++    uint8_t     ieee[3];
++    uint8_t     cmic;
++    uint8_t     mdts;
++    uint8_t     rsvd255[178];
++    uint16_t    oacs;
++    uint8_t     acl;
++    uint8_t     aerl;
++    uint8_t     frmw;
++    uint8_t     lpa;
++    uint8_t     elpe;
++    uint8_t     npss;
++    uint8_t     rsvd511[248];
++    uint8_t     sqes;
++    uint8_t     cqes;
++    uint16_t    rsvd515;
++    uint32_t    nn;
++    uint16_t    oncs;
++    uint16_t    fuses;
++    uint8_t     fna;
++    uint8_t     vwc;
++    uint16_t    awun;
++    uint16_t    awupf;
++    uint8_t     rsvd703[174];
++    uint8_t     rsvd2047[1344];
++    NvmePSD     psd[32];
++    uint8_t     vs[1024];
++} NvmeIdCtrl;
++
++enum NvmeIdCtrlOacs {
++    NVME_OACS_SECURITY  = 1 << 0,
++    NVME_OACS_FORMAT    = 1 << 1,
++    NVME_OACS_FW        = 1 << 2,
++};
++
++enum NvmeIdCtrlOncs {
++    NVME_ONCS_COMPARE       = 1 << 0,
++    NVME_ONCS_WRITE_UNCORR  = 1 << 1,
++    NVME_ONCS_DSM           = 1 << 2,
++    NVME_ONCS_WRITE_ZEROS   = 1 << 3,
++    NVME_ONCS_FEATURES      = 1 << 4,
++    NVME_ONCS_RESRVATIONS   = 1 << 5,
++};
++
++#define NVME_CTRL_SQES_MIN(sqes) ((sqes) & 0xf)
++#define NVME_CTRL_SQES_MAX(sqes) (((sqes) >> 4) & 0xf)
++#define NVME_CTRL_CQES_MIN(cqes) ((cqes) & 0xf)
++#define NVME_CTRL_CQES_MAX(cqes) (((cqes) >> 4) & 0xf)
++
++typedef struct NvmeFeatureVal {
++    uint32_t    arbitration;
++    uint32_t    power_mgmt;
++    uint32_t    temp_thresh;
++    uint32_t    err_rec;
++    uint32_t    volatile_wc;
++    uint32_t    num_queues;
++    uint32_t    int_coalescing;
++    uint32_t    *int_vector_config;
++    uint32_t    write_atomicity;
++    uint32_t    async_config;
++    uint32_t    sw_prog_marker;
++} NvmeFeatureVal;
++
++#define NVME_ARB_AB(arb)    (arb & 0x7)
++#define NVME_ARB_LPW(arb)   ((arb >> 8) & 0xff)
++#define NVME_ARB_MPW(arb)   ((arb >> 16) & 0xff)
++#define NVME_ARB_HPW(arb)   ((arb >> 24) & 0xff)
++
++#define NVME_INTC_THR(intc)     (intc & 0xff)
++#define NVME_INTC_TIME(intc)    ((intc >> 8) & 0xff)
++
++enum NvmeFeatureIds {
++    NVME_ARBITRATION                = 0x1,
++    NVME_POWER_MANAGEMENT           = 0x2,
++    NVME_LBA_RANGE_TYPE             = 0x3,
++    NVME_TEMPERATURE_THRESHOLD      = 0x4,
++    NVME_ERROR_RECOVERY             = 0x5,
++    NVME_VOLATILE_WRITE_CACHE       = 0x6,
++    NVME_NUMBER_OF_QUEUES           = 0x7,
++    NVME_INTERRUPT_COALESCING       = 0x8,
++    NVME_INTERRUPT_VECTOR_CONF      = 0x9,
++    NVME_WRITE_ATOMICITY            = 0xa,
++    NVME_ASYNCHRONOUS_EVENT_CONF    = 0xb,
++    NVME_SOFTWARE_PROGRESS_MARKER   = 0x80
++};
++
++typedef struct NvmeRangeType {
++    uint8_t     type;
++    uint8_t     attributes;
++    uint8_t     rsvd2[14];
++    uint64_t    slba;
++    uint64_t    nlb;
++    uint8_t     guid[16];
++    uint8_t     rsvd48[16];
++} NvmeRangeType;
++
++typedef struct NvmeLBAF {
++    uint16_t    ms;
++    uint8_t     ds;
++    uint8_t     rp;
++} NvmeLBAF;
++
++typedef struct NvmeIdNs {
++    uint64_t    nsze;
++    uint64_t    ncap;
++    uint64_t    nuse;
++    uint8_t     nsfeat;
++    uint8_t     nlbaf;
++    uint8_t     flbas;
++    uint8_t     mc;
++    uint8_t     dpc;
++    uint8_t     dps;
++    uint8_t     res30[98];
++    NvmeLBAF    lbaf[16];
++    uint8_t     res192[192];
++    uint8_t     vs[3712];
++} NvmeIdNs;
++
++#define NVME_ID_NS_NSFEAT_THIN(nsfeat)      ((nsfeat & 0x1))
++#define NVME_ID_NS_FLBAS_EXTENDED(flbas)    ((flbas >> 4) & 0x1)
++#define NVME_ID_NS_FLBAS_INDEX(flbas)       ((flbas & 0xf))
++#define NVME_ID_NS_MC_SEPARATE(mc)          ((mc >> 1) & 0x1)
++#define NVME_ID_NS_MC_EXTENDED(mc)          ((mc & 0x1))
++#define NVME_ID_NS_DPC_LAST_EIGHT(dpc)      ((dpc >> 4) & 0x1)
++#define NVME_ID_NS_DPC_FIRST_EIGHT(dpc)     ((dpc >> 3) & 0x1)
++#define NVME_ID_NS_DPC_TYPE_3(dpc)          ((dpc >> 2) & 0x1)
++#define NVME_ID_NS_DPC_TYPE_2(dpc)          ((dpc >> 1) & 0x1)
++#define NVME_ID_NS_DPC_TYPE_1(dpc)          ((dpc & 0x1))
++#define NVME_ID_NS_DPC_TYPE_MASK            0x7
++
++enum NvmeIdNsDps {
++    DPS_TYPE_NONE   = 0,
++    DPS_TYPE_1      = 1,
++    DPS_TYPE_2      = 2,
++    DPS_TYPE_3      = 3,
++    DPS_TYPE_MASK   = 0x7,
++    DPS_FIRST_EIGHT = 8,
++};
++
++static inline void _nvme_check_size(void)
++{
++    QEMU_BUILD_BUG_ON(sizeof(NvmeAerResult) != 4);
++    QEMU_BUILD_BUG_ON(sizeof(NvmeCqe) != 16);
++    QEMU_BUILD_BUG_ON(sizeof(NvmeDsmRange) != 16);
++    QEMU_BUILD_BUG_ON(sizeof(NvmeCmd) != 64);
++    QEMU_BUILD_BUG_ON(sizeof(NvmeDeleteQ) != 64);
++    QEMU_BUILD_BUG_ON(sizeof(NvmeCreateCq) != 64);
++    QEMU_BUILD_BUG_ON(sizeof(NvmeCreateSq) != 64);
++    QEMU_BUILD_BUG_ON(sizeof(NvmeIdentify) != 64);
++    QEMU_BUILD_BUG_ON(sizeof(NvmeRwCmd) != 64);
++    QEMU_BUILD_BUG_ON(sizeof(NvmeDsmCmd) != 64);
++    QEMU_BUILD_BUG_ON(sizeof(NvmeRangeType) != 64);
++    QEMU_BUILD_BUG_ON(sizeof(NvmeErrorLog) != 64);
++    QEMU_BUILD_BUG_ON(sizeof(NvmeFwSlotInfoLog) != 512);
++    QEMU_BUILD_BUG_ON(sizeof(NvmeSmartLog) != 512);
++    QEMU_BUILD_BUG_ON(sizeof(NvmeIdCtrl) != 4096);
++    QEMU_BUILD_BUG_ON(sizeof(NvmeIdNs) != 4096);
++}
++
++typedef struct NvmeAsyncEvent {
++    QSIMPLEQ_ENTRY(NvmeAsyncEvent) entry;
++    NvmeAerResult result;
++} NvmeAsyncEvent;
++
++typedef struct NvmeRequest {
++    struct NvmeSQueue       *sq;
++    BlockDriverAIOCB        *aiocb;
++    uint16_t                status;
++    NvmeCqe                 cqe;
++    QEMUSGList              qsg;
++    QTAILQ_ENTRY(NvmeRequest)entry;
++} NvmeRequest;
++
++typedef struct NvmeSQueue {
++    struct NvmeCtrl *ctrl;
++    uint16_t    sqid;
++    uint16_t    cqid;
++    uint32_t    head;
++    uint32_t    tail;
++    uint32_t    size;
++    uint64_t    dma_addr;
++    QEMUTimer   *timer;
++    NvmeRequest *io_req;
++    QTAILQ_HEAD(sq_req_list, NvmeRequest) req_list;
++    QTAILQ_HEAD(out_req_list, NvmeRequest) out_req_list;
++    QTAILQ_ENTRY(NvmeSQueue) entry;
++} NvmeSQueue;
++
++typedef struct NvmeCQueue {
++    struct NvmeCtrl *ctrl;
++    uint8_t     phase;
++    uint16_t    cqid;
++    uint16_t    irq_enabled;
++    uint32_t    head;
++    uint32_t    tail;
++    uint32_t    vector;
++    uint32_t    size;
++    uint64_t    dma_addr;
++    QEMUTimer   *timer;
++    QTAILQ_HEAD(sq_list, NvmeSQueue) sq_list;
++    QTAILQ_HEAD(cq_req_list, NvmeRequest) req_list;
++} NvmeCQueue;
++
++typedef struct NvmeNamespace {
++    NvmeIdNs        id_ns;
++    NvmeRangeType   lba_range[64];
++    uint64_t        start_block;
++} NvmeNamespace;
++
++#define TYPE_NVME "nvme"
++#define NVME(obj) \
++        OBJECT_CHECK(NvmeCtrl, (obj), TYPE_NVME)
++
++typedef struct NvmeCtrl {
++    PCIDevice    parent_obj;
++    MemoryRegion iomem;
++    NvmeBar      bar;
++    BlockConf    conf;
++
++    uint16_t    page_size;
++    uint16_t    page_bits;
++    uint16_t    max_prp_ents;
++    uint16_t    cqe_size;
++    uint16_t    sqe_size;
++    uint32_t    reg_size;
++    uint32_t    num_namespaces;
++    uint32_t    num_queues;
++    uint32_t    max_q_ents;
++    uint64_t    ns_size;
++
++    char            *serial;
++    NvmeNamespace   *namespaces;
++    NvmeSQueue      **sq;
++    NvmeCQueue      **cq;
++    NvmeSQueue      admin_sq;
++    NvmeCQueue      admin_cq;
++    NvmeIdCtrl      id_ctrl;
++} NvmeCtrl;
++
++#endif /* HW_NVME_H */
+diff --git a/include/hw/pci/pci_ids.h b/include/hw/pci/pci_ids.h
+index d8dc2f1..08f8161 100644
+--- a/include/hw/pci/pci_ids.h
++++ b/include/hw/pci/pci_ids.h
+@@ -19,6 +19,7 @@
+ #define PCI_CLASS_STORAGE_IDE            0x0101
+ #define PCI_CLASS_STORAGE_RAID           0x0104
+ #define PCI_CLASS_STORAGE_SATA           0x0106
++#define PCI_CLASS_STORAGE_EXPRESS        0x0108
+ #define PCI_CLASS_STORAGE_OTHER          0x0180
+ 
+ #define PCI_CLASS_NETWORK_ETHERNET       0x0200
+-- 
+1.7.0.4
+
+

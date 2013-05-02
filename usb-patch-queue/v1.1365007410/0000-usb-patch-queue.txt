@@ -1,0 +1,54 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Gerd Hoffmann <kraxel@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Gerd Hoffmann <kraxel@redhat.com>
+Date: Wed,  3 Apr 2013 11:43:30 +0200
+Message-id: 1364982220-4755-1-git-send-email-kraxel@redhat.com
+Subject: [PATCH 00/10] usb patch queue
+
+  Hi,
+
+Here comes the usb patch queue.  Nothing major, just a bunch of little
+bugfixes, some of them lingering in the queue _way_ too long already.
+
+please pull,
+  Gerd
+
+The following changes since commit 162cbbd1736de2bca43fdefa7e98c54a361ee60d:
+
+  Merge remote-tracking branch 'luiz/queue/qmp' into staging (2013-04-02 14:07:35 -0500)
+
+are available in the git repository at:
+
+
+  git://git.kraxel.org/qemu usb.79
+
+for you to fetch changes up to aa1c9e971e80d25b92908dce3dec7c38b49480ea:
+
+  usb-tablet: Don't claim wakeup capability for USB-2 version (2013-04-03 11:39:43 +0200)
+
+----------------------------------------------------------------
+Gerd Hoffmann (7):
+      xhci: fix numintrs sanity checks
+      xhci: remove leftover debug printf
+      xhci: remove unimplemented printfs
+      xhci: zap unused name field
+      usb-hub: limit chain length
+      usb-hub: report status changes only once
+      usb: update docs for bus name change
+
+Hans de Goede (3):
+      usb-redir: Fix crash on migration with no client connected
+      usb-redir: Add flow control support
+      usb-tablet: Don't claim wakeup capability for USB-2 version
+
+ docs/usb2.txt     |   20 ++++++++++----------
+ hw/usb.h          |    1 +
+ hw/usb/bus.c      |    2 ++
+ hw/usb/dev-hid.c  |    2 +-
+ hw/usb/dev-hub.c  |   12 +++++++++++-
+ hw/usb/hcd-xhci.c |   28 ++++++++++++----------------
+ hw/usb/redirect.c |   37 ++++++++++++++++++++++++++++++++++++-
+ trace-events      |    1 +
+ 8 files changed, 74 insertions(+), 29 deletions(-)
+

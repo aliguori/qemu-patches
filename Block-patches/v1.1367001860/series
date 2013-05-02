@@ -1,0 +1,12 @@
+0000-Block-patches.txt
+0001-block-ssh-Require-libssh2--128.patch
+0002-sheepdog-add-discard-trim-support-for-sheepdog.patch
+0003-sheepdog-use-BDRV_SECTOR_SIZE.patch
+0004-sheepdog-implement-bdrv_co_is_allocated.patch
+0005-qemu-iotests-Add-test-for--drive-options.patch
+0006-rbd-Fix-use-after-free-in-rbd_open.patch
+0007-sheepdog-cleanup-find_vdi_name.patch
+0008-sheepdog-add-SD_RES_READONLY-result-code.patch
+0009-sheepdog-add-helper-function-to-reload-inode.patch
+0010-sheepdog-resend-write-requests-when-SD_RES_READONLY-is-received.patch
+0011-sheepdog-fix-loadvm-operation.patch

@@ -1,0 +1,44 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Alexander Graf <agraf@suse.de>
+To: qemu-ppc@nongnu.org
+Cc: Blue Swirl <blauwirbel@gmail.com>,
+ Christian Borntraeger <borntraeger@de.ibm.com>,
+ Aurelien Jarno <aurelien@aurel32.net>, qemu-devel@nongnu.org
+Date: Fri, 26 Apr 2013 20:19:23 +0200
+Message-id: 1367000373-7972-15-git-send-email-agraf@suse.de
+Subject: [PATCH 14/24] s390-ccw.img: Fix compile warning in s390 ccw virtio
+ code
+
+From: Christian Borntraeger <borntraeger@de.ibm.com>
+
+Lets fix this gcc warning:
+
+virtio.c: In function ‘vring_send_buf’:
+virtio.c:125:35: error: operation on ‘vr->next_idx’ may be undefined
+[-Werror=sequence-point]
+
+Signed-off-by: Christian Borntraeger <borntraeger@de.ibm.com>
+Signed-off-by: Alexander Graf <agraf@suse.de>
+---
+ pc-bios/s390-ccw/virtio.c |    4 +++-
+ 1 files changed, 3 insertions(+), 1 deletions(-)
+
+diff --git a/pc-bios/s390-ccw/virtio.c b/pc-bios/s390-ccw/virtio.c
+index 79e2941..1968fc6 100644
+--- a/pc-bios/s390-ccw/virtio.c
++++ b/pc-bios/s390-ccw/virtio.c
+@@ -122,7 +122,9 @@ static void vring_send_buf(struct vring *vr, void *p, int len, int flags)
+     vr->desc[vr->next_idx].addr = (ulong)p;
+     vr->desc[vr->next_idx].len = len;
+     vr->desc[vr->next_idx].flags = flags & ~VRING_HIDDEN_IS_CHAIN;
+-    vr->desc[vr->next_idx].next = ++vr->next_idx;
++    vr->desc[vr->next_idx].next = vr->next_idx;
++    vr->desc[vr->next_idx].next++;
++    vr->next_idx++;
+ 
+     /* Chains only have a single ID */
+     if (!(flags & VRING_DESC_F_NEXT)) {
+-- 
+1.6.0.2
+
+

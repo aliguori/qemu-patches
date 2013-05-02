@@ -1,0 +1,51 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Peter Maydell <peter.maydell@linaro.org>
+To: Blue Swirl <blauwirbel@gmail.com>, Peter Maydell <peter.maydell@linaro.org>,
+ qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, Paolo Bonzini <pbonzini@redhat.com>,
+ qemu-devel <qemu-devel@nongnu.org>, patches@linaro.org,
+ David Gibson <david@gibson.dropbear.id.au>,
+ "patches@linaro.org" <patches@linaro.org>
+Date: Sat, 20 Apr 2013 14:48:26 +0100
+Message-id: 1366465708-14462-1-git-send-email-peter.maydell@linaro.org
+Subject: [PATCH 0/2] Drop support for qdev taddr properties
+
+There is currently only one user of the qdev taddr (target addr,
+now hwaddr) property code, and that user is wrong anyway, since the
+property it's trying to set isn't actually a taddr property.
+Fix the erroneous use in sm501 and drop all the taddr property code.
+
+The justification for dropping the support is that a device should
+generally not be exposing properties whose width (conceptually)
+depends on the target CPU type. (This is the same rationale for
+not supporting hwaddr fields in migration state.) Instead the
+device should expose either a 32 bit or 64 bit property, depending
+on what the actual hardware does.
+
+Changes v2->v3:
+ * rebased and fixed trivial textual conflict in xilinx_axidma.c
+Changes v1->v2:
+ * no functional changes, just rebased since Paolo's moved
+   everything around and the old patches won't apply
+
+Peter Maydell (2):
+  hw/sm501: Use correct setter for sysbus-ohci dma-address property
+  qdev: Drop taddr properties
+
+ hw/block/fdc.c              |    1 -
+ hw/core/Makefile.objs       |    1 -
+ hw/core/qdev-addr.c         |   78 -------------------------------------------
+ hw/display/sm501.c          |    3 +-
+ hw/display/tcx.c            |    1 -
+ hw/dma/xilinx_axidma.c      |    1 -
+ hw/lm32/milkymist-hw.h      |    1 -
+ hw/net/milkymist-minimac2.c |    1 -
+ hw/sparc/sun4m.c            |    1 -
+ include/hw/qdev-addr.h      |   10 ------
+ 10 files changed, 1 insertion(+), 97 deletions(-)
+ delete mode 100644 hw/core/qdev-addr.c
+ delete mode 100644 include/hw/qdev-addr.h
+
+-- 
+1.7.9.5
+

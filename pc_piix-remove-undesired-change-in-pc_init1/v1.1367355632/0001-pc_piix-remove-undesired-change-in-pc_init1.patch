@@ -1,0 +1,31 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: Paolo Bonzini <pbonzini@redhat.com>, qemu-devel@nongnu.org
+Cc: afaerber@suse.de, anthony@codemonkey.ws
+Date: Tue, 30 Apr 2013 16:00:32 +0200
+Message-id: 1367330432-14417-1-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 1/1] pc_piix: remove undesired change in pc_init1
+
+Introduced when applying commit f81222b (audio: look for the ISA and
+PCI buses, 2013-04-18).
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ hw/i386/pc_piix.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/hw/i386/pc_piix.c b/hw/i386/pc_piix.c
+index c1113e0..2bda79e 100644
+--- a/hw/i386/pc_piix.c
++++ b/hw/i386/pc_piix.c
+@@ -88,6 +88,7 @@ static void pc_init1(MemoryRegion *system_memory,
+     void *fw_cfg = NULL;
+ 
+     pc_cpus_init(cpu_model);
++    pc_acpi_init("acpi-dsdt.aml");
+ 
+     if (kvmclock_enabled) {
+         kvmclock_create();
+-- 
+1.8.2
+

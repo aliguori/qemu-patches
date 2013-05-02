@@ -1,0 +1,42 @@
+From patches Mon Sep 17 00:00:00 2001
+From: "Richard W.M. Jones" <rjones@redhat.com>
+To: qemu-trivial@nongnu.org, "Richard W.M. Jones" <rjones@redhat.com>
+Cc: qemu-trivial@nongnu.org, sw@weilnetz.de, qemu-devel@nongnu.org
+Date: Thu, 18 Apr 2013 22:09:33 +0100
+Message-id: 1366319373-12926-1-git-send-email-rjones@redhat.com
+Subject: [PATCH 1/1] ssh: Remove unnecessary use of strlen function.
+
+From: "Richard W.M. Jones" <rjones@redhat.com>
+
+Reviewed-by: Eric Blake <eblake@redhat.com>
+Reviewed-by: Stefan Weil <sw@weilnetz.de>
+---
+ block/ssh.c | 6 ++----
+ 1 file changed, 2 insertions(+), 4 deletions(-)
+
+diff --git a/block/ssh.c b/block/ssh.c
+index 8f78e2e..7bc008d 100644
+--- a/block/ssh.c
++++ b/block/ssh.c
+@@ -387,15 +387,13 @@ static int check_host_key(BDRVSSHState *s, const char *host, int port,
+     }
+ 
+     /* host_key_check=md5:xx:yy:zz:... */
+-    if (strlen(host_key_check) >= 4 &&
+-        strncmp(host_key_check, "md5:", 4) == 0) {
++    if (strncmp(host_key_check, "md5:", 4) == 0) {
+         return check_host_key_hash(s, &host_key_check[4],
+                                    LIBSSH2_HOSTKEY_HASH_MD5, 16);
+     }
+ 
+     /* host_key_check=sha1:xx:yy:zz:... */
+-    if (strlen(host_key_check) >= 5 &&
+-        strncmp(host_key_check, "sha1:", 5) == 0) {
++    if (strncmp(host_key_check, "sha1:", 5) == 0) {
+         return check_host_key_hash(s, &host_key_check[5],
+                                    LIBSSH2_HOSTKEY_HASH_SHA1, 20);
+     }
+-- 
+1.8.1.4
+
+

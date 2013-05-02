@@ -1,0 +1,1 @@
+../m25p80c-Sync-Flash-chip-list-with-Linux/v1.1367422853/0001-m25p80c-Sync-Flash-chip-list-with-Linux.patch

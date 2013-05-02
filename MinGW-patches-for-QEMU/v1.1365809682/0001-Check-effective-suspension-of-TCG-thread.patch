@@ -1,0 +1,61 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Stefan Weil <sw@weilnetz.de>
+To: Anthony Liguori <aliguori@us.ibm.com>
+Cc: Olivier Hainque <hainque@adacore.com>, Stefan Weil <sw@weilnetz.de>,
+ qemu-devel@nongnu.org, Fabien Chouteau <chouteau@adacore.com>
+Date: Fri, 12 Apr 2013 18:34:43 +0200
+Message-id: 1365784486-617-2-git-send-email-sw@weilnetz.de
+Subject: [PATCH 1/4] Check effective suspension of TCG thread
+
+From: Olivier Hainque <hainque@adacore.com>
+
+On multi-core systems, SuspendThread does not guaranty immediate thread
+suspension. We add busy loop to wait for effective thread suspension
+after call to ThreadSuspend().
+
+Signed-off-by: Fabien Chouteau <chouteau@adacore.com>
+Reviewed-by: Paolo Bonzini <pbonzini@redhat.com>
+Signed-off-by: Stefan Weil <sw@weilnetz.de>
+---
+ cpus.c |   24 ++++++++++++++++++++++--
+ 1 file changed, 22 insertions(+), 2 deletions(-)
+
+diff --git a/cpus.c b/cpus.c
+index e919dd7..97e9ab4 100644
+--- a/cpus.c
++++ b/cpus.c
+@@ -862,9 +862,29 @@ static void qemu_cpu_kick_thread(CPUState *cpu)
+     }
+ #else /* _WIN32 */
+     if (!qemu_cpu_is_self(cpu)) {
+-        SuspendThread(cpu->hThread);
++        CONTEXT tcgContext;
++
++        if (SuspendThread(cpu->hThread) == (DWORD)-1) {
++            fprintf(stderr, "qemu:%s: GetLastError:%d\n", __func__,
++                    GetLastError());
++            exit(1);
++        }
++
++        /* On multi-core systems, we are not sure that the thread is actually
++         * suspended until we can get the context.
++         */
++        tcgContext.ContextFlags = CONTEXT_CONTROL;
++        while (GetThreadContext(cpu->hThread, &tcgContext) != 0) {
++            continue;
++        }
++
+         cpu_signal(0);
+-        ResumeThread(cpu->hThread);
++
++        if (ResumeThread(cpu->hThread) == (DWORD)-1) {
++            fprintf(stderr, "qemu:%s: GetLastError:%d\n", __func__,
++                    GetLastError());
++            exit(1);
++        }
+     }
+ #endif
+ }
+-- 
+1.7.10.4
+

@@ -1,0 +1,69 @@
+From patches Mon Sep 17 00:00:00 2001
+From: "Jason J. Herne" <jjherne@us.ibm.com>
+To: Anthony Liguori <aliguori@us.ibm.com>, jan.kiszka@siemens.com,
+ mtosatti@redhat.com, agraf@suse.de, qemu-devel@nongnu.org,
+ borntraeger@de.ibm.com, R65777@freescale.com
+Cc: Jason Herne <jjherne@us.ibm.com>
+Date: Thu, 25 Apr 2013 10:25:51 -0400
+Message-id: 1366899951-9262-3-git-send-email-jjherne@us.ibm.com
+Subject: [PATCH 2/2] Utilize selective runtime reg sync for hot code paths
+
+From: "Jason J. Herne" <jjherne@us.ibm.com>
+
+Make use of new kvm_s390_get_registers_partial() for kvm_handle_css_inst() and
+handle_hypercall() since they only need registers from the partial set and they
+are called quite frequently.
+
+Signed-off-by: Jason J. Herne <jjherne@us.ibm.com>
+---
+ target-s390x/kvm.c |   15 ++++++++++++---
+ 1 file changed, 12 insertions(+), 3 deletions(-)
+
+diff --git a/target-s390x/kvm.c b/target-s390x/kvm.c
+index 02b2e39..fb006ee 100644
+--- a/target-s390x/kvm.c
++++ b/target-s390x/kvm.c
+@@ -467,12 +467,16 @@ static int kvm_handle_css_inst(S390CPU *cpu, struct kvm_run *run,
+     int r = 0;
+     int no_cc = 0;
+     CPUS390XState *env = &cpu->env;
++    CPUState *cs = ENV_GET_CPU(env);
+ 
+     if (ipa0 != 0xb2) {
+         /* Not handled for now. */
+         return -1;
+     }
+-    cpu_synchronize_state(env);
++
++    kvm_s390_get_registers_partial(cs);
++    cs->kvm_vcpu_dirty = true;
++
+     switch (ipa1) {
+     case PRIV_XSCH:
+         r = ioinst_handle_xsch(env, env->regs[1]);
+@@ -603,7 +607,10 @@ static int handle_priv(S390CPU *cpu, struct kvm_run *run,
+ 
+ static int handle_hypercall(CPUS390XState *env, struct kvm_run *run)
+ {
+-    cpu_synchronize_state(env);
++    CPUState *cs = ENV_GET_CPU(env);
++
++    kvm_s390_get_registers_partial(cs);
++    cs->kvm_vcpu_dirty = true;
+     env->regs[2] = s390_virtio_hypercall(env);
+ 
+     return 0;
+@@ -808,7 +815,9 @@ static int handle_tsch(S390CPU *cpu)
+     struct kvm_run *run = cs->kvm_run;
+     int ret;
+ 
+-    cpu_synchronize_state(env);
++    kvm_s390_get_registers_partial(cs);
++    cs->kvm_vcpu_dirty = true;
++
+     ret = ioinst_handle_tsch(env, env->regs[1], run->s390_tsch.ipb);
+     if (ret >= 0) {
+         /* Success; set condition code. */
+-- 
+1.7.10.4
+

@@ -1,0 +1,1 @@
+../Kill-the-use-flash-device-for-BIOS-unless-KVM-misfeature/v1.1365805500/0003-pc-Kill-the-use-flash-device-for-BIOS-unless-KVM-misfeature.patch

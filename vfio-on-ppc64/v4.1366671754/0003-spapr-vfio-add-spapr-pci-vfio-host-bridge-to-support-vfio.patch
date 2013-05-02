@@ -1,0 +1,609 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Alexey Kardashevskiy <aik@ozlabs.ru>
+To: Alex Williamson <alex.williamson@redhat.com>
+Cc: David Gibson <david@gibson.dropbear.id.au>, qemu-ppc@nongnu.org,
+ Alexey Kardashevskiy <aik@ozlabs.ru>, qemu-devel@nongnu.org
+Date: Mon, 22 Apr 2013 18:02:37 +1000
+Message-id: 1366617757-6604-4-git-send-email-aik@ozlabs.ru
+Subject: [PATCH 3/3] spapr vfio: add spapr-pci-vfio-host-bridge to support vfio
+
+The patch adds a spapr-pci-vfio-host-bridge device type
+which is a PCI Host Bridge with VFIO support. The new device
+inherits from the spapr-pci-host-bridge device and adds
+the following properties:
+	iommu - IOMMU group ID which represents a Partitionable
+	 	Endpoint, QEMU/ppc64 uses a separate PHB for
+		an IOMMU group so the guest kernel has to have
+		PCI Domain support enabled.
+	forceaddr (optional, 0 by default) - forces QEMU to copy
+		device:function from the host address as
+		certain guest drivers expect devices to appear in
+		particular locations;
+	mf (optional, 0 by default) - forces multifunction bit for
+		the function #0 of a found device, only makes sense
+		for multifunction devices and only with the forceaddr
+		property set. It would not be required if there
+		was a way to know in advance whether a device is
+		multifunctional or not.
+	scan (optional, 1 by default) - if non-zero, the new PHB walks
+		through all non-bridge devices in the group and tries
+		adding them to the PHB; if zero, all devices in the group
+		have to be configured manually via the QEMU command line.
+
+The patch also adds a VFIO IOMMU type support to the existing
+sPAPR TCE list in spapr_iommu.c.
+
+Examples:
+1) Scan and add all devices from IOMMU group with ID=1 to QEMU's PHB #6:
+	-device spapr-pci-vfio-host-bridge,id=DEVICENAME,iommu=1,index=6
+
+2) Configure and Add 3 functions of a multifunctional device to QEMU:
+(the NEC PCI USB card is used as an example here):
+	-device spapr-pci-vfio-host-bridge,id=USB,iommu=4,scan=0,index=7 \
+	-device vfio-pci,host=4:0:1.0,addr=1.0,bus=USB,multifunction=true
+	-device vfio-pci,host=4:0:1.1,addr=1.1,bus=USB
+	-device vfio-pci,host=4:0:1.2,addr=1.2,bus=USB
+
+Cc: David Gibson <david@gibson.dropbear.id.au>
+Signed-off-by: Alexey Kardashevskiy <aik@ozlabs.ru>
+---
+ hw/ppc/spapr_iommu.c        |  151 +++++++++++++++++++++++++++--------
+ hw/ppc/spapr_pci.c          |  186 +++++++++++++++++++++++++++++++++++++++++--
+ include/hw/pci-host/spapr.h |   12 +++
+ include/hw/ppc/spapr.h      |    3 +
+ trace-events                |    4 +
+ 5 files changed, 315 insertions(+), 41 deletions(-)
+
+diff --git a/hw/ppc/spapr_iommu.c b/hw/ppc/spapr_iommu.c
+index 1bc8cb6..eabe56d 100644
+--- a/hw/ppc/spapr_iommu.c
++++ b/hw/ppc/spapr_iommu.c
+@@ -16,14 +16,17 @@
+  * You should have received a copy of the GNU Lesser General Public
+  * License along with this library; if not, see <http://www.gnu.org/licenses/>.
+  */
++
+ #include "hw/hw.h"
+ #include "sysemu/kvm.h"
+ #include "hw/qdev.h"
+ #include "kvm_ppc.h"
+ #include "sysemu/dma.h"
+ #include "exec/address-spaces.h"
++#include "trace.h"
+ 
+ #include "hw/ppc/spapr.h"
++#include "hw/misc/vfio.h"
+ 
+ #include <libfdt.h>
+ 
+@@ -41,14 +44,21 @@ typedef struct sPAPRTCETable sPAPRTCETable;
+ struct sPAPRTCETable {
+     DMAContext dma;
+     uint32_t liobn;
+-    uint32_t window_size;
+-    sPAPRTCE *table;
+-    bool bypass;
+     int fd;
++    enum { TCETYPE_EMULATED,TCETYPE_VFIO } type;
++    union {
++        struct {
++            uint32_t window_size;
++            sPAPRTCE *table;
++            bool bypass;
++        };
++        struct {
++            struct VFIOContainer *container;
++        };
++    };
+     QLIST_ENTRY(sPAPRTCETable) list;
+ };
+ 
+-
+ QLIST_HEAD(spapr_tce_tables, sPAPRTCETable) spapr_tce_tables;
+ 
+ static sPAPRTCETable *spapr_tce_find_by_liobn(uint32_t liobn)
+@@ -159,6 +169,7 @@ DMAContext *spapr_tce_new_dma_context(uint32_t liobn, size_t window_size)
+     tcet = g_malloc0(sizeof(*tcet));
+     dma_context_init(&tcet->dma, &address_space_memory, spapr_tce_translate, NULL, NULL);
+ 
++    tcet->type = TCETYPE_EMULATED;
+     tcet->liobn = liobn;
+     tcet->window_size = window_size;
+ 
+@@ -240,6 +251,47 @@ static target_ulong put_tce_emu(sPAPRTCETable *tcet, target_ulong ioba,
+     return H_SUCCESS;
+ }
+ 
++DMAContext *spapr_vfio_new_dma(uint32_t liobn, int iommu_id,
++                               struct VFIOContainer *container)
++{
++    sPAPRTCETable *tcet;
++
++    tcet = g_malloc0(sizeof(*tcet));
++    tcet->type = TCETYPE_VFIO;
++    tcet->container = container;
++    tcet->liobn = liobn;
++
++    QLIST_INSERT_HEAD(&spapr_tce_tables, tcet, list);
++
++    return &tcet->dma;
++}
++
++static int put_tce_vfio(sPAPRTCETable *tcet, target_ulong ioba,
++                        target_ulong tce)
++{
++    int ret;
++
++    if (tce & SPAPR_TCE_PAGE_MASK) {
++        ret = vfio_dma_map(tcet->container, ioba, SPAPR_TCE_PAGE_SIZE,
++                           qemu_get_ram_ptr(tce & ~SPAPR_TCE_PAGE_MASK),
++                           (tce & SPAPR_TCE_PAGE_MASK) == SPAPR_TCE_RO);
++        trace_spapr_iommu("vfio map", tcet->liobn, ioba, tce, ret);
++        if (ret < 0) {
++            perror("spapr_tce map");
++            return H_PARAMETER;
++        }
++    } else {
++        ret = vfio_dma_unmap(tcet->container, ioba, SPAPR_TCE_PAGE_SIZE);
++        trace_spapr_iommu("vfio unmap", tcet->liobn, ioba, 0, ret);
++        if (ret < 0) {
++            perror("spapr_tce unmap");
++            return H_PARAMETER;
++        }
++    }
++
++    return H_SUCCESS;
++}
++
+ static target_ulong h_put_tce_indirect(PowerPCCPU *cpu,
+                                        sPAPREnvironment *spapr,
+                                        target_ulong opcode, target_ulong *args)
+@@ -252,24 +304,37 @@ static target_ulong h_put_tce_indirect(PowerPCCPU *cpu,
+     target_ulong ret = 0;
+     sPAPRTCETable *tcet = spapr_tce_find_by_liobn(liobn);
+ 
+-    if (tcet) {
+-        for (i = 0; i < npages; ++i, ioba += SPAPR_TCE_PAGE_SIZE) {
+-            target_ulong tce = ldq_phys((tce_list & ~SPAPR_TCE_PAGE_MASK) +
+-                                        i * sizeof(target_ulong));
+-            ret = put_tce_emu(tcet, ioba, tce);
+-            if (ret) {
+-                break;
+-            }
++    if (!tcet) {
++        return H_PARAMETER;
++    }
++
++    if (liobn & 0xFFFFFFFF00000000ULL) {
++        hcall_dprintf("spapr_vio_put_tce on out-of-boundsw LIOBN "
++                      TARGET_FMT_lx "\n", liobn);
++        return H_PARAMETER;
++    }
++
++    for (i = 0; i < npages; ++i, ioba += SPAPR_TCE_PAGE_SIZE) {
++        target_ulong tce = ldq_phys((tce_list & ~SPAPR_TCE_PAGE_MASK) +
++                                    i * sizeof(target_ulong));
++        switch (tcet->type) {
++        case TCETYPE_EMULATED: ret = put_tce_emu(tcet, ioba, tce); break;
++        case TCETYPE_VFIO: ret = put_tce_vfio(tcet, ioba, tce); break;
++        default: ret = H_PARAMETER; break;
++        }
++        if (ret) {
++            break;
+         }
+-        return ret;
+     }
++
+ #ifdef DEBUG_TCE
+     fprintf(stderr, "%s on liobn=" TARGET_FMT_lx
+-            "  ioba 0x" TARGET_FMT_lx "  TCE 0x" TARGET_FMT_lx "\n",
+-            __func__, liobn, ioba, tce);
++            "  ioba 0x" TARGET_FMT_lx "  TCE 0x" TARGET_FMT_lx
++            " ret = " TARGET_FMT_ld "\n",
++            __func__, liobn, ioba, tce, ret);
+ #endif
+ 
+-    return H_PARAMETER;
++    return ret;
+ }
+ 
+ static target_ulong h_stuff_tce(PowerPCCPU *cpu, sPAPREnvironment *spapr,
+@@ -283,24 +348,36 @@ static target_ulong h_stuff_tce(PowerPCCPU *cpu, sPAPREnvironment *spapr,
+     target_ulong ret = 0;
+     sPAPRTCETable *tcet = spapr_tce_find_by_liobn(liobn);
+ 
++    if (!tcet) {
++        return H_PARAMETER;
++    }
++
++    if (liobn & 0xFFFFFFFF00000000ULL) {
++        hcall_dprintf("spapr_vio_put_tce on out-of-boundsw LIOBN "
++                      TARGET_FMT_lx "\n", liobn);
++        return H_PARAMETER;
++    }
++
+     ioba &= ~(SPAPR_TCE_PAGE_SIZE - 1);
+ 
+-    if (tcet) {
+-        for (i = 0; i < npages; ++i, ioba += SPAPR_TCE_PAGE_SIZE) {
+-            ret = put_tce_emu(tcet, ioba, tce_value);
+-            if (ret) {
+-                break;
+-            }
++    for (i = 0; i < npages; ++i, ioba += SPAPR_TCE_PAGE_SIZE) {
++        switch (tcet->type) {
++        case TCETYPE_EMULATED: ret = put_tce_emu(tcet, ioba, tce_value); break;
++        case TCETYPE_VFIO: ret = put_tce_vfio(tcet, ioba, tce_value); break;
++        default: ret = H_PARAMETER; break;
++        }
++        if (ret) {
++            break;
+         }
+-        return ret;
+     }
+ #ifdef DEBUG_TCE
+-    fprintf(stderr, "%s on liobn=" TARGET_FMT_lx /*%s*/
+-            "  ioba 0x" TARGET_FMT_lx "  TCE 0x" TARGET_FMT_lx "\n",
+-            __func__, liobn, /*dev->qdev.id, */ioba, tce);
++    fprintf(stderr, "%s on liobn=" TARGET_FMT_lx
++            "  ioba 0x" TARGET_FMT_lx "  TCE 0x" TARGET_FMT_lx
++            " ret = " TARGET_FMT_ld "\n",
++            __func__, liobn, ioba, tce, ret);
+ #endif
+ 
+-    return H_PARAMETER;
++    return ret;
+ }
+ 
+ static target_ulong h_put_tce(PowerPCCPU *cpu, sPAPREnvironment *spapr,
+@@ -310,19 +387,27 @@ static target_ulong h_put_tce(PowerPCCPU *cpu, sPAPREnvironment *spapr,
+     target_ulong ioba = args[1];
+     target_ulong tce = args[2];
+     sPAPRTCETable *tcet = spapr_tce_find_by_liobn(liobn);
++    int ret;
++
++    if (!tcet) {
++        return H_PARAMETER;
++    }
+ 
+     ioba &= ~(SPAPR_TCE_PAGE_SIZE - 1);
+ 
+-    if (tcet) {
+-        return put_tce_emu(tcet, ioba, tce);
++    switch (tcet->type) {
++    case TCETYPE_EMULATED: ret = put_tce_emu(tcet, ioba, tce); break;
++    case TCETYPE_VFIO: ret = put_tce_vfio(tcet, ioba, tce); break;
++    default: ret = H_PARAMETER; break;
+     }
+ #ifdef DEBUG_TCE
+-    fprintf(stderr, "%s on liobn=" TARGET_FMT_lx /*%s*/
+-            "  ioba 0x" TARGET_FMT_lx "  TCE 0x" TARGET_FMT_lx "\n",
+-            __func__, liobn, /*dev->qdev.id, */ioba, tce);
++    fprintf(stderr, "%s on liobn=" TARGET_FMT_lx
++            "  ioba 0x" TARGET_FMT_lx "  TCE 0x" TARGET_FMT_lx
++            " ret = " TARGET_FMT_ld "\n",
++            __func__, liobn, ioba, tce, ret);
+ #endif
+ 
+-    return H_PARAMETER;
++    return ret;
+ }
+ 
+ void spapr_iommu_init(void)
+diff --git a/hw/ppc/spapr_pci.c b/hw/ppc/spapr_pci.c
+index 1da02ae..06b491e 100644
+--- a/hw/ppc/spapr_pci.c
++++ b/hw/ppc/spapr_pci.c
+@@ -22,6 +22,9 @@
+  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+  * THE SOFTWARE.
+  */
++#include <sys/types.h>
++#include <dirent.h>
++
+ #include "hw/hw.h"
+ #include "hw/pci/pci.h"
+ #include "hw/pci/msi.h"
+@@ -34,6 +37,7 @@
+ #include "trace.h"
+ 
+ #include "hw/pci/pci_bus.h"
++#include "hw/misc/vfio.h"
+ 
+ /* Copied from the kernel arch/powerpc/platforms/pseries/msi.c */
+ #define RTAS_QUERY_FN           0
+@@ -514,7 +518,7 @@ static DMAContext *spapr_pci_dma_context_fn(PCIBus *bus, void *opaque,
+     return phb->dma;
+ }
+ 
+-static int spapr_phb_init(SysBusDevice *s)
++static int _spapr_phb_init(SysBusDevice *s)
+ {
+     sPAPRPHBState *sphb = SPAPR_PCI_HOST_BRIDGE(s);
+     PCIHostState *phb = PCI_HOST_BRIDGE(s);
+@@ -644,13 +648,6 @@ static int spapr_phb_init(SysBusDevice *s)
+                            PCI_DEVFN(0, 0), PCI_NUM_PINS, TYPE_PCI_BUS);
+     phb->bus = bus;
+ 
+-    sphb->dma_window_start = 0;
+-    sphb->dma_window_size = 0x40000000;
+-    sphb->dma = spapr_tce_new_dma_context(sphb->dma_liobn, sphb->dma_window_size);
+-    if (!sphb->dma) {
+-        fprintf(stderr, "Unable to create TCE table for %s\n", sphb->dtbusname);
+-        return -1;
+-    }
+     pci_setup_iommu(bus, spapr_pci_dma_context_fn, sphb);
+ 
+     QLIST_INSERT_HEAD(&spapr->phbs, sphb, list);
+@@ -670,6 +667,27 @@ static int spapr_phb_init(SysBusDevice *s)
+     return 0;
+ }
+ 
++static int spapr_phb_init(SysBusDevice *s)
++{
++    sPAPRPHBState *sphb = SPAPR_PCI_HOST_BRIDGE(s);
++    int ret;
++
++    ret = _spapr_phb_init(s);
++    if (ret)
++        return ret;
++
++    sphb->dma_window_start = 0;
++    sphb->dma_window_size = 0x40000000;
++    sphb->dma = spapr_tce_new_dma_context(sphb->dma_liobn,
++                                          sphb->dma_window_size);
++    if (!sphb->dma) {
++        fprintf(stderr, "Unable to create TCE table for %s\n", sphb->dtbusname);
++        return -1;
++    }
++
++    return 0;
++}
++
+ static void spapr_phb_reset(DeviceState *qdev)
+ {
+     SysBusDevice *s = SYS_BUS_DEVICE(qdev);
+@@ -770,6 +788,153 @@ PCIHostState *spapr_create_phb(sPAPREnvironment *spapr, int index)
+     return PCI_HOST_BRIDGE(dev);
+ }
+ 
++/* sPAPR VFIO */
++static Property spapr_phb_vfio_properties[] = {
++    DEFINE_PROP_INT32("iommu", sPAPRPHBVFIOState, iommugroupid, -1),
++    DEFINE_PROP_UINT8("scan", sPAPRPHBVFIOState, scan, 1),
++    DEFINE_PROP_UINT8("mf", sPAPRPHBVFIOState, enable_multifunction, 0),
++    DEFINE_PROP_UINT8("forceaddr", sPAPRPHBVFIOState, force_addr, 0),
++    DEFINE_PROP_END_OF_LIST(),
++};
++
++static int spapr_pci_vfio_scan(sPAPRPHBVFIOState *svphb)
++{
++    PCIHostState *phb = PCI_HOST_BRIDGE(svphb);
++    char *iommupath;
++    DIR *dirp;
++    struct dirent *entry;
++
++    if (!svphb->scan) {
++        trace_spapr_pci("autoscan disabled for ", svphb->phb.dtbusname);
++        return 0;
++    }
++
++    iommupath = g_strdup_printf("/sys/kernel/iommu_groups/%d/devices/",
++                                svphb->iommugroupid);
++    if (!iommupath) {
++        return -ENOMEM;
++    }
++
++    dirp = opendir(iommupath);
++    if (!dirp) {
++        fprintf(stderr, "failed to scan group=%d\n", svphb->iommugroupid);
++        g_free(iommupath);
++        return -1;
++    }
++
++    while ((entry = readdir(dirp)) != NULL) {
++        char *tmp;
++        FILE *deviceclassfile;
++        unsigned deviceclass = 0, domainid, busid, devid, fnid;
++        char addr[32];
++        DeviceState *dev;
++
++        if (sscanf(entry->d_name, "%X:%X:%X.%x",
++                   &domainid, &busid, &devid, &fnid) != 4) {
++            continue;
++        }
++
++        tmp = g_strdup_printf("%s%s/class", iommupath, entry->d_name);
++        trace_spapr_pci("Reading device class from ", tmp);
++
++        deviceclassfile = fopen(tmp, "r");
++        if (deviceclassfile) {
++            int ret = fscanf(deviceclassfile, "%x", &deviceclass);
++            fclose(deviceclassfile);
++            if (ret != 1) {
++                continue;
++            }
++        }
++        g_free(tmp);
++
++        if (!deviceclass) {
++            continue;
++        }
++        if ((deviceclass >> 16) == (PCI_CLASS_BRIDGE_OTHER >> 8)) {
++            /* Skip bridges */
++            continue;
++        }
++        trace_spapr_pci("Creating device from ", entry->d_name);
++
++        dev = qdev_create(&phb->bus->qbus, "vfio-pci");
++        if (!dev) {
++            fprintf(stderr, "failed to create vfio-pci\n");
++            continue;
++        }
++        qdev_prop_parse(dev, "host", entry->d_name);
++        if (svphb->force_addr) {
++            snprintf(addr, sizeof(addr), "%x.%x", devid, fnid);
++            qdev_prop_parse(dev, "addr", addr);
++        }
++        if (svphb->enable_multifunction) {
++            qdev_prop_set_bit(dev, "multifunction", 1);
++        }
++        qdev_init_nofail(dev);
++    }
++    closedir(dirp);
++    g_free(iommupath);
++
++    return 0;
++}
++
++static int spapr_phb_vfio_init(SysBusDevice *s)
++{
++    sPAPRPHBVFIOState *svphb = SPAPR_PCI_VFIO_HOST_BRIDGE(s);
++    struct VFIOGroup *group;
++    struct vfio_iommu_spapr_tce_info info = { .argsz = sizeof(info) };
++    int ret;
++
++    if (svphb->iommugroupid == -1) {
++        fprintf(stderr, "Wrong IOMMU group ID %d\n", svphb->iommugroupid);
++        return -1;
++    }
++
++    ret = _spapr_phb_init(s);
++    if (ret) {
++        return ret;
++    }
++
++    group = vfio_get_group(svphb->iommugroupid, false);
++    if (!group) {
++        return -EFAULT;
++    }
++
++    svphb->container = vfio_container_spapr_alloc(group, &info);
++    if (!svphb->container) {
++        return -EFAULT;
++    }
++
++    svphb->phb.dma_window_start = info.dma32_window_start;
++    svphb->phb.dma_window_size = info.dma32_window_size;
++    svphb->phb.dma = spapr_vfio_new_dma(svphb->phb.dma_liobn,
++                                        svphb->iommugroupid,
++                                        svphb->container);
++
++    ret = spapr_pci_vfio_scan(svphb);
++    /* dma_window_xxxx will be initialized from
++       spapr_register_vfio_container() when VFIO will create the very first
++       device in the group */
++
++    return ret;
++}
++
++static void spapr_phb_vfio_class_init(ObjectClass *klass, void *data)
++{
++    SysBusDeviceClass *sdc = SYS_BUS_DEVICE_CLASS(klass);
++    DeviceClass *dc = DEVICE_CLASS(klass);
++
++    sdc->init = spapr_phb_vfio_init;
++    dc->props = spapr_phb_vfio_properties;
++    dc->vmsd = &vmstate_spapr_pci;
++}
++
++static const TypeInfo spapr_phb_vfio_info = {
++    .name          = TYPE_SPAPR_PCI_VFIO_HOST_BRIDGE,
++    .parent        = TYPE_SPAPR_PCI_HOST_BRIDGE,
++    .instance_size = sizeof(sPAPRPHBVFIOState),
++    .class_init    = spapr_phb_vfio_class_init,
++};
++
+ /* Macros to operate with address in OF binding to PCI */
+ #define b_x(x, p, l)    (((x) & ((1<<(l))-1)) << (p))
+ #define b_n(x)          b_x((x), 31, 1) /* 0 if relocatable */
+@@ -860,6 +1025,10 @@ int spapr_populate_pci_dt(sPAPRPHBState *phb,
+     _FDT(fdt_setprop(fdt, bus_off, "interrupt-map", &interrupt_map,
+                      sizeof(interrupt_map)));
+ 
++    if (!phb->dma_window_size) {
++        fprintf(stderr, "Unexpected error: DMA window is zero, exiting\n");
++        exit(1);
++    }
+     spapr_dma_dt(fdt, bus_off, "ibm,dma-window",
+                  phb->dma_liobn, phb->dma_window_start,
+                  phb->dma_window_size);
+@@ -883,6 +1052,7 @@ void spapr_pci_rtas_init(void)
+ static void spapr_pci_register_types(void)
+ {
+     type_register_static(&spapr_phb_info);
++    type_register_static(&spapr_phb_vfio_info);
+ }
+ 
+ type_init(spapr_pci_register_types)
+diff --git a/include/hw/pci-host/spapr.h b/include/hw/pci-host/spapr.h
+index 99ee921..f1eec00 100644
+--- a/include/hw/pci-host/spapr.h
++++ b/include/hw/pci-host/spapr.h
+@@ -30,10 +30,14 @@
+ #define SPAPR_MSIX_MAX_DEVS 32
+ 
+ #define TYPE_SPAPR_PCI_HOST_BRIDGE "spapr-pci-host-bridge"
++#define TYPE_SPAPR_PCI_VFIO_HOST_BRIDGE "spapr-pci-vfio-host-bridge"
+ 
+ #define SPAPR_PCI_HOST_BRIDGE(obj) \
+     OBJECT_CHECK(sPAPRPHBState, (obj), TYPE_SPAPR_PCI_HOST_BRIDGE)
+ 
++#define SPAPR_PCI_VFIO_HOST_BRIDGE(obj) \
++    OBJECT_CHECK(sPAPRPHBVFIOState, (obj), TYPE_SPAPR_PCI_VFIO_HOST_BRIDGE)
++
+ typedef struct sPAPRPHBState {
+     PCIHostState parent_obj;
+ 
+@@ -64,6 +68,14 @@ typedef struct sPAPRPHBState {
+     QLIST_ENTRY(sPAPRPHBState) list;
+ } sPAPRPHBState;
+ 
++typedef struct sPAPRPHBVFIOState {
++    sPAPRPHBState phb;
++
++    struct VFIOContainer *container;
++    int32_t iommugroupid;
++    uint8_t scan, enable_multifunction, force_addr;
++} sPAPRPHBVFIOState;
++
+ #define SPAPR_PCI_BASE_BUID          0x800000020000000ULL
+ 
+ #define SPAPR_PCI_WINDOW_BASE        0x10000000000ULL
+diff --git a/include/hw/ppc/spapr.h b/include/hw/ppc/spapr.h
+index 72495b5..b830183 100644
+--- a/include/hw/ppc/spapr.h
++++ b/include/hw/ppc/spapr.h
+@@ -360,6 +360,9 @@ void spapr_iommu_init(void);
+ void spapr_events_init(sPAPREnvironment *spapr);
+ void spapr_events_fdt_skel(void *fdt, uint32_t epow_irq);
+ DMAContext *spapr_tce_new_dma_context(uint32_t liobn, size_t window_size);
++struct VFIOContainer;
++DMAContext *spapr_vfio_new_dma(uint32_t liobn, int iommu_id,
++                               struct VFIOContainer *container);
+ void spapr_tce_free(DMAContext *dma);
+ void spapr_tce_reset(DMAContext *dma);
+ void spapr_tce_set_bypass(DMAContext *dma, bool bypass);
+diff --git a/trace-events b/trace-events
+index 581d67a..e4da4aa 100644
+--- a/trace-events
++++ b/trace-events
+@@ -1073,6 +1073,7 @@ qxl_render_guest_primary_resized(int32_t width, int32_t height, int32_t stride,
+ qxl_render_update_area_done(void *cookie) "%p"
+ 
+ # hw/spapr_pci.c
++spapr_pci(const char *msg1, const char *msg2) "%s%s"
+ spapr_pci_msi(const char *msg, uint32_t n, uint32_t ca) "%s (device#%d, cfg=%x)"
+ spapr_pci_msi_setup(const char *name, unsigned vector, uint64_t addr) "dev\"%s\" vector %u, addr=%"PRIx64
+ spapr_pci_rtas_ibm_change_msi(unsigned func, unsigned req) "func %u, requested %u"
+@@ -1118,3 +1119,6 @@ virtio_ccw_new_device(int cssid, int ssid, int schid, int devno, const char *dev
+ 
+ # migration.c
+ migrate_set_state(int new_state) "new state %d"
++
++# hw/spapr_iommu.c
++spapr_iommu(const char *op, uint32_t liobn, uint64_t ioba, uint64_t tce, int ret) "%s %x ioba=%"PRIx64" tce=%"PRIx64" ret=%d"
+-- 
+1.7.10.4
+
+

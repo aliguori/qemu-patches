@@ -1,0 +1,1 @@
+../ccid-and-libcacard-fixes-for-windows-mingw/v3.1366671870/0027-dev-smartcard-reader-empty-implementation-for-Mechanical-fail-correctly.patch

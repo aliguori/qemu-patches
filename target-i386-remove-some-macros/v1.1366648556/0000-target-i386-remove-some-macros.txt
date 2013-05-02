@@ -1,0 +1,39 @@
+From patches Mon Sep 17 00:00:00 2001
+From: liguang <lig.fnst@cn.fujitsu.com>
+To: qemu-devel@nongnu.org
+Cc: peter.maydell@linaro.org, ehabkost@redhat.com,
+ liguang <lig.fnst@cn.fujitsu.com>, blauwirbel@gmail.com, avi@redhat.com,
+ pbonzini@redhat.com, imammedo@redhat.com, afaerber@suse.de, rth@twiddle.net
+Date: Mon, 22 Apr 2013 11:35:56 +0800
+Message-id: 1366601756-15567-1-git-send-email-lig.fnst@cn.fujitsu.com
+Subject: [PATCH 000/122] target-i386: remove some macros
+
+remove macros EAX, EBX, ECX, EDX, EBP, ESP, ESI, EDI, EIP, DF
+as suggested by Richard Henderson <rth@twiddle.net>
+
+Li Guang (12)
+	 target-i386/helper: remove EAX macro
+	 target-i386/helper: remove EBX macro
+	 target-i386/helper: remove ECX macro
+	 target-i386/helper: remove EDX macro
+	 target-i386/helper: remove EBP macro
+	 target-i386/helper: remove ESP macro
+	 target-i386/helper: remove ESI macro
+	 target-i386/helper: remove EDI macro
+	 target-i386/helper: remove EIP macro
+	 target-i386/helper: remove DF macro
+	 target-i386/helper: remove redundant env->eip assignment
+	 target-i386: fix over 80 chars warnings
+
+cpu-exec.c                |   4 ++--
+target-i386/cc_helper.c   |   2 +-
+target-i386/cpu.h         |  24 -
+target-i386/excp_helper.c |   2 +-
+target-i386/int_helper.c  |  86 ++++++++++++++++++++++----------------------
+target-i386/mem_helper.c  |  24 +++---
+target-i386/misc_helper.c | 107 +++---
+target-i386/seg_helper.c  | 182 +++---
+target-i386/smm_helper.c  |  64 +++---
+target-i386/svm_helper.c  |  66 ++++++++--------
+10 files changed, 280 insertions(+), 281 deletions(-)
+

@@ -1,0 +1,317 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Igor Mammedov <imammedo@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, ehabkost@redhat.com,
+ claudio.fontana@huawei.com, aderumier@odiso.com, lcapitulino@redhat.com,
+ jfrei@linux.vnet.ibm.com, yang.z.zhang@intel.com, pbonzini@redhat.com,
+ eblake@redhat.com, afaerber@suse.de, lig.fnst@cn.fujitsu.com, rth@twiddle.net
+Date: Thu, 11 Apr 2013 16:51:54 +0200
+Message-id: 1365691918-30594-16-git-send-email-imammedo@redhat.com
+Subject: [PATCH 15/19] target-i386: move APIC to ICC bus
+
+... to allow it to be hotplugged
+
+ * map APIC's mmio at board level if it is present
+ * do not register mmio region for each APIC, since
+   only one is used/mapped
+
+Signed-off-by: Igor Mammedov <imammedo@redhat.com>
+---
+ hw/cpu/icc_bus.c                | 15 ++++++++++++++-
+ hw/i386/kvmvapic.c              |  1 +
+ hw/i386/pc.c                    | 20 +++++++++++++++++---
+ hw/intc/apic_common.c           | 17 ++++++++++++-----
+ include/hw/i386/apic_internal.h |  6 +++---
+ include/hw/i386/icc_bus.h       |  2 ++
+ target-i386/cpu.c               | 16 +++-------------
+ 7 files changed, 52 insertions(+), 25 deletions(-)
+
+diff --git a/hw/cpu/icc_bus.c b/hw/cpu/icc_bus.c
+index 3824968..c499f09 100644
+--- a/hw/cpu/icc_bus.c
++++ b/hw/cpu/icc_bus.c
+@@ -59,13 +59,26 @@ static const TypeInfo icc_device_info = {
+ 
+ typedef struct ICCBridgeState {
+     SysBusDevice busdev;
++    MemoryRegion apic_container;
+ } ICCBridgeState;
+ #define ICC_BRIGDE(obj) OBJECT_CHECK(ICCBridgeState, (obj), TYPE_ICC_BRIDGE)
+ 
+ 
+ static void icc_bridge_initfn(Object *obj)
+ {
+-    qbus_create(TYPE_ICC_BUS, DEVICE(obj), "icc-bus");
++    ICCBridgeState *s = ICC_BRIGDE(obj);
++    SysBusDevice *sb = SYS_BUS_DEVICE(obj);
++    ICCBus *ibus;
++
++    ibus = ICC_BUS(qbus_create(TYPE_ICC_BUS, DEVICE(obj), "icc-bus"));
++
++    /* Do not change order of registering regions,
++     * APIC must be first registered region, board maps it by 0 index
++     */
++    memory_region_init(&s->apic_container, "icc-apic-container",
++                       APIC_SPACE_SIZE);
++    sysbus_init_mmio(sb, &s->apic_container);
++    ibus->apic_address_space = &s->apic_container;
+ }
+ 
+ static const TypeInfo icc_bridge_info = {
+diff --git a/hw/i386/kvmvapic.c b/hw/i386/kvmvapic.c
+index 3a10c07..5b558aa 100644
+--- a/hw/i386/kvmvapic.c
++++ b/hw/i386/kvmvapic.c
+@@ -12,6 +12,7 @@
+ #include "sysemu/cpus.h"
+ #include "sysemu/kvm.h"
+ #include "hw/i386/apic_internal.h"
++#include "hw/sysbus.h"
+ 
+ #define VAPIC_IO_PORT           0x7e
+ 
+diff --git a/hw/i386/pc.c b/hw/i386/pc.c
+index 3adf294..1c7b3c2 100644
+--- a/hw/i386/pc.c
++++ b/hw/i386/pc.c
+@@ -52,6 +52,7 @@
+ #include "sysemu/arch_init.h"
+ #include "qemu/bitmap.h"
+ #include "qemu/config-file.h"
++#include "hw/i386/icc_bus.h"
+ 
+ /* debug PC/ISA interrupts */
+ //#define DEBUG_IRQ
+@@ -869,13 +870,13 @@ void pc_acpi_smi_interrupt(void *opaque, int irq, int level)
+     }
+ }
+ 
+-static void pc_new_cpu(const char *cpu_model, int64_t apic_id, Error **errp)
++static X86CPU *pc_new_cpu(const char *cpu_model, int64_t apic_id, Error **errp)
+ {
+     X86CPU *cpu;
+ 
+     cpu = cpu_x86_create(cpu_model, errp);
+     if (!cpu) {
+-        return;
++        return cpu;
+     }
+ 
+     object_property_set_int(OBJECT(cpu), apic_id, "apic-id", errp);
+@@ -884,14 +885,18 @@ static void pc_new_cpu(const char *cpu_model, int64_t apic_id, Error **errp)
+     if (error_is_set(errp)) {
+         if (cpu != NULL) {
+             object_unref(OBJECT(cpu));
++            cpu = NULL;
+         }
+     }
++    return cpu;
+ }
+ 
+ void pc_cpus_init(const char *cpu_model)
+ {
+     int i;
++    X86CPU *cpu = NULL;
+     Error *error = NULL;
++    SysBusDevice *ib;
+ 
+     /* init CPUs */
+     if (cpu_model == NULL) {
+@@ -902,14 +907,23 @@ void pc_cpus_init(const char *cpu_model)
+ #endif
+     }
+ 
++    ib = SYS_BUS_DEVICE(object_resolve_path_type("icc-bridge",
++                                                 TYPE_ICC_BRIDGE, NULL));
++
+     for (i = 0; i < smp_cpus; i++) {
+-        pc_new_cpu(cpu_model, x86_cpu_apic_id_from_index(i), &error);
++        cpu = pc_new_cpu(cpu_model, x86_cpu_apic_id_from_index(i), &error);
+         if (error) {
+             fprintf(stderr, "%s\n", error_get_pretty(error));
+             error_free(error);
+             exit(1);
+         }
+     }
++
++    /* map APIC MMIO area if CPU has APIC */
++    if (cpu && cpu->env.apic_state) {
++        /* XXX: what if the base changes? */
++        sysbus_mmio_map_overlap(ib, 0, APIC_DEFAULT_ADDRESS, 0x1000);
++    }
+ }
+ 
+ void pc_acpi_init(const char *default_dsdt)
+diff --git a/hw/intc/apic_common.c b/hw/intc/apic_common.c
+index e0ae07a..39396f1 100644
+--- a/hw/intc/apic_common.c
++++ b/hw/intc/apic_common.c
+@@ -21,6 +21,8 @@
+ #include "hw/i386/apic_internal.h"
+ #include "trace.h"
+ #include "sysemu/kvm.h"
++#include "hw/qdev.h"
++#include "hw/sysbus.h"
+ 
+ static int apic_irq_delivered;
+ bool apic_report_tpr_access;
+@@ -282,12 +284,14 @@ static int apic_load_old(QEMUFile *f, void *opaque, int version_id)
+     return 0;
+ }
+ 
+-static int apic_init_common(SysBusDevice *dev)
++static int apic_init_common(ICCDevice *dev)
+ {
+     APICCommonState *s = APIC_COMMON(dev);
++    DeviceState *d = DEVICE(dev);
+     APICCommonClass *info;
+     static DeviceState *vapic;
+     static int apic_no;
++    static bool mmio_registered;
+ 
+     if (apic_no >= MAX_APICS) {
+         return -1;
+@@ -296,8 +300,11 @@ static int apic_init_common(SysBusDevice *dev)
+ 
+     info = APIC_COMMON_GET_CLASS(s);
+     info->init(s);
+-
+-    sysbus_init_mmio(dev, &s->io_memory);
++    if (!mmio_registered) {
++        MemoryRegion *as = ICC_BUS(d->parent_bus)->apic_address_space;
++        memory_region_add_subregion(as, 0, &s->io_memory);
++        mmio_registered = true;
++    }
+ 
+     /* Note: We need at least 1M to map the VAPIC option ROM */
+     if (!vapic && s->vapic_control & VAPIC_ENABLE_MASK &&
+@@ -375,7 +382,7 @@ static Property apic_properties_common[] = {
+ 
+ static void apic_common_class_init(ObjectClass *klass, void *data)
+ {
+-    SysBusDeviceClass *sc = SYS_BUS_DEVICE_CLASS(klass);
++    ICCDeviceClass *sc = ICC_DEVICE_CLASS(klass);
+     DeviceClass *dc = DEVICE_CLASS(klass);
+ 
+     dc->vmsd = &vmstate_apic_common;
+@@ -387,7 +394,7 @@ static void apic_common_class_init(ObjectClass *klass, void *data)
+ 
+ static const TypeInfo apic_common_type = {
+     .name = TYPE_APIC_COMMON,
+-    .parent = TYPE_SYS_BUS_DEVICE,
++    .parent = TYPE_ICC_DEVICE,
+     .instance_size = sizeof(APICCommonState),
+     .class_size = sizeof(APICCommonClass),
+     .class_init = apic_common_class_init,
+diff --git a/include/hw/i386/apic_internal.h b/include/hw/i386/apic_internal.h
+index aac6290..05acf4b 100644
+--- a/include/hw/i386/apic_internal.h
++++ b/include/hw/i386/apic_internal.h
+@@ -21,7 +21,7 @@
+ #define QEMU_APIC_INTERNAL_H
+ 
+ #include "exec/memory.h"
+-#include "hw/sysbus.h"
++#include "hw/i386/icc_bus.h"
+ #include "qemu/timer.h"
+ 
+ /* APIC Local Vector Table */
+@@ -78,7 +78,7 @@ typedef struct APICCommonState APICCommonState;
+ 
+ typedef struct APICCommonClass
+ {
+-    SysBusDeviceClass parent_class;
++    ICCDeviceClass parent_class;
+ 
+     void (*init)(APICCommonState *s);
+     void (*set_base)(APICCommonState *s, uint64_t val);
+@@ -92,7 +92,7 @@ typedef struct APICCommonClass
+ } APICCommonClass;
+ 
+ struct APICCommonState {
+-    SysBusDevice busdev;
++    ICCDevice busdev;
+ 
+     MemoryRegion io_memory;
+     X86CPU *cpu;
+diff --git a/include/hw/i386/icc_bus.h b/include/hw/i386/icc_bus.h
+index ae1866c..2c8f78f 100644
+--- a/include/hw/i386/icc_bus.h
++++ b/include/hw/i386/icc_bus.h
+@@ -19,6 +19,7 @@
+ #ifndef ICC_BUS_H
+ #define ICC_BUS_H
+ 
++#include "exec/memory.h"
+ #include "hw/qdev-core.h"
+ 
+ #define TYPE_ICC_BUS "icc-bus"
+@@ -26,6 +27,7 @@
+ #ifndef CONFIG_USER_ONLY
+ typedef struct ICCBus {
+     BusState qbus;
++    MemoryRegion *apic_address_space;
+ } ICCBus;
+ #define ICC_BUS(obj) OBJECT_CHECK(ICCBus, (obj), TYPE_ICC_BUS)
+ 
+diff --git a/target-i386/cpu.c b/target-i386/cpu.c
+index 2bb38d6..f77c3bb 100644
+--- a/target-i386/cpu.c
++++ b/target-i386/cpu.c
+@@ -41,10 +41,10 @@
+ #endif
+ 
+ #include "sysemu/sysemu.h"
++#include "hw/qdev-properties.h"
+ #include "hw/i386/icc_bus.h"
+ #ifndef CONFIG_USER_ONLY
+ #include "hw/xen/xen.h"
+-#include "hw/sysbus.h"
+ #include "hw/i386/apic_internal.h"
+ #endif
+ 
+@@ -2111,6 +2111,7 @@ static void mce_init(X86CPU *cpu)
+ static void x86_cpu_apic_create(X86CPU *cpu, Error **errp)
+ {
+     CPUX86State *env = &cpu->env;
++    DeviceState *dev = DEVICE(cpu);
+     APICCommonState *apic;
+     const char *apic_type = "apic";
+ 
+@@ -2120,7 +2121,7 @@ static void x86_cpu_apic_create(X86CPU *cpu, Error **errp)
+         apic_type = "xen-apic";
+     }
+ 
+-    env->apic_state = qdev_try_create(NULL, apic_type);
++    env->apic_state = qdev_try_create(dev->parent_bus, apic_type);
+     if (env->apic_state == NULL) {
+         error_setg(errp, "APIC device '%s' could not be created", apic_type);
+         return;
+@@ -2137,7 +2138,6 @@ static void x86_cpu_apic_create(X86CPU *cpu, Error **errp)
+ static void x86_cpu_apic_realize(X86CPU *cpu, Error **errp)
+ {
+     CPUX86State *env = &cpu->env;
+-    static int apic_mapped;
+ 
+     if (env->apic_state == NULL) {
+         return;
+@@ -2148,16 +2148,6 @@ static void x86_cpu_apic_realize(X86CPU *cpu, Error **errp)
+                    object_get_typename(OBJECT(env->apic_state)));
+         return;
+     }
+-
+-    /* XXX: mapping more APICs at the same memory location */
+-    if (apic_mapped == 0) {
+-        /* NOTE: the APIC is directly connected to the CPU - it is not
+-           on the global memory bus. */
+-        /* XXX: what if the base changes? */
+-        sysbus_mmio_map_overlap(SYS_BUS_DEVICE(env->apic_state), 0,
+-                                APIC_DEFAULT_ADDRESS, 0x1000);
+-        apic_mapped = 1;
+-    }
+ }
+ #else
+ static void x86_cpu_apic_realize(X86CPU *cpu, Error **errp)
+-- 
+1.8.2
+

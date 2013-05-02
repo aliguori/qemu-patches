@@ -1,0 +1,1 @@
+../console-console-overhaul-continued/v3.1365085722/0014-console-simplify-screendump.patch

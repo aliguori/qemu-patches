@@ -1,0 +1,1 @@
+../fix-win32-compilation/v5.1367088516/0002-win32-move-Makefile-dependencies-on-version-obj-y-to-rulesmak.patch

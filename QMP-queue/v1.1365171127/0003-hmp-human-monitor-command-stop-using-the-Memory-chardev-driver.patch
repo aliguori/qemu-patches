@@ -1,0 +1,102 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Luiz Capitulino <lcapitulino@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>
+Date: Fri, 5 Apr 2013 09:12:10 -0400
+Message-id: 1365167531-17553-4-git-send-email-lcapitulino@redhat.com
+Subject: [PATCH 3/4] hmp: human-monitor-command: stop using the Memory chardev
+ driver
+
+The Memory chardev driver was added because, as the Monitor's output
+buffer was static, we needed a way to accumulate the output of an
+HMP commmand when ran by human-monitor-command.
+
+However, the Monitor's output buffer is now dynamic, so it's possible
+for the human-monitor-command to use it instead of the Memory chardev
+driver.
+
+This commit does that change, but there are two important
+observations about it:
+
+ 1. We need a way to signal to the Monitor that it shouldn't call
+    chardev functions when flushing its output. This is done
+    by adding a new flag to the Monitor object called skip_flush
+	(which is set to true by qmp_human_monitor_command())
+
+ 2. The current code has buffered semantics: QMP clients will
+    only see a command's output if it flushes its output with
+	a new-line character. This commit changes this to unbuffered,
+	which means that QMP clients will see a command's output
+	whenever the command prints anything.
+
+	I don't think this will matter in practice though, as I believe
+	all HMP commands print the new-line character anyway.
+
+Signed-off-by: Luiz Capitulino <lcapitulino@redhat.com>
+Reviewed-by: Eric Blake <eblake@redhat.com>
+Acked-by: Gerd Hoffmann <kraxel@redhat.com>
+---
+ monitor.c | 17 ++++++++---------
+ 1 file changed, 8 insertions(+), 9 deletions(-)
+
+diff --git a/monitor.c b/monitor.c
+index 8712c53..b4bda77 100644
+--- a/monitor.c
++++ b/monitor.c
+@@ -188,6 +188,7 @@ struct Monitor {
+     int reset_seen;
+     int flags;
+     int suspend_cnt;
++    bool skip_flush;
+     QString *outbuf;
+     ReadLineState *rs;
+     MonitorControl *mc;
+@@ -273,6 +274,10 @@ void monitor_flush(Monitor *mon)
+     size_t len;
+     const char *buf;
+ 
++    if (mon->skip_flush) {
++        return;
++    }
++
+     buf = qstring_get_str(mon->outbuf);
+     len = qstring_get_length(mon->outbuf);
+ 
+@@ -675,13 +680,10 @@ char *qmp_human_monitor_command(const char *command_line, bool has_cpu_index,
+ {
+     char *output = NULL;
+     Monitor *old_mon, hmp;
+-    CharDriverState mchar;
+ 
+     memset(&hmp, 0, sizeof(hmp));
+     hmp.outbuf = qstring_new();
+-
+-    qemu_chr_init_mem(&mchar);
+-    hmp.chr = &mchar;
++    hmp.skip_flush = true;
+ 
+     old_mon = cur_mon;
+     cur_mon = &hmp;
+@@ -699,17 +701,14 @@ char *qmp_human_monitor_command(const char *command_line, bool has_cpu_index,
+     handle_user_command(&hmp, command_line);
+     cur_mon = old_mon;
+ 
+-    if (qemu_chr_mem_osize(hmp.chr) > 0) {
+-        QString *str = qemu_chr_mem_to_qs(hmp.chr);
+-        output = g_strdup(qstring_get_str(str));
+-        QDECREF(str);
++    if (qstring_get_length(hmp.outbuf) > 0) {
++        output = g_strdup(qstring_get_str(hmp.outbuf));
+     } else {
+         output = g_strdup("");
+     }
+ 
+ out:
+     QDECREF(hmp.outbuf);
+-    qemu_chr_close_mem(hmp.chr);
+     return output;
+ }
+ 
+-- 
+1.8.1.4
+

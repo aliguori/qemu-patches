@@ -1,0 +1,1 @@
+../Add-an-IPMI-device-to-qemu/v4.1347998427/0007-qom-release-previous-object-when-setting.patch

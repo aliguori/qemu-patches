@@ -1,0 +1,1 @@
+../TARGET__ALIGNMENT-cleanup-and-config-targetmak-trimming/v2.1365010318/0003-elfload-use-tswapreg-consistently-in-elf_core_copy_regs.patch

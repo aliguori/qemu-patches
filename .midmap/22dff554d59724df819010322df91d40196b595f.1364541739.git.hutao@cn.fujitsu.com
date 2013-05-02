@@ -1,0 +1,1 @@
+../Add-pvpanic-device-to-deal-with-guest-panic-event/v16.1364591801/0006-pvpanic-pass-configurable-ioport-to-seabios.patch

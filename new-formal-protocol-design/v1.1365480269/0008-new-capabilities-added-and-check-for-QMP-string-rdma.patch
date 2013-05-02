@@ -1,0 +1,120 @@
+From patches Mon Sep 17 00:00:00 2001
+From: mrhines@linux.vnet.ibm.com
+To: Paolo Bonzini <pbonzini@redhat.com>, qemu-devel@nongnu.org,
+ mrhines@linux.vnet.ibm.com, "Michael R. Hines" <mrhines@linux.vnet.ibm.com>
+Cc: Anthony Liguori <aliguori@us.ibm.com>,
+ "Michael R. Hines" <mrhines@linux.vnet.ibm.com>, mst@redhat.com,
+ qemu-devel@nongnu.org, Michael R Hines <mrhines@us.ibm.com>,
+ Bulent Abali <abali@us.ibm.com>, owasserm@redhat.com, pbonzini@redhat.com,
+ Gokul B Kandiraju <gokul@us.ibm.com>
+Date: Mon, 8 Apr 2013 23:04:37 -0400
+Message-id: 1365476681-31593-9-git-send-email-mrhines@linux.vnet.ibm.com
+Subject: [PATCH 08/12] new capabilities added and check for QMP string 'rdma'
+
+From: "Michael R. Hines" <mrhines@us.ibm.com>
+
+1. capability for zero pages (enabled by default)
+2. capability for dynamic server chunk registration (disabled by default)
+
+Signed-off-by: Michael R. Hines <mrhines@us.ibm.com>
+---
+ migration.c |   41 ++++++++++++++++++++++++++++++++++++++---
+ 1 file changed, 38 insertions(+), 3 deletions(-)
+
+diff --git a/migration.c b/migration.c
+index 3b4b467..f01efa9 100644
+--- a/migration.c
++++ b/migration.c
+@@ -15,6 +15,7 @@
+ 
+ #include "qemu-common.h"
+ #include "migration/migration.h"
++#include "migration/rdma.h"
+ #include "monitor/monitor.h"
+ #include "migration/qemu-file.h"
+ #include "sysemu/sysemu.h"
+@@ -68,6 +69,18 @@ MigrationState *migrate_get_current(void)
+         .xbzrle_cache_size = DEFAULT_MIGRATE_CACHE_SIZE,
+     };
+ 
++    static bool first_time = 1;
++
++    /*
++     * Historically, checking for zeros is enabled
++     * by default. Require the user to disable it
++     * (for example RDMA), if they really want to.
++     */
++    if(first_time) {
++        current_migration.enabled_capabilities[MIGRATION_CAPABILITY_CHECK_FOR_ZERO] = true;
++        first_time = 0;
++    }
++
+     return &current_migration;
+ }
+ 
+@@ -77,6 +90,8 @@ void qemu_start_incoming_migration(const char *uri, Error **errp)
+ 
+     if (strstart(uri, "tcp:", &p))
+         tcp_start_incoming_migration(p, errp);
++    else if (strstart(uri, "rdma:", &p))
++        rdma_start_incoming_migration(p, errp);
+ #if !defined(WIN32)
+     else if (strstart(uri, "exec:", &p))
+         exec_start_incoming_migration(p, errp);
+@@ -120,7 +135,6 @@ void process_incoming_migration(QEMUFile *f)
+     Coroutine *co = qemu_coroutine_create(process_incoming_migration_co);
+     int fd = qemu_get_fd(f);
+ 
+-    assert(fd != -1);
+     qemu_set_nonblock(fd);
+     qemu_coroutine_enter(co, f);
+ }
+@@ -405,6 +419,8 @@ void qmp_migrate(const char *uri, bool has_blk, bool blk,
+ 
+     if (strstart(uri, "tcp:", &p)) {
+         tcp_start_outgoing_migration(s, p, &local_err);
++    } else if (strstart(uri, "rdma:", &p)) {
++        rdma_start_outgoing_migration(s, p, &local_err);
+ #if !defined(WIN32)
+     } else if (strstart(uri, "exec:", &p)) {
+         exec_start_outgoing_migration(s, p, &local_err);
+@@ -474,6 +490,24 @@ void qmp_migrate_set_downtime(double value, Error **errp)
+     max_downtime = (uint64_t)value;
+ }
+ 
++bool migrate_chunk_register_destination(void)
++{
++    MigrationState *s;
++
++    s = migrate_get_current();
++
++    return s->enabled_capabilities[MIGRATION_CAPABILITY_CHUNK_REGISTER_DESTINATION];
++}
++
++bool migrate_check_for_zero(void)
++{
++    MigrationState *s;
++
++    s = migrate_get_current();
++
++    return s->enabled_capabilities[MIGRATION_CAPABILITY_CHECK_FOR_ZERO];
++}
++
+ int migrate_use_xbzrle(void)
+ {
+     MigrationState *s;
+@@ -546,8 +580,9 @@ static void *migration_thread(void *opaque)
+             max_size = bandwidth * migrate_max_downtime() / 1000000;
+ 
+             DPRINTF("transferred %" PRIu64 " time_spent %" PRIu64
+-                    " bandwidth %g max_size %" PRId64 "\n",
+-                    transferred_bytes, time_spent, bandwidth, max_size);
++                    " bandwidth %g (%0.2f mbps) max_size %" PRId64 "\n",
++                    transferred_bytes, time_spent, 
++                    bandwidth, Mbps(transferred_bytes, time_spent), max_size);
+             /* if we haven't sent anything, we don't want to recalculate
+                10000 is a small enough number for our purposes */
+             if (s->dirty_bytes_rate && transferred_bytes > 10000) {
+-- 
+1.7.10.4
+

@@ -1,0 +1,56 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Eduardo Habkost <ehabkost@redhat.com>
+To: qemu-devel@nongnu.org, =?UTF-8?q?Andreas=20F=C3=A4rber?= <afaerber@suse.de>
+Cc: libvir-list@redhat.com, Igor Mammedov <imammedo@redhat.com>,
+ Jiri Denemark <jdenemar@redhat.com>
+Date: Mon, 22 Apr 2013 16:00:19 -0300
+Message-id: 1366657220-776-9-git-send-email-ehabkost@redhat.com
+Subject: [PATCH 8/9] target-i386: Introduce X86CPU.filtered_features field
+
+This field will contain the feature bits that were filtered out because
+of missing host support.
+
+Signed-off-by: Eduardo Habkost <ehabkost@redhat.com>
+---
+ target-i386/cpu-qom.h | 3 +++
+ target-i386/cpu.c     | 9 ++++++---
+ 2 files changed, 9 insertions(+), 3 deletions(-)
+
+diff --git a/target-i386/cpu-qom.h b/target-i386/cpu-qom.h
+index 08f9eb6..159378f 100644
+--- a/target-i386/cpu-qom.h
++++ b/target-i386/cpu-qom.h
+@@ -65,6 +65,9 @@ typedef struct X86CPU {
+     /*< public >*/
+ 
+     CPUX86State env;
++
++    /* Features that were filtered out because of missing host capabilities */
++    uint32_t filtered_features[FEATURE_WORDS];
+ } X86CPU;
+ 
+ static inline X86CPU *x86_env_get_cpu(CPUX86State *env)
+diff --git a/target-i386/cpu.c b/target-i386/cpu.c
+index bdb94a7..1178c5f 100644
+--- a/target-i386/cpu.c
++++ b/target-i386/cpu.c
+@@ -1642,9 +1642,12 @@ static void filter_features_for_kvm(X86CPU *cpu)
+ 
+     for (w = 0; w < FEATURE_WORDS; w++) {
+         FeatureWordInfo *wi = &feature_word_info[w];
+-        env->features[w] &= kvm_arch_get_supported_cpuid(s, wi->cpuid_eax,
+-                                                            wi->cpuid_ecx,
+-                                                            wi->cpuid_reg);
++        uint32_t host_feat = kvm_arch_get_supported_cpuid(s, wi->cpuid_eax,
++                                                             wi->cpuid_ecx,
++                                                             wi->cpuid_reg);
++        uint32_t requested_features = env->features[w];
++        env->features[w] &= host_feat;
++        cpu->filtered_features[w] = requested_features & ~env->features[w];
+     }
+ }
+ #endif
+-- 
+1.8.1.4
+
+

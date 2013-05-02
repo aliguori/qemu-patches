@@ -1,0 +1,1 @@
+../ich9-kill-cmos_s3/v1.1366846642/0001-ich9-kill-cmos_s3.patch

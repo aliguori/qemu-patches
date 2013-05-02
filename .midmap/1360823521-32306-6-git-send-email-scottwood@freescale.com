@@ -1,0 +1,1 @@
+../kvm-openpic-in-kernel-irqchip/v1.1360823515/0005-kvm-export-result-of-irqchip-config-check.patch

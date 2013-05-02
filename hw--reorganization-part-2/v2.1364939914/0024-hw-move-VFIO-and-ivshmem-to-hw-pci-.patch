@@ -1,0 +1,66 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: Paolo Bonzini <pbonzini@redhat.com>, qemu-devel@nongnu.org,
+ "Michael S. Tsirkin" <mst@redhat.com>
+Cc: qemu-devel@nongnu.org
+Date: Tue,  2 Apr 2013 16:58:58 +0200
+Message-id: 1364914749-11141-25-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 24/35] hw: move VFIO and ivshmem to hw/pci/
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ hw/Makefile.objs              | 10 ----------
+ hw/pci/Makefile.objs          |  5 +++++
+ hw/{ => pci}/ivshmem.c        |  0
+ hw/{vfio_pci.c => pci/vfio.c} |  0
+ 4 files changed, 5 insertions(+), 10 deletions(-)
+ rename hw/{ => pci}/ivshmem.c (100%)
+ rename hw/{vfio_pci.c => pci/vfio.c} (100%)
+
+diff --git a/hw/Makefile.objs b/hw/Makefile.objs
+index b2be078..dc30f74 100644
+--- a/hw/Makefile.objs
++++ b/hw/Makefile.objs
+@@ -28,13 +28,3 @@ devices-dirs-$(CONFIG_SOFTMMU) += xen/
+ common-obj-y += core/
+ common-obj-y += $(devices-dirs-y)
+ obj-y += $(devices-dirs-y)
+-
+-ifeq ($(CONFIG_SOFTMMU),y)
+-
+-# Inter-VM PCI shared memory & VFIO PCI device assignment
+-ifeq ($(CONFIG_PCI), y)
+-obj-$(CONFIG_KVM) += ivshmem.o
+-obj-$(CONFIG_LINUX) += vfio_pci.o
+-endif
+-
+-endif
+diff --git a/hw/pci/Makefile.objs b/hw/pci/Makefile.objs
+index 8b20135..9086b3b 100644
+--- a/hw/pci/Makefile.objs
++++ b/hw/pci/Makefile.objs
+@@ -26,6 +26,11 @@ common-obj-$(CONFIG_PPCE500_PCI) += host-ppce500.o
+ # ARM devices
+ common-obj-$(CONFIG_VERSATILE_PCI) += host-versatile.o
+ 
++ifeq ($(CONFIG_PCI), y)
++obj-$(CONFIG_KVM) += ivshmem.o
++obj-$(CONFIG_LINUX) += vfio.o
++endif
++
+ obj-$(CONFIG_PCI_APB) += host-apb.o
+ obj-$(CONFIG_FULONG) += host-bonito.o
+ obj-$(CONFIG_PCI_PIIX) += host-piix.o
+diff --git a/hw/ivshmem.c b/hw/pci/ivshmem.c
+similarity index 100%
+rename from hw/ivshmem.c
+rename to hw/pci/ivshmem.c
+diff --git a/hw/vfio_pci.c b/hw/pci/vfio.c
+similarity index 100%
+rename from hw/vfio_pci.c
+rename to hw/pci/vfio.c
+-- 
+1.8.1.4
+
+
+

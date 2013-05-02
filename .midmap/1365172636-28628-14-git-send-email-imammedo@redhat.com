@@ -1,0 +1,1 @@
+../target-i386-CPU-hot-add-with-cpu-add-QMP-command/v2.1365197812/0013-acpi_piix4-add-infrastructure-to-send-CPU-hot-plug-GPE-to-guest.patch

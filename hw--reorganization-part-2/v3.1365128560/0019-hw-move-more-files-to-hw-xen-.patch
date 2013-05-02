@@ -1,0 +1,100 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: 
+Date: Thu,  4 Apr 2013 21:22:59 +0200
+Message-id: 1365103395-11547-20-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 19/35] hw: move more files to hw/xen/
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ default-configs/i386-softmmu.mak   | 1 +
+ default-configs/x86_64-softmmu.mak | 1 +
+ hw/i386/Makefile.objs              | 3 ---
+ hw/xen/Makefile.objs               | 4 ++++
+ hw/{ => xen}/xen-host-pci-device.c | 0
+ hw/{ => xen}/xen_apic.c            | 0
+ hw/{ => xen}/xen_platform.c        | 0
+ hw/{ => xen}/xen_pt.c              | 0
+ hw/{ => xen}/xen_pt_config_init.c  | 0
+ hw/{ => xen}/xen_pt_msi.c          | 0
+ 10 files changed, 6 insertions(+), 3 deletions(-)
+ rename hw/{ => xen}/xen-host-pci-device.c (100%)
+ rename hw/{ => xen}/xen_apic.c (100%)
+ rename hw/{ => xen}/xen_platform.c (100%)
+ rename hw/{ => xen}/xen_pt.c (100%)
+ rename hw/{ => xen}/xen_pt_config_init.c (100%)
+ rename hw/{ => xen}/xen_pt_msi.c (100%)
+
+diff --git a/default-configs/i386-softmmu.mak b/default-configs/i386-softmmu.mak
+index 48ed8d4..89aaff5 100644
+--- a/default-configs/i386-softmmu.mak
++++ b/default-configs/i386-softmmu.mak
+@@ -33,3 +33,4 @@ CONFIG_PCI_HOTPLUG=y
+ CONFIG_MC146818RTC=y
+ CONFIG_WDT_IB700=y
+ CONFIG_PC_SYSFW=y
++CONFIG_XEN_I386=$(CONFIG_XEN)
+diff --git a/default-configs/x86_64-softmmu.mak b/default-configs/x86_64-softmmu.mak
+index 58b33cf..c34f8f8 100644
+--- a/default-configs/x86_64-softmmu.mak
++++ b/default-configs/x86_64-softmmu.mak
+@@ -33,3 +33,4 @@ CONFIG_PCI_HOTPLUG=y
+ CONFIG_MC146818RTC=y
+ CONFIG_WDT_IB700=y
+ CONFIG_PC_SYSFW=y
++CONFIG_XEN_I386=$(CONFIG_XEN)
+diff --git a/hw/i386/Makefile.objs b/hw/i386/Makefile.objs
+index fe01234..c85bb3d 100644
+--- a/hw/i386/Makefile.objs
++++ b/hw/i386/Makefile.objs
+@@ -3,9 +3,6 @@ obj-y += sga.o ioapic_common.o ioapic.o piix_pci.o
+ obj-y += vmport.o
+ obj-y += debugcon.o debugexit.o
+ obj-y += lpc_ich9.o q35.o
+-obj-$(CONFIG_XEN) += xen_platform.o xen_apic.o
+-obj-$(CONFIG_XEN_PCI_PASSTHROUGH) += xen-host-pci-device.o
+-obj-$(CONFIG_XEN_PCI_PASSTHROUGH) += xen_pt.o xen_pt_config_init.o xen_pt_msi.o
+ obj-y += kvm/
+ obj-y += pc-testdev.o
+ 
+diff --git a/hw/xen/Makefile.objs b/hw/xen/Makefile.objs
+index 4b209a7..2017560 100644
+--- a/hw/xen/Makefile.objs
++++ b/hw/xen/Makefile.objs
+@@ -1,2 +1,6 @@
+ # xen backend driver support
+ common-obj-$(CONFIG_XEN_BACKEND) += xen_backend.o xen_devconfig.o
++
++obj-$(CONFIG_XEN_I386) += xen_platform.o xen_apic.o
++obj-$(CONFIG_XEN_PCI_PASSTHROUGH) += xen-host-pci-device.o
++obj-$(CONFIG_XEN_PCI_PASSTHROUGH) += xen_pt.o xen_pt_config_init.o xen_pt_msi.o
+diff --git a/hw/xen-host-pci-device.c b/hw/xen/xen-host-pci-device.c
+similarity index 100%
+rename from hw/xen-host-pci-device.c
+rename to hw/xen/xen-host-pci-device.c
+diff --git a/hw/xen_apic.c b/hw/xen/xen_apic.c
+similarity index 100%
+rename from hw/xen_apic.c
+rename to hw/xen/xen_apic.c
+diff --git a/hw/xen_platform.c b/hw/xen/xen_platform.c
+similarity index 100%
+rename from hw/xen_platform.c
+rename to hw/xen/xen_platform.c
+diff --git a/hw/xen_pt.c b/hw/xen/xen_pt.c
+similarity index 100%
+rename from hw/xen_pt.c
+rename to hw/xen/xen_pt.c
+diff --git a/hw/xen_pt_config_init.c b/hw/xen/xen_pt_config_init.c
+similarity index 100%
+rename from hw/xen_pt_config_init.c
+rename to hw/xen/xen_pt_config_init.c
+diff --git a/hw/xen_pt_msi.c b/hw/xen/xen_pt_msi.c
+similarity index 100%
+rename from hw/xen_pt_msi.c
+rename to hw/xen/xen_pt_msi.c
+-- 
+1.8.1.4
+
+
+

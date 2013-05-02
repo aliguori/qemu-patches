@@ -1,0 +1,7 @@
+0000-target-i386do-some-cleanups.txt
+0001-target-i386-seg_helper-replace-env-eip-with-EIP.patch
+0002-target-i386-smm_helper-replace-env-eip-with-EIP.patch
+0003-target-i386-svm_helper-replace-env-eip-with-EIP.patch
+0004-target-i386-svm_helper-remove-redundant-assignment.patch
+0005-target-i386-seg_helper-refactor-4-helper-functions.patch
+0006-target-i386-seg_helper-define-names-for-code-data-segment-types.patch

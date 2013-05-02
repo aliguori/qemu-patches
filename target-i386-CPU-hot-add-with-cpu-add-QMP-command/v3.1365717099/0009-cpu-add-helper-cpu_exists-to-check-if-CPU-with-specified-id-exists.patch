@@ -1,0 +1,84 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Igor Mammedov <imammedo@redhat.com>
+To: Eduardo Habkost <ehabkost@redhat.com>, Igor Mammedov <imammedo@redhat.com>,
+ qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, ehabkost@redhat.com,
+ claudio.fontana@huawei.com, qemu-devel@nongnu.org, aderumier@odiso.com,
+ lcapitulino@redhat.com, jfrei@linux.vnet.ibm.com, yang.z.zhang@intel.com,
+ pbonzini@redhat.com, eblake@redhat.com, afaerber@suse.de,
+ lig.fnst@cn.fujitsu.com, rth@twiddle.net
+Date: Thu, 11 Apr 2013 16:51:48 +0200
+Message-id: 1365691918-30594-10-git-send-email-imammedo@redhat.com
+Subject: [PATCH 09/19] cpu: add helper cpu_exists(),
+ to check if CPU with specified id exists
+
+... it should be used only on slow path since it does recursive search
+    on /machine QOM tree for objects of TYPE_CPU
+
+Signed-off-by: Igor Mammedov <imammedo@redhat.com>
+Reviewed-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+v2:
+  * s/get_firmware_id()/get_arch_id()/ rebase fixup
+  * remove check for get_arch_id being NULL, since it's always defined
+---
+ include/qom/cpu.h | 10 ++++++++++
+ qom/cpu.c         | 21 +++++++++++++++++++++
+ 2 files changed, 31 insertions(+)
+
+diff --git a/include/qom/cpu.h b/include/qom/cpu.h
+index b376416..cd7c4b5 100644
+--- a/include/qom/cpu.h
++++ b/include/qom/cpu.h
+@@ -225,6 +225,16 @@ void run_on_cpu(CPUState *cpu, void (*func)(void *data), void *data);
+  */
+ CPUState *qemu_get_cpu(int index);
+ 
++/**
++ * cpu_exists:
++ * @id - guest exposed CPU ID to lookup
++ *
++ * Search for CPU with specified ID.
++ *
++ * Returns: true - CPU is found, false - CPU isn't found
++ */
++bool cpu_exists(int64_t id);
++
+ #ifndef CONFIG_USER_ONLY
+ 
+ typedef void (*CPUInterruptHandler)(CPUState *, int);
+diff --git a/qom/cpu.c b/qom/cpu.c
+index 90cbd77..c850d27 100644
+--- a/qom/cpu.c
++++ b/qom/cpu.c
+@@ -25,6 +25,27 @@
+ #include "qemu/notify.h"
+ #include "sysemu/sysemu.h"
+ 
++static int cpu_exist_cb(Object *obj, void *opaque)
++{
++    int64_t id = *(int64_t *)opaque;
++    Object *cpu_obj = object_dynamic_cast(obj, TYPE_CPU);
++
++    if (cpu_obj) {
++        CPUState *cpu = CPU(cpu_obj);
++        CPUClass *klass = CPU_GET_CLASS(cpu);
++
++        if (klass->get_arch_id(cpu) == id) {
++            return 1;
++        }
++    }
++    return object_child_foreach(obj, cpu_exist_cb, opaque);
++}
++
++bool cpu_exists(int64_t id)
++{
++   return cpu_exist_cb(qdev_get_machine(), &id) ? true : false;
++}
++
+ /* CPU hot-plug notifiers */
+ static NotifierList cpu_added_notifiers =
+     NOTIFIER_LIST_INITIALIZER(cpu_add_notifiers);
+-- 
+1.8.2
+

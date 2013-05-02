@@ -1,0 +1,101 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Igor Mammedov <imammedo@redhat.com>
+To: Igor Mammedov <imammedo@redhat.com>,
+ Andreas =?ISO-8859-1?B?RuRyYmVy?= <afaerber@suse.de>, qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, ehabkost@redhat.com, mst@redhat.com,
+ jan.kiszka@siemens.com, claudio.fontana@huawei.com, qemu-devel@nongnu.org,
+ aderumier@odiso.com, lcapitulino@redhat.com, jfrei@linux.vnet.ibm.com,
+ yang.z.zhang@intel.com, pbonzini@redhat.com, eblake@redhat.com,
+ afaerber@suse.de, lig.fnst@cn.fujitsu.com, rth@twiddle.net
+Date: Tue, 16 Apr 2013 00:12:46 +0200
+Message-id: 1366063976-4909-7-git-send-email-imammedo@redhat.com
+Subject: [PATCH 06/16] target-i386: pc: update rtc_cmos on CPU hot-plug
+
+... so that on reboot BIOS could read current available CPU count
+
+Signed-off-by: Igor Mammedov <imammedo@redhat.com>
+Reviewed-by: Eduardo Habkost <ehabkost@redhat.com>
+---
+ hw/i386/pc.c                   | 20 ++++++++++++++++++++
+ hw/timer/mc146818rtc.c         |  7 +++++++
+ include/hw/timer/mc146818rtc.h |  1 +
+ 3 files changed, 28 insertions(+)
+
+diff --git a/hw/i386/pc.c b/hw/i386/pc.c
+index 8d75b34..dc1a78b 100644
+--- a/hw/i386/pc.c
++++ b/hw/i386/pc.c
+@@ -337,6 +337,21 @@ static void pc_cmos_init_late(void *opaque)
+     qemu_unregister_reset(pc_cmos_init_late, opaque);
+ }
+ 
++typedef struct rtc_cpu_hotplug_arg {
++    ISADevice *rtc_state;
++    Notifier cpu_added_notifier;
++} rtc_cpu_hotplug_arg;
++
++static void rtc_notify_cpu_added(Notifier *notifier, void *data)
++{
++    rtc_cpu_hotplug_arg *arg = container_of(notifier, rtc_cpu_hotplug_arg,
++                                           cpu_added_notifier);
++    ISADevice *s = arg->rtc_state;
++
++    /* increment the number of CPUs */
++    rtc_set_memory(s, 0x5f, rtc_get_memory(s, 0x5f) + 1);
++}
++
+ void pc_cmos_init(ram_addr_t ram_size, ram_addr_t above_4g_mem_size,
+                   const char *boot_device,
+                   ISADevice *floppy, BusState *idebus0, BusState *idebus1,
+@@ -345,6 +360,7 @@ void pc_cmos_init(ram_addr_t ram_size, ram_addr_t above_4g_mem_size,
+     int val, nb, i;
+     FDriveType fd_type[2] = { FDRIVE_DRV_NONE, FDRIVE_DRV_NONE };
+     static pc_cmos_init_late_arg arg;
++    static rtc_cpu_hotplug_arg cpu_hotplug_cb;
+ 
+     /* various important CMOS locations needed by PC/Bochs bios */
+ 
+@@ -383,6 +399,10 @@ void pc_cmos_init(ram_addr_t ram_size, ram_addr_t above_4g_mem_size,
+ 
+     /* set the number of CPU */
+     rtc_set_memory(s, 0x5f, smp_cpus - 1);
++    /* init CPU hotplug notifier */
++    cpu_hotplug_cb.rtc_state = s;
++    cpu_hotplug_cb.cpu_added_notifier.notify = rtc_notify_cpu_added;
++    qemu_register_cpu_added_notifier(&cpu_hotplug_cb.cpu_added_notifier);
+ 
+     /* set boot devices, and disable floppy signature check if requested */
+     if (set_boot_dev(s, boot_device, fd_bootchk)) {
+diff --git a/hw/timer/mc146818rtc.c b/hw/timer/mc146818rtc.c
+index 69e6844..e639942 100644
+--- a/hw/timer/mc146818rtc.c
++++ b/hw/timer/mc146818rtc.c
+@@ -677,6 +677,13 @@ void rtc_set_memory(ISADevice *dev, int addr, int val)
+         s->cmos_data[addr] = val;
+ }
+ 
++int rtc_get_memory(ISADevice *dev, int addr)
++{
++    RTCState *s = DO_UPCAST(RTCState, dev, dev);
++    assert(addr >= 0 && addr <= 127);
++    return s->cmos_data[addr];
++}
++
+ static void rtc_set_date_from_host(ISADevice *dev)
+ {
+     RTCState *s = DO_UPCAST(RTCState, dev, dev);
+diff --git a/include/hw/timer/mc146818rtc.h b/include/hw/timer/mc146818rtc.h
+index 854ea3f..09f37b7 100644
+--- a/include/hw/timer/mc146818rtc.h
++++ b/include/hw/timer/mc146818rtc.h
+@@ -6,6 +6,7 @@
+ 
+ ISADevice *rtc_init(ISABus *bus, int base_year, qemu_irq intercept_irq);
+ void rtc_set_memory(ISADevice *dev, int addr, int val);
++int rtc_get_memory(ISADevice *dev, int addr);
+ void rtc_set_date(ISADevice *dev, const struct tm *tm);
+ 
+ #endif /* !MC146818RTC_H */
+-- 
+1.8.2
+

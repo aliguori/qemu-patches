@@ -1,0 +1,124 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Richard Henderson <rth@twiddle.net>
+To: qemu-devel@nongnu.org
+Cc: Aurelien Jarno <aurelien@aurel32.net>, av1474@comtv.ru
+Date: Thu,  4 Apr 2013 17:56:11 -0500
+Message-id: 1365116186-19382-19-git-send-email-rth@twiddle.net
+Subject: [PATCH 18/33] tcg-ppc64: Implement rotates
+
+Reviewed-by: Aurelien Jarno <aurelien@aurel32.net>
+Signed-off-by: Richard Henderson <rth@twiddle.net>
+---
+ tcg/ppc64/tcg-target.c | 39 +++++++++++++++++++++++++++++++++++++++
+ tcg/ppc64/tcg-target.h |  4 ++--
+ 2 files changed, 41 insertions(+), 2 deletions(-)
+
+diff --git a/tcg/ppc64/tcg-target.c b/tcg/ppc64/tcg-target.c
+index 0cb1667..18338a2 100644
+--- a/tcg/ppc64/tcg-target.c
++++ b/tcg/ppc64/tcg-target.c
+@@ -336,11 +336,14 @@ static int tcg_target_const_match (tcg_target_long val,
+ #define LWZU   OPCD( 33)
+ #define STWU   OPCD( 37)
+ 
++#define RLWIMI OPCD( 20)
+ #define RLWINM OPCD( 21)
++#define RLWNM  OPCD( 23)
+ 
+ #define RLDICL XO30(  0)
+ #define RLDICR XO30(  1)
+ #define RLDIMI XO30(  3)
++#define RLDCL  XO30(  8)
+ 
+ #define BCLR   XO19( 16)
+ #define BCCTR  XO19(528)
+@@ -1473,6 +1476,23 @@ static void tcg_out_op (TCGContext *s, TCGOpcode opc, const TCGArg *args,
+         else
+             tcg_out32 (s, SRAW | SAB (args[1], args[0], args[2]));
+         break;
++    case INDEX_op_rotl_i32:
++        if (const_args[2]) {
++            tcg_out_rlw(s, RLWINM, args[0], args[1], args[2], 0, 31);
++        } else {
++            tcg_out32(s, RLWNM | SAB(args[1], args[0], args[2])
++                         | MB(0) | ME(31));
++        }
++        break;
++    case INDEX_op_rotr_i32:
++        if (const_args[2]) {
++            tcg_out_rlw(s, RLWINM, args[0], args[1], 32 - args[2], 0, 31);
++        } else {
++            tcg_out32(s, SUBFIC | TAI(0, args[2], 32));
++            tcg_out32(s, RLWNM | SAB(args[1], args[0], args[2])
++                         | MB(0) | ME(31));
++        }
++        break;
+ 
+     case INDEX_op_brcond_i32:
+         tcg_out_brcond (s, args[2], args[0], args[1], const_args[1], args[3], 0);
+@@ -1561,6 +1581,21 @@ static void tcg_out_op (TCGContext *s, TCGOpcode opc, const TCGArg *args,
+         else
+             tcg_out32 (s, SRAD | SAB (args[1], args[0], args[2]));
+         break;
++    case INDEX_op_rotl_i64:
++        if (const_args[2]) {
++            tcg_out_rld(s, RLDICL, args[0], args[1], args[2], 0);
++        } else {
++            tcg_out32(s, RLDCL | SAB(args[1], args[0], args[2]) | MB64(0));
++        }
++        break;
++    case INDEX_op_rotr_i64:
++        if (const_args[2]) {
++            tcg_out_rld(s, RLDICL, args[0], args[1], 64 - args[2], 0);
++        } else {
++            tcg_out32(s, SUBFIC | TAI(0, args[2], 64));
++            tcg_out32(s, RLDCL | SAB(args[1], args[0], 0) | MB64(0));
++        }
++        break;
+ 
+     case INDEX_op_mul_i64:
+         tcg_out32 (s, MULLD | TAB (args[0], args[1], args[2]));
+@@ -1693,6 +1728,8 @@ static const TCGTargetOpDef ppc_op_defs[] = {
+     { INDEX_op_shl_i32, { "r", "r", "ri" } },
+     { INDEX_op_shr_i32, { "r", "r", "ri" } },
+     { INDEX_op_sar_i32, { "r", "r", "ri" } },
++    { INDEX_op_rotl_i32, { "r", "r", "ri" } },
++    { INDEX_op_rotr_i32, { "r", "r", "ri" } },
+ 
+     { INDEX_op_brcond_i32, { "r", "ri" } },
+     { INDEX_op_brcond_i64, { "r", "ri" } },
+@@ -1709,6 +1746,8 @@ static const TCGTargetOpDef ppc_op_defs[] = {
+     { INDEX_op_shl_i64, { "r", "r", "ri" } },
+     { INDEX_op_shr_i64, { "r", "r", "ri" } },
+     { INDEX_op_sar_i64, { "r", "r", "ri" } },
++    { INDEX_op_rotl_i64, { "r", "r", "ri" } },
++    { INDEX_op_rotr_i64, { "r", "r", "ri" } },
+ 
+     { INDEX_op_mul_i64, { "r", "r", "r" } },
+     { INDEX_op_div_i64, { "r", "r", "r" } },
+diff --git a/tcg/ppc64/tcg-target.h b/tcg/ppc64/tcg-target.h
+index a4078ae..b2713a0 100644
+--- a/tcg/ppc64/tcg-target.h
++++ b/tcg/ppc64/tcg-target.h
+@@ -76,7 +76,7 @@ typedef enum {
+ 
+ /* optional instructions */
+ #define TCG_TARGET_HAS_div_i32          1
+-#define TCG_TARGET_HAS_rot_i32          0
++#define TCG_TARGET_HAS_rot_i32          1
+ #define TCG_TARGET_HAS_ext8s_i32        1
+ #define TCG_TARGET_HAS_ext16s_i32       1
+ #define TCG_TARGET_HAS_bswap16_i32      0
+@@ -96,7 +96,7 @@ typedef enum {
+ #define TCG_TARGET_HAS_muls2_i32        0
+ 
+ #define TCG_TARGET_HAS_div_i64          1
+-#define TCG_TARGET_HAS_rot_i64          0
++#define TCG_TARGET_HAS_rot_i64          1
+ #define TCG_TARGET_HAS_ext8s_i64        1
+ #define TCG_TARGET_HAS_ext16s_i64       1
+ #define TCG_TARGET_HAS_ext32s_i64       1
+-- 
+1.8.1.4
+
+

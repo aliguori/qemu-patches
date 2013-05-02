@@ -1,0 +1,43 @@
+From patches Mon Sep 17 00:00:00 2001
+From: liguang <lig.fnst@cn.fujitsu.com>
+To: qemu-devel@nongnu.org
+Cc: liguang <lig.fnst@cn.fujitsu.com>
+Date: Thu, 11 Apr 2013 14:32:43 +0800
+Message-id: 1365661963-15396-16-git-send-email-lig.fnst@cn.fujitsu.com
+Subject: [PATCH 16/16] target-xtensa/translate: minimally change
+ gen_intermediate_code_internal
+
+Signed-off-by: liguang <lig.fnst@cn.fujitsu.com>
+---
+ target-xtensa/translate.c |    7 +++----
+ 1 files changed, 3 insertions(+), 4 deletions(-)
+
+diff --git a/target-xtensa/translate.c b/target-xtensa/translate.c
+index 06d68db..dbceeb8 100644
+--- a/target-xtensa/translate.c
++++ b/target-xtensa/translate.c
+@@ -2927,9 +2927,8 @@ static void gen_intermediate_code_internal(
+         if (search_pc) {
+             j = tcg_ctx.gen_opc_ptr - tcg_ctx.gen_opc_buf;
+             if (lj < j) {
+-                lj++;
+-                while (lj < j) {
+-                    tcg_ctx.gen_opc_instr_start[lj++] = 0;
++                while (++lj < j) {
++                    tcg_ctx.gen_opc_instr_start[lj] = 0;
+                 }
+             }
+             tcg_ctx.gen_opc_pc[lj] = dc.pc;
+@@ -2997,7 +2996,7 @@ static void gen_intermediate_code_internal(
+     if (search_pc) {
+         j = tcg_ctx.gen_opc_ptr - tcg_ctx.gen_opc_buf;
+         memset(tcg_ctx.gen_opc_instr_start + lj + 1, 0,
+-                (j - lj) * sizeof(tcg_ctx.gen_opc_instr_start[0]));
++               (j - lj) * sizeof(tcg_ctx.gen_opc_instr_start[0]));
+     } else {
+         tb->size = dc.pc - pc_start;
+         tb->icount = insn_count;
+-- 
+1.7.2.5
+
+

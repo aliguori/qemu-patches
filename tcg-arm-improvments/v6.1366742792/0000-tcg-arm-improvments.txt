@@ -1,0 +1,64 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Richard Henderson <rth@twiddle.net>
+To: qemu-devel@nongnu.org, Richard Henderson <rth@twiddle.net>
+Cc: qemu-devel@nongnu.org, aurelien@aurel32.net
+Date: Tue, 23 Apr 2013 13:46:32 -0700
+Message-id: 1366750012-25015-1-git-send-email-rth@twiddle.net
+Subject: [PATCH 00/20] tcg-arm improvments
+
+Changes v5-v6, feedback from Aurelien:
+  * Drop tcg_out_goto changes.
+  * Add Z constraint for deposit.
+  * Small comment cleanups.
+  * Rebase vs master.
+
+The following changes since commit 456736710df19c2275192269fe67a3f0b2583835:
+
+  block: Fix build with tracing enabled (2013-04-22 11:31:41 -0500)
+
+are available in the git repository at:
+
+  git://github.com/rth7680/qemu.git tcg-arm-2
+
+for you to fetch changes up to 1394dedd76bd16489cc2327e40df28ab2095a22e:
+
+  tcg-arm: Remove long jump from tcg_out_goto_label (2013-04-23 13:34:28 -0700)
+
+
+r~
+
+
+Richard Henderson (20):
+  tcg-arm: Fix local stack frame
+  tcg: Log the contents of the prologue with -d out_asm
+  tcg-arm: Use bic to implement and with constant
+  tcg-arm: Handle negated constant arguments to and/sub
+  tcg-arm: Allow constant first argument to sub
+  tcg-arm: Use tcg_out_dat_rIN for compares
+  tcg-arm: Handle constant arguments to add2/sub2
+  tcg-arm: Improve constant generation
+  tcg-arm: Implement deposit for armv7
+  tcg-arm: Implement division instructions
+  tcg-arm: Use TCG_REG_TMP name for the tcg temporary
+  tcg-arm: Use R12 for the tcg temporary
+  tcg-arm: Cleanup multiply subroutines
+  tcg-arm: Cleanup most primitive load store subroutines
+  tcg-arm: Split out tcg_out_tlb_read
+  tcg-arm: Improve scheduling of tcg_out_tlb_read
+  tcg-arm: Delete the 'S' constraint
+  tcg-arm: Use movi32 + blx for calls on v7
+  tcg-arm: Convert to CONFIG_QEMU_LDST_OPTIMIZATION
+  tcg-arm: Remove long jump from tcg_out_goto_label
+
+ configure               |    2 +-
+ disas/arm.c             |    4 +
+ include/exec/exec-all.h |   17 +
+ tcg/arm/tcg-target.c    | 1435 +++++++++++++++++++++++++++--------------------
+ tcg/arm/tcg-target.h    |   14 +-
+ tcg/tcg.c               |   10 +
+ 6 files changed, 862 insertions(+), 620 deletions(-)
+
+Tested-by: Peter Maydell <peter.maydell@linaro.org>
+-- 
+1.8.1.4
+

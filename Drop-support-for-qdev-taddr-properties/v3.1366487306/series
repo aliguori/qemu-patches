@@ -1,0 +1,3 @@
+0000-Drop-support-for-qdev-taddr-properties.txt
+0001-hw-sm501-Use-correct-setter-for-sysbus-ohci-dma-address-property.patch
+0002-qdev-Drop-taddr-properties.patch

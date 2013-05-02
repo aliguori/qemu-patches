@@ -1,0 +1,25 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Artyom Tarasenko <atar4qemu@gmail.com>
+To: Blue Swirl <blauwirbel@gmail.com>, qemu-devel@nongnu.org,
+ Artyom Tarasenko <atar4qemu@gmail.com>
+Cc: blauwirbel@gmail.com, qemu-devel <qemu-devel@nongnu.org>,
+ Artyom Tarasenko <atar4qemu@gmail.com>, qemu-devel@nongnu.org
+Date: Sat, 27 Apr 2013 09:12:16 +0200
+Message-id: cover.1367046225.git.atar4qemu@gmail.com
+Subject: [PATCH 0/2] sparc64: Fix NVRAM access mode
+
+The sun4u machines use a slightly different modification of the ISA Mostek chip.
+It has MMIO, 1968 as a base year and no IRQ line. Since it matches our m48t08,
+make keep PIO behavior for the 59 model and use MMIO for the 8 model.
+
+This series fixes recognising Mostek RTC in the Linux/sparc64 guest.
+
+Artyom Tarasenko (2):
+  m48t59: use mmio for the m48t08 model of the m48t59_isa card
+  sparc64: Use the correct type of the Mostek NVRAM chip
+
+ hw/sparc64/sun4u.c |    5 ++++-
+ hw/timer/m48t59.c  |   38 +++++++++++++++++++++++++++++++++++---
+ 2 files changed, 39 insertions(+), 4 deletions(-)
+
+

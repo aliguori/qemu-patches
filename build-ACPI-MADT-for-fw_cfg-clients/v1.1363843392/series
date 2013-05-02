@@ -1,0 +1,12 @@
+0000-build-ACPI-MADT-for-fw_cfg-clients.txt
+0001-strip-some-whitespace.patch
+0002-change-element-type-from-char-to-unsigned-char-in-ACPI-table-data.patch
+0003-acpi_table_add-report-fatal-errors-through-an-internal-Error-object.patch
+0004-qapi-schema-add-AcpiTableOptions.patch
+0005-acpi_table_add-accept-QemuOpts-and-parse-it-with-OptsVisitor.patch
+0006-acpi_table_add-extract-and-reimplement-internals.patch
+0007-like-acpi_table_install-acpi_table_add-should-propagate-Errors.patch
+0008-extract-unify-the-constant-0xfee00000-as-APIC_DEFAULT_ADDRESS.patch
+0009-Introduce-IO_APIC_DEFAULT_ADDRESS-for-0xfec00000.patch
+0010-pc_acpi_init-dont-bail-as-soon-as-failing-to-find-default-DSDT.patch
+0011-i386-pc-build-ACPI-MADT-for-fw_cfg-clients.patch

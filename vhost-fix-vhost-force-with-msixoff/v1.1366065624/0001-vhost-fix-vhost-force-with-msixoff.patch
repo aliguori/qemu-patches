@@ -1,0 +1,36 @@
+From patches Mon Sep 17 00:00:00 2001
+From: "Michael S. Tsirkin" <mst@redhat.com>
+To: Christian Borntraeger <borntraeger@de.ibm.com>,
+ Alexander Graf <agraf@suse.de>, qemu-devel@nongnu.org,
+ "Michael S. Tsirkin" <mst@redhat.com>
+Cc: Alexander Graf <agraf@suse.de>, Cornelia Huck <cornelia.huck@de.ibm.com>,
+ qemu-devel@nongnu.org, "Michael S. Tsirkin" <mst@redhat.com>,
+ Christian Borntraeger <borntraeger@de.ibm.com>
+Date: Mon, 15 Apr 2013 17:40:24 +0300
+Message-id: 20130415144024.GA20178@redhat.com
+Subject: [PATCH 1/1] vhost: fix vhost force with msix=off
+
+In response to a bug report on IRC: this should fix it I think?
+Need to test properly but out of time for today,
+compiled only. Hope this helps.
+
+Signed-off-by: Michael S. Tsirkin <mst@redhat.com>
+
+diff --git a/hw/virtio/virtio-pci.c b/hw/virtio/virtio-pci.c
+index 8bba0f3..d0fcc6c 100644
+--- a/hw/virtio/virtio-pci.c
++++ b/hw/virtio/virtio-pci.c
+@@ -758,6 +758,10 @@ static int virtio_pci_set_guest_notifier(DeviceState *d, int n, bool assign,
+         event_notifier_cleanup(notifier);
+     }
+ 
++    if (!msix_enabled(&proxy->pci_dev) && proxy->vdev->guest_notifier_mask) {
++        proxy->vdev->guest_notifier_mask(proxy->vdev, n, !assign);
++    }
++
+     return 0;
+ }
+ 
+
+
+Tested-by: Alexander Graf <agraf@suse.de>

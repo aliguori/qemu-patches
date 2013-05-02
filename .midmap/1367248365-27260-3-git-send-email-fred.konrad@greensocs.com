@@ -1,0 +1,1 @@
+../virtio-fix-bus-command-line-compatibility/v1.1367273561/0002-virtio-serial-fix-command-line-compatibility.patch

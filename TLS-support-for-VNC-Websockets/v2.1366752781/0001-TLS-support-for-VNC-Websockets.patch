@@ -1,0 +1,416 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Tim Hardeck <thardeck@suse.de>
+To: qemu-devel@nongnu.org, Tim Hardeck <thardeck@suse.de>
+Cc: Anthony Liguori <aliguori@us.ibm.com>, stefanha@gmail.com,
+ github@martintribe.org, berrange@redhat.com, Tim Hardeck <thardeck@suse.de>
+Date: Tue, 23 Apr 2013 16:33:01 +0200
+Message-id: 1366727581-5772-1-git-send-email-thardeck@suse.de
+Subject: [PATCH 1/1] TLS support for VNC Websockets
+
+Added TLS support to the VNC QEMU Websockets implementation.
+VNC-TLS needs to be enabled for this feature to be used.
+
+The required certificates are specified as in case of VNC-TLS
+with the VNC parameter "x509=<path>".
+
+If the server certificate isn't signed by a rooth authority it needs to
+be manually imported in the browser because at least in case of Firefox
+and Chrome there is no user dialog, the connection just gets canceled.
+
+As a side note VEncrypt over Websocket doesn't work atm because TLS can't
+be stacked in the current implementation. (It also didn't work before)
+Nevertheless to my knowledge there is no HTML 5 VNC client which supports
+it and the Websocket connection can be encrypted with regular TLS now so
+it should be fine for most use cases.
+
+Signed-off-by: Tim Hardeck <thardeck@suse.de>
+Reviewed-by: Anthony Liguori <aliguori@us.ibm.com>
+---
+
+Changes v2
+
+* a peek buffer of 4 Byte is enough
+---
+ qemu-options.hx |  2 ++
+ ui/vnc-tls.c    | 61 +++++++++++++++++++++++++---------------
+ ui/vnc-ws.c     | 63 ++++++++++++++++++++++++++++++++++++++++++
+ ui/vnc-ws.h     |  3 ++
+ ui/vnc.c        | 86 ++++++++++++++++++++++++++++++++++++++++++++-------------
+ ui/vnc.h        |  5 +++-
+ 6 files changed, 178 insertions(+), 42 deletions(-)
+
+diff --git a/qemu-options.hx b/qemu-options.hx
+index 7cd6002..e19db6f 100644
+--- a/qemu-options.hx
++++ b/qemu-options.hx
+@@ -1127,6 +1127,8 @@ By definition the Websocket port is 5700+@var{display}. If @var{host} is
+ specified connections will only be allowed from this host.
+ As an alternative the Websocket port could be specified by using
+ @code{websocket}=@var{port}.
++TLS encryption for the Websocket connection is supported if the required
++certificates are specified with the VNC option @option{x509}.
+ 
+ @item password
+ 
+diff --git a/ui/vnc-tls.c b/ui/vnc-tls.c
+index 8d4cc8e..50275de 100644
+--- a/ui/vnc-tls.c
++++ b/ui/vnc-tls.c
+@@ -334,29 +334,38 @@ static int vnc_set_gnutls_priority(gnutls_session_t s, int x509)
+ 
+ int vnc_tls_client_setup(struct VncState *vs,
+                          int needX509Creds) {
++    VncStateTLS *tls;
+ 
+     VNC_DEBUG("Do TLS setup\n");
++#ifdef CONFIG_VNC_WS
++    if (vs->websocket) {
++        tls = &vs->ws_tls;
++    } else
++#endif /* CONFIG_VNC_WS */
++    {
++        tls = &vs->tls;
++    }
+     if (vnc_tls_initialize() < 0) {
+         VNC_DEBUG("Failed to init TLS\n");
+         vnc_client_error(vs);
+         return -1;
+     }
+-    if (vs->tls.session == NULL) {
+-        if (gnutls_init(&vs->tls.session, GNUTLS_SERVER) < 0) {
++    if (tls->session == NULL) {
++        if (gnutls_init(&tls->session, GNUTLS_SERVER) < 0) {
+             vnc_client_error(vs);
+             return -1;
+         }
+ 
+-        if (gnutls_set_default_priority(vs->tls.session) < 0) {
+-            gnutls_deinit(vs->tls.session);
+-            vs->tls.session = NULL;
++        if (gnutls_set_default_priority(tls->session) < 0) {
++            gnutls_deinit(tls->session);
++            tls->session = NULL;
+             vnc_client_error(vs);
+             return -1;
+         }
+ 
+-        if (vnc_set_gnutls_priority(vs->tls.session, needX509Creds) < 0) {
+-            gnutls_deinit(vs->tls.session);
+-            vs->tls.session = NULL;
++        if (vnc_set_gnutls_priority(tls->session, needX509Creds) < 0) {
++            gnutls_deinit(tls->session);
++            tls->session = NULL;
+             vnc_client_error(vs);
+             return -1;
+         }
+@@ -364,43 +373,43 @@ int vnc_tls_client_setup(struct VncState *vs,
+         if (needX509Creds) {
+             gnutls_certificate_server_credentials x509_cred = vnc_tls_initialize_x509_cred(vs->vd);
+             if (!x509_cred) {
+-                gnutls_deinit(vs->tls.session);
+-                vs->tls.session = NULL;
++                gnutls_deinit(tls->session);
++                tls->session = NULL;
+                 vnc_client_error(vs);
+                 return -1;
+             }
+-            if (gnutls_credentials_set(vs->tls.session, GNUTLS_CRD_CERTIFICATE, x509_cred) < 0) {
+-                gnutls_deinit(vs->tls.session);
+-                vs->tls.session = NULL;
++            if (gnutls_credentials_set(tls->session, GNUTLS_CRD_CERTIFICATE, x509_cred) < 0) {
++                gnutls_deinit(tls->session);
++                tls->session = NULL;
+                 gnutls_certificate_free_credentials(x509_cred);
+                 vnc_client_error(vs);
+                 return -1;
+             }
+             if (vs->vd->tls.x509verify) {
+                 VNC_DEBUG("Requesting a client certificate\n");
+-                gnutls_certificate_server_set_request (vs->tls.session, GNUTLS_CERT_REQUEST);
++                gnutls_certificate_server_set_request (tls->session, GNUTLS_CERT_REQUEST);
+             }
+ 
+         } else {
+             gnutls_anon_server_credentials_t anon_cred = vnc_tls_initialize_anon_cred();
+             if (!anon_cred) {
+-                gnutls_deinit(vs->tls.session);
+-                vs->tls.session = NULL;
++                gnutls_deinit(tls->session);
++                tls->session = NULL;
+                 vnc_client_error(vs);
+                 return -1;
+             }
+-            if (gnutls_credentials_set(vs->tls.session, GNUTLS_CRD_ANON, anon_cred) < 0) {
+-                gnutls_deinit(vs->tls.session);
+-                vs->tls.session = NULL;
++            if (gnutls_credentials_set(tls->session, GNUTLS_CRD_ANON, anon_cred) < 0) {
++                gnutls_deinit(tls->session);
++                tls->session = NULL;
+                 gnutls_anon_free_server_credentials(anon_cred);
+                 vnc_client_error(vs);
+                 return -1;
+             }
+         }
+ 
+-        gnutls_transport_set_ptr(vs->tls.session, (gnutls_transport_ptr_t)vs);
+-        gnutls_transport_set_push_function(vs->tls.session, vnc_tls_push);
+-        gnutls_transport_set_pull_function(vs->tls.session, vnc_tls_pull);
++        gnutls_transport_set_ptr(tls->session, (gnutls_transport_ptr_t)vs);
++        gnutls_transport_set_push_function(tls->session, vnc_tls_push);
++        gnutls_transport_set_pull_function(tls->session, vnc_tls_pull);
+     }
+     return 0;
+ }
+@@ -414,6 +423,14 @@ void vnc_tls_client_cleanup(struct VncState *vs)
+     }
+     vs->tls.wiremode = VNC_WIREMODE_CLEAR;
+     g_free(vs->tls.dname);
++#ifdef CONFIG_VNC_WS
++    if (vs->ws_tls.session) {
++        gnutls_deinit(vs->ws_tls.session);
++        vs->ws_tls.session = NULL;
++    }
++    vs->ws_tls.wiremode = VNC_WIREMODE_CLEAR;
++    g_free(vs->ws_tls.dname);
++#endif /* CONFIG_VNC_WS */
+ }
+ 
+ 
+diff --git a/ui/vnc-ws.c b/ui/vnc-ws.c
+index 3e30209..df89315 100644
+--- a/ui/vnc-ws.c
++++ b/ui/vnc-ws.c
+@@ -20,6 +20,69 @@
+ 
+ #include "vnc.h"
+ 
++#ifdef CONFIG_VNC_TLS
++#include "qemu/sockets.h"
++
++static void vncws_tls_handshake_io(void *opaque);
++
++static int vncws_start_tls_handshake(struct VncState *vs)
++{
++    int ret = gnutls_handshake(vs->ws_tls.session);
++
++    if (ret < 0) {
++        if (!gnutls_error_is_fatal(ret)) {
++            VNC_DEBUG("Handshake interrupted (blocking)\n");
++            if (!gnutls_record_get_direction(vs->ws_tls.session)) {
++                qemu_set_fd_handler(vs->csock, vncws_tls_handshake_io,
++                                    NULL, vs);
++            } else {
++                qemu_set_fd_handler(vs->csock, NULL, vncws_tls_handshake_io,
++                                    vs);
++            }
++            return 0;
++        }
++        VNC_DEBUG("Handshake failed %s\n", gnutls_strerror(ret));
++        vnc_client_error(vs);
++        return -1;
++    }
++
++    VNC_DEBUG("Handshake done, switching to TLS data mode\n");
++    vs->ws_tls.wiremode = VNC_WIREMODE_TLS;
++    qemu_set_fd_handler2(vs->csock, NULL, vncws_handshake_read, NULL, vs);
++
++    return 0;
++}
++
++static void vncws_tls_handshake_io(void *opaque)
++{
++    struct VncState *vs = (struct VncState *)opaque;
++
++    VNC_DEBUG("Handshake IO continue\n");
++    vncws_start_tls_handshake(vs);
++}
++
++void vncws_tls_handshake_peek(void *opaque)
++{
++    VncState *vs = opaque;
++    long ret;
++
++    if (!vs->ws_tls.session) {
++        char peek[4];
++        ret = qemu_recv(vs->csock, peek, sizeof(peek), MSG_PEEK);
++        if (ret && (strncmp(peek, "\x16", 1) == 0
++                    || strncmp(peek, "\x80", 1) == 0)) {
++            VNC_DEBUG("TLS Websocket connection recognized");
++            vnc_tls_client_setup(vs, 1);
++            vncws_start_tls_handshake(vs);
++        } else {
++            vncws_handshake_read(vs);
++        }
++    } else {
++        qemu_set_fd_handler2(vs->csock, NULL, vncws_handshake_read, NULL, vs);
++    }
++}
++#endif /* CONFIG_VNC_TLS */
++
+ void vncws_handshake_read(void *opaque)
+ {
+     VncState *vs = opaque;
+diff --git a/ui/vnc-ws.h b/ui/vnc-ws.h
+index 039a587..95c1b0a 100644
+--- a/ui/vnc-ws.h
++++ b/ui/vnc-ws.h
+@@ -74,6 +74,9 @@ enum {
+     WS_OPCODE_PONG = 0xA
+ };
+ 
++#ifdef CONFIG_VNC_TLS
++void vncws_tls_handshake_peek(void *opaque);
++#endif /* CONFIG_VNC_TLS */
+ void vncws_handshake_read(void *opaque);
+ long vnc_client_write_ws(VncState *vs);
+ long vnc_client_read_ws(VncState *vs);
+diff --git a/ui/vnc.c b/ui/vnc.c
+index 5ddb696..99d5e61 100644
+--- a/ui/vnc.c
++++ b/ui/vnc.c
+@@ -1118,6 +1118,23 @@ void vnc_client_error(VncState *vs)
+     vnc_disconnect_start(vs);
+ }
+ 
++#ifdef CONFIG_VNC_TLS
++static long vnc_client_write_tls(gnutls_session_t *session,
++                                 const uint8_t *data,
++                                 size_t datalen)
++{
++    long ret = gnutls_write(*session, data, datalen);
++    if (ret < 0) {
++        if (ret == GNUTLS_E_AGAIN) {
++            errno = EAGAIN;
++        } else {
++            errno = EIO;
++        }
++        ret = -1;
++    }
++    return ret;
++}
++#endif /* CONFIG_VNC_TLS */
+ 
+ /*
+  * Called to write a chunk of data to the client socket. The data may
+@@ -1139,17 +1156,20 @@ long vnc_client_write_buf(VncState *vs, const uint8_t *data, size_t datalen)
+     long ret;
+ #ifdef CONFIG_VNC_TLS
+     if (vs->tls.session) {
+-        ret = gnutls_write(vs->tls.session, data, datalen);
+-        if (ret < 0) {
+-            if (ret == GNUTLS_E_AGAIN)
+-                errno = EAGAIN;
+-            else
+-                errno = EIO;
+-            ret = -1;
++        ret = vnc_client_write_tls(&vs->tls.session, data, datalen);
++    } else {
++#ifdef CONFIG_VNC_WS
++        if (vs->ws_tls.session) {
++            ret = vnc_client_write_tls(&vs->ws_tls.session, data, datalen);
++        } else
++#endif /* CONFIG_VNC_WS */
++#endif /* CONFIG_VNC_TLS */
++        {
++            ret = send(vs->csock, (const void *)data, datalen, 0);
+         }
+-    } else
++#ifdef CONFIG_VNC_TLS
++    }
+ #endif /* CONFIG_VNC_TLS */
+-        ret = send(vs->csock, (const void *)data, datalen, 0);
+     VNC_DEBUG("Wrote wire %p %zd -> %ld\n", data, datalen, ret);
+     return vnc_client_io_error(vs, ret, socket_error());
+ }
+@@ -1247,6 +1267,22 @@ void vnc_read_when(VncState *vs, VncReadEvent *func, size_t expecting)
+     vs->read_handler_expect = expecting;
+ }
+ 
++#ifdef CONFIG_VNC_TLS
++static long vnc_client_read_tls(gnutls_session_t *session, uint8_t *data,
++                                size_t datalen)
++{
++    long ret = gnutls_read(*session, data, datalen);
++    if (ret < 0) {
++        if (ret == GNUTLS_E_AGAIN) {
++            errno = EAGAIN;
++        } else {
++            errno = EIO;
++        }
++        ret = -1;
++    }
++    return ret;
++}
++#endif /* CONFIG_VNC_TLS */
+ 
+ /*
+  * Called to read a chunk of data from the client socket. The data may
+@@ -1268,17 +1304,20 @@ long vnc_client_read_buf(VncState *vs, uint8_t *data, size_t datalen)
+     long ret;
+ #ifdef CONFIG_VNC_TLS
+     if (vs->tls.session) {
+-        ret = gnutls_read(vs->tls.session, data, datalen);
+-        if (ret < 0) {
+-            if (ret == GNUTLS_E_AGAIN)
+-                errno = EAGAIN;
+-            else
+-                errno = EIO;
+-            ret = -1;
++        ret = vnc_client_read_tls(&vs->tls.session, data, datalen);
++    } else {
++#ifdef CONFIG_VNC_WS
++        if (vs->ws_tls.session) {
++            ret = vnc_client_read_tls(&vs->ws_tls.session, data, datalen);
++        } else
++#endif /* CONFIG_VNC_WS */
++#endif /* CONFIG_VNC_TLS */
++        {
++            ret = qemu_recv(vs->csock, data, datalen, 0);
+         }
+-    } else
++#ifdef CONFIG_VNC_TLS
++    }
+ #endif /* CONFIG_VNC_TLS */
+-        ret = qemu_recv(vs->csock, data, datalen, 0);
+     VNC_DEBUG("Read wire %p %zd -> %ld\n", data, datalen, ret);
+     return vnc_client_io_error(vs, ret, socket_error());
+ }
+@@ -2736,7 +2775,16 @@ static void vnc_connect(VncDisplay *vd, int csock, int skipauth, bool websocket)
+ #ifdef CONFIG_VNC_WS
+     if (websocket) {
+         vs->websocket = 1;
+-        qemu_set_fd_handler2(vs->csock, NULL, vncws_handshake_read, NULL, vs);
++#ifdef CONFIG_VNC_TLS
++        if (vd->tls.x509cert) {
++            qemu_set_fd_handler2(vs->csock, NULL, vncws_tls_handshake_peek,
++                                 NULL, vs);
++        } else
++#endif /* CONFIG_VNC_TLS */
++        {
++            qemu_set_fd_handler2(vs->csock, NULL, vncws_handshake_read,
++                                 NULL, vs);
++        }
+     } else
+ #endif /* CONFIG_VNC_WS */
+     {
+diff --git a/ui/vnc.h b/ui/vnc.h
+index 58e002e..e54a89a 100644
+--- a/ui/vnc.h
++++ b/ui/vnc.h
+@@ -278,9 +278,12 @@ struct VncState
+     VncStateSASL sasl;
+ #endif
+ #ifdef CONFIG_VNC_WS
++#ifdef CONFIG_VNC_TLS
++    VncStateTLS ws_tls;
++#endif /* CONFIG_VNC_TLS */
+     bool encode_ws;
+     bool websocket;
+-#endif
++#endif /* CONFIG_VNC_WS */
+ 
+     QObject *info;
+ 
+-- 
+1.8.1.4
+

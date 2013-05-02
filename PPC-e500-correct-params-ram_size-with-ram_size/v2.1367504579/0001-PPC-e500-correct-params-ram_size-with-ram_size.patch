@@ -1,0 +1,37 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Tiejun Chen <tiejun.chen@windriver.com>
+To: Tiejun Chen <tiejun.chen@windriver.com>, agraf@suse.de
+Cc: qemu-ppc@nongnu.org, qemu-devel@nongnu.org
+Date: Thu, 2 May 2013 09:22:59 +0800
+Message-id: 1367457779-4062-1-git-send-email-tiejun.chen@windriver.com
+Subject: [PATCH 1/1] PPC: e500: correct params->ram_size with ram_size
+
+We should sync params->ram_size after we fixup memory size on
+a alignment boundary. Otherwise Guest would exceed the actual
+memory region.
+
+Signed-off-by: Tiejun Chen <tiejun.chen@windriver.com>
+---
+v2: 
+
+eliminate that original comment in v1.
+
+ hw/ppc/e500.c |    1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/hw/ppc/e500.c b/hw/ppc/e500.c
+index c1bdb6b..3978f84 100644
+--- a/hw/ppc/e500.c
++++ b/hw/ppc/e500.c
+@@ -523,6 +523,7 @@ void ppce500_init(PPCE500Params *params)
+ 
+     /* Fixup Memory size on a alignment boundary */
+     ram_size &= ~(RAM_SIZES_ALIGN - 1);
++    params->ram_size = ram_size;
+ 
+     /* Register Memory */
+     memory_region_init_ram(ram, "mpc8544ds.ram", ram_size);
+-- 
+1.7.9.5
+
+

@@ -1,0 +1,122 @@
+From patches Mon Sep 17 00:00:00 2001
+From: mrhines@linux.vnet.ibm.com
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, quintela@redhat.com,
+ Michael R Hines <mrhines@us.ibm.com>, Bulent Abali <abali@us.ibm.com>,
+ owasserm@redhat.com, pbonzini@redhat.com, Gokul B Kandiraju <gokul@us.ibm.com>
+Date: Sun, 21 Apr 2013 17:18:01 -0400
+Message-id: 1366579081-6857-13-git-send-email-mrhines@linux.vnet.ibm.com
+Subject: [PATCH 12/12] rdma: send pc.ram
+
+From: "Michael R. Hines" <mrhines@us.ibm.com>
+
+This takes advantages of the previous patches:
+
+1. use the new QEMUFileOps hook 'save_page'
+
+2. call out to the right accessor methods to invoke
+   the iteration hooks defined in QEMUFileOps
+
+Signed-off-by: Michael R. Hines <mrhines@us.ibm.com>
+---
+ arch_init.c |   35 +++++++++++++++++++++++++++++++++--
+ 1 file changed, 33 insertions(+), 2 deletions(-)
+
+diff --git a/arch_init.c b/arch_init.c
+index e272852..2628ad3 100644
+--- a/arch_init.c
++++ b/arch_init.c
+@@ -115,6 +115,7 @@ const uint32_t arch_type = QEMU_ARCH;
+ #define RAM_SAVE_FLAG_EOS      0x10
+ #define RAM_SAVE_FLAG_CONTINUE 0x20
+ #define RAM_SAVE_FLAG_XBZRLE   0x40
++/* 0x80 is reserved in migration.h start with 0x100 next */
+ 
+ 
+ static struct defconfig_file {
+@@ -454,8 +455,15 @@ static int ram_save_block(QEMUFile *f, bool last_stage)
+             p = memory_region_get_ram_ptr(mr) + offset;
+ 
+             /* In doubt sent page as normal */
+-            bytes_sent = -1;
+-            if (is_zero_page(p)) {
++            bytes_sent = ram_control_save_page(f, block->offset,
++                                       offset, TARGET_PAGE_SIZE);
++            if (bytes_sent != -1) {
++                if (bytes_sent > 0) {
++                    acct_info.norm_pages++;
++                } else if(bytes_sent == 0) {
++                    acct_info.dup_pages++;
++                }
++            } else if (is_zero_page(p)) {
+                 acct_info.dup_pages++;
+                 if (!ram_bulk_stage) {
+                     bytes_sent = save_block_hdr(f, block, offset, cont,
+@@ -598,6 +606,15 @@ static int ram_save_setup(QEMUFile *f, void *opaque)
+     }
+ 
+     qemu_mutex_unlock_ramlist();
++
++    /*
++     * Please leave in place. These calls generate reserved messages in
++     * the RDMA protocol in order to pre-register RDMA memory in the
++     * future to before the bulk round begins.
++     */
++    ram_control_before_iterate(f, RAM_CONTROL_SETUP);
++    ram_control_after_iterate(f, RAM_CONTROL_SETUP);
++
+     qemu_put_be64(f, RAM_SAVE_FLAG_EOS);
+ 
+     return 0;
+@@ -616,6 +633,8 @@ static int ram_save_iterate(QEMUFile *f, void *opaque)
+         reset_ram_globals();
+     }
+ 
++    ram_control_before_iterate(f, RAM_CONTROL_ROUND);
++
+     t0 = qemu_get_clock_ns(rt_clock);
+     i = 0;
+     while ((ret = qemu_file_rate_limit(f)) == 0) {
+@@ -646,6 +665,12 @@ static int ram_save_iterate(QEMUFile *f, void *opaque)
+ 
+     qemu_mutex_unlock_ramlist();
+ 
++    /*
++     * Must occur before EOS (or any QEMUFile operation)
++     * because of RDMA protocol.
++     */
++    ram_control_after_iterate(f, RAM_CONTROL_ROUND);
++
+     if (ret < 0) {
+         bytes_transferred += total_sent;
+         return ret;
+@@ -663,6 +688,8 @@ static int ram_save_complete(QEMUFile *f, void *opaque)
+     qemu_mutex_lock_ramlist();
+     migration_bitmap_sync();
+ 
++    ram_control_before_iterate(f, RAM_CONTROL_FINISH);
++
+     /* try transferring iterative blocks of memory */
+ 
+     /* flush all remaining blocks regardless of rate limiting */
+@@ -676,6 +703,8 @@ static int ram_save_complete(QEMUFile *f, void *opaque)
+         }
+         bytes_transferred += bytes_sent;
+     }
++
++    ram_control_after_iterate(f, RAM_CONTROL_FINISH);
+     migration_end();
+ 
+     qemu_mutex_unlock_ramlist();
+@@ -872,6 +901,8 @@ static int ram_load(QEMUFile *f, void *opaque, int version_id)
+                 ret = -EINVAL;
+                 goto done;
+             }
++        } else if (flags & RAM_SAVE_FLAG_HOOK) {
++            ram_control_load_hook(f, flags);
+         }
+         error = qemu_file_get_error(f);
+         if (error) {
+-- 
+1.7.10.4
+

@@ -1,0 +1,2 @@
+0001-target-ppc-Fix-invalid-SPR-read-write-warnings.patch
+0002-target-ppc-Add-read-and-write-of-PPR-SPR.patch

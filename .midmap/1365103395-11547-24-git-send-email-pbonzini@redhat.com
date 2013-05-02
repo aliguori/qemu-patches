@@ -1,0 +1,1 @@
+../hw--reorganization-part-2/v3.1365128560/0023-hw-move-SD-MMC-devices-to-hw-sd--configure-with-default-configs-.patch

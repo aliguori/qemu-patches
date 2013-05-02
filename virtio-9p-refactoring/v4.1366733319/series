@@ -1,0 +1,5 @@
+0000-virtio-9p-refactoring.txt
+0001-virtio-9p-add-the-virtio-9p-device.patch
+0002-virtio-9p-pci-switch-to-the-new-API.patch
+0003-virtio-9p-cleanup-init-function.patch
+0004-virtio-9p-cleanup-QOM-casts.patch

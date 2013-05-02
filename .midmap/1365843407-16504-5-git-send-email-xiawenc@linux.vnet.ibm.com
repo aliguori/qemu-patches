@@ -1,0 +1,1 @@
+../qmp-hmp-interfaces-for-internal-snapshot-info/v12.1365890189/0004-block-move-collect_snapshots-and-collect_image_info-to-block-qapic.patch

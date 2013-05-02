@@ -1,0 +1,242 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: Paolo Bonzini <pbonzini@redhat.com>, qemu-devel@nongnu.org,
+ Peter Maydell <peter.maydell@linaro.org>
+Cc: Blue Swirl <blauwirbel@gmail.com>, Alexander Graf <agraf@suse.de>,
+ Aurelien Jarno <aurelien@aurel32.net>, qemu-devel@nongnu.org,
+ Paolo Bonzini <pbonzini@redhat.com>
+Date: Tue,  2 Apr 2013 16:44:16 +0200
+Message-id: 1364913860-25159-2-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 1/5] configure: move TARGET_*_ALIGNMENT to target-*/cpu.h
+
+This is no different from, for example, TARGET_LONG_BITS.  It does
+not belong in configure.
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ configure               | 18 ------------------
+ include/exec/cpu-defs.h | 13 +++++++++++++
+ target-alpha/cpu.h      |  1 +
+ target-arm/cpu.h        |  1 +
+ target-i386/cpu.h       |  1 +
+ target-m68k/cpu.h       |  3 +++
+ target-mips/mips-defs.h |  1 +
+ target-ppc/cpu.h        |  1 +
+ target-s390x/cpu.h      |  1 +
+ target-sparc/cpu.h      |  1 +
+ 10 files changed, 23 insertions(+), 18 deletions(-)
+
+diff --git a/configure b/configure
+index 04c2618..5d9a87e 100755
+--- a/configure
++++ b/configure
+@@ -4013,10 +4013,6 @@ bflt="no"
+ target_nptl="no"
+ interp_prefix1=`echo "$interp_prefix" | sed "s/%M/$target_arch2/g"`
+ gdb_xml_files=""
+-target_short_alignment=2
+-target_int_alignment=4
+-target_long_alignment=4
+-target_llong_alignment=8
+ target_libs_softmmu=
+ 
+ TARGET_ARCH="$target_arch2"
+@@ -4028,10 +4024,8 @@ case "$target_arch2" in
+   ;;
+   x86_64)
+     TARGET_BASE_ARCH=i386
+-    target_long_alignment=8
+   ;;
+   alpha)
+-    target_long_alignment=8
+     target_nptl="yes"
+   ;;
+   arm|armeb)
+@@ -4039,7 +4033,6 @@ case "$target_arch2" in
+     bflt="yes"
+     target_nptl="yes"
+     gdb_xml_files="arm-core.xml arm-vfp.xml arm-vfp3.xml arm-neon.xml"
+-    target_llong_alignment=4
+   ;;
+   cris)
+     target_nptl="yes"
+@@ -4050,9 +4043,6 @@ case "$target_arch2" in
+   m68k)
+     bflt="yes"
+     gdb_xml_files="cf-core.xml cf-fp.xml"
+-    target_int_alignment=2
+-    target_long_alignment=2
+-    target_llong_alignment=2
+   ;;
+   microblaze|microblazeel)
+     TARGET_ARCH=microblaze
+@@ -4074,7 +4064,6 @@ case "$target_arch2" in
+     TARGET_ARCH=mips64
+     TARGET_BASE_ARCH=mips
+     echo "TARGET_ABI_MIPSN64=y" >> $config_target_mak
+-    target_long_alignment=8
+   ;;
+   moxie)
+   ;;
+@@ -4096,7 +4085,6 @@ case "$target_arch2" in
+     TARGET_BASE_ARCH=ppc
+     TARGET_ABI_DIR=ppc
+     gdb_xml_files="power64-core.xml power-fpu.xml power-altivec.xml power-spe.xml"
+-    target_long_alignment=8
+   ;;
+   ppc64abi32)
+     TARGET_ARCH=ppc64
+@@ -4114,7 +4102,6 @@ case "$target_arch2" in
+   ;;
+   sparc64)
+     TARGET_BASE_ARCH=sparc
+-    target_long_alignment=8
+   ;;
+   sparc32plus)
+     TARGET_ARCH=sparc64
+@@ -4124,7 +4111,6 @@ case "$target_arch2" in
+   ;;
+   s390x)
+     target_nptl="yes"
+-    target_long_alignment=8
+   ;;
+   unicore32)
+   ;;
+@@ -4156,10 +4142,6 @@ case "$cpu" in
+   ;;
+ esac
+ 
+-echo "TARGET_SHORT_ALIGNMENT=$target_short_alignment" >> $config_target_mak
+-echo "TARGET_INT_ALIGNMENT=$target_int_alignment" >> $config_target_mak
+-echo "TARGET_LONG_ALIGNMENT=$target_long_alignment" >> $config_target_mak
+-echo "TARGET_LLONG_ALIGNMENT=$target_llong_alignment" >> $config_target_mak
+ echo "TARGET_ARCH=$TARGET_ARCH" >> $config_target_mak
+ target_arch_name="`upper $TARGET_ARCH`"
+ echo "TARGET_$target_arch_name=y" >> $config_target_mak
+diff --git a/include/exec/cpu-defs.h b/include/exec/cpu-defs.h
+index 0ae967a..32d11e8 100644
+--- a/include/exec/cpu-defs.h
++++ b/include/exec/cpu-defs.h
+@@ -36,6 +36,19 @@
+ 
+ #define TARGET_LONG_SIZE (TARGET_LONG_BITS / 8)
+ 
++#ifndef TARGET_SHORT_ALIGNMENT
++#define TARGET_SHORT_ALIGNMENT 2
++#endif
++#ifndef TARGET_INT_ALIGNMENT
++#define TARGET_INT_ALIGNMENT 4
++#endif
++#ifndef TARGET_LONG_ALIGNMENT
++#define TARGET_LONG_ALIGNMENT 4
++#endif
++#ifndef TARGET_LLONG_ALIGNMENT
++#define TARGET_LLONG_ALIGNMENT 8
++#endif
++
+ typedef int16_t target_short __attribute__ ((aligned(TARGET_SHORT_ALIGNMENT)));
+ typedef uint16_t target_ushort __attribute__((aligned(TARGET_SHORT_ALIGNMENT)));
+ typedef int32_t target_int __attribute__((aligned(TARGET_INT_ALIGNMENT)));
+diff --git a/target-alpha/cpu.h b/target-alpha/cpu.h
+index 2156a1e..b0338fb 100644
+--- a/target-alpha/cpu.h
++++ b/target-alpha/cpu.h
+@@ -24,6 +24,7 @@
+ #include "qemu-common.h"
+ 
+ #define TARGET_LONG_BITS 64
++#define TARGET_LONG_ALIGNMENT 8
+ 
+ #define CPUArchState struct CPUAlphaState
+ 
+diff --git a/target-arm/cpu.h b/target-arm/cpu.h
+index 2b97221..9a8bb03 100644
+--- a/target-arm/cpu.h
++++ b/target-arm/cpu.h
+@@ -20,6 +20,7 @@
+ #define CPU_ARM_H
+ 
+ #define TARGET_LONG_BITS 32
++#define TARGET_LLONG_ALIGNMENT 4
+ 
+ #define ELF_MACHINE	EM_ARM
+ 
+diff --git a/target-i386/cpu.h b/target-i386/cpu.h
+index 48f41ca..f1ef87c 100644
+--- a/target-i386/cpu.h
++++ b/target-i386/cpu.h
+@@ -24,6 +24,7 @@
+ 
+ #ifdef TARGET_X86_64
+ #define TARGET_LONG_BITS 64
++#define TARGET_LONG_ALIGNMENT 8
+ #else
+ #define TARGET_LONG_BITS 32
+ #endif
+diff --git a/target-m68k/cpu.h b/target-m68k/cpu.h
+index c90c40c..74612a9 100644
+--- a/target-m68k/cpu.h
++++ b/target-m68k/cpu.h
+@@ -21,6 +21,9 @@
+ #define CPU_M68K_H
+ 
+ #define TARGET_LONG_BITS 32
++#define TARGET_INT_ALIGNMENT 2
++#define TARGET_LONG_ALIGNMENT 2
++#define TARGET_LLONG_ALIGNMENT 2
+ 
+ #define CPUArchState struct CPUM68KState
+ 
+diff --git a/target-mips/mips-defs.h b/target-mips/mips-defs.h
+index bf094a3..624a015 100644
+--- a/target-mips/mips-defs.h
++++ b/target-mips/mips-defs.h
+@@ -10,6 +10,7 @@
+ 
+ #if defined(TARGET_MIPS64)
+ #define TARGET_LONG_BITS 64
++#define TARGET_LONG_ALIGNMENT 8
+ #define TARGET_PHYS_ADDR_SPACE_BITS 36
+ #define TARGET_VIRT_ADDR_SPACE_BITS 42
+ #else
+diff --git a/target-ppc/cpu.h b/target-ppc/cpu.h
+index 42c36e2..19d4e4c 100644
+--- a/target-ppc/cpu.h
++++ b/target-ppc/cpu.h
+@@ -27,6 +27,7 @@
+ #if defined (TARGET_PPC64)
+ /* PowerPC 64 definitions */
+ #define TARGET_LONG_BITS 64
++#define TARGET_LONG_ALIGNMENT 8
+ #define TARGET_PAGE_BITS 12
+ 
+ /* Note that the official physical address space bits is 62-M where M
+diff --git a/target-s390x/cpu.h b/target-s390x/cpu.h
+index e351005..8a241d3 100644
+--- a/target-s390x/cpu.h
++++ b/target-s390x/cpu.h
+@@ -26,6 +26,7 @@
+ #include "qemu-common.h"
+ 
+ #define TARGET_LONG_BITS 64
++#define TARGET_LONG_ALIGNMENT 8
+ 
+ #define ELF_MACHINE	EM_S390
+ 
+diff --git a/target-sparc/cpu.h b/target-sparc/cpu.h
+index 6fa7778..9e5941a 100644
+--- a/target-sparc/cpu.h
++++ b/target-sparc/cpu.h
+@@ -13,6 +13,7 @@
+ #define TARGET_VIRT_ADDR_SPACE_BITS 32
+ #else
+ #define TARGET_LONG_BITS 64
++#define TARGET_LONG_ALIGNMENT 8
+ #define TARGET_DPREGS 32
+ #define TARGET_PAGE_BITS 13 /* 8k */
+ #define TARGET_PHYS_ADDR_SPACE_BITS 41
+-- 
+1.8.1.4
+
+
+

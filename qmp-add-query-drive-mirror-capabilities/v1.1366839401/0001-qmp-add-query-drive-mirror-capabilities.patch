@@ -1,0 +1,143 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Luiz Capitulino <lcapitulino@redhat.com>
+To: Paolo Bonzini <pbonzini@redhat.com>, Eric Blake <eblake@redhat.com>,
+ qemu-devel <qemu-devel@nongnu.org>, Markus Armbruster <armbru@redhat.com>,
+ Luiz Capitulino <lcapitulino@redhat.com>
+Cc: Paolo Bonzini <pbonzini@redhat.com>, Kevin Wolf <kwolf@redhat.com>,
+ qemu-devel <qemu-devel@nongnu.org>, Luiz Capitulino <lcapitulino@redhat.com>
+Date: Wed, 24 Apr 2013 16:36:41 -0400
+Message-id: 20130424163641.3e15bd43@redhat.com
+Subject: [PATCH 1/1] qmp: add query-drive-mirror-capabilities
+
+The drive-mirror command was extended in QEMU v1.3.0 with two new
+optional arguments 'granularity' and 'buf-size'. However, there's
+no way for libvirt to query for the existence of the new arguments.
+
+This commit solves this problem by adding the
+query-drive-mirror-capabilities command, which reports the
+existence of both arguments.
+
+Signed-off-by: Luiz Capitulino <lcapitulino@redhat.com>
+---
+
+I'm just mimicking query-migrate-capabilities. I don't know if this
+is the best way of doing this because we don't allow drive-mirror
+capabilities to be set and they're always on.
+
+On the other hand, if we take a simpler approach like returning a
+single string of supported new arguments, we may regret it later if
+we end up having to support capabilities negotiation.
+
+Having said that, I don't mind doing this one way or the other and
+slightly prefer the simpler approach.
+
+ blockdev.c       | 21 +++++++++++++++++++++
+ qapi-schema.json | 40 ++++++++++++++++++++++++++++++++++++++++
+ qmp-commands.hx  |  7 +++++++
+ 3 files changed, 68 insertions(+)
+
+diff --git a/blockdev.c b/blockdev.c
+index 8a1652b..3fa5ade 100644
+--- a/blockdev.c
++++ b/blockdev.c
+@@ -1279,6 +1279,27 @@ void qmp_block_commit(const char *device,
+     drive_get_ref(drive_get_by_blockdev(bs));
+ }
+ 
++DriveMirrorCapabilityStatusList *qmp_query_drive_mirror_capabilities(Error **errp)
++{
++    DriveMirrorCapabilityStatusList *caps, *head = NULL;
++    int i;
++
++    for (i = 0; i < DRIVE_MIRROR_CAPABILITY_MAX; i++) {
++        if (head == NULL) {
++            head = g_malloc0(sizeof(*caps));
++            caps = head;
++        } else {
++            caps->next = g_malloc0(sizeof(*caps));
++            caps = caps->next;
++        }
++        caps->value = g_malloc(sizeof(*caps->value));
++        caps->value->capability = i;
++        caps->value->state = true;
++    }
++
++    return head;
++}
++
+ #define DEFAULT_MIRROR_BUF_SIZE   (10 << 20)
+ 
+ void qmp_drive_mirror(const char *device, const char *target,
+diff --git a/qapi-schema.json b/qapi-schema.json
+index 751d3c2..311882d 100644
+--- a/qapi-schema.json
++++ b/qapi-schema.json
+@@ -1715,6 +1715,46 @@
+             '*speed': 'int' } }
+ 
+ ##
++# @DriveMirrorCapability
++#
++# Capabilities supported by the driver-mirror command
++#
++# @granularity: supports setting the dirty bitmap's granularity through the
++#               'granularity' argument
++#
++# @buf-size: supports setting the amount of data to be sent from source
++#            to target through the 'buf-size' argument
++#
++# Since: 1.5.0
++##
++{ 'enum': 'DriveMirrorCapability', 'data': [ 'granularity', 'buf-size' ] }
++
++##
++# @DriveMirrorCapabilityStatus
++#
++# Status of drive-mirror capabilities
++#
++# @capability: capability enumeration
++#
++# @state: True if supported False otherwise
++#
++# Since: 1.5.0
++##
++{ 'type': 'DriveMirrorCapabilityStatus',
++  'data': { 'capability': 'DriveMirrorCapability', 'state': 'bool' } }
++
++##
++# @query-drive-mirror-capabilities
++#
++# Returns information about current drive-mirror's capabilities status
++#
++# Returns: @DriveMirrorCapabilityStatus list
++#
++# Since: 1.5.0
++##
++{ 'command': 'query-drive-mirror-capabilities', 'returns': [ 'DriveMirrorCapabilityStatus' ] }
++
++##
+ # @drive-mirror
+ #
+ # Start mirroring a block device's writes to a new destination.
+diff --git a/qmp-commands.hx b/qmp-commands.hx
+index 4d65422..5b4e559 100644
+--- a/qmp-commands.hx
++++ b/qmp-commands.hx
+@@ -2715,6 +2715,13 @@ EQMP
+     },
+ 
+     {
++        .name       = "query-drive-mirror-capabilities",
++        .args_type  = "",
++        .mhandler.cmd_new = qmp_marshal_input_query_drive_mirror_capabilities,
++    },
++
++
++    {
+         .name       = "query-cpu-definitions",
+         .args_type  = "",
+         .mhandler.cmd_new = qmp_marshal_input_query_cpu_definitions,
+-- 
+1.8.1.4
+
+

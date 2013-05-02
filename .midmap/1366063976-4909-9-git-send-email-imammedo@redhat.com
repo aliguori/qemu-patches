@@ -1,0 +1,1 @@
+../target-i386-CPU-hot-add-with-cpu-add-QMP-command/v4.1366089160/0008-cpu-add-helper-cpu_exists-to-check-if-CPU-with-specified-id-exists.patch

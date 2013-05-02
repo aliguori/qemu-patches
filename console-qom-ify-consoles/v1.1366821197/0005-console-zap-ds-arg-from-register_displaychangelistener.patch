@@ -1,0 +1,166 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Gerd Hoffmann <kraxel@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>,
+ =?utf-8?b?IkFuZHJlYXMgRsOkcmJlciI=?= <andreas.faerber@web.de>,
+ Gerd Hoffmann <kraxel@redhat.com>
+Date: Wed, 24 Apr 2013 11:33:22 +0200
+Message-id: 1366796002-30135-6-git-send-email-kraxel@redhat.com
+Subject: [PATCH 5/5] console: zap ds arg from register_displaychangelistener
+
+We don't have multiple DisplayStates any more,
+so passing it in as argument is not needed.
+
+Signed-off-by: Gerd Hoffmann <kraxel@redhat.com>
+---
+ hw/display/qxl.c     |    2 +-
+ include/ui/console.h |    3 +--
+ ui/cocoa.m           |    2 +-
+ ui/console.c         |   10 +++++-----
+ ui/curses.c          |    2 +-
+ ui/gtk.c             |    2 +-
+ ui/sdl.c             |    2 +-
+ ui/spice-display.c   |    2 +-
+ ui/vnc.c             |    2 +-
+ 9 files changed, 13 insertions(+), 14 deletions(-)
+
+diff --git a/hw/display/qxl.c b/hw/display/qxl.c
+index f8bd7ff..a14296c 100644
+--- a/hw/display/qxl.c
++++ b/hw/display/qxl.c
+@@ -2080,7 +2080,7 @@ static int qxl_init_primary(PCIDevice *dev)
+     qxl->ssd.dcl.ops = &display_listener_ops;
+     qxl->ssd.dcl.con = vga->con;
+     ds = qemu_console_displaystate(vga->con);
+-    register_displaychangelistener(ds, &qxl->ssd.dcl);
++    register_displaychangelistener(&qxl->ssd.dcl);
+     return rc;
+ }
+ 
+diff --git a/include/ui/console.h b/include/ui/console.h
+index c74e791..3e00c99 100644
+--- a/include/ui/console.h
++++ b/include/ui/console.h
+@@ -221,8 +221,7 @@ static inline int is_buffer_shared(DisplaySurface *surface)
+     return !(surface->flags & QEMU_ALLOCATED_FLAG);
+ }
+ 
+-void register_displaychangelistener(DisplayState *ds,
+-                                    DisplayChangeListener *dcl);
++void register_displaychangelistener(DisplayChangeListener *dcl);
+ void update_displaychangelistener(DisplayChangeListener *dcl,
+                                   uint64_t interval);
+ void unregister_displaychangelistener(DisplayChangeListener *dcl);
+diff --git a/ui/cocoa.m b/ui/cocoa.m
+index d51462a..1971d9c 100644
+--- a/ui/cocoa.m
++++ b/ui/cocoa.m
+@@ -1030,7 +1030,7 @@ void cocoa_display_init(DisplayState *ds, int full_screen)
+ 
+     // register vga output callbacks
+     dcl->ops = &dcl_ops;
+-    register_displaychangelistener(ds, dcl);
++    register_displaychangelistener(dcl);
+ 
+     // register cleanup function
+     atexit(cocoa_cleanup);
+diff --git a/ui/console.c b/ui/console.c
+index 3835316..a13fb64 100644
+--- a/ui/console.c
++++ b/ui/console.c
+@@ -178,6 +178,7 @@ static int nb_consoles = 0;
+ 
+ static void text_console_do_init(CharDriverState *chr, DisplayState *ds);
+ static void dpy_refresh(DisplayState *s);
++static DisplayState *get_alloc_displaystate(void);
+ 
+ static void gui_update(void *opaque)
+ {
+@@ -1309,15 +1310,14 @@ void qemu_free_displaysurface(DisplaySurface *surface)
+     g_free(surface);
+ }
+ 
+-void register_displaychangelistener(DisplayState *ds,
+-                                    DisplayChangeListener *dcl)
++void register_displaychangelistener(DisplayChangeListener *dcl)
+ {
+     QemuConsole *con;
+ 
+     trace_displaychangelistener_register(dcl, dcl->ops->dpy_name);
+-    dcl->ds = ds;
+-    QLIST_INSERT_HEAD(&ds->listeners, dcl, next);
+-    gui_setup_refresh(ds);
++    dcl->ds = get_alloc_displaystate();
++    QLIST_INSERT_HEAD(&dcl->ds->listeners, dcl, next);
++    gui_setup_refresh(dcl->ds);
+     if (dcl->con) {
+         dcl->con->dcls++;
+         con = dcl->con;
+diff --git a/ui/curses.c b/ui/curses.c
+index a85a7da..289a955 100644
+--- a/ui/curses.c
++++ b/ui/curses.c
+@@ -359,7 +359,7 @@ void curses_display_init(DisplayState *ds, int full_screen)
+ 
+     dcl = (DisplayChangeListener *) g_malloc0(sizeof(DisplayChangeListener));
+     dcl->ops = &dcl_ops;
+-    register_displaychangelistener(ds, dcl);
++    register_displaychangelistener(dcl);
+ 
+     invalidate = 1;
+ }
+diff --git a/ui/gtk.c b/ui/gtk.c
+index 4110342..42e3c0a 100644
+--- a/ui/gtk.c
++++ b/ui/gtk.c
+@@ -1470,7 +1470,7 @@ void gtk_display_init(DisplayState *ds)
+ 
+     gtk_widget_show_all(s->window);
+ 
+-    register_displaychangelistener(ds, &s->dcl);
++    register_displaychangelistener(&s->dcl);
+ 
+     global_state = s;
+ }
+diff --git a/ui/sdl.c b/ui/sdl.c
+index c9f2928..39a42d6 100644
+--- a/ui/sdl.c
++++ b/ui/sdl.c
+@@ -937,7 +937,7 @@ void sdl_display_init(DisplayState *ds, int full_screen, int no_frame)
+ 
+     dcl = g_malloc0(sizeof(DisplayChangeListener));
+     dcl->ops = &dcl_ops;
+-    register_displaychangelistener(ds, dcl);
++    register_displaychangelistener(dcl);
+ 
+     mouse_mode_notifier.notify = sdl_mouse_mode_change;
+     qemu_add_mouse_mode_change_notifier(&mouse_mode_notifier);
+diff --git a/ui/spice-display.c b/ui/spice-display.c
+index 53c19be..82d8b9f 100644
+--- a/ui/spice-display.c
++++ b/ui/spice-display.c
+@@ -625,7 +625,7 @@ void qemu_spice_display_init(DisplayState *ds)
+ 
+     ssd->dcl.ops = &display_listener_ops;
+     ssd->dcl.con = qemu_console_lookup_by_index(0);
+-    register_displaychangelistener(ds, &ssd->dcl);
++    register_displaychangelistener(&ssd->dcl);
+ 
+     qemu_spice_create_host_primary(ssd);
+ }
+diff --git a/ui/vnc.c b/ui/vnc.c
+index 8ee66b7..86fe1dd 100644
+--- a/ui/vnc.c
++++ b/ui/vnc.c
+@@ -2832,7 +2832,7 @@ void vnc_display_init(DisplayState *ds)
+     vnc_start_worker_thread();
+ 
+     vs->dcl.ops = &dcl_ops;
+-    register_displaychangelistener(ds, &vs->dcl);
++    register_displaychangelistener(&vs->dcl);
+ }
+ 
+ 
+-- 
+1.7.9.7
+

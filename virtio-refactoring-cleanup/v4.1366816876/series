@@ -1,0 +1,8 @@
+0000-virtio-refactoring-cleanup.txt
+0001-virtio-bus-add-new-functions.patch
+0002-virtio-bus-make-virtio_x_bus_new-static.patch
+0003-virtio-pci-cleanup.patch
+0004-virtio-remove-the-function-pointer.patch
+0005-virtio-remove-virtiobindings.patch
+0006-virtio-cleanup-init-and-exit-function.patch
+0007-virtio-drop-unused-function-prototypes.patch

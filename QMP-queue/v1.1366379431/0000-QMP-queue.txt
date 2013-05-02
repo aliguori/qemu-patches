@@ -1,0 +1,28 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Luiz Capitulino <lcapitulino@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>
+Date: Fri, 19 Apr 2013 08:50:31 -0400
+Message-id: 1366375833-995-1-git-send-email-lcapitulino@redhat.com
+Subject: [PATCH 0/2] QMP queue
+
+Two important fixes.
+
+The changes (since 09dada400328d75daf79e3eca1e48e024fec148d) are available
+in the following repository:
+
+    git://repo.or.cz/qemu/qmp-unstable.git queue/qmp
+
+Amos Kong (1):
+  monitor: fix the wrong order of releasing keys
+
+Luiz Capitulino (1):
+  virtio-balloon: fix integer overflow in BALLOON_CHANGE QMP event
+
+ hw/virtio/virtio-balloon.c | 2 +-
+ ui/input.c                 | 8 +++-----
+ 2 files changed, 4 insertions(+), 6 deletions(-)
+
+-- 
+1.8.1.4
+

@@ -1,0 +1,70 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Ed Maste <emaste@freebsd.org>
+To: qemu-devel@nongnu.org
+Cc: Ed Maste <emaste@freebsd.org>
+Date: Thu, 25 Apr 2013 14:28:01 -0400
+Message-id: 1366914481-12219-1-git-send-email-emaste@freebsd.org
+Subject: [PATCH 1/1] Rename hexdump to avoid FreeBSD libutil conflict
+
+On FreeBSD libutil is used for openpty(), but it also provides a hexdump()
+which conflicts with QEMU's.
+
+Signed-off-by: Ed Maste <emaste@freebsd.org>
+---
+ hw/dma/pl330.c        | 4 ++--
+ include/qemu-common.h | 2 +-
+ util/hexdump.c        | 2 +-
+ 3 files changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/hw/dma/pl330.c b/hw/dma/pl330.c
+index 8b33138..60f5299 100644
+--- a/hw/dma/pl330.c
++++ b/hw/dma/pl330.c
+@@ -1157,7 +1157,7 @@ static int pl330_exec_cycle(PL330Chan *channel)
+         if (PL330_ERR_DEBUG > 1) {
+             DB_PRINT("PL330 read from memory @%08x (size = %08x):\n",
+                       q->addr, len);
+-            hexdump((char *)buf, stderr, "", len);
++            qemu_hexdump((char *)buf, stderr, "", len);
+         }
+         fifo_res = pl330_fifo_push(&s->fifo, buf, len, q->tag);
+         if (fifo_res == PL330_FIFO_OK) {
+@@ -1189,7 +1189,7 @@ static int pl330_exec_cycle(PL330Chan *channel)
+             if (PL330_ERR_DEBUG > 1) {
+                 DB_PRINT("PL330 read from memory @%08x (size = %08x):\n",
+                          q->addr, len);
+-                hexdump((char *)buf, stderr, "", len);
++                qemu_hexdump((char *)buf, stderr, "", len);
+             }
+             if (q->inc) {
+                 q->addr += len;
+diff --git a/include/qemu-common.h b/include/qemu-common.h
+index a39cdba..0822e47 100644
+--- a/include/qemu-common.h
++++ b/include/qemu-common.h
+@@ -449,7 +449,7 @@ int mod_utf8_codepoint(const char *s, size_t n, char **end);
+  * Hexdump a buffer to a file. An optional string prefix is added to every line
+  */
+ 
+-void hexdump(const char *buf, FILE *fp, const char *prefix, size_t size);
++void qemu_hexdump(const char *buf, FILE *fp, const char *prefix, size_t size);
+ 
+ /* vector definitions */
+ #ifdef __ALTIVEC__
+diff --git a/util/hexdump.c b/util/hexdump.c
+index 0d0efc8..969b340 100644
+--- a/util/hexdump.c
++++ b/util/hexdump.c
+@@ -15,7 +15,7 @@
+ 
+ #include "qemu-common.h"
+ 
+-void hexdump(const char *buf, FILE *fp, const char *prefix, size_t size)
++void qemu_hexdump(const char *buf, FILE *fp, const char *prefix, size_t size)
+ {
+     unsigned int b;
+ 
+-- 
+1.7.11.5
+
+

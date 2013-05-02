@@ -1,0 +1,27 @@
+From patches Mon Sep 17 00:00:00 2001
+From: MORITA Kazutaka <morita.kazutaka@lab.ntt.co.jp>
+To: kwolf@redhat.com, Eric Blake <eblake@redhat.com>, stefanha@redhat.com
+Cc: kwolf@redhat.com, MORITA Kazutaka <morita.kazutaka@lab.ntt.co.jp>,
+ sheepdog@lists.wpkg.org, qemu-devel@nongnu.org, stefanha@redhat.com
+Date: Thu, 25 Apr 2013 19:37:40 +0900
+Message-id: 1366886263-21263-1-git-send-email-morita.kazutaka@lab.ntt.co.jp
+Subject: [PATCH 0/3] sheepdog: support online snapshot from qemu-img
+
+Currently, we can take sheepdog snapshots of running VMs only from the
+qemu monitor.  This series allows taking online snapshots from
+qemu-img.
+
+The first two patches prepare for the thrid patch.
+
+MORITA Kazutaka (3):
+  sheepdog: cleanup find_vdi_name
+  sheepdog: add SD_RES_READONLY result code
+  sheepdog: resend write requests when SD_RES_READONLY is received
+
+ block/sheepdog.c |  115 ++++++++++++++++++++++++++++++++++++++++++++++++++----
+ 1 files changed, 107 insertions(+), 8 deletions(-)
+
+-- 
+1.7.2.5
+
+

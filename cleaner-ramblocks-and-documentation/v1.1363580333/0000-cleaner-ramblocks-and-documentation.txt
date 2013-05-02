@@ -1,0 +1,221 @@
+From patches Mon Sep 17 00:00:00 2001
+From: mrhines@linux.vnet.ibm.com
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, mst@redhat.com,
+ Michael R Hines <mrhines@us.ibm.com>, Bulent Abali <abali@us.ibm.com>,
+ owasserm@redhat.com, pbonzini@redhat.com, Gokul B Kandiraju <gokul@us.ibm.com>
+Date: Sun, 17 Mar 2013 23:18:53 -0400
+Message-id: 1363576743-6146-1-git-send-email-mrhines@linux.vnet.ibm.com
+Subject: [PATCH 00/10] cleaner ramblocks and documentation
+
+From: "Michael R. Hines" <mrhines@us.ibm.com>
+
+Changes since v3:
+
+- Compile-tested with and without --enable-rdma is working.
+- Updated docs/rdma.txt (included below)
+- Merged with latest pull queue from Paolo
+- Implemented qemu_ram_foreach_block()
+
+mrhines@mrhinesdev:~/qemu$ git diff --stat master
+Makefile.objs                 |    1 +
+arch_init.c                   |   28 +-
+configure                     |   25 ++
+docs/rdma.txt                 |  190 +++++++++++
+exec.c                        |   21 ++
+include/exec/cpu-common.h     |    6 +
+include/migration/migration.h |    3 +
+include/migration/qemu-file.h |   10 +
+include/migration/rdma.h      |  269 ++++++++++++++++
+include/qemu/sockets.h        |    1 +
+migration-rdma.c              |  205 ++++++++++++
+migration.c                   |   19 +-
+rdma.c                        | 1511 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+savevm.c                      |  172 +++++++++-
+util/qemu-sockets.c           |    2 +-
+15 files changed, 2445 insertions(+), 18 deletions(-)
+
+QEMUFileRDMA:
+==================================
+
+QEMUFileRDMA introduces a couple of new functions:
+
+1. qemu_rdma_get_buffer()  (QEMUFileOps rdma_read_ops)
+2. qemu_rdma_put_buffer()  (QEMUFileOps rdma_write_ops)
+
+These two functions provide an RDMA transport
+(not a protocol) without changing the upper-level
+users of QEMUFile that depend on a bytstream abstraction.
+
+In order to provide the same bytestream interface 
+for RDMA, we use SEND messages instead of sockets.
+The operations themselves and the protocol built on 
+top of QEMUFile used throughout the migration 
+process do not change whatsoever.
+
+An infiniband SEND message is the standard ibverbs
+message used by applications of infiniband hardware.
+The only difference between a SEND message and an RDMA
+message is that SEND message cause completion notifications
+to be posted to the completion queue (CQ) on the 
+infiniband receiver side, whereas RDMA messages (used
+for pc.ram) do not (to behave like an actual DMA).
+    
+Messages in infiniband require two things:
+
+1. registration of the memory that will be transmitted
+2. (SEND only) work requests to be posted on both
+   sides of the network before the actual transmission
+   can occur.
+
+RDMA messages much easier to deal with. Once the memory
+on the receiver side is registed and pinned, we're
+basically done. All that is required is for the sender
+side to start dumping bytes onto the link.
+
+SEND messages require more coordination because the
+receiver must have reserved space (using a receive
+work request) on the receive queue (RQ) before QEMUFileRDMA
+can start using them to carry all the bytes as
+a transport for migration of device state.
+
+After the initial connection setup (migration-rdma.c),
+this coordination starts by having both sides post
+a single work request to the RQ before any users
+of QEMUFile are activated.
+
+Once an initial receive work request is posted,
+we have a put_buffer()/get_buffer() implementation
+that looks like this:
+
+Logically:
+
+qemu_rdma_get_buffer():
+
+1. A user on top of QEMUFile calls ops->get_buffer(),
+   which calls us.
+2. We transmit an empty SEND to let the sender know that 
+   we are *ready* to receive some bytes from QEMUFileRDMA.
+   These bytes will come in the form of a another SEND.
+3. Before attempting to receive that SEND, we post another
+   RQ work request to replace the one we just used up.
+4. Block on a CQ event channel and wait for the SEND
+   to arrive.
+5. When the send arrives, librdmacm will unblock us
+   and we can consume the bytes (described later).
+   
+qemu_rdma_put_buffer(): 
+
+1. A user on top of QEMUFile calls ops->put_buffer(),
+   which calls us.
+2. Block on the CQ event channel waiting for a SEND
+   from the receiver to tell us that the receiver
+   is *ready* for us to transmit some new bytes.
+3. When the "ready" SEND arrives, librdmacm will 
+   unblock us and we immediately post a RQ work request
+   to replace the one we just used up.
+4. Now, we can actually deliver the bytes that
+   put_buffer() wants and return. 
+
+NOTE: This entire sequents of events is designed this
+way to mimic the operations of a bytestream and is not
+typical of an infiniband application. (Something like MPI
+would not 'ping-pong' messages like this and would not
+block after every request, which would normally defeat
+the purpose of using zero-copy infiniband in the first place).
+
+Finally, how do we handoff the actual bytes to get_buffer()?
+
+Again, because we're trying to "fake" a bytestream abstraction
+using an analogy not unlike individual UDP frames, we have
+to hold on to the bytes received from SEND in memory.
+
+Each time we get to "Step 5" above for get_buffer(),
+the bytes from SEND are copied into a local holding buffer.
+
+Then, we return the number of bytes requested by get_buffer()
+and leave the remaining bytes in the buffer until get_buffer()
+comes around for another pass.
+
+If the buffer is empty, then we follow the same steps
+listed above for qemu_rdma_get_buffer() and block waiting
+for another SEND message to re-fill the buffer.
+
+Migration of pc.ram:
+===============================
+
+At the beginning of the migration, (migration-rdma.c),
+the sender and the receiver populate the list of RAMBlocks
+to be registered with each other into a structure.
+
+Then, using a single SEND message, they exchange this
+structure with each other, to be used later during the
+iteration of main memory. This structure includes a list
+of all the RAMBlocks, their offsets and lengths.
+
+Main memory is not migrated with SEND infiniband 
+messages, but is instead migrated with RDMA infiniband
+messages.
+
+Messages are migrated in "chunks" (about 64 pages right now).
+Chunk size is not dynamic, but it could be in a future
+implementation.
+
+When a total of 64 pages (or a flush()) are aggregated,
+the memory backed by the chunk on the sender side is
+registered with librdmacm and pinned in memory.
+
+After pinning, an RDMA send is generated and tramsmitted
+for the entire chunk.
+
+Error-handling:
+===============================
+
+Infiniband has what is called a "Reliable, Connected"
+link (one of 4 choices). This is the mode in which
+we use for RDMA migration.
+
+If a *single* message fails,
+the decision is to abort the migration entirely and
+cleanup all the RDMA descriptors and unregister all
+the memory.
+
+After cleanup, the Virtual Machine is returned to normal
+operation the same way that would happen if the TCP
+socket is broken during a non-RDMA based migration.
+
+USAGE
+===============================
+
+Compiling:
+
+$ ./configure --enable-rdma --target-list=x86_64-softmmu
+
+$ make
+
+Command-line on the Source machine AND Destination:
+
+$ virsh qemu-monitor-command --hmp --cmd "migrate_set_speed 40g" # or whatever is the MAX of your RDMA device
+
+Finally, perform the actual migration:
+
+$ virsh migrate domain rdma:xx.xx.xx.xx:port
+
+PERFORMANCE
+===================
+
+Using a 40gbps infinband link performing a worst-case stress test:
+
+RDMA Throughput With $ stress --vm-bytes 1024M --vm 1 --vm-keep
+Approximately 30 gpbs (little better than the paper)
+1. Average worst-case throughput 
+TCP Throughput With $ stress --vm-bytes 1024M --vm 1 --vm-keep
+2. Approximately 8 gpbs (using IPOIB IP over Infiniband)
+
+Average downtime (stop time) ranges between 28 and 33 milliseconds.
+
+An *exhaustive* paper (2010) shows additional performance details
+linked on the QEMU wiki:
+
+http://wiki.qemu.org/Features/RDMALiveMigration
+

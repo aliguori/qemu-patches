@@ -1,0 +1,60 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Richard Henderson <rth@twiddle.net>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, aurelien@aurel32.net
+Date: Fri, 5 Apr 2013 13:47:33 -0500
+Message-id: 1365187661-17023-6-git-send-email-rth@twiddle.net
+Subject: [PATCH 05/13] tcg-s390: Implement mulu2_i64 opcode
+
+Signed-off-by: Richard Henderson <rth@twiddle.net>
+---
+ tcg/s390/tcg-target.c | 5 +++++
+ tcg/s390/tcg-target.h | 2 +-
+ 2 files changed, 6 insertions(+), 1 deletion(-)
+
+diff --git a/tcg/s390/tcg-target.c b/tcg/s390/tcg-target.c
+index b007763..81e2f6a 100644
+--- a/tcg/s390/tcg-target.c
++++ b/tcg/s390/tcg-target.c
+@@ -147,6 +147,7 @@ typedef enum S390Opcode {
+     RRE_LRVR    = 0xb91f,
+     RRE_LRVGR   = 0xb90f,
+     RRE_LTGR    = 0xb902,
++    RRE_MLGR    = 0xb986,
+     RRE_MSGR    = 0xb90c,
+     RRE_MSR     = 0xb252,
+     RRE_NGR     = 0xb980,
+@@ -1981,6 +1982,9 @@ static inline void tcg_out_op(TCGContext *s, TCGOpcode opc,
+     case INDEX_op_divu2_i64:
+         tcg_out_insn(s, RRE, DLGR, TCG_REG_R2, args[4]);
+         break;
++    case INDEX_op_mulu2_i64:
++        tcg_out_insn(s, RRE, MLGR, TCG_REG_R2, args[3]);
++        break;
+ 
+     case INDEX_op_shl_i64:
+         op = RSY_SLLG;
+@@ -2156,6 +2160,7 @@ static const TCGTargetOpDef s390_op_defs[] = {
+ 
+     { INDEX_op_div2_i64, { "b", "a", "0", "1", "r" } },
+     { INDEX_op_divu2_i64, { "b", "a", "0", "1", "r" } },
++    { INDEX_op_mulu2_i64, { "b", "a", "0", "r" } },
+ 
+     { INDEX_op_and_i64, { "r", "0", "rA" } },
+     { INDEX_op_or_i64, { "r", "0", "rO" } },
+diff --git a/tcg/s390/tcg-target.h b/tcg/s390/tcg-target.h
+index da726bd..c0cb714 100644
+--- a/tcg/s390/tcg-target.h
++++ b/tcg/s390/tcg-target.h
+@@ -92,7 +92,7 @@ typedef enum TCGReg {
+ #define TCG_TARGET_HAS_movcond_i64      0
+ #define TCG_TARGET_HAS_add2_i64         1
+ #define TCG_TARGET_HAS_sub2_i64         1
+-#define TCG_TARGET_HAS_mulu2_i64        0
++#define TCG_TARGET_HAS_mulu2_i64        1
+ #define TCG_TARGET_HAS_muls2_i64        0
+ 
+ /* used for function call generation */
+-- 
+1.8.1.4
+

@@ -1,0 +1,57 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Michal Novotny <minovotn@redhat.com>
+To: Luiz Capitulino <lcapitulino@redhat.com>, Eric Blake <eblake@redhat.com>,
+ qemu-devel@nongnu.org, Michal Novotny <minovotn@redhat.com>,
+ "qemu-devel@nongnu.org" <qemu-devel@nongnu.org>
+Cc: qemu-devel@nongnu.org, imammedo@redhat.com, ehabkost@redhat.com,
+ Michal Novotny <minovotn@redhat.com>, lcapitulino@redhat.com
+Date: Mon,  8 Apr 2013 18:21:02 +0200
+Message-id: 111bea6806c8d7e0f20856e75edba74f86a6bc9b.1365430186.git.minovotn@redhat.com
+Subject: [PATCH 1/1] New cpu-max field in query-machines QMP command output
+
+Alter the query-machines QMP command to output information about
+maximum number of CPUs for each machine type with default value
+set to 1 in case the number of max_cpus is not set.
+
+Signed-off-by: Michal Novotny <minovotn@redhat.com>
+Reviewed-by: Eric Blake <eblake@redhat.com>
+---
+ qapi-schema.json | 4 +++-
+ vl.c             | 1 +
+ 2 files changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/qapi-schema.json b/qapi-schema.json
+index db542f6..689ca8d 100644
+--- a/qapi-schema.json
++++ b/qapi-schema.json
+@@ -2861,11 +2861,13 @@
+ #
+ # @default: #optional whether the machine is default
+ #
++# @cpu-max: maximum number of CPUs supported by the machine type
++#
+ # Since: 1.2.0
+ ##
+ { 'type': 'MachineInfo',
+   'data': { 'name': 'str', '*alias': 'str',
+-            '*is-default': 'bool' } }
++            '*is-default': 'bool', 'cpu-max': 'int' } }
+ 
+ ##
+ # @query-machines:
+diff --git a/vl.c b/vl.c
+index a8bba04..c05b3d3 100644
+--- a/vl.c
++++ b/vl.c
+@@ -1617,6 +1617,7 @@ MachineInfoList *qmp_query_machines(Error **errp)
+         }
+ 
+         info->name = g_strdup(m->name);
++        info->cpu_max = !m->max_cpus ? 1 : m->max_cpus;
+ 
+         entry = g_malloc0(sizeof(*entry));
+         entry->value = info;
+-- 
+1.7.11.7
+
+

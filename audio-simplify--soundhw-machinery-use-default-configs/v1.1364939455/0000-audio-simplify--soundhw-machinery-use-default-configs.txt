@@ -1,0 +1,57 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: av1474@comtv.ru, qemu-devel@nongnu.org
+Cc: av1474@comtv.ru, qemu-devel@nongnu.org
+Date: Tue,  2 Apr 2013 16:50:55 +0200
+Message-id: 1364914261-4237-1-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 0/6] audio: simplify -soundhw machinery, use default-configs
+
+This avoids audio-specific hacks in configure, so that the
+same mechanism is used for all targets and all devices.
+
+Not yet tested enough, hence RFC.
+
+Paolo
+
+Paolo Bonzini (6):
+  adlib: qdev-ify
+  audio: remove the need for audio card CONFIG_* symbols
+  audio: remove HAS_AUDIO
+  audio: remove CONFIG_* symbols
+  audio: replace audio card configuration with default-configs
+  audio: move PCI audio cards to pci.mak
+
+ arch_init.c                          | 145 ++++++++---------------------------
+ configure                            |  30 --------
+ default-configs/i386-softmmu.mak     |   2 +-
+ default-configs/mips-softmmu.mak     |   2 +-
+ default-configs/mips64-softmmu.mak   |   2 +-
+ default-configs/mips64el-softmmu.mak |   2 +-
+ default-configs/mipsel-softmmu.mak   |   2 +-
+ default-configs/pci.mak              |   3 +
+ default-configs/ppc-softmmu.mak      |   2 +-
+ default-configs/ppc64-softmmu.mak    |   2 +-
+ default-configs/ppcemb-softmmu.mak   |   2 +-
+ default-configs/sound.mak            |   4 +
+ default-configs/x86_64-softmmu.mak   |   2 +-
+ hmp-commands.hx                      |   4 -
+ hw/Makefile.objs                     |  17 ++--
+ hw/ac97.c                            |   3 +-
+ hw/adlib.c                           |  83 +++++++++++++++-----
+ hw/audiodev.h                        |  23 +-----
+ hw/cs4231a.c                         |   3 +-
+ hw/es1370.c                          |   3 +-
+ hw/gus.c                             |   3 +-
+ hw/intel-hda.c                       |  22 +++---
+ hw/pcspk.c                           |   4 +-
+ hw/pcspk.h                           |   2 -
+ hw/sb16.c                            |   3 +-
+ hw/usb/dev-audio.c                   |   1 -
+ monitor.c                            |   2 -
+ 27 files changed, 149 insertions(+), 224 deletions(-)
+ create mode 100644 default-configs/sound.mak
+
+-- 
+1.8.1.4
+
+

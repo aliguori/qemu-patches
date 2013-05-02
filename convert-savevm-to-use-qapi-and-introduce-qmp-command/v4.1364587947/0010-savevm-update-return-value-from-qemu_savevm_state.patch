@@ -1,0 +1,62 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Pavel Hrdina <phrdina@redhat.com>
+To: qemu-devel@nongnu.org, Pavel Hrdina <phrdina@redhat.com>
+Cc: qemu-devel@nongnu.org, phrdina@redhat.com, armbru@redhat.com,
+ lcapitulino@redhat.com
+Date: Fri, 29 Mar 2013 15:12:37 +0100
+Message-id: f35fc82e4fe577aa49e628ac949bdbb56ccbe150.1364565637.git.phrdina@redhat.com
+Subject: [PATCH 10/11] savevm: update return value from qemu_savevm_state
+
+Signed-off-by: Pavel Hrdina <phrdina@redhat.com>
+Reviewed-by: Eric Blake <eblake@redhat.com>
+---
+ savevm.c | 9 ++++-----
+ 1 file changed, 4 insertions(+), 5 deletions(-)
+
+diff --git a/savevm.c b/savevm.c
+index 6ac4ece..75f64d1 100644
+--- a/savevm.c
++++ b/savevm.c
+@@ -1910,7 +1910,7 @@ void qemu_savevm_state_cancel(void)
+     }
+ }
+ 
+-static int qemu_savevm_state(QEMUFile *f, Error **errp)
++static void qemu_savevm_state(QEMUFile *f, Error **errp)
+ {
+     int ret;
+     MigrationParams params = {
+@@ -1919,7 +1919,7 @@ static int qemu_savevm_state(QEMUFile *f, Error **errp)
+     };
+ 
+     if (qemu_savevm_state_blocked(errp)) {
+-        return -EINVAL;
++        return;
+     }
+ 
+     qemu_mutex_unlock_iothread();
+@@ -1940,7 +1940,6 @@ static int qemu_savevm_state(QEMUFile *f, Error **errp)
+     if (ret != 0) {
+         qemu_savevm_state_cancel();
+     }
+-    return ret;
+ }
+ 
+ static int qemu_save_device_state(QEMUFile *f)
+@@ -2327,10 +2326,10 @@ SnapshotInfo *qmp_vm_snapshot_save(bool has_name, const char *name,
+         error_setg(errp, "failed to open '%s' file", bdrv_get_device_name(bs));
+         goto the_end;
+     }
+-    ret = qemu_savevm_state(f, &local_err);
++    qemu_savevm_state(f, &local_err);
+     vm_state_size = qemu_ftell(f);
+     qemu_fclose(f);
+-    if (ret < 0) {
++    if (error_is_set(&local_err)) {
+         error_propagate(errp, local_err);
+         goto the_end;
+     }
+-- 
+1.8.1.4
+
+

@@ -1,0 +1,1 @@
+../Add-pvpanic-device-to-deal-with-guest-panic-event/v16.1364591801/0005-pc_piix-pc_q35-export-fw_cfg.patch

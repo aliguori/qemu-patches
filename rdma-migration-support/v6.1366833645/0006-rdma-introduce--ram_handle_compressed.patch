@@ -1,0 +1,80 @@
+From patches Mon Sep 17 00:00:00 2001
+From: "" <mrhines@linux.vnet.ibm.com>
+To: quintela@redhat.com
+Cc: Anthony Liguori <aliguori@us.ibm.com>, qemu-devel@nongnu.org,
+ Michael R Hines <mrhines@us.ibm.com>, Bulent Abali <abali@us.ibm.com>,
+ owasserm@redhat.com, pbonzini@redhat.com, Gokul B Kandiraju <gokul@us.ibm.com>,
+ eblake@redhat.com
+Date: Wed, 24 Apr 2013 15:00:51 -0400
+Message-id: 1366830057-16964-7-git-send-email-mrhines@linux.vnet.ibm.com
+Subject: [PATCH 06/11] rdma: introduce  ram_handle_compressed()
+
+From: "Michael R. Hines" <mrhines@us.ibm.com>
+
+This gives RDMA shared access to madvise() on the destination side
+when an entire chunk is found to be zero.
+
+Signed-off-by: Michael R. Hines <mrhines@us.ibm.com>
+---
+ arch_init.c                   |   24 ++++++++++++++++--------
+ include/migration/migration.h |    2 ++
+ 2 files changed, 18 insertions(+), 8 deletions(-)
+
+diff --git a/arch_init.c b/arch_init.c
+index 92de1bd..e272852 100644
+--- a/arch_init.c
++++ b/arch_init.c
+@@ -770,6 +770,21 @@ static inline void *host_from_stream_offset(QEMUFile *f,
+     return NULL;
+ }
+ 
++/*
++ * If a page (or a whole RDMA chunk) has been
++ * determined to be zero, then zap it.
++ */
++void ram_handle_compressed(void *host, uint8_t ch, uint64_t size)
++{
++    memset(host, ch, TARGET_PAGE_SIZE);
++#ifndef _WIN32
++    if (ch == 0 && (!kvm_enabled() || kvm_has_sync_mmu()) &&
++                            getpagesize() <= TARGET_PAGE_SIZE) {
++        qemu_madvise(host, size, QEMU_MADV_DONTNEED);
++    }
++#endif
++}
++
+ static int ram_load(QEMUFile *f, void *opaque, int version_id)
+ {
+     ram_addr_t addr;
+@@ -837,14 +852,7 @@ static int ram_load(QEMUFile *f, void *opaque, int version_id)
+             }
+ 
+             ch = qemu_get_byte(f);
+-            memset(host, ch, TARGET_PAGE_SIZE);
+-#ifndef _WIN32
+-            if (ch == 0 &&
+-                (!kvm_enabled() || kvm_has_sync_mmu()) &&
+-                getpagesize() <= TARGET_PAGE_SIZE) {
+-                qemu_madvise(host, TARGET_PAGE_SIZE, QEMU_MADV_DONTNEED);
+-            }
+-#endif
++            ram_handle_compressed(host, ch, TARGET_PAGE_SIZE);
+         } else if (flags & RAM_SAVE_FLAG_PAGE) {
+             void *host;
+ 
+diff --git a/include/migration/migration.h b/include/migration/migration.h
+index 6aa15e0..2a5aeef 100644
+--- a/include/migration/migration.h
++++ b/include/migration/migration.h
+@@ -106,6 +106,8 @@ uint64_t xbzrle_mig_pages_transferred(void);
+ uint64_t xbzrle_mig_pages_overflow(void);
+ uint64_t xbzrle_mig_pages_cache_miss(void);
+ 
++void ram_handle_compressed(void *host, uint8_t ch, uint64_t size);
++
+ /**
+  * @migrate_add_blocker - prevent migration from proceeding
+  *
+-- 
+1.7.10.4
+

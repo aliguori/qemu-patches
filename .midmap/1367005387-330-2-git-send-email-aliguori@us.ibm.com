@@ -1,0 +1,1 @@
+../gtk-add-Devices-menu/v1.1367005384/0001-ide-add-drive-id-property.patch

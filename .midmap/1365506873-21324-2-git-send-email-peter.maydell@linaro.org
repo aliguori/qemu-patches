@@ -1,0 +1,1 @@
+../Drop-support-for-qdev-taddr-properties/v2.1365528471/0001-hw-sm501-Use-correct-setter-for-sysbus-ohci-dma-address-property.patch

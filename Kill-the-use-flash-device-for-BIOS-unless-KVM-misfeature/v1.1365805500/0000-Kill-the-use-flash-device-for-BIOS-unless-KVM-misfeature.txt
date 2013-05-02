@@ -1,0 +1,25 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Markus Armbruster <armbru@redhat.com>
+To: Markus Armbruster <armbru@redhat.com>, qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, jljusten@gmail.com
+Date: Fri, 12 Apr 2013 17:25:00 +0200
+Message-id: 1365780303-26398-1-git-send-email-armbru@redhat.com
+Subject: [PATCH 0/3] Kill the "use flash device for BIOS unless KVM" misfeature
+
+See PATCH 3/3 for description, the other two are trivial preliminaries
+to simplify review.
+
+Markus Armbruster (3):
+  pc: Inline pc_init_pci_1_3() into pc_init_pci_1_2()
+  pc: Split pc_init_pci_1_0() off pc_init_pci_1_2()
+  pc: Kill the "use flash device for BIOS unless KVM" misfeature
+
+ hw/block/pc_sysfw.c  | 20 ++++++++++++++++++--
+ hw/i386/pc_piix.c    | 29 +++++++++++++++++++++++------
+ hw/i386/pc_q35.c     |  8 +++++++-
+ include/hw/i386/pc.h |  5 +++++
+ 4 files changed, 53 insertions(+), 9 deletions(-)
+
+-- 
+1.7.11.7
+

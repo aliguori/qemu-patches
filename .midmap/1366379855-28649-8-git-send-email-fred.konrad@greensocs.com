@@ -1,0 +1,1 @@
+../virtio-rng-refactoring/v4.1366405047/0007-virtio-rng-cleanup-remove-qdev-field.patch

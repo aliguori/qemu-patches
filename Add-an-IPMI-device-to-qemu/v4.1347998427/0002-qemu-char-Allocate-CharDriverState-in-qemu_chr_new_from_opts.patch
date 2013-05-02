@@ -1,0 +1,516 @@
+From patches Mon Sep 17 00:00:00 2001
+From: minyard@acm.org
+To: qemu-devel@nongnu.org
+Cc: Corey Minyard <cminyard@mvista.com>
+Date: Tue, 18 Sep 2012 15:00:29 -0500
+Message-id: 1347998443-20599-3-git-send-email-minyard@acm.org
+Subject: [PATCH 02/16] qemu-char: Allocate CharDriverState in
+ qemu_chr_new_from_opts
+
+From: Corey Minyard <cminyard@mvista.com>
+
+This allocates the CharDriverState structure in a more logical place.
+It reduces code size and it allows a coming option to automatically
+attempt to reconnect a chardev if the connection fails.
+
+Signed-off-by: Corey Minyard <cminyard@mvista.com>
+---
+ console.c         |    6 +---
+ console.h         |    2 +-
+ hw/baum.c         |    6 +--
+ hw/baum.h         |    2 +-
+ hw/msmouse.c      |    5 +--
+ hw/msmouse.h      |    2 +-
+ qemu-char.c       |   93 +++++++++++++++++++++-------------------------------
+ spice-qemu-char.c |    4 +--
+ ui/qemu-spice.h   |    2 +-
+ 9 files changed, 47 insertions(+), 75 deletions(-)
+
+diff --git a/console.c b/console.c
+index c1ed5e0..d6f7c5e 100644
+--- a/console.c
++++ b/console.c
+@@ -1537,15 +1537,12 @@ static void text_console_do_init(CharDriverState *chr, DisplayState *ds)
+         chr->init(chr);
+ }
+ 
+-CharDriverState *text_console_init(QemuOpts *opts)
++CharDriverState *text_console_init(CharDriverState *chr, QemuOpts *opts)
+ {
+-    CharDriverState *chr;
+     TextConsole *s;
+     unsigned width;
+     unsigned height;
+ 
+-    chr = g_malloc0(sizeof(CharDriverState));
+-
+     width = qemu_opt_get_number(opts, "width", 0);
+     if (width == 0)
+         width = qemu_opt_get_number(opts, "cols", 0) * FONT_WIDTH;
+@@ -1561,7 +1558,6 @@ CharDriverState *text_console_init(QemuOpts *opts)
+     }
+ 
+     if (!s) {
+-        g_free(chr);
+         return NULL;
+     }
+ 
+diff --git a/console.h b/console.h
+index f990684..9843edd 100644
+--- a/console.h
++++ b/console.h
+@@ -361,7 +361,7 @@ void vga_hw_text_update(console_ch_t *chardata);
+ 
+ int is_graphic_console(void);
+ int is_fixedsize_console(void);
+-CharDriverState *text_console_init(QemuOpts *opts);
++CharDriverState *text_console_init(CharDriverState *chr, QemuOpts *opts);
+ void text_consoles_set_display(DisplayState *ds);
+ void console_select(unsigned int index);
+ void console_color_init(DisplayState *ds);
+diff --git a/hw/baum.c b/hw/baum.c
+index 3e94f84..b5df8a6 100644
+--- a/hw/baum.c
++++ b/hw/baum.c
+@@ -562,10 +562,9 @@ static void baum_close(struct CharDriverState *chr)
+     g_free(baum);
+ }
+ 
+-CharDriverState *chr_baum_init(QemuOpts *opts)
++CharDriverState *chr_baum_init(CharDriverState *chr, QemuOpts *opts)
+ {
+     BaumDriverState *baum;
+-    CharDriverState *chr;
+     brlapi_handle_t *handle;
+ #ifdef CONFIG_SDL
+     SDL_SysWMinfo info;
+@@ -573,7 +572,7 @@ CharDriverState *chr_baum_init(QemuOpts *opts)
+     int tty;
+ 
+     baum = g_malloc0(sizeof(BaumDriverState));
+-    baum->chr = chr = g_malloc0(sizeof(CharDriverState));
++    baum->chr = chr;
+ 
+     chr->opaque = baum;
+     chr->chr_write = baum_write;
+@@ -621,7 +620,6 @@ fail:
+     brlapi__closeConnection(handle);
+ fail_handle:
+     g_free(handle);
+-    g_free(chr);
+     g_free(baum);
+     return NULL;
+ }
+diff --git a/hw/baum.h b/hw/baum.h
+index 8af710f..599d48b 100644
+--- a/hw/baum.h
++++ b/hw/baum.h
+@@ -23,4 +23,4 @@
+  */
+ 
+ /* char device */
+-CharDriverState *chr_baum_init(QemuOpts *opts);
++CharDriverState *chr_baum_init(CharDriverState *chr, QemuOpts *opts);
+diff --git a/hw/msmouse.c b/hw/msmouse.c
+index 9c492a4..8a8a1d3 100644
+--- a/hw/msmouse.c
++++ b/hw/msmouse.c
+@@ -64,11 +64,8 @@ static void msmouse_chr_close (struct CharDriverState *chr)
+     g_free (chr);
+ }
+ 
+-CharDriverState *qemu_chr_open_msmouse(QemuOpts *opts)
++CharDriverState *qemu_chr_open_msmouse(CharDriverState *chr, QemuOpts *opts)
+ {
+-    CharDriverState *chr;
+-
+-    chr = g_malloc0(sizeof(CharDriverState));
+     chr->chr_write = msmouse_chr_write;
+     chr->chr_close = msmouse_chr_close;
+ 
+diff --git a/hw/msmouse.h b/hw/msmouse.h
+index 456cb21..925af1a 100644
+--- a/hw/msmouse.h
++++ b/hw/msmouse.h
+@@ -1,2 +1,2 @@
+ /* msmouse.c */
+-CharDriverState *qemu_chr_open_msmouse(QemuOpts *opts);
++CharDriverState *qemu_chr_open_msmouse(CharDriverState *chr, QemuOpts *opts);
+diff --git a/qemu-char.c b/qemu-char.c
+index 398baf1..1409d67 100644
+--- a/qemu-char.c
++++ b/qemu-char.c
+@@ -221,11 +221,8 @@ static int null_chr_write(CharDriverState *chr, const uint8_t *buf, int len)
+     return len;
+ }
+ 
+-static CharDriverState *qemu_chr_open_null(QemuOpts *opts)
++static CharDriverState *qemu_chr_open_null(CharDriverState *chr, QemuOpts *opts)
+ {
+-    CharDriverState *chr;
+-
+-    chr = g_malloc0(sizeof(CharDriverState));
+     chr->chr_write = null_chr_write;
+     return chr;
+ }
+@@ -618,12 +615,11 @@ static void fd_chr_close(struct CharDriverState *chr)
+ }
+ 
+ /* open a character device to a unix fd */
+-static CharDriverState *qemu_chr_open_fd(int fd_in, int fd_out)
++static CharDriverState *qemu_chr_open_fd(CharDriverState *chr,
++                                         int fd_in, int fd_out)
+ {
+-    CharDriverState *chr;
+     FDCharDriver *s;
+ 
+-    chr = g_malloc0(sizeof(CharDriverState));
+     s = g_malloc0(sizeof(FDCharDriver));
+     s->fd_in = fd_in;
+     s->fd_out = fd_out;
+@@ -637,7 +633,8 @@ static CharDriverState *qemu_chr_open_fd(int fd_in, int fd_out)
+     return chr;
+ }
+ 
+-static CharDriverState *qemu_chr_open_file_out(QemuOpts *opts)
++static CharDriverState *qemu_chr_open_file_out(CharDriverState *chr,
++                                               QemuOpts *opts)
+ {
+     int fd_out;
+ 
+@@ -646,10 +643,10 @@ static CharDriverState *qemu_chr_open_file_out(QemuOpts *opts)
+     if (fd_out < 0) {
+         return NULL;
+     }
+-    return qemu_chr_open_fd(-1, fd_out);
++    return qemu_chr_open_fd(chr, -1, fd_out);
+ }
+ 
+-static CharDriverState *qemu_chr_open_pipe(QemuOpts *opts)
++static CharDriverState *qemu_chr_open_pipe(CharDriverState *chr, QemuOpts *opts)
+ {
+     int fd_in, fd_out;
+     char filename_in[256], filename_out[256];
+@@ -674,7 +671,7 @@ static CharDriverState *qemu_chr_open_pipe(QemuOpts *opts)
+             return NULL;
+         }
+     }
+-    return qemu_chr_open_fd(fd_in, fd_out);
++    return qemu_chr_open_fd(chr, fd_in, fd_out);
+ }
+ 
+ 
+@@ -765,10 +762,9 @@ static void qemu_chr_close_stdio(struct CharDriverState *chr)
+     fd_chr_close(chr);
+ }
+ 
+-static CharDriverState *qemu_chr_open_stdio(QemuOpts *opts)
++static CharDriverState *qemu_chr_open_stdio(CharDriverState *chr,
++                                            QemuOpts *opts)
+ {
+-    CharDriverState *chr;
+-
+     if (stdio_nb_clients >= STDIO_MAX_CLIENTS) {
+         return NULL;
+     }
+@@ -779,7 +775,7 @@ static CharDriverState *qemu_chr_open_stdio(QemuOpts *opts)
+         atexit(term_exit);
+     }
+ 
+-    chr = qemu_chr_open_fd(0, 1);
++    qemu_chr_open_fd(chr, 0, 1);
+     chr->chr_close = qemu_chr_close_stdio;
+     chr->chr_set_echo = qemu_chr_set_echo_stdio;
+     qemu_set_fd_handler2(0, stdio_read_poll, stdio_read, NULL, chr);
+@@ -975,9 +971,8 @@ static void pty_chr_close(struct CharDriverState *chr)
+     qemu_chr_be_event(chr, CHR_EVENT_CLOSED);
+ }
+ 
+-static CharDriverState *qemu_chr_open_pty(QemuOpts *opts)
++static CharDriverState *qemu_chr_open_pty(CharDriverState *chr, QemuOpts *opts)
+ {
+-    CharDriverState *chr;
+     PtyCharDriver *s;
+     struct termios tty;
+     int master_fd, slave_fd, len;
+@@ -999,8 +994,6 @@ static CharDriverState *qemu_chr_open_pty(QemuOpts *opts)
+     tcsetattr(slave_fd, TCSAFLUSH, &tty);
+     close(slave_fd);
+ 
+-    chr = g_malloc0(sizeof(CharDriverState));
+-
+     len = strlen(q_ptsname(master_fd)) + 5;
+     chr->filename = g_malloc(len);
+     snprintf(chr->filename, len, "pty:%s", q_ptsname(master_fd));
+@@ -1217,10 +1210,9 @@ static void qemu_chr_close_tty(CharDriverState *chr)
+     }
+ }
+ 
+-static CharDriverState *qemu_chr_open_tty(QemuOpts *opts)
++static CharDriverState *qemu_chr_open_tty(CharDriverState *chr, QemuOpts *opts)
+ {
+     const char *filename = qemu_opt_get(opts, "path");
+-    CharDriverState *chr;
+     int fd;
+ 
+     TFR(fd = qemu_open(filename, O_RDWR | O_NONBLOCK));
+@@ -1228,7 +1220,7 @@ static CharDriverState *qemu_chr_open_tty(QemuOpts *opts)
+         return NULL;
+     }
+     tty_serial_init(fd, 115200, 'N', 8, 1);
+-    chr = qemu_chr_open_fd(fd, fd);
++    qemu_chr_open_fd(chr, fd, fd);
+     chr->chr_ioctl = tty_serial_ioctl;
+     chr->chr_close = qemu_chr_close_tty;
+     return chr;
+@@ -1350,10 +1342,9 @@ static void pp_close(CharDriverState *chr)
+     qemu_chr_be_event(chr, CHR_EVENT_CLOSED);
+ }
+ 
+-static CharDriverState *qemu_chr_open_pp(QemuOpts *opts)
++static CharDriverState *qemu_chr_open_pp(CharDriverState *chr, QemuOpts *opts)
+ {
+     const char *filename = qemu_opt_get(opts, "path");
+-    CharDriverState *chr;
+     ParallelCharDriver *drv;
+     int fd;
+ 
+@@ -1371,7 +1362,6 @@ static CharDriverState *qemu_chr_open_pp(QemuOpts *opts)
+     drv->fd = fd;
+     drv->mode = IEEE1284_MODE_COMPAT;
+ 
+-    chr = g_malloc0(sizeof(CharDriverState));
+     chr->chr_write = null_chr_write;
+     chr->chr_ioctl = pp_ioctl;
+     chr->chr_close = pp_close;
+@@ -1652,13 +1642,12 @@ static int win_chr_poll(void *opaque)
+     return 0;
+ }
+ 
+-static CharDriverState *qemu_chr_open_win(QemuOpts *opts)
++static CharDriverState *qemu_chr_open_win(CharDriverState *chr,
++                                          QemuOpts *opts)
+ {
+     const char *filename = qemu_opt_get(opts, "path");
+-    CharDriverState *chr;
+     WinCharState *s;
+ 
+-    chr = g_malloc0(sizeof(CharDriverState));
+     s = g_malloc0(sizeof(WinCharState));
+     chr->opaque = s;
+     chr->chr_write = win_chr_write;
+@@ -1666,7 +1655,6 @@ static CharDriverState *qemu_chr_open_win(QemuOpts *opts)
+ 
+     if (win_chr_init(chr, filename) < 0) {
+         g_free(s);
+-        g_free(chr);
+         return NULL;
+     }
+     qemu_chr_generic_open(chr);
+@@ -1752,13 +1740,12 @@ static int win_chr_pipe_init(CharDriverState *chr, const char *filename)
+ }
+ 
+ 
+-static CharDriverState *qemu_chr_open_win_pipe(QemuOpts *opts)
++static CharDriverState *qemu_chr_open_win_pipe(CharDriverState *chr,
++                                               QemuOpts *opts)
+ {
+     const char *filename = qemu_opt_get(opts, "path");
+-    CharDriverState *chr;
+     WinCharState *s;
+ 
+-    chr = g_malloc0(sizeof(CharDriverState));
+     s = g_malloc0(sizeof(WinCharState));
+     chr->opaque = s;
+     chr->chr_write = win_chr_write;
+@@ -1766,19 +1753,17 @@ static CharDriverState *qemu_chr_open_win_pipe(QemuOpts *opts)
+ 
+     if (win_chr_pipe_init(chr, filename) < 0) {
+         g_free(s);
+-        g_free(chr);
+         return NULL;
+     }
+     qemu_chr_generic_open(chr);
+     return chr;
+ }
+ 
+-static CharDriverState *qemu_chr_open_win_file(HANDLE fd_out)
++static CharDriverState *qemu_chr_open_win_file(CharDriverState *chr,
++                                               HANDLE fd_out)
+ {
+-    CharDriverState *chr;
+     WinCharState *s;
+ 
+-    chr = g_malloc0(sizeof(CharDriverState));
+     s = g_malloc0(sizeof(WinCharState));
+     s->hcom = fd_out;
+     chr->opaque = s;
+@@ -1787,12 +1772,14 @@ static CharDriverState *qemu_chr_open_win_file(HANDLE fd_out)
+     return chr;
+ }
+ 
+-static CharDriverState *qemu_chr_open_win_con(QemuOpts *opts)
++static CharDriverState *qemu_chr_open_win_con(CharDriverState *chr,
++                                              QemuOpts *opts)
+ {
+-    return qemu_chr_open_win_file(GetStdHandle(STD_OUTPUT_HANDLE));
++    return qemu_chr_open_win_file(chr, GetStdHandle(STD_OUTPUT_HANDLE));
+ }
+ 
+-static CharDriverState *qemu_chr_open_win_file_out(QemuOpts *opts)
++static CharDriverState *qemu_chr_open_win_file_out(CharDriverState *chr,
++                                                   QemuOpts *opts)
+ {
+     const char *file_out = qemu_opt_get(opts, "path");
+     HANDLE fd_out;
+@@ -1803,7 +1790,7 @@ static CharDriverState *qemu_chr_open_win_file_out(QemuOpts *opts)
+         return NULL;
+     }
+ 
+-    return qemu_chr_open_win_file(fd_out);
++    return qemu_chr_open_win_file(chr, fd_out);
+ }
+ 
+ static int win_stdio_write(CharDriverState *chr, const uint8_t *buf, int len)
+@@ -1944,9 +1931,9 @@ static void win_stdio_close(CharDriverState *chr)
+     stdio_nb_clients--;
+ }
+ 
+-static CharDriverState *qemu_chr_open_win_stdio(QemuOpts *opts)
++static CharDriverState *qemu_chr_open_win_stdio(CharDriverState   *chr,
++                                                QemuOpts *opts)
+ {
+-    CharDriverState   *chr;
+     WinStdioCharState *stdio;
+     DWORD              dwMode;
+     int                is_console = 0;
+@@ -1956,7 +1943,6 @@ static CharDriverState *qemu_chr_open_win_stdio(QemuOpts *opts)
+         return NULL;
+     }
+ 
+-    chr   = g_malloc0(sizeof(CharDriverState));
+     stdio = g_malloc0(sizeof(WinStdioCharState));
+ 
+     stdio->hStdIn = GetStdHandle(STD_INPUT_HANDLE);
+@@ -2093,13 +2079,11 @@ static void udp_chr_close(CharDriverState *chr)
+     qemu_chr_be_event(chr, CHR_EVENT_CLOSED);
+ }
+ 
+-static CharDriverState *qemu_chr_open_udp(QemuOpts *opts)
++static CharDriverState *qemu_chr_open_udp(CharDriverState *chr, QemuOpts *opts)
+ {
+-    CharDriverState *chr = NULL;
+     NetCharDriver *s = NULL;
+     int fd = -1;
+ 
+-    chr = g_malloc0(sizeof(CharDriverState));
+     s = g_malloc0(sizeof(NetCharDriver));
+ 
+     fd = inet_dgram_opts(opts);
+@@ -2118,7 +2102,6 @@ static CharDriverState *qemu_chr_open_udp(QemuOpts *opts)
+     return chr;
+ 
+ return_err:
+-    g_free(chr);
+     g_free(s);
+     if (fd >= 0) {
+         closesocket(fd);
+@@ -2322,7 +2305,8 @@ static void tcp_chr_read(void *opaque)
+ #ifndef _WIN32
+ CharDriverState *qemu_chr_open_eventfd(int eventfd)
+ {
+-    return qemu_chr_open_fd(eventfd, eventfd);
++    CharDriverState *chr = g_malloc0(sizeof(CharDriverState));
++    return qemu_chr_open_fd(chr, eventfd, eventfd);
+ }
+ #endif
+ 
+@@ -2425,9 +2409,9 @@ static void tcp_chr_close(CharDriverState *chr)
+     qemu_chr_be_event(chr, CHR_EVENT_CLOSED);
+ }
+ 
+-static CharDriverState *qemu_chr_open_socket(QemuOpts *opts)
++static CharDriverState *qemu_chr_open_socket(CharDriverState *chr,
++                                             QemuOpts *opts)
+ {
+-    CharDriverState *chr = NULL;
+     TCPCharDriver *s = NULL;
+     int fd = -1;
+     int is_listen;
+@@ -2444,7 +2428,6 @@ static CharDriverState *qemu_chr_open_socket(QemuOpts *opts)
+     if (!is_listen)
+         is_waitconnect = 0;
+ 
+-    chr = g_malloc0(sizeof(CharDriverState));
+     s = g_malloc0(sizeof(TCPCharDriver));
+ 
+     if (is_unix) {
+@@ -2521,7 +2504,6 @@ static CharDriverState *qemu_chr_open_socket(QemuOpts *opts)
+     if (fd >= 0)
+         closesocket(fd);
+     g_free(s);
+-    g_free(chr);
+     return NULL;
+ }
+ 
+@@ -2719,7 +2701,7 @@ fail:
+ 
+ static const struct {
+     const char *name;
+-    CharDriverState *(*open)(QemuOpts *opts);
++  CharDriverState *(*open)(CharDriverState *chr, QemuOpts *opts);
+ } backend_table[] = {
+     { .name = "null",      .open = qemu_chr_open_null },
+     { .name = "socket",    .open = qemu_chr_open_socket },
+@@ -2781,8 +2763,9 @@ CharDriverState *qemu_chr_new_from_opts(QemuOpts *opts,
+         return NULL;
+     }
+ 
+-    chr = backend_table[i].open(opts);
+-    if (!chr) {
++    chr = g_malloc0(sizeof(CharDriverState));
++    if (!backend_table[i].open(chr, opts)) {
++        g_free(chr);
+         fprintf(stderr, "chardev: opening backend \"%s\" failed\n",
+                 qemu_opt_get(opts, "backend"));
+         return NULL;
+diff --git a/spice-qemu-char.c b/spice-qemu-char.c
+index 09aa22d..2fb8a10 100644
+--- a/spice-qemu-char.c
++++ b/spice-qemu-char.c
+@@ -188,9 +188,8 @@ static void print_allowed_subtypes(void)
+     fprintf(stderr, "\n");
+ }
+ 
+-CharDriverState *qemu_chr_open_spice(QemuOpts *opts)
++CharDriverState *qemu_chr_open_spice(CharDriverState *chr, QemuOpts *opts)
+ {
+-    CharDriverState *chr;
+     SpiceCharDriver *s;
+     const char* name = qemu_opt_get(opts, "name");
+     uint32_t debug = qemu_opt_get_number(opts, "debug", 0);
+@@ -214,7 +213,6 @@ CharDriverState *qemu_chr_open_spice(QemuOpts *opts)
+         return NULL;
+     }
+ 
+-    chr = g_malloc0(sizeof(CharDriverState));
+     s = g_malloc0(sizeof(SpiceCharDriver));
+     s->chr = chr;
+     s->debug = debug;
+diff --git a/ui/qemu-spice.h b/ui/qemu-spice.h
+index 3299da8..fb582c5 100644
+--- a/ui/qemu-spice.h
++++ b/ui/qemu-spice.h
+@@ -45,7 +45,7 @@ int qemu_spice_migrate_info(const char *hostname, int port, int tls_port,
+ void do_info_spice_print(Monitor *mon, const QObject *data);
+ void do_info_spice(Monitor *mon, QObject **ret_data);
+ 
+-CharDriverState *qemu_chr_open_spice(QemuOpts *opts);
++CharDriverState *qemu_chr_open_spice(CharDriverState *chr, QemuOpts *opts);
+ 
+ #else  /* CONFIG_SPICE */
+ #include "monitor.h"
+-- 
+1.7.4.1
+
+

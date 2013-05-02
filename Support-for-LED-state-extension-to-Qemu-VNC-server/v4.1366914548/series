@@ -1,0 +1,5 @@
+0000-Support-for-LED-state-extension-to-Qemu-VNC-server.txt
+0001-vnc-Add-SCROLL-lock-key-to-kbd_leds.patch
+0002-vnc-Support-for-LED-state-extension.patch
+0003-vnc-Adjust-lock-state-sync-logic-with-VNC_FEATURE_LED_STATE.patch
+0004-doc-document-the-Pseudo-encoding-of-LED-state.patch

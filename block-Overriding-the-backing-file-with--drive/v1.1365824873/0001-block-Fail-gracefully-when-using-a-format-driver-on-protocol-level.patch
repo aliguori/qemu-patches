@@ -1,0 +1,83 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Kevin Wolf <kwolf@redhat.com>
+To: Eric Blake <eblake@redhat.com>, Kevin Wolf <kwolf@redhat.com>,
+ qemu-devel@nongnu.org
+Cc: kwolf@redhat.com, qemu-devel@nongnu.org, stefanha@redhat.com,
+ armbru@redhat.com
+Date: Fri, 12 Apr 2013 22:47:54 +0200
+Message-id: 1365799688-19918-2-git-send-email-kwolf@redhat.com
+Subject: [PATCH 01/15] block: Fail gracefully when using a format driver on
+ protocol level
+
+Specifying the wrong driver could fail an assertion:
+
+$ qemu-system-x86_64 -drive file.driver=qcow2,file=x
+qemu-system-x86_64: block.c:721: bdrv_open_common: Assertion `file !=
+((void *)0)' failed.
+
+Signed-off-by: Kevin Wolf <kwolf@redhat.com>
+---
+ block.c                    |  7 +++++++
+ tests/qemu-iotests/051     |  7 +++++++
+ tests/qemu-iotests/051.out | 10 ++++++++++
+ 3 files changed, 24 insertions(+)
+
+diff --git a/block.c b/block.c
+index 602d8a4..f23bdcc 100644
+--- a/block.c
++++ b/block.c
+@@ -718,6 +718,13 @@ static int bdrv_open_common(BlockDriverState *bs, BlockDriverState *file,
+         assert(drv->bdrv_parse_filename || filename != NULL);
+         ret = drv->bdrv_file_open(bs, filename, options, open_flags);
+     } else {
++        if (file == NULL) {
++            qerror_report(ERROR_CLASS_GENERIC_ERROR, "The '%s' block driver is "
++                          "not suitable for the bottom level",
++                          drv->format_name);
++            ret = -EINVAL;
++            goto free_and_fail;
++        }
+         assert(file != NULL);
+         bs->file = file;
+         ret = drv->bdrv_open(bs, options, open_flags);
+diff --git a/tests/qemu-iotests/051 b/tests/qemu-iotests/051
+index 17a1d92..8f96ef4 100755
+--- a/tests/qemu-iotests/051
++++ b/tests/qemu-iotests/051
+@@ -142,6 +142,13 @@ run_qemu -drive media=cdrom,cache=writethrough
+ run_qemu -drive media=cdrom,cache=unsafe
+ run_qemu -drive media=cdrom,cache=invalid_value
+ 
++echo
++echo === Specifying the protocol layer ===
++echo
++
++run_qemu -drive file=$TEST_IMG,file.driver=file
++run_qemu -drive file=$TEST_IMG,file.driver=qcow2
++
+ # success, all done
+ echo "*** done"
+ rm -f $seq.full
+diff --git a/tests/qemu-iotests/051.out b/tests/qemu-iotests/051.out
+index da0d18b..194f2d2 100644
+--- a/tests/qemu-iotests/051.out
++++ b/tests/qemu-iotests/051.out
+@@ -159,4 +159,14 @@ q[K[Dqu[K[D[Dqui[K[D[D[Dquit[K
+ Testing: -drive media=cdrom,cache=invalid_value
+ qemu: -drive media=cdrom,cache=invalid_value: invalid cache option
+ 
++
++=== Specifying the protocol layer ===
++
++Testing: -drive file=TEST_DIR/t.qcow2,file.driver=file
++q[K[Dqu[K[D[Dqui[K[D[D[Dquit[K
++
++Testing: -drive file=TEST_DIR/t.qcow2,file.driver=qcow2
++qemu: -drive file=TEST_DIR/t.qcow2,file.driver=qcow2: The 'qcow2' block driver is not suitable for the bottom level
++qemu: -drive file=TEST_DIR/t.qcow2,file.driver=qcow2: could not open disk image TEST_DIR/t.qcow2: Invalid argument
++
+ *** done
+-- 
+1.8.1.4
+
+

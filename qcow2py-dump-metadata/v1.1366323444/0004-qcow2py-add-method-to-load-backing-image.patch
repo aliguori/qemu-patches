@@ -1,0 +1,98 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: kwolf@redhat.com, stefanha@redhat.com
+Date: Thu, 18 Apr 2013 17:17:28 +0200
+Message-id: 1366298249-11739-5-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 4/5] qcow2.py: add method to load backing image
+
+This also adds support for raw ImageFiles.
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ tests/qemu-iotests/qcow2.py | 26 ++++++++++++++++++++++++++
+ 1 file changed, 26 insertions(+)
+
+diff --git a/tests/qemu-iotests/qcow2.py b/tests/qemu-iotests/qcow2.py
+index 77e03cb..77a9d52 100755
+--- a/tests/qemu-iotests/qcow2.py
++++ b/tests/qemu-iotests/qcow2.py
+@@ -19,12 +19,22 @@ class QcowHeaderExtension:
+ class ImageFile:
+     def __init__(self, fd, fields):
+         self.__dict__ = fields
++        if 'backing_file' not in fields:
++            self.backing_file = None
++        self.backing_image = None
+         self.fd = fd
+ 
+     def close(self):
+         self.fd.close()
+         self.fd = None
+ 
++    def open_backing_image(self, mode='rb'):
++        if not self.backing_image:
++            if self.backing_file:
++                self.backing_image = load_image(self.backing_file, mode,
++                                                self.backing_format)
++        return None
++
+     def raw_pread(self, offset, size):
+         self.fd.seek(offset)
+         return self.fd.read(size)
+@@ -33,6 +43,10 @@ class ImageFile:
+         self.fd.seek(offset)
+         return self.fd.write(data)
+ 
++class Raw(ImageFile):
++    def __init__(self, fd):
++        size = os.fstat(fd.fileno()).st_size
++        ImageFile.__init__(self, fd, dict(size=size))
+ 
+ class Qcow(ImageFile):
+ 
+@@ -65,6 +79,8 @@ class Qcow(ImageFile):
+ 
+     HEADER_FMT = '>' + ''.join(field[0] for field in fields)
+     QCOW_MAGIC = 0x514649fb
++    EXT_BACKING_FORMAT = 0xE2792ACA
++    EXT_FEATURE_NAMES = 0x6803f857
+ 
+     def __init__(self, fd):
+ 
+@@ -93,6 +109,8 @@ class Qcow(ImageFile):
+         else:
+             self.backing_file = None
+ 
++        self.backing_format = self.get_extension(Qcow.EXT_BACKING_FORMAT)
++
+     def set_defaults(self):
+         if self.version == 2:
+             self.incompatible_features = 0
+@@ -135,6 +153,12 @@ class Qcow(ImageFile):
+         if self.fd.tell() > self.cluster_size:
+             raise Exception("I think I just broke the image...")
+ 
++    def get_extension(self, magic):
++        for ex in self.extensions:
++            if ex.magic == magic:
++                return ex.data
++        return None
++
+     def update(self):
+         header_bytes = self.header_length
+ 
+@@ -178,6 +202,8 @@ def load_image(filename, mode='rb', format=None):
+ 
+     if format == 'qcow2':
+         return Qcow(fd)
++    elif format == 'raw':
++        return Raw(fd)
+ 
+     raise Error('unknown format %s' % format)
+ 
+-- 
+1.8.2
+
+
+

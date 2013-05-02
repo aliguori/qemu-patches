@@ -1,0 +1,1 @@
+../another-round-of-qemu-char-fixes/v2.1366410725/0002-qemu-char-simplify-pty-polling.patch

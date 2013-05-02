@@ -1,0 +1,81 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Peter Maydell <peter.maydell@linaro.org>
+To: qemu-devel@nongnu.org
+Cc: Arnd Bergmann <arnd@arndb.de>, patches@linaro.org,
+ Aurelien Jarno <aurelien@aurel32.net>, "Michael S. Tsirkin" <mst@redhat.com>,
+ Paul Brook <paul@codesourcery.com>,
+ =?UTF-8?q?Andreas=20F=C3=A4rber?= <afaerber@suse.de>,
+ Will Deacon <will.deacon@arm.com>
+Date: Thu,  4 Apr 2013 13:58:22 +0100
+Message-id: 1365080313-20875-1-git-send-email-peter.maydell@linaro.org
+Subject: [PATCH 00/11] Fix versatile_pci (without breaking linux)
+
+This patch series fixes a number of serious bugs in our emulation of
+the PCI controller found on VersatilePB and the early Realview boards:
+ * our interrupt mapping was totally wrong
+ * we weren't implementing the PCI memory windows
+ * the I/O window wasn't mapped on VersatilePB
+ * realview mapped things at the wrong addresses
+ * we didn't implement the controller's registers at all
+It also updates to some reasonable approximation to QOM best practice,
+including subclassing pci_host rather than doing everything by hand.
+
+I haven't implemented support for the SMAP registers (which control
+how the controller converts accesses made by bus-mastering PCI
+devices into system addresses). For the moment we rely on the fact
+that Linux always maps things 1:1. (It wouldn't be too hard to add
+SMAP support but it requires changing QEMU's pci code to allow a
+controller to pass in a MemoryRegion* for DMA to use instead of
+the system address space, so I prefer to leave that for another series.)
+
+Patchset tested on both versatilepb and realview, using a set of
+Linux kernel patches written by Arnd Bergmann:
+http://lists.infradead.org/pipermail/linux-arm-kernel/2010-October/029040.html
+which were in turn tested against real PB926 and PB1176 hardware.
+
+This version of the patchset avoids breaking legacy Linux guests
+by automatically detecting those broken kernels and switching back
+to the old mapping. This works by looking at the values the kernel
+writes to the PCI_INTERRUPT_LINE register in the config space, which
+is effectively the interrupt number the kernel expects the device
+to be using. If this doesn't match reality we use the broken mapping.
+(Thanks to Michael S. Tsirkin for this suggestion.)
+
+If the kernel ever writes something different to the old kernel
+then QEMU will assume it is dealing with a working kernel and
+will stop looking for broken values. This allows a new kernel to
+put any values it likes in PCI_INTERRUPT_LINE, provided its init
+code does an initial write of something other than 27 to let QEMU
+know it can cope with the correct irq mapping.
+
+Changes v2->v3:
+ * patch 7: make broken guest autodetect a one-time thing rather than
+   reversible, to allow more flexibility in how new kernels choose
+   to use the PCI_INTERRUPT_LINE registers
+Changes v1->v2:
+ * autodetect broken guests rather than using user-set property
+ * use pci_swizzle_map_fn
+ * new patch: drop unnecessary vpb_pci_config_addr() function
+
+Peter Maydell (11):
+  versatile_pci: Fix hardcoded tabs
+  versatile_pci: Expose PCI I/O region on Versatile PB
+  versatile_pci: Update to realize and instance init functions
+  versatile_pci: Change to subclassing TYPE_PCI_HOST_BRIDGE
+  versatile_pci: Use separate PCI I/O space rather than system I/O space
+  versatile_pci: Put the host bridge PCI device at slot 29
+  versatile_pci: Implement the correct PCI IRQ mapping
+  versatile_pci: Implement the PCI controller's control registers
+  arm/realview: Fix mapping of PCI regions
+  versatile_pci: Expose PCI memory space to system
+  hw/versatile_pci: Drop unnecessary vpb_pci_config_addr()
+
+ hw/arm/realview.c    |   22 +--
+ hw/arm/versatilepb.c |   11 +-
+ hw/versatile_pci.c   |  399 ++++++++++++++++++++++++++++++++++++++++++++------
+ 3 files changed, 371 insertions(+), 61 deletions(-)
+
+-- 
+1.7.9.5
+
+

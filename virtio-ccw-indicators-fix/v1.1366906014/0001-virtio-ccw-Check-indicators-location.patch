@@ -1,0 +1,45 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Cornelia Huck <cornelia.huck@de.ibm.com>
+To: qemu-devel <qemu-devel@nongnu.org>
+Cc: Blue Swirl <blauwirbel@gmail.com>, Anthony Liguori <aliguori@us.ibm.com>,
+ =?utf-8?b?IkF1csOpbGllbiBKYXJubyI=?= <aurelien@aurel32.net>,
+ Cornelia Huck <cornelia.huck@de.ibm.com>, qemu-stable@nongnu.org
+Date: Thu, 25 Apr 2013 11:06:55 +0200
+Message-id: 1366880815-26431-2-git-send-email-cornelia.huck@de.ibm.com
+Subject: [PATCH 1/1] virtio-ccw: Check indicators location.
+
+If a guest neglected to register (secondary) indicators but still runs
+with notifications enabled, we might end up writing to guest zero;
+avoid this by checking for valid indicators and only writing to the
+guest and generating an interrupt if indicators have been setup.
+
+Cc: qemu-stable@nongnu.org
+Signed-off-by: Cornelia Huck <cornelia.huck@de.ibm.com>
+---
+ hw/s390x/virtio-ccw.c |    6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/hw/s390x/virtio-ccw.c b/hw/s390x/virtio-ccw.c
+index 56e4872..b857413 100644
+--- a/hw/s390x/virtio-ccw.c
++++ b/hw/s390x/virtio-ccw.c
+@@ -742,10 +742,16 @@ static void virtio_ccw_notify(DeviceState *d, uint16_t vector)
+     }
+ 
+     if (vector < VIRTIO_PCI_QUEUE_MAX) {
++        if (!dev->indicators) {
++            return;
++        }
+         indicators = ldq_phys(dev->indicators);
+         indicators |= 1ULL << vector;
+         stq_phys(dev->indicators, indicators);
+     } else {
++        if (!dev->indicators2) {
++            return;
++        }
+         vector = 0;
+         indicators = ldq_phys(dev->indicators2);
+         indicators |= 1ULL << vector;
+-- 
+1.7.9.5
+

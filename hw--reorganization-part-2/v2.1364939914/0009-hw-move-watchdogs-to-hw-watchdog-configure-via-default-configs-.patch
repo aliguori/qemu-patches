@@ -1,0 +1,77 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: 
+Date: Tue,  2 Apr 2013 16:58:43 +0200
+Message-id: 1364914749-11141-10-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 09/35] hw: move watchdogs to hw/watchdog,
+ configure via default-configs/
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ default-configs/i386-softmmu.mak   | 1 +
+ default-configs/pci.mak            | 1 +
+ default-configs/x86_64-softmmu.mak | 1 +
+ hw/i386/Makefile.objs              | 1 -
+ hw/watchdog/Makefile.objs          | 3 ++-
+ hw/{ => watchdog}/wdt_ib700.c      | 0
+ 6 files changed, 5 insertions(+), 2 deletions(-)
+ rename hw/{ => watchdog}/wdt_ib700.c (100%)
+
+diff --git a/default-configs/i386-softmmu.mak b/default-configs/i386-softmmu.mak
+index e041a63..7dd0669 100644
+--- a/default-configs/i386-softmmu.mak
++++ b/default-configs/i386-softmmu.mak
+@@ -29,3 +29,4 @@ CONFIG_PFLASH_CFI01=y
+ CONFIG_TPM_TIS=y
+ CONFIG_TPM_PASSTHROUGH=y
+ CONFIG_PCI_HOTPLUG=y
++CONFIG_WDT_IB700=y
+diff --git a/default-configs/pci.mak b/default-configs/pci.mak
+index ce56d58..f5f100e 100644
+--- a/default-configs/pci.mak
++++ b/default-configs/pci.mak
+@@ -23,3 +23,4 @@ CONFIG_ESP_PCI=y
+ CONFIG_SERIAL=y
+ CONFIG_SERIAL_PCI=y
+ CONFIG_IPACK=y
++CONFIG_WDT_IB6300ESB=y
+diff --git a/default-configs/x86_64-softmmu.mak b/default-configs/x86_64-softmmu.mak
+index 5ba1116..0e5ab55 100644
+--- a/default-configs/x86_64-softmmu.mak
++++ b/default-configs/x86_64-softmmu.mak
+@@ -29,3 +29,4 @@ CONFIG_PFLASH_CFI01=y
+ CONFIG_TPM_TIS=y
+ CONFIG_TPM_PASSTHROUGH=y
+ CONFIG_PCI_HOTPLUG=y
++CONFIG_WDT_IB700=y
+diff --git a/hw/i386/Makefile.objs b/hw/i386/Makefile.objs
+index c813b1e..5559a8b 100644
+--- a/hw/i386/Makefile.objs
++++ b/hw/i386/Makefile.objs
+@@ -2,7 +2,6 @@ obj-y += mc146818rtc.o
+ obj-y += apic_common.o apic.o
+ obj-y += sga.o ioapic_common.o ioapic.o piix_pci.o
+ obj-y += vmport.o
+-obj-y += wdt_ib700.o
+ obj-y += debugcon.o debugexit.o
+ obj-y += pc_sysfw.o
+ obj-y += lpc_ich9.o q35.o
+diff --git a/hw/watchdog/Makefile.objs b/hw/watchdog/Makefile.objs
+index f57133b..4b0374a 100644
+--- a/hw/watchdog/Makefile.objs
++++ b/hw/watchdog/Makefile.objs
+@@ -1,2 +1,3 @@
+ common-obj-y += watchdog.o
+-common-obj-$(CONFIG_PCI) += wdt_i6300esb.o
++common-obj-$(CONFIG_WDT_IB6300ESB) += wdt_i6300esb.o
++common-obj-$(CONFIG_WDT_IB700) += wdt_ib700.o
+diff --git a/hw/wdt_ib700.c b/hw/watchdog/wdt_ib700.c
+similarity index 100%
+rename from hw/wdt_ib700.c
+rename to hw/watchdog/wdt_ib700.c
+-- 
+1.8.1.4
+
+
+

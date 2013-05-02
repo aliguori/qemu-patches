@@ -1,0 +1,1 @@
+../Xilinx-SPIPS-fixes-round-2/v3.1366661479/0002-xilinx_spips-Make-interrupts-clear-on-read.patch

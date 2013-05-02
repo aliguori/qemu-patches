@@ -1,0 +1,61 @@
+From patches Mon Sep 17 00:00:00 2001
+From: peter.crosthwaite@xilinx.com
+To: qemu-devel@nongnu.org
+Cc: edgar.iglesias@gmail.com
+Date: Tue, 16 Apr 2013 10:22:41 +1000
+Message-id: 841cd9c81bdf29dae5acb9daeb41f5ee3901788b.1366069170.git.peter.crosthwaite@xilinx.com
+Subject: [PATCH 07/16] xilinx_axidma: Register reset properly
+
+From: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+
+Register the reset function as the Device::reset function rather than
+explicitly call it from the sysbus::init.
+
+Signed-off-by: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+Acked-by: Edgar E. Iglesias <edgar.iglesias@xilinx.com>
+---
+
+ hw/dma/xilinx_axidma.c |   12 +++++++++++-
+ 1 files changed, 11 insertions(+), 1 deletions(-)
+
+diff --git a/hw/dma/xilinx_axidma.c b/hw/dma/xilinx_axidma.c
+index 0b5bb44..91b8f07 100644
+--- a/hw/dma/xilinx_axidma.c
++++ b/hw/dma/xilinx_axidma.c
+@@ -357,6 +357,16 @@ static void stream_process_s2mem(struct Stream *s,
+     }
+ }
+ 
++static void xilinx_axidma_reset(DeviceState *dev)
++{
++    int i;
++    XilinxAXIDMA *s = XILINX_AXI_DMA(dev);
++
++    for (i = 0; i < 2; i++) {
++        stream_reset(&s->streams[i]);
++    }
++}
++
+ static void
+ axidma_push(StreamSlave *obj, unsigned char *buf, size_t len, uint32_t *app)
+ {
+@@ -477,7 +487,6 @@ static int xilinx_axidma_init(SysBusDevice *dev)
+     sysbus_init_mmio(dev, &s->iomem);
+ 
+     for (i = 0; i < 2; i++) {
+-        stream_reset(&s->streams[i]);
+         s->streams[i].nr = i;
+         s->streams[i].bh = qemu_bh_new(timer_hit, &s->streams[i]);
+         s->streams[i].ptimer = ptimer_init(s->streams[i].bh);
+@@ -506,6 +515,7 @@ static void axidma_class_init(ObjectClass *klass, void *data)
+     StreamSlaveClass *ssc = STREAM_SLAVE_CLASS(klass);
+ 
+     k->init = xilinx_axidma_init;
++    dc->reset = xilinx_axidma_reset;
+     dc->props = axidma_properties;
+     ssc->push = axidma_push;
+ }
+-- 
+1.7.0.4
+
+

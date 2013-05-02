@@ -1,0 +1,1 @@
+../block-Vectored-bdrv_writev_vmstate/v1.1365215272/0001-block-Introduce-bdrv_writev_vmstate.patch

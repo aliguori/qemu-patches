@@ -1,0 +1,4 @@
+0000-chardev-frontends-Explicitly-check-inc-and-dec-avail_connections-v2.txt
+0001-qemu-char-Add-qemu_chr_fe_claim---_release-helper-functions.patch
+0002-qemu-char-Call-fe_claim---fe_release-when-not-using-qdev-chr-properties.patch
+0003-ipoctal232-Convert-to-use-chardev-properties-directly.patch

@@ -1,0 +1,1 @@
+../KVM-flash-memory-support/v1.1367130735/0002-kvm-support-using-KVM_MEM_READONLY-flag-for-readonly-regions.patch

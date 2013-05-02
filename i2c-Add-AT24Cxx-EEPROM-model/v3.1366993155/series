@@ -1,0 +1,3 @@
+0000-i2c-Add-AT24Cxx-EEPROM-model.txt
+0001-i2c-Introduce-device-address-mask.patch
+0002-Add-AT24Cxx-I2C-EEPROM-device-model.patch

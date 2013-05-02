@@ -1,0 +1,1 @@
+../fix-win32-compilation/v5.1367088516/0001-win32-add-generic-RC-rules-to-rulesmak.patch

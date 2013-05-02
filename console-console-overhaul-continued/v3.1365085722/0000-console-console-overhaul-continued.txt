@@ -1,0 +1,115 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Gerd Hoffmann <kraxel@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Gerd Hoffmann <kraxel@redhat.com>
+Date: Thu,  4 Apr 2013 09:28:42 +0200
+Message-id: 1365060546-24638-1-git-send-email-kraxel@redhat.com
+Subject: [PATCH 00/24] console: console overhaul continued
+
+  Hi,
+
+Next round of console cleanup patches for review.  What is in there?
+
+  (1) qemu text consoles are rendered using pixman now.
+  (2) Each QemuConsole has its own DisplaySurface now, so we can
+      switch consoles without re-rendering the QemuConsole and
+      update non-active consoles.
+  (3) Based on (2) the screendump code is simplified *alot*.
+  (4) gui refresh timer adaption is fixes and consolidated.
+
+Also some cleanups and bugfixes.
+
+v3 changes:
+  * more bugfixes (especially vmware vga).
+  * dropped multi-window gtk patch for now (needs some more
+    refinement + discussions, but I don't want it block the
+    other patches).
+  * addressed v2 review comments.
+
+v2 adds:
+  * bugfixes from Igor.
+  * multihead support.
+
+cheers,
+  Gerd
+
+The following changes since commit 4dbb9ed3263e0f48282a2fc3d05099ba63e5b0e2:
+
+  xilinx_axienet: pump events as appropriate (2013-04-04 00:55:03 +0200)
+
+are available in the git repository at:
+
+  git://git.kraxel.org/qemu pixman.v10
+
+for you to fetch changes up to e98ffc5606e9aa294e04d214f9fa0e90b22a8ab0:
+
+  qxl: register QemuConsole for secondary cards (2013-04-04 09:18:04 +0200)
+
+----------------------------------------------------------------
+Gerd Hoffmann (22):
+      hw/vmware_vga.c: add tracepoints for mmio reads+writes
+      hw/vmware_vga.c: various vmware vga fixes.
+      pixman: add qemu_pixman_color()
+      pixman: render vgafont glyphs into pixman images
+      console: use pixman for fill+blit
+      console: use pixman for font rendering
+      console: switch color_table_rgb to pixman_color_t
+      console: add trace events
+      console: displaystate init revamp
+      console: rename vga_hw_*, add QemuConsole param
+      console: give each QemuConsole its own DisplaySurface
+      console: simplify screendump
+      console: zap g_width + g_height
+      console: move gui_update+gui_setup_refresh from vl.c into console.c
+      console: make DisplayState private to console.c
+      console: add GraphicHwOps
+      console: gui timer fixes
+      xen: re-enable refresh interval reporting for xenfb
+      console: add qemu_console_is_*
+      console: allow pinning displaychangelisteners to consoles
+      gtk: custom cursor support
+      qxl: register QemuConsole for secondary cards
+
+Igor Mitsyanko (2):
+      exynos4210_fimd.c: fix display resize bug introduced after console revamp
+      hw/vmware_vga.c: fix screen resize bug introduced after console revamp
+
+ hw/arm/musicpal.c          |    8 +-
+ hw/blizzard.c              |   21 +-
+ hw/cirrus_vga.c            |   10 +-
+ hw/exynos4210_fimd.c       |   15 +-
+ hw/g364fb.c                |   80 +-----
+ hw/jazz_led.c              |   11 +-
+ hw/milkymist-vgafb.c       |    9 +-
+ hw/omap_lcdc.c             |   93 +-----
+ hw/pl110.c                 |    9 +-
+ hw/pxa2xx_lcd.c            |    9 +-
+ hw/qxl.c                   |   42 +--
+ hw/sm501.c                 |    7 +-
+ hw/ssd0303.c               |    9 +-
+ hw/ssd0323.c               |    9 +-
+ hw/tc6393xb.c              |   10 +-
+ hw/tcx.c                   |  143 +---------
+ hw/unicore32/puv3.c        |    4 +-
+ hw/vga-isa-mm.c            |    4 +-
+ hw/vga-isa.c               |    3 +-
+ hw/vga-pci.c               |    3 +-
+ hw/vga.c                   |   76 +----
+ hw/vga_int.h               |    6 +-
+ hw/vmware_vga.c            |  198 +++++++------
+ hw/xenfb.c                 |   58 ++--
+ include/ui/console.h       |   55 ++--
+ include/ui/qemu-pixman.h   |    9 +
+ include/ui/spice-display.h |    1 -
+ trace-events               |   11 +
+ ui/console.c               |  676 ++++++++++++++++++++++++--------------------
+ ui/curses.c                |   11 +-
+ ui/gtk.c                   |   36 ++-
+ ui/qemu-pixman.c           |   54 ++++
+ ui/sdl.c                   |   52 ++--
+ ui/spice-display.c         |   11 +-
+ ui/vnc.c                   |   87 ++----
+ ui/vnc.h                   |    2 -
+ vl.c                       |   55 +---
+ 37 files changed, 831 insertions(+), 1066 deletions(-)
+

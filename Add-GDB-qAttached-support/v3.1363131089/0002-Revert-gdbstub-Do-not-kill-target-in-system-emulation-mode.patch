@@ -1,0 +1,41 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Fabien Chouteau <chouteau@adacore.com>
+To: Anthony Liguori <aliguori@us.ibm.com>, qemu-devel@nongnu.org
+Cc: jan.kiszka@siemens.com, Fabien Chouteau <chouteau@adacore.com>,
+ "qemu-devel@nongnu.org" <qemu-devel@nongnu.org>
+Date: Tue, 12 Mar 2013 18:31:31 +0100
+Message-id: 1363109492-1901-3-git-send-email-chouteau@adacore.com
+Subject: [PATCH 2/3] Revert "gdbstub: Do not kill target in system emulation
+ mode"
+
+The requirements described in this patch are implemented by "Add GDB
+qAttached support".
+
+This reverts commit 00e94dbc7fd0110b0555d59592b004333adfb4b8.
+
+Signed-off-by: Fabien Chouteau <chouteau@adacore.com>
+Reviewed-by: Jan Kiszka <jan.kiszka@siemens.com>
+---
+ gdbstub.c |    2 --
+ 1 file changed, 2 deletions(-)
+
+diff --git a/gdbstub.c b/gdbstub.c
+index 70d54ce..0e94311 100644
+--- a/gdbstub.c
++++ b/gdbstub.c
+@@ -2185,11 +2185,9 @@ static int gdb_handle_packet(GDBState *s, const char *line_buf)
+             goto unknown_command;
+         }
+     case 'k':
+-#ifdef CONFIG_USER_ONLY
+         /* Kill the target */
+         fprintf(stderr, "\nQEMU: Terminated via GDBstub\n");
+         exit(0);
+-#endif
+     case 'D':
+         /* Detach packet */
+         gdb_breakpoint_remove_all();
+-- 
+1.7.9.5
+
+

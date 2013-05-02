@@ -1,0 +1,109 @@
+From patches Mon Sep 17 00:00:00 2001
+From: =?utf-8?q?Herv=C3=A9_Poussineau_=3Chpoussin=40reactos=2Eorg=3E?=
+To: qemu-devel@nongnu.org
+Cc: qemu-ppc@nongnu.org, =?UTF-8?q?Andreas=20F=C3=A4rber?= <afaerber@suse.de>,
+ =?UTF-8?q?Herv=C3=A9=20Poussineau?= <hpoussin@reactos.org>
+Date: Thu,  2 May 2013 22:08:59 +0200
+Message-id: 1367525344-7755-3-git-send-email-hpoussin@reactos.org
+Subject: [PATCH 2/7] qom: handle registration of new types when initializing
+ the first ones
+
+When initializing all types in object_class_foreach, called by object_class_get_list,
+some new types may be registered. Those will change the type internal hashtable which
+is currently enumerated, and may crash QEMU.
+
+Fix it, by adding a second hash table which contains all the non-initialized types,
+merged to the main one before each round of initializations.
+
+Bug has been detected when registering dynamic types containing an interface.
+
+Signed-off-by: Hervé Poussineau <hpoussin@reactos.org>
+---
+ qom/object.c |   45 +++++++++++++++++++++++++++++++++++++--------
+ 1 file changed, 37 insertions(+), 8 deletions(-)
+
+diff --git a/qom/object.c b/qom/object.c
+index 75e6aac..e0a24dc 100644
+--- a/qom/object.c
++++ b/qom/object.c
+@@ -65,25 +65,39 @@ struct TypeImpl
+ 
+ static Type type_interface;
+ 
++static GHashTable *type_table_to_initialize;
++static GHashTable *type_table_initialized;
++
+ static GHashTable *type_table_get(void)
+ {
+-    static GHashTable *type_table;
+-
+-    if (type_table == NULL) {
+-        type_table = g_hash_table_new(g_str_hash, g_str_equal);
++    if (!type_table_initialized) {
++        type_table_initialized = g_hash_table_new(g_str_hash, g_str_equal);
+     }
+ 
+-    return type_table;
++    return type_table_initialized;
+ }
+ 
+ static void type_table_add(TypeImpl *ti)
+ {
+-    g_hash_table_insert(type_table_get(), (void *)ti->name, ti);
++    GHashTable **type_table;
++    if (ti->class) {
++        type_table = &type_table_initialized;
++    } else {
++        type_table = &type_table_to_initialize;
++    }
++    if (!*type_table) {
++        *type_table = g_hash_table_new(g_str_hash, g_str_equal);
++    }
++    g_hash_table_insert(*type_table, (void *)ti->name, ti);
+ }
+ 
+ static TypeImpl *type_table_lookup(const char *name)
+ {
+-    return g_hash_table_lookup(type_table_get(), name);
++    TypeImpl *ret = g_hash_table_lookup(type_table_get(), name);
++    if (!ret && type_table_to_initialize) {
++        ret = g_hash_table_lookup(type_table_to_initialize, name);
++    }
++    return ret;
+ }
+ 
+ static TypeImpl *type_register_internal(const TypeInfo *info)
+@@ -573,13 +587,28 @@ static void object_class_foreach_tramp(gpointer key, gpointer value,
+     data->fn(k, data->opaque);
+ }
+ 
++static void object_class_merge(gpointer key, gpointer value,
++                               gpointer opaque)
++{
++    g_hash_table_insert(type_table_get(), key, value);
++}
++
+ void object_class_foreach(void (*fn)(ObjectClass *klass, void *opaque),
+                           const char *implements_type, bool include_abstract,
+                           void *opaque)
+ {
+     OCFData data = { fn, implements_type, include_abstract, opaque };
+ 
+-    g_hash_table_foreach(type_table_get(), object_class_foreach_tramp, &data);
++    while (type_table_to_initialize &&
++           g_hash_table_size(type_table_to_initialize) > 0) {
++        g_hash_table_foreach(type_table_to_initialize, object_class_merge,
++                             NULL);
++        g_hash_table_destroy(type_table_to_initialize);
++        type_table_to_initialize = NULL;
++
++        g_hash_table_foreach(type_table_get(), object_class_foreach_tramp,
++                             &data);
++    }
+ }
+ 
+ int object_child_foreach(Object *obj, int (*fn)(Object *child, void *opaque),
+-- 
+1.7.10.4
+
+

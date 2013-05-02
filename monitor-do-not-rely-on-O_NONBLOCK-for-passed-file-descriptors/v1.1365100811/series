@@ -1,0 +1,5 @@
+0000-monitor-do-not-rely-on-O_NONBLOCK-for-passed-file-descriptors.txt
+0001-oslib-posix-rename-socket_set_nonblock-to-qemu_set_nonblock.patch
+0002-net-ensure-socket-backend-uses-non-blocking-fds.patch
+0003-qemu-socket-set-passed-fd-non-blocking-in-socket_connect.patch
+0004-chardev-clear-O_NONBLOCK-on-SCM_RIGHTS-file-descriptors.patch

@@ -1,0 +1,1 @@
+../libqos-support/v1.1362491604/0007-libqos-add-fw_cfg-pc.patch

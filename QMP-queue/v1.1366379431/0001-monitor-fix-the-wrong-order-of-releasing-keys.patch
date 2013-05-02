@@ -1,0 +1,48 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Luiz Capitulino <lcapitulino@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>
+Date: Fri, 19 Apr 2013 08:50:32 -0400
+Message-id: 1366375833-995-2-git-send-email-lcapitulino@redhat.com
+Subject: [PATCH 1/2] monitor: fix the wrong order of releasing keys
+
+From: Amos Kong <akong@redhat.com>
+
+(qemu) sendkey ctrl_r-scroll_lock-scroll_lock
+
+Executing this command could not let Windows guest panic, it caused by
+the wrong order of releasing keys. This problem was introduced by
+commit e4c8f004c55d9da3eae3e14df740238bf805b5d6.
+
+The right release order should be starting from last item.
+
+Signed-off-by: Amos Kong <akong@redhat.com>
+Signed-off-by: Luiz Capitulino <lcapitulino@redhat.com>
+---
+ ui/input.c | 8 +++-----
+ 1 file changed, 3 insertions(+), 5 deletions(-)
+
+diff --git a/ui/input.c b/ui/input.c
+index 9abef0c..ecfeb43 100644
+--- a/ui/input.c
++++ b/ui/input.c
+@@ -234,13 +234,11 @@ static void free_keycodes(void)
+ 
+ static void release_keys(void *opaque)
+ {
+-    int i;
+-
+-    for (i = 0; i < keycodes_size; i++) {
+-        if (keycodes[i] & 0x80) {
++    while (keycodes_size > 0) {
++        if (keycodes[--keycodes_size] & 0x80) {
+             kbd_put_keycode(0xe0);
+         }
+-        kbd_put_keycode(keycodes[i]| 0x80);
++        kbd_put_keycode(keycodes[keycodes_size] | 0x80);
+     }
+ 
+     free_keycodes();
+-- 
+1.8.1.4
+

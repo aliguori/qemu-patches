@@ -1,0 +1,4 @@
+0000-QMP-queue.txt
+0001-New-cpu-max-field-in-query-machines-QMP-command-output.patch
+0002-Revert-New-QMP-command-query-cpu-max-and-HMP-command-cpu_max.patch
+0003-qapi-use-valid-JSON-in-schema.patch

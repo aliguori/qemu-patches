@@ -1,0 +1,147 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Alexey Kardashevskiy <aik@ozlabs.ru>
+To: Alex Williamson <alex.williamson@redhat.com>
+Cc: David Gibson <david@gibson.dropbear.id.au>, qemu-ppc@nongnu.org,
+ Alexey Kardashevskiy <aik@ozlabs.ru>, qemu-devel@nongnu.org
+Date: Mon, 22 Apr 2013 18:02:36 +1000
+Message-id: 1366617757-6604-3-git-send-email-aik@ozlabs.ru
+Subject: [PATCH 2/3] vfio: add support for spapr platform (powerpc64 server)
+
+The existing code assumes that containers are capable of
+multiple groups support which is not the case for POWERPC64
+where groups are defined by the hardware configuration and
+cannot share one container.
+
+The earlier proposal for PPC64 support was:
+- spapr_phb_vfio_init(): create a spapr-pci-vfio-host-bridge,
+	IOMMU ID is already known at this stage;
+- spapr_pci_vfio_scan(): start scanning the group and adding devices;
+- vfio_initfn(): the VFIO device init function allocates a group struct
+	(if not yet);
+- vfio_get_group():  a group struct allocator allocates a container
+	(if not yet);
+- vfio_connect_container(): connects a group to a container, requests
+	POWERPC64 specific properties and calls a callback to spapr_pci.c
+	passing those properties.
+
+As the group ID is knows from the very beginning (as it is supplied via
+the command line), it makes more sense to create group and container
+structs first and then add devices from this group.
+
+In order to achieve this, this patch adds a vfio_container_spapr_alloc()
+function which allocates sPAPR container and returns its properties which
+are a DMA window size and start.
+
+Cc: David Gibson <david@gibson.dropbear.id.au>
+Signed-off-by: Alexey Kardashevskiy <aik@ozlabs.ru>
+---
+ hw/misc/vfio.c         |   79 ++++++++++++++++++++++++++++++++++++++++++++++++
+ include/hw/misc/vfio.h |    3 ++
+ 2 files changed, 82 insertions(+)
+
+diff --git a/hw/misc/vfio.c b/hw/misc/vfio.c
+index 503125e..adcbb80 100644
+--- a/hw/misc/vfio.c
++++ b/hw/misc/vfio.c
+@@ -2684,6 +2684,85 @@ static int vfio_connect_container(VFIOGroup *group)
+     return 0;
+ }
+ 
++VFIOContainer *vfio_container_spapr_alloc(VFIOGroup *group,
++                                          struct vfio_iommu_spapr_tce_info *info)
++{
++    VFIOContainer *container;
++    int ret, fd;
++
++    if (group->container) {
++        return NULL;
++    }
++
++    fd = qemu_open("/dev/vfio/vfio", O_RDWR);
++    if (fd < 0) {
++        error_report("vfio: failed to open /dev/vfio/vfio: %m");
++        return NULL;
++    }
++
++    ret = ioctl(fd, VFIO_GET_API_VERSION);
++    if (ret != VFIO_API_VERSION) {
++        error_report("vfio: supported vfio version: %d, "
++                     "reported version: %d", VFIO_API_VERSION, ret);
++        close(fd);
++        return NULL;
++    }
++
++    container = g_malloc0(sizeof(*container));
++    container->fd = fd;
++
++    if (ioctl(fd, VFIO_CHECK_EXTENSION, VFIO_SPAPR_TCE_IOMMU)) {
++        ret = ioctl(group->fd, VFIO_GROUP_SET_CONTAINER, &fd);
++        if (ret) {
++            error_report("vfio: failed to set group container: %s",
++                         strerror(errno));
++            g_free(container);
++            close(fd);
++            return NULL;
++        }
++
++        ret = ioctl(fd, VFIO_SET_IOMMU, VFIO_SPAPR_TCE_IOMMU);
++        if (ret) {
++            error_report("vfio: failed to set iommu for container: %s",
++                         strerror(errno));
++            g_free(container);
++            close(fd);
++            return NULL;
++        }
++
++        ret = ioctl(fd, VFIO_IOMMU_SPAPR_TCE_GET_INFO, info);
++        if (ret) {
++            error_report("vfio: failed to get iommu info for container: %s",
++                         strerror(errno));
++            g_free(container);
++            close(fd);
++            return NULL;
++        }
++
++        ret = ioctl(container->fd, VFIO_IOMMU_ENABLE);
++        if (ret) {
++            error_report("vfio: failed to enable container: %s",
++                         strerror(errno));
++            g_free(container);
++            close(fd);
++            return NULL;
++        }
++    } else {
++        error_report("vfio: No available IOMMU models");
++        g_free(container);
++        close(fd);
++        return NULL;
++    }
++
++    QLIST_INIT(&container->group_list);
++    QLIST_INSERT_HEAD(&container_list, container, next);
++
++    group->container = container;
++    QLIST_INSERT_HEAD(&container->group_list, group, container_next);
++
++    return container;
++}
++
+ static void vfio_disconnect_container(VFIOGroup *group)
+ {
+     VFIOContainer *container = group->container;
+diff --git a/include/hw/misc/vfio.h b/include/hw/misc/vfio.h
+index f39aef8..d1c7ff1 100644
+--- a/include/hw/misc/vfio.h
++++ b/include/hw/misc/vfio.h
+@@ -14,4 +14,7 @@ extern int vfio_dma_map(struct VFIOContainer *container, hwaddr iova,
+ 
+ extern struct VFIOGroup *vfio_get_group(int groupid, bool connect);
+ 
++extern struct VFIOContainer *vfio_container_spapr_alloc(struct VFIOGroup *group,
++                                                        struct vfio_iommu_spapr_tce_info *info);
++
+ #endif
+-- 
+1.7.10.4
+
+

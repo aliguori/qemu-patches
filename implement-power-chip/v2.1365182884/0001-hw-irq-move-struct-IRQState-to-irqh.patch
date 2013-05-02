@@ -1,0 +1,62 @@
+From patches Mon Sep 17 00:00:00 2001
+From: liguang <lig.fnst@cn.fujitsu.com>
+To: Anthony Liguori <aliguori@us.ibm.com>, peter.maydell@linaro.org,
+ stefanha@gmail.com, qemu-devel@nongnu.org, liguang <lig.fnst@cn.fujitsu.com>,
+ Peter Maydell <peter.maydell@linaro.org>, pbonzini@redhat.com,
+ afaerber@suse.de
+Cc: Anthony Liguori <aliguori@us.ibm.com>, stefanha@gmail.com,
+ qemu-devel@nongnu.org, liguang <lig.fnst@cn.fujitsu.com>, pbonzini@redhat.com,
+ afaerber@suse.de
+Date: Fri, 5 Apr 2013 12:28:05 +0800
+Message-id: 1365136091-26148-2-git-send-email-lig.fnst@cn.fujitsu.com
+Subject: [PATCH 1/7] hw/irq: move struct IRQState to irq.h
+
+define struct IRQState in irq.c bring in
+a annoying result, if you want dereference of
+IRQState's member like opaque outside of
+irq.c, compiler will complain:
+"error: dereferencing pointer to incomplete type"
+
+Signed-off-by: liguang <lig.fnst@cn.fujitsu.com>
+---
+ hw/irq.c |    6 ------
+ hw/irq.h |    6 ++++++
+ 2 files changed, 6 insertions(+), 6 deletions(-)
+
+diff --git a/hw/irq.c b/hw/irq.c
+index 2078542..100890f 100644
+--- a/hw/irq.c
++++ b/hw/irq.c
+@@ -24,12 +24,6 @@
+ #include "qemu-common.h"
+ #include "hw/irq.h"
+ 
+-struct IRQState {
+-    qemu_irq_handler handler;
+-    void *opaque;
+-    int n;
+-};
+-
+ void qemu_set_irq(qemu_irq irq, int level)
+ {
+     if (!irq)
+diff --git a/hw/irq.h b/hw/irq.h
+index 610e6b7..7ae152d 100644
+--- a/hw/irq.h
++++ b/hw/irq.h
+@@ -7,6 +7,12 @@ typedef struct IRQState *qemu_irq;
+ 
+ typedef void (*qemu_irq_handler)(void *opaque, int n, int level);
+ 
++struct IRQState {
++    qemu_irq_handler handler;
++    void *opaque;
++    int n;
++};
++
+ void qemu_set_irq(qemu_irq irq, int level);
+ 
+ static inline void qemu_irq_raise(qemu_irq irq)
+-- 
+1.7.2.5
+

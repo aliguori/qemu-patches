@@ -1,0 +1,51 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Fabien Chouteau <chouteau@adacore.com>
+To: qemu-devel@nongnu.org
+Cc: hainque@adacore.com, peter.maydell@linaro.org, sw@weilnetz.de,
+ blauwirbel@gmail.com, pbonzini@redhat.com, afaerber@suse.de
+Date: Tue,  9 Apr 2013 18:06:55 +0200
+Message-id: 1365523615-5177-4-git-send-email-chouteau@adacore.com
+Subject: [PATCH 3/3] Release SMP restriction on Windows
+
+The previous patches make QEMU SMP safe on Windows, we can now release
+the restriction.
+
+Signed-off-by: Fabien Chouteau <chouteau@adacore.com>
+---
+ os-win32.c |   18 ------------------
+ 1 file changed, 18 deletions(-)
+
+diff --git a/os-win32.c b/os-win32.c
+index 9673a81..c7f6b5c 100644
+--- a/os-win32.c
++++ b/os-win32.c
+@@ -69,25 +69,7 @@ static BOOL WINAPI qemu_ctrl_handler(DWORD type)
+ 
+ void os_setup_early_signal_handling(void)
+ {
+-    /* Note: cpu_interrupt() is currently not SMP safe, so we force
+-       QEMU to run on a single CPU */
+-    HANDLE h;
+-    DWORD_PTR mask, smask;
+-    int i;
+-
+     SetConsoleCtrlHandler(qemu_ctrl_handler, TRUE);
+-
+-    h = GetCurrentProcess();
+-    if (GetProcessAffinityMask(h, &mask, &smask)) {
+-        for(i = 0; i < 32; i++) {
+-            if (mask & (1 << i))
+-                break;
+-        }
+-        if (i != 32) {
+-            mask = 1 << i;
+-            SetProcessAffinityMask(h, mask);
+-        }
+-    }
+ }
+ 
+ /* Look for support files in the same directory as the executable.  */
+-- 
+1.7.9.5
+
+

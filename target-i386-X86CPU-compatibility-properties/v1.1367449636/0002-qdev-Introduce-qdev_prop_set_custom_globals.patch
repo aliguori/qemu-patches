@@ -1,0 +1,87 @@
+From patches Mon Sep 17 00:00:00 2001
+From: =?utf-8?q?Andreas_F=C3=A4rber_=3Cafaerber=40suse=2Ede=3E?=
+To: qemu-devel@nongnu.org, Andreas =?iso-8859-1?Q?F=E4rber?= <afaerber@suse.de>
+Cc: ehabkost@redhat.com, qemu-devel@nongnu.org,
+ =?UTF-8?q?Andreas=20F=C3=A4rber?= <afaerber@suse.de>, anthony@codemonkey.ws,
+ pbonzini@redhat.com, imammedo@redhat.com
+Date: Wed,  1 May 2013 18:07:18 +0200
+Message-id: 1367424440-16687-3-git-send-email-afaerber@suse.de
+Subject: [PATCH 2/4] qdev: Introduce qdev_prop_set_custom_globals()
+
+Reuse it in qdev_prop_set_globals().
+
+Signed-off-by: Andreas Färber <afaerber@suse.de>
+Reviewed-by: Eduardo Habkost <ehabkost@redhat.com>
+---
+ hw/core/qdev-properties.c    | 35 ++++++++++++++++++++++++-----------
+ include/hw/qdev-properties.h |  2 ++
+ 2 files changed, 26 insertions(+), 11 deletions(-)
+
+diff --git a/hw/core/qdev-properties.c b/hw/core/qdev-properties.c
+index 716ba19..68d1bff 100644
+--- a/hw/core/qdev-properties.c
++++ b/hw/core/qdev-properties.c
+@@ -1099,23 +1099,36 @@ void qdev_prop_register_global_list(GlobalProperty *props)
+     }
+ }
+ 
++void qdev_prop_set_custom_globals(DeviceState *dev, const char *driver,
++                                  Error **errp)
++{
++    GlobalProperty *prop;
++
++    QTAILQ_FOREACH(prop, &global_props, next) {
++        Error *err = NULL;
++
++        if (strcmp(driver, prop->driver) != 0) {
++            continue;
++        }
++        qdev_prop_parse(dev, prop->property, prop->value, &err);
++        if (err != NULL) {
++            error_propagate(errp, err);
++            return;
++        }
++    }
++}
++
+ void qdev_prop_set_globals(DeviceState *dev, Error **errp)
+ {
+     ObjectClass *class = object_get_class(OBJECT(dev));
+ 
+     do {
+-        GlobalProperty *prop;
+-        QTAILQ_FOREACH(prop, &global_props, next) {
+-            Error *err = NULL;
++        Error *err = NULL;
+ 
+-            if (strcmp(object_class_get_name(class), prop->driver) != 0) {
+-                continue;
+-            }
+-            qdev_prop_parse(dev, prop->property, prop->value, &err);
+-            if (err != NULL) {
+-                error_propagate(errp, err);
+-                return;
+-            }
++        qdev_prop_set_custom_globals(dev, object_class_get_name(class), &err);
++        if (err != NULL) {
++            error_propagate(errp, err);
++            return;
+         }
+         class = object_class_get_parent(class);
+     } while (class);
+diff --git a/include/hw/qdev-properties.h b/include/hw/qdev-properties.h
+index 38469d4..833300c 100644
+--- a/include/hw/qdev-properties.h
++++ b/include/hw/qdev-properties.h
+@@ -169,6 +169,8 @@ void qdev_prop_set_ptr(DeviceState *dev, const char *name, void *value);
+ void qdev_prop_register_global(GlobalProperty *prop);
+ void qdev_prop_register_global_list(GlobalProperty *props);
+ void qdev_prop_set_globals(DeviceState *dev, Error **errp);
++void qdev_prop_set_custom_globals(DeviceState *dev, const char *driver,
++                                  Error **errp);
+ void error_set_from_qdev_prop_error(Error **errp, int ret, DeviceState *dev,
+                                     Property *prop, const char *value);
+ 
+-- 
+1.8.1.4
+

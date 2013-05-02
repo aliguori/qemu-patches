@@ -1,0 +1,246 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Luiz Capitulino <lcapitulino@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>
+Date: Thu, 25 Apr 2013 16:44:16 -0400
+Message-id: 1366922656-32545-2-git-send-email-lcapitulino@redhat.com
+Subject: [PATCH 1/1] monitor: introduce query-command-line-options
+
+From: Amos Kong <akong@redhat.com>
+
+Libvirt has no way to probe if an option or property is supported,
+This patch introduces a new qmp command to query command line
+option information. hmp command isn't added because it's not needed.
+
+Signed-off-by: Amos Kong <akong@redhat.com>
+CC: Luiz Capitulino <lcapitulino@redhat.com>
+CC: Osier Yang <jyang@redhat.com>
+CC: Anthony Liguori <aliguori@us.ibm.com>
+Signed-off-by: Luiz Capitulino <lcapitulino@redhat.com>
+Reviewed-by: Eric Blake <eblake@redhat.com>
+---
+ qapi-schema.json   | 66 +++++++++++++++++++++++++++++++++++++++++++++++++++++
+ qmp-commands.hx    | 47 ++++++++++++++++++++++++++++++++++++++
+ util/qemu-config.c | 67 ++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ 3 files changed, 180 insertions(+)
+
+diff --git a/qapi-schema.json b/qapi-schema.json
+index 751d3c2..5b0fb3b 100644
+--- a/qapi-schema.json
++++ b/qapi-schema.json
+@@ -3505,3 +3505,69 @@
+     '*asl_compiler_rev':  'uint32',
+     '*file':              'str',
+     '*data':              'str' }}
++
++##
++# @CommandLineParameterType:
++#
++# Possible types for an option parameter.
++#
++# @string: accepts a character string
++#
++# @boolean: accepts "on" or "off"
++#
++# @number: accepts a number
++#
++# @size: accepts a number followed by an optional suffix (K)ilo,
++#        (M)ega, (G)iga, (T)era
++#
++# Since 1.5
++##
++{ 'enum': 'CommandLineParameterType',
++  'data': ['string', 'boolean', 'number', 'size'] }
++
++##
++# @CommandLineParameterInfo:
++#
++# Details about a single parameter of a command line option.
++#
++# @name: parameter name
++#
++# @type: parameter @CommandLineParameterType
++#
++# @help: #optional human readable text string, not suitable for parsing.
++#
++# Since 1.5
++##
++{ 'type': 'CommandLineParameterInfo',
++  'data': { 'name': 'str',
++            'type': 'CommandLineParameterType',
++            '*help': 'str' } }
++
++##
++# @CommandLineOptionInfo:
++#
++# Details about a command line option, including its list of parameter details
++#
++# @option: option name
++#
++# @parameters: an array of @CommandLineParameterInfo
++#
++# Since 1.5
++##
++{ 'type': 'CommandLineOptionInfo',
++  'data': { 'option': 'str', 'parameters': ['CommandLineParameterInfo'] } }
++
++##
++# @query-command-line-options:
++#
++# Query command line option schema.
++#
++# @option: #optional option name
++#
++# Returns: list of @CommandLineOptionInfo for all options (or for the given
++#          @option).  Returns an error if the given @option doesn't exist.
++#
++# Since 1.5
++##
++{'command': 'query-command-line-options', 'data': { '*option': 'str' },
++ 'returns': ['CommandLineOptionInfo'] }
+diff --git a/qmp-commands.hx b/qmp-commands.hx
+index 4d65422..0e89132 100644
+--- a/qmp-commands.hx
++++ b/qmp-commands.hx
+@@ -2416,6 +2416,53 @@ EQMP
+     },
+ 
+ SQMP
++query-command-line-options
++--------------------------
++
++Show command line option schema.
++
++Return a json-array of command line option schema for all options (or for
++the given option), returning an error if the given option doesn't exist.
++
++Each array entry contains the following:
++
++- "option": option name (json-string)
++- "parameters": a json-array describes all parameters of the option:
++    - "name": parameter name (json-string)
++    - "type": parameter type (one of 'string', 'boolean', 'number',
++              or 'size')
++    - "help": human readable description of the parameter
++              (json-string, optional)
++
++Example:
++
++-> { "execute": "query-command-line-options", "arguments": { "option": "option-rom" } }
++<- { "return": [
++        {
++            "parameters": [
++                {
++                    "name": "romfile",
++                    "type": "string"
++                },
++                {
++                    "name": "bootindex",
++                    "type": "number"
++                }
++            ],
++            "option": "option-rom"
++        }
++     ]
++   }
++
++EQMP
++
++    {
++        .name       = "query-command-line-options",
++        .args_type  = "option:s?",
++        .mhandler.cmd_new = qmp_marshal_input_query_command_line_options,
++    },
++
++SQMP
+ query-migrate
+ -------------
+ 
+diff --git a/util/qemu-config.c b/util/qemu-config.c
+index 01ca890..a59568d 100644
+--- a/util/qemu-config.c
++++ b/util/qemu-config.c
+@@ -5,6 +5,7 @@
+ #include "qapi/qmp/qerror.h"
+ #include "hw/qdev.h"
+ #include "qapi/error.h"
++#include "qmp-commands.h"
+ 
+ static QemuOptsList *vm_config_groups[32];
+ 
+@@ -37,6 +38,72 @@ QemuOptsList *qemu_find_opts(const char *group)
+     return ret;
+ }
+ 
++static CommandLineParameterInfoList *query_option_descs(const QemuOptDesc *desc)
++{
++    CommandLineParameterInfoList *param_list = NULL, *entry;
++    CommandLineParameterInfo *info;
++    int i;
++
++    for (i = 0; desc[i].name != NULL; i++) {
++        info = g_malloc0(sizeof(*info));
++        info->name = g_strdup(desc[i].name);
++
++        switch (desc[i].type) {
++        case QEMU_OPT_STRING:
++            info->type = COMMAND_LINE_PARAMETER_TYPE_STRING;
++            break;
++        case QEMU_OPT_BOOL:
++            info->type = COMMAND_LINE_PARAMETER_TYPE_BOOLEAN;
++            break;
++        case QEMU_OPT_NUMBER:
++            info->type = COMMAND_LINE_PARAMETER_TYPE_NUMBER;
++            break;
++        case QEMU_OPT_SIZE:
++            info->type = COMMAND_LINE_PARAMETER_TYPE_SIZE;
++            break;
++        }
++
++        if (desc[i].help) {
++            info->has_help = true;
++            info->help = g_strdup(desc[i].help);
++        }
++
++        entry = g_malloc0(sizeof(*entry));
++        entry->value = info;
++        entry->next = param_list;
++        param_list = entry;
++    }
++
++    return param_list;
++}
++
++CommandLineOptionInfoList *qmp_query_command_line_options(bool has_option,
++                                                          const char *option,
++                                                          Error **errp)
++{
++    CommandLineOptionInfoList *conf_list = NULL, *entry;
++    CommandLineOptionInfo *info;
++    int i;
++
++    for (i = 0; vm_config_groups[i] != NULL; i++) {
++        if (!has_option || !strcmp(option, vm_config_groups[i]->name)) {
++            info = g_malloc0(sizeof(*info));
++            info->option = g_strdup(vm_config_groups[i]->name);
++            info->parameters = query_option_descs(vm_config_groups[i]->desc);
++            entry = g_malloc0(sizeof(*entry));
++            entry->value = info;
++            entry->next = conf_list;
++            conf_list = entry;
++        }
++    }
++
++    if (conf_list == NULL) {
++        error_setg(errp, "invalid option name: %s", option);
++    }
++
++    return conf_list;
++}
++
+ QemuOptsList *qemu_find_opts_err(const char *group, Error **errp)
+ {
+     return find_list(vm_config_groups, group, errp);
+-- 
+1.8.1.4
+

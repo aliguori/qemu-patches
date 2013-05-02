@@ -1,0 +1,1 @@
+../arm-devs-queue/v1.1366405036/0010-versatile_pci-Expose-PCI-memory-space-to-system.patch

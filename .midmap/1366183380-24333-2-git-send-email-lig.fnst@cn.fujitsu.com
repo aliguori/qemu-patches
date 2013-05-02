@@ -1,0 +1,1 @@
+../acpi-add-ASL-for-Embedded-Controller/v1.1366230179/0002-hw-add-Embedded-Controller-chip-emulation.patch

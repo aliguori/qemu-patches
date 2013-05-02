@@ -1,0 +1,1 @@
+../s390-ccwimg-Some-more-updates/v1.1366745830/0001-s390-ccwimg-Detect-devices-with-stsch.patch

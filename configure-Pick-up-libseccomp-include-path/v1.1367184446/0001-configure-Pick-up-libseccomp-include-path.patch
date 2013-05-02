@@ -1,0 +1,35 @@
+From patches Mon Sep 17 00:00:00 2001
+From: =?utf-8?q?Andreas_F=C3=A4rber_=3Cafaerber=40suse=2Ede=3E?=
+To: qemu-devel@nongnu.org, =?UTF-8?B?QW5kcmVhcyBGw6RyYmVy?= <afaerber@suse.de>
+Cc: agraf@suse.de, qemu-trivial@nongnu.org, qemu-stable@nongnu.org,
+ qemu-devel@nongnu.org, brogers@suse.com,
+ =?UTF-8?q?Andreas=20F=C3=A4rber?= <afaerber@suse.de>
+Date: Sun, 28 Apr 2013 16:27:26 +0200
+Message-id: 1367159247-13441-1-git-send-email-afaerber@suse.de
+Subject: [PATCH 1/1] configure: Pick up libseccomp include path
+
+openSUSE 12.3 has seccomp.h in /usr/include/libseccomp-1.0.1,
+so add `pkg-config --cflags libseccomp` output to QEMU_CFLAGS.
+
+Cc: qemu-stable@nongnu.org
+Signed-off-by: Andreas Färber <afaerber@suse.de>
+---
+ configure | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/configure b/configure
+index 21438d4..643153f 100755
+--- a/configure
++++ b/configure
+@@ -1505,6 +1505,7 @@ libs_softmmu="$libs_softmmu -lz"
+ if test "$seccomp" != "no" ; then
+     if $pkg_config --atleast-version=1.0.0 libseccomp --modversion >/dev/null 2>&1; then
+         libs_softmmu="$libs_softmmu `$pkg_config --libs libseccomp`"
++        QEMU_CFLAGS="$QEMU_CFLAGS `$pkg_config --cflags libseccomp`"
+ 	seccomp="yes"
+     else
+ 	if test "$seccomp" = "yes"; then
+-- 
+1.8.1.4
+
+

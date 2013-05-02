@@ -1,0 +1,45 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Alon Levy <alevy@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: mlureau@redhat.com
+Date: Mon, 22 Apr 2013 18:04:40 +0300
+Message-id: 1366643098-2566-11-git-send-email-alevy@redhat.com
+Subject: [PATCH 10/28] libcacard: vscclient to use QemuThread for portability
+
+From: Marc-André Lureau <marcandre.lureau@redhat.com>
+
+---
+ libcacard/vscclient.c | 9 ++-------
+ 1 file changed, 2 insertions(+), 7 deletions(-)
+
+diff --git a/libcacard/vscclient.c b/libcacard/vscclient.c
+index 5e00db3..5f47634 100644
+--- a/libcacard/vscclient.c
++++ b/libcacard/vscclient.c
+@@ -218,8 +218,7 @@ on_host_init(VSCMsgHeader *mhHeader, VSCMsgInit *incoming)
+     int num_capabilities =
+         1 + ((mhHeader->length - sizeof(VSCMsgInit)) / sizeof(uint32_t));
+     int i;
+-    int rv;
+-    pthread_t thread_id;
++    QemuThread thread_id;
+ 
+     incoming->version = ntohl(incoming->version);
+     if (incoming->version != VSCARD_VERSION) {
+@@ -242,11 +241,7 @@ on_host_init(VSCMsgHeader *mhHeader, VSCMsgInit *incoming)
+     send_msg(VSC_ReaderRemove, VSCARD_MINIMAL_READER_ID, NULL, 0);
+     /* launch the event_thread. This will trigger reader adds for all the
+      * existing readers */
+-    rv = pthread_create(&thread_id, NULL, event_thread, NULL);
+-    if (rv < 0) {
+-        perror("pthread_create");
+-        return rv;
+-    }
++    qemu_thread_create(&thread_id, event_thread, NULL, 0);
+     return 0;
+ }
+ 
+-- 
+1.8.2
+
+

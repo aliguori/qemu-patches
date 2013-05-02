@@ -1,0 +1,109 @@
+From patches Mon Sep 17 00:00:00 2001
+From: "Austin Clements" <amdragon@mit.edu>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, Yu Chen <chyyuu@gmail.com>,
+ Austin Clements <amdragon@mit.edu>
+Date: Thu, 14 Mar 2013 18:55:10 -0400
+Message-id: 1363301710-19729-1-git-send-email-amdragon@mit.edu
+Subject: [PATCH 1/1] multiboot: Clean up mmap loop and report correct
+ mmap_length
+
+Previously, the multiboot option ROM set the mmap_length field of the
+multiboot info structure to the length of the mmap array *excluding*
+the final element of the array, rather than the total length of the
+array.  The multiboot specification indicates that this is incorrect,
+and it's incompatible with GRUB's [1] and SYSLINUX's [2] multiboot
+loaders, which both set mmap_length to the length of the entire mmap
+array.
+
+This bug is easy to miss: if the VM is configured with 3584 MB of RAM
+or less, the last E820 entry is simply a reserved region that does not
+overlap with any other region, so there's no harm in omitting it.
+However, if it's started with more than 3584 MB of RAM, the memory
+above the high memory hole appears as the last entry in the E820 map
+and will be omitted from the multiboot mmap array.
+
+This patch rewrites the loop that constructs the mmap array from the
+E820 map to simplify it and fix the final mmap_length value.
+
+[1] grub-core/loader/i386/multiboot_mbi.c:grub_multiboot_make_mbi
+
+[2] com32/mboot/mem.c:mboot_make_memmap
+
+Signed-off-by: Austin Clements <amdragon@mit.edu>
+---
+ pc-bios/multiboot.bin         |  Bin 1024 -> 1024 bytes
+ pc-bios/optionrom/multiboot.S |   25 +++++++++----------------
+ 2 files changed, 9 insertions(+), 16 deletions(-)
+
+diff --git a/pc-bios/multiboot.bin b/pc-bios/multiboot.bin
+index 7b3c1745a430ea5e0e15b9aa817d1cbbaa40db14..24690fcc7d49d4751835c58878b9618425427dec 100644
+GIT binary patch
+delta 119
+zcmZqRXyBNj#q7l7K2g_7frlxL@o;KdryK*rZVrajPB|8aZaEt!AcKt|ty|7+V*6}8
+z1|Ue=DFP(bI(eIqv!v}%cmWjI72xO_d{(sixJVJ3;_VWq*SAwT?Q|F>hcoVBOq(pq
+TWXLG8*_~+z<KzM+4n`#aoCG2B
+
+delta 123
+zcmZqRXyBNj#q7o8KT+38L4+xd@o;KdryK*rZVrajPB|8aZaEhwAcKt|ty|7*V*6}U
+z76t}}w4EYAQY}5L)BjJ}4uuy$kzE0fzQJcji$oP~mk92VVEF#H^LR?9oeo3uahBKT
+ZCkHU@VPeRg%*$lRD6`p~X$K>t9srM{CD#A|
+
+diff --git a/pc-bios/optionrom/multiboot.S b/pc-bios/optionrom/multiboot.S
+index 003bcfb..f8d374e 100644
+--- a/pc-bios/optionrom/multiboot.S
++++ b/pc-bios/optionrom/multiboot.S
+@@ -89,41 +89,34 @@ run_multiboot:
+ 
+ 	/* Initialize multiboot mmap structs using int 0x15(e820) */
+ 	xor		%ebx, %ebx
+-	/* mmap start after first size */
+-	movl		$4, %edi
++	/* edi = position in mmap struct list */
++	movl		$0, %edi
+ 
+ mmap_loop:
+ 	/* entry size (mmap struct) & max buffer size (int15) */
+ 	movl		$20, %ecx
+ 	/* store entry size */
+-	/* old as(1) doesn't like this insn so emit the bytes instead:
+-	movl		%ecx, %es:-4(%edi)
+-	*/
+-	.dc.b		0x26,0x67,0x66,0x89,0x4f,0xfc
++	mov		%cx, %es:(%di)
++	add		$4, %di
+ 	/* e820 */
+ 	movl		$0x0000e820, %eax
+ 	/* 'SMAP' magic */
+ 	movl		$0x534d4150, %edx
+ 	int		$0x15
+ 
+-mmap_check_entry:
++	/* move entry pointer forward */
++	add		$20, %di
+ 	/* last entry? then we're done */
+ 	jb		mmap_done
+ 	and		%bx, %bx
+ 	jz		mmap_done
+ 	/* valid entry, so let's loop on */
+-
+-mmap_store_entry:
+-	/* %ax = entry_number * 24 */
+-	mov		$24, %ax
+-	mul		%bx
+-	mov		%ax, %di
+-	movw		%di, %fs:0x2c
+-	/* %di = 4 + (entry_number * 24) */
+-	add		$4, %di
+ 	jmp		mmap_loop
+ 
+ mmap_done:
++	/* update mmap_length in bootinfo */
++	movw		%di, %fs:0x2c
++
+ real_to_prot:
+ 	/* Load the GDT before going into protected mode */
+ lgdt:
+-- 
+1.7.10.4
+

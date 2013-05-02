@@ -1,0 +1,4 @@
+0000-gtk-add-Devices-menu.txt
+0001-ide-add-drive-id-property.patch
+0002-monitor-add-notifier-list-for-monitor-events.patch
+0003-gtk-add-devices-menu-to-allow-changing-removable-block-devices.patch

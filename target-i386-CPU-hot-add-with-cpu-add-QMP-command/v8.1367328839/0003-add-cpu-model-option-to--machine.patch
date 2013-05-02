@@ -1,0 +1,69 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Igor Mammedov <imammedo@redhat.com>
+To: Anthony Liguori <aliguori@us.ibm.com>, Igor Mammedov <imammedo@redhat.com>,
+ qemu-devel@nongnu.org
+Cc: aliguori@us.ibm.com, ehabkost@redhat.com, mst@redhat.com,
+ qemu-devel@nongnu.org, jfrei@linux.vnet.ibm.com, pbonzini@redhat.com,
+ afaerber@suse.de, lig.fnst@cn.fujitsu.com
+Date: Tue, 30 Apr 2013 08:34:02 +0200
+Message-id: 1367303643-16036-4-git-send-email-imammedo@redhat.com
+Subject: [PATCH 3/4] add cpu-model option to -machine
+
+Provides globally accessible cpu-model via machine opts.
+
+Signed-off-by: Igor Mammedov <imammedo@redhat.com>
+Reviewed-by: Eduardo Habkost <ehabkost@redhat.com>
+---
+Note:
+ - it will be used in cpu-add hook on tartget-i386.
+---
+ vl.c | 12 +++++++++++-
+ 1 file changed, 11 insertions(+), 1 deletion(-)
+
+diff --git a/vl.c b/vl.c
+index 1e7d474..37a0f81 100644
+--- a/vl.c
++++ b/vl.c
+@@ -429,6 +429,10 @@ static QemuOptsList qemu_machine_opts = {
+             .name = "usb",
+             .type = QEMU_OPT_BOOL,
+             .help = "Set on/off to enable/disable usb",
++        }, {
++            .name = "cpu-model",
++            .type = QEMU_OPT_STRING,
++            .help = "alias for \"-cpu\"  CPU model definition",
+         },
+         { /* End of list */ }
+     },
+@@ -2979,7 +2983,7 @@ int main(int argc, char **argv, char **envp)
+             }
+             case QEMU_OPTION_cpu:
+                 /* hw initialization will check this */
+-                cpu_model = optarg;
++                qemu_opts_set(qemu_find_opts("machine"), 0, "cpu-model", optarg);
+                 break;
+             case QEMU_OPTION_hda:
+                 {
+@@ -3919,6 +3923,11 @@ int main(int argc, char **argv, char **envp)
+      */
+     cpudef_init();
+ 
++    machine_opts = qemu_opts_find(qemu_find_opts("machine"), 0);
++    if (machine_opts) {
++        cpu_model = qemu_opt_get(machine_opts, "cpu-model");
++    }
++
+     if (cpu_model && is_help_option(cpu_model)) {
+         list_cpus(stdout, &fprintf, cpu_model);
+         exit(0);
+@@ -4124,6 +4133,7 @@ int main(int argc, char **argv, char **envp)
+         kernel_filename = qemu_opt_get(machine_opts, "kernel");
+         initrd_filename = qemu_opt_get(machine_opts, "initrd");
+         kernel_cmdline = qemu_opt_get(machine_opts, "append");
++        cpu_model = qemu_opt_get(machine_opts, "cpu-model");
+     } else {
+         kernel_filename = initrd_filename = kernel_cmdline = NULL;
+     }
+-- 
+1.8.2.1
+

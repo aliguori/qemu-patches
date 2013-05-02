@@ -1,0 +1,33 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Sage Weil <sage@inktank.com>
+To: Sage Weil <sage@inktank.com>, qemu-devel@nongnu.org
+Cc: Sage Weil <sage@inktank.com>, qemu-devel@nongnu.org
+Date: Tue, 16 Apr 2013 15:01:14 -0700
+Message-id: 1366149674-21452-1-git-send-email-sage@inktank.com
+Subject: [PATCH 1/1] qemu-iotests: send 'rbd rm ...' stderr to /dev/null
+
+The rbd cli tool now sends progress info to stderr; send that to the bit
+bucket too.
+
+Signed-off-by: Sage Weil <sage@inktank.com>
+---
+ tests/qemu-iotests/common.rc |    2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/tests/qemu-iotests/common.rc b/tests/qemu-iotests/common.rc
+index a536bf7..d7b0ad1 100644
+--- a/tests/qemu-iotests/common.rc
++++ b/tests/qemu-iotests/common.rc
+@@ -152,7 +152,7 @@ _cleanup_test_img()
+             ;;
+ 
+         rbd)
+-            rbd rm $TEST_DIR/t.$IMGFMT > /dev/null
++            rbd rm $TEST_DIR/t.$IMGFMT > /dev/null 2> /dev/null
+             ;;
+ 
+         sheepdog)
+-- 
+1.7.9.5
+
+

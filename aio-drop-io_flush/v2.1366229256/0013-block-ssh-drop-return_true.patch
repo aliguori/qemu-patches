@@ -1,0 +1,48 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Stefan Hajnoczi <stefanha@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, Paolo Bonzini <pbonzini@redhat.com>,
+ Stefan Hajnoczi <stefanha@redhat.com>, pingfank@linux.vnet.ibm.com,
+ Kevin Wolf <kwolf@redhat.com>
+Date: Wed, 17 Apr 2013 15:07:49 +0200
+Message-id: 1366204073-8468-14-git-send-email-stefanha@redhat.com
+Subject: [PATCH 13/17] block/ssh: drop return_true()
+
+.io_flush() is no longer called so drop return_true().
+
+Signed-off-by: Stefan Hajnoczi <stefanha@redhat.com>
+---
+ block/ssh.c | 10 +---------
+ 1 file changed, 1 insertion(+), 9 deletions(-)
+
+diff --git a/block/ssh.c b/block/ssh.c
+index 8f78e2e..555442c 100644
+--- a/block/ssh.c
++++ b/block/ssh.c
+@@ -728,14 +728,6 @@ static void restart_coroutine(void *opaque)
+     qemu_coroutine_enter(co, NULL);
+ }
+ 
+-/* Always true because when we have called set_fd_handler there is
+- * always a request being processed.
+- */
+-static int return_true(void *opaque)
+-{
+-    return 1;
+-}
+-
+ static coroutine_fn void set_fd_handler(BDRVSSHState *s)
+ {
+     int r;
+@@ -754,7 +746,7 @@ static coroutine_fn void set_fd_handler(BDRVSSHState *s)
+     DPRINTF("s->sock=%d rd_handler=%p wr_handler=%p", s->sock,
+             rd_handler, wr_handler);
+ 
+-    qemu_aio_set_fd_handler(s->sock, rd_handler, wr_handler, return_true, co);
++    qemu_aio_set_fd_handler(s->sock, rd_handler, wr_handler, NULL, co);
+ }
+ 
+ static coroutine_fn void clear_fd_handler(BDRVSSHState *s)
+-- 
+1.8.1.4
+

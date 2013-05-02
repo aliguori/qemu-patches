@@ -1,0 +1,65 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Fabien Chouteau <chouteau@adacore.com>
+To: Alexander Graf <agraf@suse.de>, qemu-devel@nongnu.org,
+ Fabien Chouteau <chouteau@adacore.com>
+Cc: Tristan Gingold <gingold@adacore.com>, qemu-ppc@nongnu.org, agraf@suse.de,
+ qemu-devel@nongnu.org
+Date: Tue,  9 Apr 2013 17:00:55 +0200
+Message-id: 1365519655-30416-1-git-send-email-chouteau@adacore.com
+Subject: [PATCH 1/1] powerpc: correctly handle fpu exceptions.
+
+From: Tristan Gingold <gingold@adacore.com>
+
+Raise the exception on the first occurence, do not wait for the next
+floating point operation.
+
+Signed-off-by: Fabien Chouteau <chouteau@adacore.com>
+---
+ target-ppc/fpu_helper.c |   23 ++++++++++++-----------
+ 1 file changed, 12 insertions(+), 11 deletions(-)
+
+diff --git a/target-ppc/fpu_helper.c b/target-ppc/fpu_helper.c
+index 9e779ea..1e141fb 100644
+--- a/target-ppc/fpu_helper.c
++++ b/target-ppc/fpu_helper.c
+@@ -470,6 +470,18 @@ void store_fpscr(CPUPPCState *env, uint64_t arg, uint32_t mask)
+ 
+ void helper_float_check_status(CPUPPCState *env)
+ {
++    int status = get_float_exception_flags(&env->fp_status);
++
++    if (status & float_flag_divbyzero) {
++        float_zero_divide_excp(env);
++    } else if (status & float_flag_overflow) {
++        float_overflow_excp(env);
++    } else if (status & float_flag_underflow) {
++        float_underflow_excp(env);
++    } else if (status & float_flag_inexact) {
++        float_inexact_excp(env);
++    }
++
+     if (env->exception_index == POWERPC_EXCP_PROGRAM &&
+         (env->error_code & POWERPC_EXCP_FP)) {
+         /* Differred floating-point exception after target FPR update */
+@@ -477,17 +489,6 @@ void helper_float_check_status(CPUPPCState *env)
+             helper_raise_exception_err(env, env->exception_index,
+                                        env->error_code);
+         }
+-    } else {
+-        int status = get_float_exception_flags(&env->fp_status);
+-        if (status & float_flag_divbyzero) {
+-            float_zero_divide_excp(env);
+-        } else if (status & float_flag_overflow) {
+-            float_overflow_excp(env);
+-        } else if (status & float_flag_underflow) {
+-            float_underflow_excp(env);
+-        } else if (status & float_flag_inexact) {
+-            float_inexact_excp(env);
+-        }
+     }
+ }
+ 
+-- 
+1.7.9.5
+
+

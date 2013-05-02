@@ -1,0 +1,1 @@
+../Add-an-IPMI-device-to-qemu/v4.1347998427/0006-qemu-char-Close-fd-at-end-of-file.patch

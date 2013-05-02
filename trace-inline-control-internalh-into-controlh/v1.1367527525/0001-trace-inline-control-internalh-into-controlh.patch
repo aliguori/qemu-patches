@@ -1,0 +1,276 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Stefan Hajnoczi <stefanha@redhat.com>
+To: Stefan Hajnoczi <stefanha@redhat.com>, Andreas Faerber <afaerber@suse.de>,
+ qemu-devel@nongnu.org
+Cc: Stefan Hajnoczi <stefanha@redhat.com>, Andreas Faerber <afaerber@suse.de>,
+ qemu-devel@nongnu.org, =?UTF-8?q?Llu=C3=ADs=20Vilanova?= <vilanova@ac.upc.edu>
+Date: Thu,  2 May 2013 15:45:25 +0200
+Message-id: 1367502325-25419-1-git-send-email-stefanha@redhat.com
+Subject: [PATCH 1/1] trace: inline control-internal.h into control.h
+
+trace/control.h is the API for manipulating trace events in QEMU.  Some
+of the implementation of this API lives in trace/control-internal.h.
+
+Older versions of gcc complain because a static prototype is used but
+the function is defined static inline later on:
+
+  CC    vl.o
+  In file included from trace/control.h:191,
+                   from vl.c:165:
+                   trace/control.h:77:
+  warning: ‘trace_event_count’ declared inline after being called
+                   trace/control.h:77:
+  warning: previous declaration of ‘trace_event_count’ was here
+
+The gcc version is:
+
+  gcc (SUSE Linux) 4.3.4 [gcc-4_3-branch revision 152973]
+
+The whole split into a public header and implementation header with
+static inlines seems a bit much anyway.  If we want these functions to
+be static inline let's pay the price and put them into the header file.
+
+Note that a few functions must be re-ordered so that they are declared
+before use.
+
+Reported-by: Andreas Färber <afaerber@suse.de>
+Signed-off-by: Stefan Hajnoczi <stefanha@redhat.com>
+---
+ trace/control-internal.h | 67 ----------------------------------------
+ trace/control.h          | 80 +++++++++++++++++++++++++++++++++---------------
+ 2 files changed, 55 insertions(+), 92 deletions(-)
+ delete mode 100644 trace/control-internal.h
+
+diff --git a/trace/control-internal.h b/trace/control-internal.h
+deleted file mode 100644
+index cce2da4..0000000
+--- a/trace/control-internal.h
++++ /dev/null
+@@ -1,67 +0,0 @@
+-/*
+- * Interface for configuring and controlling the state of tracing events.
+- *
+- * Copyright (C) 2011-2012 Lluís Vilanova <vilanova@ac.upc.edu>
+- *
+- * This work is licensed under the terms of the GNU GPL, version 2 or later.
+- * See the COPYING file in the top-level directory.
+- */
+-
+-#ifndef TRACE__CONTROL_INTERNAL_H
+-#define TRACE__CONTROL_INTERNAL_H
+-
+-#include <string.h>
+-
+-
+-extern TraceEvent trace_events[];
+-
+-
+-static inline TraceEvent *trace_event_id(TraceEventID id)
+-{
+-    assert(id < trace_event_count());
+-    return &trace_events[id];
+-}
+-
+-static inline TraceEventID trace_event_count(void)
+-{
+-    return TRACE_EVENT_COUNT;
+-}
+-
+-static inline bool trace_event_is_pattern(const char *str)
+-{
+-    assert(str != NULL);
+-    return strchr(str, '*') != NULL;
+-}
+-
+-static inline TraceEventID trace_event_get_id(TraceEvent *ev)
+-{
+-    assert(ev != NULL);
+-    return ev->id;
+-}
+-
+-static inline const char * trace_event_get_name(TraceEvent *ev)
+-{
+-    assert(ev != NULL);
+-    return ev->name;
+-}
+-
+-static inline bool trace_event_get_state_static(TraceEvent *ev)
+-{
+-    assert(ev != NULL);
+-    return ev->sstate;
+-}
+-
+-static inline bool trace_event_get_state_dynamic(TraceEvent *ev)
+-{
+-    assert(ev != NULL);
+-    return ev->dstate;
+-}
+-
+-static inline void trace_event_set_state_dynamic(TraceEvent *ev, bool state)
+-{
+-    assert(ev != NULL);
+-    assert(trace_event_get_state_static(ev));
+-    return trace_event_set_state_dynamic_backend(ev, state);
+-}
+-
+-#endif  /* TRACE__CONTROL_INTERNAL_H */
+diff --git a/trace/control.h b/trace/control.h
+index cde8260..d603932 100644
+--- a/trace/control.h
++++ b/trace/control.h
+@@ -13,6 +13,8 @@
+ #include "qemu-common.h"
+ #include "trace/generated-events.h"
+ 
++/** Private - use trace_event_id() instead */
++extern TraceEvent trace_events[];
+ 
+ /**
+  * TraceEventID:
+@@ -26,6 +28,16 @@
+ enum TraceEventID;
+ 
+ /**
++ * trace_event_count:
++ *
++ * Return the number of events.
++ */
++static inline TraceEventID trace_event_count(void)
++{
++    return TRACE_EVENT_COUNT;
++}
++
++/**
+  * trace_event_id:
+  * @id: Event identifier.
+  *
+@@ -39,7 +51,11 @@ enum TraceEventID;
+  * Returns: pointer to #TraceEvent.
+  *
+  */
+-static TraceEvent *trace_event_id(TraceEventID id);
++static inline TraceEvent *trace_event_id(TraceEventID id)
++{
++    assert(id < trace_event_count());
++    return &trace_events[id];
++}
+ 
+ /**
+  * trace_event_name:
+@@ -67,14 +83,11 @@ TraceEvent *trace_event_pattern(const char *pat, TraceEvent *ev);
+  *
+  * Whether the given string is an event name pattern.
+  */
+-static bool trace_event_is_pattern(const char *str);
+-
+-/**
+- * trace_event_count:
+- *
+- * Return the number of events.
+- */
+-static TraceEventID trace_event_count(void);
++static inline bool trace_event_is_pattern(const char *str)
++{
++    assert(str != NULL);
++    return strchr(str, '*') != NULL;
++}
+ 
+ 
+ 
+@@ -83,14 +96,22 @@ static TraceEventID trace_event_count(void);
+  *
+  * Get the identifier of an event.
+  */
+-static TraceEventID trace_event_get_id(TraceEvent *ev);
++static inline TraceEventID trace_event_get_id(TraceEvent *ev)
++{
++    assert(ev != NULL);
++    return ev->id;
++}
+ 
+ /**
+  * trace_event_get_name:
+  *
+  * Get the name of an event.
+  */
+-static const char * trace_event_get_name(TraceEvent *ev);
++static inline const char *trace_event_get_name(TraceEvent *ev)
++{
++    assert(ev != NULL);
++    return ev->name;
++}
+ 
+ /**
+  * trace_event_get_state:
+@@ -115,14 +136,22 @@ static const char * trace_event_get_name(TraceEvent *ev);
+  * Use the define 'TRACE_${EVENT_NAME}_ENABLED' for compile-time checks (it will
+  * be set to 1 or 0 according to the presence of the disabled property).
+  */
+-static bool trace_event_get_state_static(TraceEvent *ev);
++static inline bool trace_event_get_state_static(TraceEvent *ev)
++{
++    assert(ev != NULL);
++    return ev->sstate;
++}
+ 
+ /**
+  * trace_event_get_state_dynamic:
+  *
+  * Get the dynamic tracing state of an event.
+  */
+-static bool trace_event_get_state_dynamic(TraceEvent *ev);
++static inline bool trace_event_get_state_dynamic(TraceEvent *ev)
++{
++    assert(ev != NULL);
++    return ev->dstate;
++}
+ 
+ /**
+  * trace_event_set_state:
+@@ -138,21 +167,25 @@ static bool trace_event_get_state_dynamic(TraceEvent *ev);
+     } while (0)
+ 
+ /**
+- * trace_event_set_state_dynamic:
+- *
+- * Set the dynamic tracing state of an event.
+- *
+- * Pre-condition: trace_event_get_state_static(ev) == true
+- */
+-static void trace_event_set_state_dynamic(TraceEvent *ev, bool state);
+-
+-/**
+  * trace_event_set_state_dynamic_backend:
+  *
+  * Warning: This function must be implemented by each tracing backend.
+  */
+ void trace_event_set_state_dynamic_backend(TraceEvent *ev, bool state);
+ 
++/**
++ * trace_event_set_state_dynamic:
++ *
++ * Set the dynamic tracing state of an event.
++ *
++ * Pre-condition: trace_event_get_state_static(ev) == true
++ */
++static inline void trace_event_set_state_dynamic(TraceEvent *ev, bool state)
++{
++    assert(ev != NULL);
++    assert(trace_event_get_state_static(ev));
++    return trace_event_set_state_dynamic_backend(ev, state);
++}
+ 
+ 
+ /**
+@@ -187,7 +220,4 @@ bool trace_backend_init(const char *events, const char *file);
+  */
+ void trace_backend_init_events(const char *fname);
+ 
+-
+-#include "trace/control-internal.h"
+-
+ #endif  /* TRACE__CONTROL_H */
+-- 
+1.8.1.4
+
+

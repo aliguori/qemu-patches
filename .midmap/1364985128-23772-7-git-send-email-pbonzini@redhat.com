@@ -1,0 +1,1 @@
+../TARGET__ALIGNMENT-cleanup-and-config-targetmak-trimming/v2.1365010318/0006-elfload-only-give-abi_long-ulong-the-alignment-specified-by-the-target.patch

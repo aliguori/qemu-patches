@@ -1,0 +1,6 @@
+0000-Data-Driven-device-registers--Zynq-DEVCFG.txt
+0001-bitops-Add-ONES-macro.patch
+0002-register-Add-Register-API.patch
+0003-register-Add-Memory-API-glue.patch
+0004-xilinx_devcfg-Zynq-devcfg-device-model.patch
+0005-xilinx_zynq-added-devcfg-to-machine-model.patch

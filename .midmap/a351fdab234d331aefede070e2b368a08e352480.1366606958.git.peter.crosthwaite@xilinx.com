@@ -1,0 +1,1 @@
+../Xilinx-SPIPS-fixes-round-2/v3.1366661479/0001-xilinx_spips-seperate-SPI-and-QSPI-as-two-classes.patch

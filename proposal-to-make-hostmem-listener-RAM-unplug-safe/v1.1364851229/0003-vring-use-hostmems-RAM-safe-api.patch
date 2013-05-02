@@ -1,0 +1,297 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Liu Ping Fan <qemulist@gmail.com>
+To: Liu Ping Fan <qemulist@gmail.com>, Stefan Hajnoczi <stefanha@gmail.com>,
+ qemu-devel@nongnu.org, liu ping fan <qemulist@gmail.com>
+Cc: Anthony Liguori <aliguori@us.ibm.com>, Paolo Bonzini <pbonzini@redhat.com>,
+ Stefan Hajnoczi <stefanha@gmail.com>, qemu-devel@nongnu.org,
+ Marcelo Tosatti <mtosatti@redhat.com>,
+ Peter Maydell <peter.maydell@linaro.org>, Jan Kiszka <jan.kiszka@siemens.com>,
+ Vasilis Liaskovitis <vasilis.liaskovitis@profitbricks.com>
+Date: Mon, 1 Apr 2013 16:20:32 +0800
+Message-id: 1364804434-7980-4-git-send-email-qemulist@gmail.com
+Subject: [PATCH 3/5] vring: use hostmem's RAM safe api
+
+From: Liu Ping Fan <pingfank@linux.vnet.ibm.com>
+
+When lookup gpa to hva, the corresponding MemoryRegion will be exposed
+to caller, and will release by caller later
+
+Signed-off-by: Liu Ping Fan <pingfank@linux.vnet.ibm.com>
+---
+ hw/dataplane/vring.c     |   88 ++++++++++++++++++++++++++++++++++------------
+ hw/dataplane/vring.h     |    5 ++-
+ include/qemu/main-loop.h |    2 +
+ 3 files changed, 70 insertions(+), 25 deletions(-)
+
+diff --git a/hw/dataplane/vring.c b/hw/dataplane/vring.c
+index e3b2253..5a9b335 100644
+--- a/hw/dataplane/vring.c
++++ b/hw/dataplane/vring.c
+@@ -27,8 +27,7 @@ bool vring_setup(Vring *vring, VirtIODevice *vdev, int n)
+ 
+     vring->broken = false;
+ 
+-    hostmem_init(&vring->hostmem);
+-    vring_ptr = hostmem_lookup(&vring->hostmem, vring_addr, vring_size, true);
++    vring_ptr = hostmem_lookup(vring_addr, vring_size, &vring->vring_mr, true);
+     if (!vring_ptr) {
+         error_report("Failed to map vring "
+                      "addr %#" HWADDR_PRIx " size %" HWADDR_PRIu,
+@@ -51,7 +50,7 @@ bool vring_setup(Vring *vring, VirtIODevice *vdev, int n)
+ 
+ void vring_teardown(Vring *vring)
+ {
+-    hostmem_finalize(&vring->hostmem);
++    memory_region_unref(vring->vring_mr);
+ }
+ 
+ /* Disable guest->host notifies */
+@@ -111,11 +110,14 @@ bool vring_should_notify(VirtIODevice *vdev, Vring *vring)
+ static int get_indirect(Vring *vring,
+                         struct iovec iov[], struct iovec *iov_end,
+                         unsigned int *out_num, unsigned int *in_num,
+-                        struct vring_desc *indirect)
++                        struct vring_desc *indirect,
++                        MemoryRegion ***mrs)
+ {
+     struct vring_desc desc;
+     unsigned int i = 0, count, found = 0;
+-
++    MemoryRegion **cur = *mrs;
++    int ret = 0;
++    MemoryRegion *tmp;
+     /* Sanity check */
+     if (unlikely(indirect->len % sizeof(desc))) {
+         error_report("Invalid length in indirect descriptor: "
+@@ -138,16 +140,18 @@ static int get_indirect(Vring *vring,
+         struct vring_desc *desc_ptr;
+ 
+         /* Translate indirect descriptor */
+-        desc_ptr = hostmem_lookup(&vring->hostmem,
+-                                  indirect->addr + found * sizeof(desc),
+-                                  sizeof(desc), false);
++        desc_ptr = hostmem_lookup(indirect->addr + found * sizeof(desc),
++                                  sizeof(desc),
++                                  &tmp,
++                                  false);
+         if (!desc_ptr) {
+             error_report("Failed to map indirect descriptor "
+                          "addr %#" PRIx64 " len %zu",
+                          (uint64_t)indirect->addr + found * sizeof(desc),
+                          sizeof(desc));
+             vring->broken = true;
+-            return -EFAULT;
++            ret = -EFAULT;
++            goto fail;
+         }
+         desc = *desc_ptr;
+ 
+@@ -158,31 +162,41 @@ static int get_indirect(Vring *vring,
+             error_report("Loop detected: last one at %u "
+                          "indirect size %u", i, count);
+             vring->broken = true;
+-            return -EFAULT;
++            memory_region_unref(tmp);
++            ret = -EFAULT;
++            goto fail;
+         }
+ 
+         if (unlikely(desc.flags & VRING_DESC_F_INDIRECT)) {
+             error_report("Nested indirect descriptor");
+             vring->broken = true;
+-            return -EFAULT;
++            memory_region_unref(tmp);
++            ret = -EFAULT;
++            goto fail;
+         }
+ 
+         /* Stop for now if there are not enough iovecs available. */
+         if (iov >= iov_end) {
+-            return -ENOBUFS;
++            memory_region_unref(tmp);
++            ret = -ENOBUFS;
++            goto fail;
+         }
+ 
+-        iov->iov_base = hostmem_lookup(&vring->hostmem, desc.addr, desc.len,
++        iov->iov_base = hostmem_lookup(desc.addr, desc.len,
++                                       cur,
+                                        desc.flags & VRING_DESC_F_WRITE);
+         if (!iov->iov_base) {
+             error_report("Failed to map indirect descriptor"
+                          "addr %#" PRIx64 " len %u",
+                          (uint64_t)desc.addr, desc.len);
+             vring->broken = true;
+-            return -EFAULT;
++            memory_region_unref(tmp);
++            ret = -EFAULT;
++            goto fail;
+         }
+         iov->iov_len = desc.len;
+         iov++;
++        cur++;
+ 
+         /* If this is an input descriptor, increment that count. */
+         if (desc.flags & VRING_DESC_F_WRITE) {
+@@ -194,13 +208,23 @@ static int get_indirect(Vring *vring,
+                 error_report("Indirect descriptor "
+                              "has out after in: idx %u", i);
+                 vring->broken = true;
+-                return -EFAULT;
++                memory_region_unref(tmp);
++                ret = -EFAULT;
++                goto fail;
+             }
+             *out_num += 1;
+         }
+         i = desc.next;
++        memory_region_unref(tmp);
+     } while (desc.flags & VRING_DESC_F_NEXT);
++    *mrs = cur;
+     return 0;
++
++fail:
++    for (; cur > *mrs; cur--) {
++        memory_region_unref(*cur);
++    }
++    return ret;
+ }
+ 
+ /* This looks in the virtqueue and for the first available buffer, and converts
+@@ -212,15 +236,20 @@ static int get_indirect(Vring *vring,
+  * never a valid descriptor number) if none was found.  A negative code is
+  * returned on error.
+  *
++ * @mrs should be no less than iov[]
++ *
+  * Stolen from linux/drivers/vhost/vhost.c.
+  */
+ int vring_pop(VirtIODevice *vdev, Vring *vring,
+               struct iovec iov[], struct iovec *iov_end,
+-              unsigned int *out_num, unsigned int *in_num)
++              unsigned int *out_num, unsigned int *in_num,
++              MemoryRegion **mrs)
+ {
+     struct vring_desc desc;
+     unsigned int i, head, found = 0, num = vring->vr.num;
+     uint16_t avail_idx, last_avail_idx;
++    MemoryRegion **cur = mrs;
++    int ret = 0;
+ 
+     /* If there was a fatal error then refuse operation */
+     if (vring->broken) {
+@@ -270,13 +299,15 @@ int vring_pop(VirtIODevice *vdev, Vring *vring,
+         if (unlikely(i >= num)) {
+             error_report("Desc index is %u > %u, head = %u", i, num, head);
+             vring->broken = true;
+-            return -EFAULT;
++            ret = -EFAULT;
++            goto fail;
+         }
+         if (unlikely(++found > num)) {
+             error_report("Loop detected: last one at %u vq size %u head %u",
+                          i, num, head);
+             vring->broken = true;
+-            return -EFAULT;
++            ret = -EFAULT;
++            goto fail;
+         }
+         desc = vring->vr.desc[i];
+ 
+@@ -284,7 +315,8 @@ int vring_pop(VirtIODevice *vdev, Vring *vring,
+         barrier();
+ 
+         if (desc.flags & VRING_DESC_F_INDIRECT) {
+-            int ret = get_indirect(vring, iov, iov_end, out_num, in_num, &desc);
++            int ret = get_indirect(vring, iov, iov_end, out_num, in_num, &desc,
++                        &cur);
+             if (ret < 0) {
+                 return ret;
+             }
+@@ -296,20 +328,24 @@ int vring_pop(VirtIODevice *vdev, Vring *vring,
+          * with the current set.
+          */
+         if (iov >= iov_end) {
+-            return -ENOBUFS;
++            ret = -ENOBUFS;
++            goto fail;
+         }
+ 
+         /* TODO handle non-contiguous memory across region boundaries */
+-        iov->iov_base = hostmem_lookup(&vring->hostmem, desc.addr, desc.len,
++        iov->iov_base = hostmem_lookup(desc.addr, desc.len,
++                                       cur,
+                                        desc.flags & VRING_DESC_F_WRITE);
+         if (!iov->iov_base) {
+             error_report("Failed to map vring desc addr %#" PRIx64 " len %u",
+                          (uint64_t)desc.addr, desc.len);
+             vring->broken = true;
+-            return -EFAULT;
++            ret = -EFAULT;
++            goto fail;
+         }
+         iov->iov_len  = desc.len;
+         iov++;
++        cur++;
+ 
+         if (desc.flags & VRING_DESC_F_WRITE) {
+             /* If this is an input descriptor,
+@@ -321,7 +357,8 @@ int vring_pop(VirtIODevice *vdev, Vring *vring,
+             if (unlikely(*in_num)) {
+                 error_report("Descriptor has out after in: idx %d", i);
+                 vring->broken = true;
+-                return -EFAULT;
++                ret = -EFAULT;
++                goto fail;
+             }
+             *out_num += 1;
+         }
+@@ -331,6 +368,11 @@ int vring_pop(VirtIODevice *vdev, Vring *vring,
+     /* On success, increment avail index. */
+     vring->last_avail_idx++;
+     return head;
++fail:
++    for (; cur > mrs; cur--) {
++        memory_region_unref(*cur);
++    }
++    return ret;
+ }
+ 
+ /* After we've used one of their buffers, we tell them about it.
+diff --git a/hw/dataplane/vring.h b/hw/dataplane/vring.h
+index defb1ef..e00deaa 100644
+--- a/hw/dataplane/vring.h
++++ b/hw/dataplane/vring.h
+@@ -23,7 +23,7 @@
+ #include "hw/virtio.h"
+ 
+ typedef struct {
+-    HostMem hostmem;                /* guest memory mapper */
++    MemoryRegion *vring_mr;   /* RAM's memoryRegion on which this vring sits */
+     struct vring vr;                /* virtqueue vring mapped to host memory */
+     uint16_t last_avail_idx;        /* last processed avail ring index */
+     uint16_t last_used_idx;         /* last processed used ring index */
+@@ -56,7 +56,8 @@ bool vring_enable_notification(VirtIODevice *vdev, Vring *vring);
+ bool vring_should_notify(VirtIODevice *vdev, Vring *vring);
+ int vring_pop(VirtIODevice *vdev, Vring *vring,
+               struct iovec iov[], struct iovec *iov_end,
+-              unsigned int *out_num, unsigned int *in_num);
++              unsigned int *out_num, unsigned int *in_num,
++              MemoryRegion **mrs);
+ void vring_push(Vring *vring, unsigned int head, int len);
+ 
+ #endif /* VRING_H */
+diff --git a/include/qemu/main-loop.h b/include/qemu/main-loop.h
+index 6f0200a..58592be 100644
+--- a/include/qemu/main-loop.h
++++ b/include/qemu/main-loop.h
+@@ -308,4 +308,6 @@ void qemu_iohandler_poll(GArray *pollfds, int rc);
+ QEMUBH *qemu_bh_new(QEMUBHFunc *cb, void *opaque);
+ void qemu_bh_schedule_idle(QEMUBH *bh);
+ 
++void hostmem_init(void);
++void hostmem_finalize(void);
+ #endif
+-- 
+1.7.4.4
+

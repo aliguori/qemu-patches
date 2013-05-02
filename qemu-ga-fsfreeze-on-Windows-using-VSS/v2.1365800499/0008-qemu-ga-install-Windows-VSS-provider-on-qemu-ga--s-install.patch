@@ -1,0 +1,42 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Tomoki Sekiyama <tsekiyam@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: mdroth@linux.vnet.ibm.com, pbonzini@redhat.com, vrozenfe@redhat.com,
+ Tomoki Sekiyama <tomoki.sekiyama@hds.com>, lcapitulino@redhat.com
+Date: Fri, 12 Apr 2013 16:02:06 -0400
+Message-id: 20130412200206.20814.47199.stgit@corona
+Subject: [PATCH 08/11] qemu-ga: install Windows VSS provider on `qemu-ga -s
+ install'
+
+Register QGA VSS provider library into Windows when qemu-ga is installed as
+Windows service ('-s install' option). It is deregistered when the service
+is uninstalled ('-s uninstall' option).
+
+Signed-off-by: Tomoki Sekiyama <tomoki.sekiyama@hds.com>
+---
+ qga/main.c |    8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+diff --git a/qga/main.c b/qga/main.c
+index 92230e9..09fa291 100644
+--- a/qga/main.c
++++ b/qga/main.c
+@@ -1029,8 +1029,16 @@ int main(int argc, char **argv)
+         case 's':
+             service = optarg;
+             if (strcmp(service, "install") == 0) {
++#ifdef HAS_VSS_SDK
++                if (FAILED(COMRegister())) {
++                    return EXIT_FAILURE;
++                }
++#endif
+                 return ga_install_service(path, log_filepath);
+             } else if (strcmp(service, "uninstall") == 0) {
++#ifdef HAS_VSS_SDK
++                COMUnregister();
++#endif
+                 return ga_uninstall_service();
+             } else {
+                 printf("Unknown service command.\n");
+
+

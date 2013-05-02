@@ -1,0 +1,1 @@
+../debugcon-fix-always-print-addr0x0-val0x0-bug/v2.1366038864/0003-debugcon-fix-compiler-warning-when-open-DEBUG_DEBUGCON.patch

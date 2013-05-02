@@ -1,0 +1,93 @@
+From patches Mon Sep 17 00:00:00 2001
+From: "Igor Mammedov" <imammedo@redhat.com>
+To: Igor Mammedov <imammedo@redhat.com>, qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, aliguori@us.ibm.com,
+ ehabkost@redhat.com, claudio.fontana@huawei.com, qemu-devel@nongnu.org,
+ aderumier@odiso.com, lcapitulino@redhat.com, jfrei@linux.vnet.ibm.com,
+ yang.z.zhang@intel.com, pbonzini@redhat.com, eblake@redhat.com,
+ afaerber@suse.de, lig.fnst@cn.fujitsu.com, rth@twiddle.net
+Date: Fri,  5 Apr 2013 16:37:01 +0200
+Message-id: 1365172636-28628-10-git-send-email-imammedo@redhat.com
+Subject: [PATCH 09/22] introduce CPU hot-plug notifier
+
+hot-added CPU will be distributed to acpi_piix4, rtc_cmos and icc_bridge
+
+Signed-off-by: Igor Mammedov <imammedo@redhat.com>
+Reviewed-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+v2:
+  * move notifier to qom/cpu.c and call it from CPUClass.realize() on hotplug
+---
+ include/qom/cpu.h       |  2 ++
+ include/sysemu/sysemu.h |  3 +++
+ qom/cpu.c               | 12 ++++++++++++
+ 3 files changed, 17 insertions(+)
+
+diff --git a/include/qom/cpu.h b/include/qom/cpu.h
+index 6d6eb7a..210aca3 100644
+--- a/include/qom/cpu.h
++++ b/include/qom/cpu.h
+@@ -46,6 +46,7 @@ typedef struct CPUState CPUState;
+  * @reset: Callback to reset the #CPUState to its initial state.
+  * @do_interrupt: Callback for interrupt handling.
+  * @resume: Callback for putting CPU in runable state
++ * @get_firmware_id: Callback for getting arch depended CPU id
+  * @vmsd: State description for migration.
+  *
+  * Represents a CPU family or model.
+@@ -60,6 +61,7 @@ typedef struct CPUClass {
+     void (*reset)(CPUState *cpu);
+     void (*do_interrupt)(CPUState *cpu);
+     void (*resume)(CPUState *cpu);
++    void (*get_firmware_id)(CPUState *cpu);
+ 
+     const struct VMStateDescription *vmsd;
+ } CPUClass;
+diff --git a/include/sysemu/sysemu.h b/include/sysemu/sysemu.h
+index 6578782..a8c3de1 100644
+--- a/include/sysemu/sysemu.h
++++ b/include/sysemu/sysemu.h
+@@ -152,6 +152,9 @@ void do_pci_device_hot_remove(Monitor *mon, const QDict *qdict);
+ /* generic hotplug */
+ void drive_hot_add(Monitor *mon, const QDict *qdict);
+ 
++/* CPU hotplug */
++void qemu_register_cpu_added_notifier(Notifier *notifier);
++
+ /* pcie aer error injection */
+ void pcie_aer_inject_error_print(Monitor *mon, const QObject *data);
+ int do_pcie_aer_inject_error(Monitor *mon,
+diff --git a/qom/cpu.c b/qom/cpu.c
+index c062e00..10ceaed 100644
+--- a/qom/cpu.c
++++ b/qom/cpu.c
+@@ -21,6 +21,17 @@
+ #include "qom/cpu.h"
+ #include "qemu-common.h"
+ #include "sysemu/kvm.h"
++#include "qemu/notify.h"
++#include "sysemu/sysemu.h"
++
++/* CPU hot-plug notifiers */
++static NotifierList cpu_added_notifiers =
++    NOTIFIER_LIST_INITIALIZER(cpu_add_notifiers);
++
++void qemu_register_cpu_added_notifier(Notifier *notifier)
++{
++    notifier_list_add(&cpu_added_notifiers, notifier);
++}
+ 
+ void cpu_reset_interrupt(CPUState *cpu, int mask)
+ {
+@@ -65,6 +76,7 @@ static void cpu_common_realizefn(DeviceState *dev, Error **errp)
+         if (klass->resume != NULL) {
+             klass->resume(CPU(dev));
+         }
++        notifier_list_notify(&cpu_added_notifiers, dev);
+     }
+ }
+ 
+-- 
+1.8.1.4
+
+

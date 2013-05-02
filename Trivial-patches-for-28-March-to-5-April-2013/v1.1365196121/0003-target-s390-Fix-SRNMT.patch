@@ -1,0 +1,37 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Stefan Hajnoczi <stefanha@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, qemu-trivial@nongnu.org,
+ Stefan Hajnoczi <stefanha@redhat.com>, Alexander Graf <agraf@suse.de>,
+ Richard Henderson <rth@twiddle.net>
+Date: Fri, 5 Apr 2013 16:08:44 +0200
+Message-id: 1365170926-6361-4-git-send-email-stefanha@redhat.com
+Subject: [PATCH 3/5] target-s390: Fix SRNMT
+
+From: Richard Henderson <rth@twiddle.net>
+
+Fallthough into abort = oops.
+
+Cc: qemu-trivial@nongnu.org
+Cc: Alexander Graf <agraf@suse.de>
+Signed-off-by: Richard Henderson <rth@twiddle.net>
+Signed-off-by: Stefan Hajnoczi <stefanha@redhat.com>
+---
+ target-s390x/translate.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/target-s390x/translate.c b/target-s390x/translate.c
+index a4f2194..0c3cf68 100644
+--- a/target-s390x/translate.c
++++ b/target-s390x/translate.c
+@@ -3088,6 +3088,7 @@ static ExitStatus op_srnm(DisasContext *s, DisasOps *o)
+         break;
+     case 0xb9: /* SRNMT */
+         pos = 4, len = 3;
++        break;
+     default:
+         tcg_abort();
+     }
+-- 
+1.8.1.4
+

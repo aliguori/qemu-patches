@@ -1,0 +1,1 @@
+../audio-simplify--soundhw-machinery-use-default-configs/v1.1364939455/0001-adlib-qdev-ify.patch

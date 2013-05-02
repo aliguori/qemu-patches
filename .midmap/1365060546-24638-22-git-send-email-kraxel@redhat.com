@@ -1,0 +1,1 @@
+../console-console-overhaul-continued/v3.1365085722/0021-console-add-qemu_console_is_.patch

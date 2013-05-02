@@ -1,0 +1,22 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+To: qemu-devel@nongnu.org, Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+Cc: peter.maydell@linaro.org, qemu-trivial@nongnu.org, qemu-devel@nongnu.org,
+ Peter Crosthwaite <peter.crosthwaite@xilinx.com>, dantesu@faraday-tech.com,
+ edgar.iglesias@gmail.com
+Date: Thu,  4 Apr 2013 11:03:14 +1000
+Message-id: cover.1365037290.git.peter.crosthwaite@xilinx.com
+Subject: [PATCH 0/2] Remove un-needed use of ssi_create_slave_no_init
+
+Trivial code cleanup of the PetaLogix and Zynq machine models.
+
+
+Peter Crosthwaite (2):
+  petalogix_ml605_mmu: Cleanup ssi_create_slave()
+  xilinx_zynq: Cleanup ssi_create_slave
+
+ hw/arm/xilinx_zynq.c                |    3 +--
+ hw/microblaze/petalogix_ml605_mmu.c |    3 +--
+ 2 files changed, 2 insertions(+), 4 deletions(-)
+
+

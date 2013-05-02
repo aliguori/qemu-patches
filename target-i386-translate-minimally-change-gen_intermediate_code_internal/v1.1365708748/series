@@ -1,0 +1,16 @@
+0001-target-i386-translate-minimally-change-gen_intermediate_code_internal.patch
+0002-target-lm32-translate-minimally-change-gen_intermediate_code_internal.patch
+0003-target-arm-translate-minimally-change-gen_intermediate_code_internal.patch
+0004-target-mips-translate-minimally-change-gen_intermediate_code_internal.patch
+0005-target-alpha-translate-minimally-change-gen_intermediate_code_internal.patch
+0006-target-cris-translate-minimally-change-gen_intermediate_code_internal.patch
+0007-target-m68k-translate-minimally-change-gen_intermediate_code_internal.patch
+0008-target-microblaze-translate-minimally-change-gen_intermediate_code_interna.patch
+0009-target-moxie-translate-minimally-change-gen_intermediate_code_internal.patch
+0010-target-openrisc-translate-minimally-change-gen_intermediate_code_internal.patch
+0011-target-ppc-translate-minimally-change-gen_intermediate_code_internal.patch
+0012-target-s390-translate-minimally-change-gen_intermediate_code_internal.patch
+0013-target-sh4-translate-minimally-change-gen_intermediate_code_internal.patch
+0014-target-sparc-translate-minimally-change-gen_intermediate_code_internal.patch
+0015-target-unicore32-translate-minimally-change-gen_intermediate_code_internal.patch
+0016-target-xtensa-translate-minimally-change-gen_intermediate_code_internal.patch

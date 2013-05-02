@@ -1,0 +1,54 @@
+From patches Mon Sep 17 00:00:00 2001
+From: John Rigby <john.rigby@linaro.org>
+To: John Rigby <john.rigby@linaro.org>, Alexander Graf <agraf@suse.de>,
+ qemu-devel <qemu-devel@nongnu.org>,
+ =?UTF-8?B?QW5kcmVhcyBGw6RyYmVy?= <afaerber@suse.de>,
+ =?utf-8?Q?Andreas_F=C3=A4rber?= <afaerber@suse.de>
+Cc: John Rigby <john.rigby@linaro.org>, Alexander Graf <agraf@suse.de>,
+ qemu-devel <qemu-devel@nongnu.org>,
+ Peter Crosthwaite <peter.crosthwaite@xilinx.com>,
+ "Edgar E. Iglesias" <edgar.iglesias@gmail.com>,
+ Peter Maydell <peter.maydell@linaro.org>
+Date: Tue, 30 Apr 2013 00:36:06 -0600
+Message-id: 1367303766-9526-1-git-send-email-john.rigby@linaro.org
+Subject: [PATCH 01/12] ARM: Export cpu_env
+
+From: Alexander Graf <agraf@suse.de>
+
+The cpu_env tcg variable will be used by both the AArch32 and AArch64
+handling code. Unstaticify it, so that both sides can make use of it.
+
+Signed-off-by: Alexander Graf <agraf@suse.de>
+---
+ target-arm/translate.c |    2 +-
+ target-arm/translate.h |    2 ++
+ 2 files changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/target-arm/translate.c b/target-arm/translate.c
+index 675773a..36537bd 100644
+--- a/target-arm/translate.c
++++ b/target-arm/translate.c
+@@ -59,7 +59,7 @@ static uint32_t gen_opc_condexec_bits[OPC_BUF_SIZE];
+ #define DISAS_WFI 4
+ #define DISAS_SWI 5
+ 
+-static TCGv_ptr cpu_env;
++TCGv_ptr cpu_env;
+ /* We reuse the same 64-bit temporaries for efficiency.  */
+ static TCGv_i64 cpu_V0, cpu_V1, cpu_M0;
+ static TCGv_i32 cpu_R[16];
+diff --git a/target-arm/translate.h b/target-arm/translate.h
+index e727bc6..8ba1433 100644
+--- a/target-arm/translate.h
++++ b/target-arm/translate.h
+@@ -24,4 +24,6 @@ typedef struct DisasContext {
+     int vec_stride;
+ } DisasContext;
+ 
++extern TCGv_ptr cpu_env;
++
+ #endif /* TARGET_ARM_TRANSLATE_H */
+-- 
+1.7.9.5
+
+

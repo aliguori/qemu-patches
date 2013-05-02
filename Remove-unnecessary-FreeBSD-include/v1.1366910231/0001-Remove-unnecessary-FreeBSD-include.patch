@@ -1,0 +1,40 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Ed Maste <emaste@freebsd.org>
+To: Ed Maste <emaste@freebsd.org>, Peter Maydell <peter.maydell@linaro.org>,
+ qemu-devel@nongnu.org
+Cc: Ed Maste <emaste@freebsd.org>, QEMU Trivial <qemu-trivial@nongnu.org>,
+ qemu-devel@nongnu.org
+Date: Thu, 25 Apr 2013 12:17:11 -0400
+Message-id: 1366906631-2680-1-git-send-email-emaste@freebsd.org
+Subject: [PATCH 1/1] Remove unnecessary FreeBSD #include
+
+sys/param.h was included to define __FreeBSD_version, but the conditional
+using it was removed by commit d05ef160453e98546a4197496dc8a3cb2defac53
+(Brad Smith, "Allow clock_gettime() monotonic clock to be utilized on more
+OS's"), so the include is no longer needed here.
+
+Signed-off-by: Ed Maste <emaste@freebsd.org>
+Reviewed-by: Peter Maydell <peter.maydell@linaro.org>
+---
+ include/qemu/timer.h | 4 ----
+ 1 file changed, 4 deletions(-)
+
+diff --git a/include/qemu/timer.h b/include/qemu/timer.h
+index c363190..9dd206c 100644
+--- a/include/qemu/timer.h
++++ b/include/qemu/timer.h
+@@ -5,10 +5,6 @@
+ #include "qemu/main-loop.h"
+ #include "qemu/notify.h"
+ 
+-#ifdef __FreeBSD__
+-#include <sys/param.h>
+-#endif
+-
+ /* timers */
+ 
+ #define SCALE_MS 1000000
+-- 
+1.7.11.5
+
+

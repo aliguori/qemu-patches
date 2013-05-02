@@ -1,0 +1,112 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Scott Wood <scottwood@freescale.com>
+To: Alexander Graf <agraf@suse.de>
+Cc: Jan Kiszka <jan.kiszka@siemens.com>, qemu-ppc@nongnu.org,
+ qemu-devel@nongnu.org, Scott Wood <scottwood@freescale.com>
+Date: Tue, 30 Apr 2013 20:48:24 -0500
+Message-id: 1367372912-23519-1-git-send-email-scottwood@freescale.com
+Subject: [PATCH 1/9] KVM: Don't assume that mpstate exists with in-kernel PIC
+ always
+
+From: Alexander Graf <agraf@suse.de>
+
+On PPC, we don't support MP state. So far it's not necessary and I'm
+not convinced yet that we really need to support it ever.
+
+However, the current idle logic in QEMU assumes that an in-kernel PIC
+also means we support MP state. This assumption is not true anymore.
+
+Let's split up the two cases into two different variables. That way
+PPC can expose an in-kernel PIC, while not implementing MP state.
+
+Signed-off-by: Alexander Graf <agraf@suse.de>
+CC: Jan Kiszka <jan.kiszka@siemens.com>
+Signed-off-by: Scott Wood <scottwood@freescale.com>
+---
+
+v1 -> v2:
+
+  - use kvm_halt_in_kernel() instead
+
+v2 -> v3:
+
+  - fix comment
+---
+ cpus.c               |    2 +-
+ include/sysemu/kvm.h |   10 ++++++++++
+ kvm-all.c            |    2 ++
+ 3 files changed, 13 insertions(+), 1 deletion(-)
+
+diff --git a/cpus.c b/cpus.c
+index 5a98a37..59225e4 100644
+--- a/cpus.c
++++ b/cpus.c
+@@ -73,7 +73,7 @@ static bool cpu_thread_is_idle(CPUArchState *env)
+         return true;
+     }
+     if (!cpu->halted || qemu_cpu_has_work(cpu) ||
+-        kvm_async_interrupts_enabled()) {
++        kvm_halt_in_kernel()) {
+         return false;
+     }
+     return true;
+diff --git a/include/sysemu/kvm.h b/include/sysemu/kvm.h
+index 75bd7d9..4a010c6 100644
+--- a/include/sysemu/kvm.h
++++ b/include/sysemu/kvm.h
+@@ -42,6 +42,7 @@
+ extern bool kvm_allowed;
+ extern bool kvm_kernel_irqchip;
+ extern bool kvm_async_interrupts_allowed;
++extern bool kvm_halt_in_kernel_allowed;
+ extern bool kvm_irqfds_allowed;
+ extern bool kvm_msi_via_irqfd_allowed;
+ extern bool kvm_gsi_routing_allowed;
+@@ -72,6 +73,14 @@ extern bool kvm_gsi_routing_allowed;
+ #define kvm_async_interrupts_enabled() (kvm_async_interrupts_allowed)
+ 
+ /**
++ * kvm_halt_in_kernel
++ *
++ * Returns: true if halted cpus should still get a KVM_RUN ioctl to run
++ * inside of kernel space. This only works if MP state is implemented.
++ */
++#define kvm_halt_in_kernel() (kvm_halt_in_kernel_allowed)
++
++/**
+  * kvm_irqfds_enabled:
+  *
+  * Returns: true if we can use irqfds to inject interrupts into
+@@ -101,6 +110,7 @@ extern bool kvm_gsi_routing_allowed;
+ #define kvm_enabled()           (0)
+ #define kvm_irqchip_in_kernel() (false)
+ #define kvm_async_interrupts_enabled() (false)
++#define kvm_halt_in_kernel() (false)
+ #define kvm_irqfds_enabled() (false)
+ #define kvm_msi_via_irqfd_enabled() (false)
+ #define kvm_gsi_routing_allowed() (false)
+diff --git a/kvm-all.c b/kvm-all.c
+index 2d92721..7976b2d 100644
+--- a/kvm-all.c
++++ b/kvm-all.c
+@@ -106,6 +106,7 @@ struct KVMState
+ KVMState *kvm_state;
+ bool kvm_kernel_irqchip;
+ bool kvm_async_interrupts_allowed;
++bool kvm_halt_in_kernel_allowed;
+ bool kvm_irqfds_allowed;
+ bool kvm_msi_via_irqfd_allowed;
+ bool kvm_gsi_routing_allowed;
+@@ -1275,6 +1276,7 @@ static int kvm_irqchip_create(KVMState *s)
+      * interrupt delivery (though the reverse is not necessarily true)
+      */
+     kvm_async_interrupts_allowed = true;
++    kvm_halt_in_kernel_allowed = true;
+ 
+     kvm_init_irq_routing(s);
+ 
+-- 
+1.7.10.4
+
+
+

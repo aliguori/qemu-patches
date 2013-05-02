@@ -1,0 +1,293 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Liu Ping Fan <qemulist@gmail.com>
+To: Liu Ping Fan <qemulist@gmail.com>, Stefan Hajnoczi <stefanha@gmail.com>,
+ liu ping fan <qemulist@gmail.com>, qemu-devel@nongnu.org,
+ Paolo Bonzini <pbonzini@redhat.com>
+Cc: Anthony Liguori <aliguori@us.ibm.com>, Paolo Bonzini <pbonzini@redhat.com>,
+ liu ping fan <qemulist@gmail.com>, Stefan Hajnoczi <stefanha@gmail.com>,
+ qemu-devel@nongnu.org, Liu Ping Fan <qemulist@gmail.com>,
+ Marcelo Tosatti <mtosatti@redhat.com>,
+ Peter Maydell <peter.maydell@linaro.org>, Jan Kiszka <jan.kiszka@siemens.com>,
+ Vasilis Liaskovitis <vasilis.liaskovitis@profitbricks.com>
+Date: Mon, 1 Apr 2013 16:20:31 +0800
+Message-id: 1364804434-7980-3-git-send-email-qemulist@gmail.com
+Subject: [PATCH 2/5] hostmem: make hostmem global and RAM hotunplg safe
+
+From: Liu Ping Fan <pingfank@linux.vnet.ibm.com>
+
+The hostmem listener will translate gpa to hva quickly. Make it
+global, so other component can use it.
+Also this patch adopt MemoryRegionOps's ref/unref interface to
+make it survive the RAM hotunplug.
+
+Signed-off-by: Liu Ping Fan <pingfank@linux.vnet.ibm.com>
+---
+ hw/dataplane/hostmem.c |  130 +++++++++++++++++++++++++++++++++--------------
+ hw/dataplane/hostmem.h |   19 ++------
+ 2 files changed, 95 insertions(+), 54 deletions(-)
+
+diff --git a/hw/dataplane/hostmem.c b/hw/dataplane/hostmem.c
+index 380537e..86c02cd 100644
+--- a/hw/dataplane/hostmem.c
++++ b/hw/dataplane/hostmem.c
+@@ -13,6 +13,12 @@
+ 
+ #include "exec/address-spaces.h"
+ #include "hostmem.h"
++#include "qemu/main-loop.h"
++
++/* lock to protect the access to cur_hostmem */
++static QemuMutex hostmem_lock;
++static HostMem *cur_hostmem;
++static HostMem *next_hostmem;
+ 
+ static int hostmem_lookup_cmp(const void *phys_, const void *region_)
+ {
+@@ -28,16 +34,49 @@ static int hostmem_lookup_cmp(const void *phys_, const void *region_)
+     }
+ }
+ 
++static void hostmem_ref(HostMem *hostmem)
++{
++    assert(__sync_add_and_fetch(&hostmem->ref, 1) > 0);
++}
++
++void hostmem_unref(HostMem *hostmem)
++{
++    int i;
++    HostMemRegion *hmr;
++
++    if (!__sync_sub_and_fetch(&hostmem->ref, 1)) {
++        for (i = 0; i < hostmem->num_current_regions; i++) {
++            hmr = &hostmem->current_regions[i];
++            /* Fix me, when memory hotunplug implement
++             * assert(hmr->mr_ops->unref)
++             */
++            if (hmr->mr->ops && hmr->mr->ops->unref) {
++                hmr->mr->ops->unref();
++            }
++        }
++        g_free(hostmem->current_regions);
++        g_free(hostmem);
++    }
++}
++
+ /**
+  * Map guest physical address to host pointer
++ * also inc refcnt of *mr, caller need to unref later
+  */
+-void *hostmem_lookup(HostMem *hostmem, hwaddr phys, hwaddr len, bool is_write)
++void *hostmem_lookup(hwaddr phys, hwaddr len, MemoryRegion **mr, bool is_write)
+ {
+     HostMemRegion *region;
+     void *host_addr = NULL;
+     hwaddr offset_within_region;
++    HostMem *hostmem;
++
++    assert(mr);
++    *mr = NULL;
++    qemu_mutex_lock(&hostmem_lock);
++    hostmem = cur_hostmem;
++    hostmem_ref(hostmem);
++    qemu_mutex_unlock(&hostmem_lock);
+ 
+-    qemu_mutex_lock(&hostmem->current_regions_lock);
+     region = bsearch(&phys, hostmem->current_regions,
+                      hostmem->num_current_regions,
+                      sizeof(hostmem->current_regions[0]),
+@@ -52,28 +91,33 @@ void *hostmem_lookup(HostMem *hostmem, hwaddr phys, hwaddr len, bool is_write)
+     if (len <= region->size - offset_within_region) {
+         host_addr = region->host_addr + offset_within_region;
+     }
+-out:
+-    qemu_mutex_unlock(&hostmem->current_regions_lock);
++    *mr = region->mr;
++    memory_region_ref(*mr);
+ 
++out:
++    hostmem_unref(hostmem);
+     return host_addr;
+ }
+ 
++static void hostmem_listener_begin(MemoryListener *listener)
++{
++    next_hostmem = g_new0(HostMem, 1);
++    next_hostmem->ref = 1;
++}
++
+ /**
+  * Install new regions list
+  */
+ static void hostmem_listener_commit(MemoryListener *listener)
+ {
+-    HostMem *hostmem = container_of(listener, HostMem, listener);
++    HostMem *tmp;
+ 
+-    qemu_mutex_lock(&hostmem->current_regions_lock);
+-    g_free(hostmem->current_regions);
+-    hostmem->current_regions = hostmem->new_regions;
+-    hostmem->num_current_regions = hostmem->num_new_regions;
+-    qemu_mutex_unlock(&hostmem->current_regions_lock);
++    tmp = cur_hostmem;
++    qemu_mutex_lock(&hostmem_lock);
++    cur_hostmem = next_hostmem;
++    qemu_mutex_unlock(&hostmem_lock);
++    hostmem_unref(tmp);
+ 
+-    /* Reset new regions list */
+-    hostmem->new_regions = NULL;
+-    hostmem->num_new_regions = 0;
+ }
+ 
+ /**
+@@ -83,23 +127,24 @@ static void hostmem_append_new_region(HostMem *hostmem,
+                                       MemoryRegionSection *section)
+ {
+     void *ram_ptr = memory_region_get_ram_ptr(section->mr);
+-    size_t num = hostmem->num_new_regions;
+-    size_t new_size = (num + 1) * sizeof(hostmem->new_regions[0]);
++    size_t num = hostmem->num_current_regions;
++    size_t new_size = (num + 1) * sizeof(hostmem->current_regions[0]);
+ 
+-    hostmem->new_regions = g_realloc(hostmem->new_regions, new_size);
+-    hostmem->new_regions[num] = (HostMemRegion){
++    hostmem->current_regions = g_realloc(hostmem->current_regions, new_size);
++    hostmem->current_regions[num] = (HostMemRegion){
+         .host_addr = ram_ptr + section->offset_within_region,
+         .guest_addr = section->offset_within_address_space,
++        .mr = section->mr,
+         .size = section->size,
+         .readonly = section->readonly,
+     };
+-    hostmem->num_new_regions++;
++    hostmem->num_current_regions++;
+ }
+ 
+-static void hostmem_listener_append_region(MemoryListener *listener,
++static void hostmem_listener_nop_region(MemoryListener *listener,
+                                            MemoryRegionSection *section)
+ {
+-    HostMem *hostmem = container_of(listener, HostMem, listener);
++    HostMem *hostmem = next_hostmem;
+ 
+     /* Ignore non-RAM regions, we may not be able to map them */
+     if (!memory_region_is_ram(section->mr)) {
+@@ -114,6 +159,18 @@ static void hostmem_listener_append_region(MemoryListener *listener,
+     hostmem_append_new_region(hostmem, section);
+ }
+ 
++static void hostmem_listener_append_region(MemoryListener *listener,
++                                           MemoryRegionSection *section)
++{
++    hostmem_listener_nop_region(listener, section);
++    /* Fix me, when memory hotunplug implement
++     * assert(section->mr->ops->ref)
++     */
++    if (section->mr->ops && section->mr->ops->ref) {
++        section->mr->ops->ref();
++    }
++}
++
+ /* We don't implement most MemoryListener callbacks, use these nop stubs */
+ static void hostmem_listener_dummy(MemoryListener *listener)
+ {
+@@ -137,18 +194,12 @@ static void hostmem_listener_coalesced_mmio_dummy(MemoryListener *listener,
+ {
+ }
+ 
+-void hostmem_init(HostMem *hostmem)
+-{
+-    memset(hostmem, 0, sizeof(*hostmem));
+-
+-    qemu_mutex_init(&hostmem->current_regions_lock);
+-
+-    hostmem->listener = (MemoryListener){
+-        .begin = hostmem_listener_dummy,
++static MemoryListener hostmem_listener = {
++        .begin = hostmem_listener_begin,
+         .commit = hostmem_listener_commit,
+         .region_add = hostmem_listener_append_region,
+         .region_del = hostmem_listener_section_dummy,
+-        .region_nop = hostmem_listener_append_region,
++        .region_nop = hostmem_listener_nop_region,
+         .log_start = hostmem_listener_section_dummy,
+         .log_stop = hostmem_listener_section_dummy,
+         .log_sync = hostmem_listener_section_dummy,
+@@ -159,18 +210,19 @@ void hostmem_init(HostMem *hostmem)
+         .coalesced_mmio_add = hostmem_listener_coalesced_mmio_dummy,
+         .coalesced_mmio_del = hostmem_listener_coalesced_mmio_dummy,
+         .priority = 10,
+-    };
++};
+ 
+-    memory_listener_register(&hostmem->listener, &address_space_memory);
+-    if (hostmem->num_new_regions > 0) {
+-        hostmem_listener_commit(&hostmem->listener);
+-    }
++void hostmem_init(void)
++{
++    qemu_mutex_init(&hostmem_lock);
++    cur_hostmem = g_new0(HostMem, 1);
++    cur_hostmem->ref = 1;
++    memory_listener_register(&hostmem_listener, &address_space_memory);
+ }
+ 
+-void hostmem_finalize(HostMem *hostmem)
++void hostmem_finalize(void)
+ {
+-    memory_listener_unregister(&hostmem->listener);
+-    g_free(hostmem->new_regions);
+-    g_free(hostmem->current_regions);
+-    qemu_mutex_destroy(&hostmem->current_regions_lock);
++    memory_listener_unregister(&hostmem_listener);
++    hostmem_unref(cur_hostmem);
++    qemu_mutex_destroy(&hostmem_lock);
+ }
+diff --git a/hw/dataplane/hostmem.h b/hw/dataplane/hostmem.h
+index b2cf093..883ba74 100644
+--- a/hw/dataplane/hostmem.h
++++ b/hw/dataplane/hostmem.h
+@@ -20,29 +20,18 @@
+ typedef struct {
+     void *host_addr;
+     hwaddr guest_addr;
++    MemoryRegion *mr;
+     uint64_t size;
+     bool readonly;
+ } HostMemRegion;
+ 
+ typedef struct {
+-    /* The listener is invoked when regions change and a new list of regions is
+-     * built up completely before they are installed.
+-     */
+-    MemoryListener listener;
+-    HostMemRegion *new_regions;
+-    size_t num_new_regions;
+-
+-    /* Current regions are accessed from multiple threads either to lookup
+-     * addresses or to install a new list of regions.  The lock protects the
+-     * pointer and the regions.
+-     */
+-    QemuMutex current_regions_lock;
++    int ref;
+     HostMemRegion *current_regions;
+     size_t num_current_regions;
+ } HostMem;
+ 
+-void hostmem_init(HostMem *hostmem);
+-void hostmem_finalize(HostMem *hostmem);
++void hostmem_unref(HostMem *hostmem);
+ 
+ /**
+  * Map a guest physical address to a pointer
+@@ -52,6 +41,6 @@ void hostmem_finalize(HostMem *hostmem);
+  * can be done with other mechanisms like bdrv_drain_all() that quiesce
+  * in-flight I/O.
+  */
+-void *hostmem_lookup(HostMem *hostmem, hwaddr phys, hwaddr len, bool is_write);
++void *hostmem_lookup(hwaddr phys, hwaddr len, MemoryRegion **mr, bool is_write);
+ 
+ #endif /* HOSTMEM_H */
+-- 
+1.7.4.4
+

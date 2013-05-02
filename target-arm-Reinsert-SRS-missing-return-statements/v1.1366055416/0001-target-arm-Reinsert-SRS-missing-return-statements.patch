@@ -1,0 +1,52 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Peter Chubb <peter.chubb@nicta.com.au>
+To: Peter Maydell <peter.maydell@linaro.org>,
+ Peter Chubb <peter.chubb@nicta.com.au>
+Cc: Japheth.Lim@nicta.com.au, Peter Chubb <peter.chubb@nicta.com.au>,
+ qemu-devel@nongnu.org
+Date: Mon, 15 Apr 2013 14:50:16 +1000
+Message-id: 84sj2s75yv.wl%peter@chubb.wattle.id.au
+Subject: [PATCH 1/1] target-arm: Reinsert SRS missing return statements.
+
+
+
+Since patch
+   81465888c5306cd94abb9847e560796fd13d3c2f
+   target-arm: factor out handling of SRS instruction
+the SRS instruction has not worked in QEMU.
+
+The problem is a return directive that was removed in the
+refactoring, so after decoding the instruction, qemu would fall
+through to do stuff that it should not have done.
+
+Signed-off-by: Peter Chubb <peter.chubb@nicta.com.au>
+
+diff --git a/target-arm/translate.c b/target-arm/translate.c
+index 35a21be..c870246 100644
+--- a/target-arm/translate.c
++++ b/target-arm/translate.c
+@@ -6762,6 +6762,7 @@ static void disas_arm_insn(CPUARMState * env, DisasContext *s)
+             }
+             ARCH(6);
+             gen_srs(s, (insn & 0x1f), (insn >> 23) & 3, insn & (1 << 21));
++            return;
+         } else if ((insn & 0x0e50ffe0) == 0x08100a00) {
+             /* rfe */
+             int32_t offset;
+@@ -8209,6 +8210,7 @@ static int disas_thumb2_insn(CPUARMState *env, DisasContext *s, uint16_t insn_hw
+                     /* srs */
+                     gen_srs(s, (insn & 0x1f), (insn & (1 << 24)) ? 1 : 2,
+                             insn & (1 << 21));
++                    return;
+                 }
+             } else {
+                 int i, loaded_base = 0;
+Reviewed-by: Peter Maydell <peter.maydell@linaro.org>
+-- 
+1.7.10.4
+
+
+
+Dr Peter Chubb				        peter.chubb AT nicta.com.au
+http://www.ssrg.nicta.com.au          Software Systems Research Group/NICTA
+

@@ -1,0 +1,35 @@
+From patches Mon Sep 17 00:00:00 2001
+From: mrhines@linux.vnet.ibm.com
+To: qemu-devel@nongnu.org, mrhines@linux.vnet.ibm.com
+Cc: Anthony Liguori <aliguori@us.ibm.com>, mst@redhat.com,
+ qemu-devel@nongnu.org, Michael R Hines <mrhines@us.ibm.com>,
+ Bulent Abali <abali@us.ibm.com>, owasserm@redhat.com, pbonzini@redhat.com,
+ Gokul B Kandiraju <gokul@us.ibm.com>
+Date: Mon, 8 Apr 2013 23:04:40 -0400
+Message-id: 1365476681-31593-12-git-send-email-mrhines@linux.vnet.ibm.com
+Subject: [PATCH 11/12] update schema to define new capabilities
+
+From: "Michael R. Hines" <mrhines@us.ibm.com>
+
+
+Signed-off-by: Michael R. Hines <mrhines@us.ibm.com>
+---
+ qapi-schema.json |    2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/qapi-schema.json b/qapi-schema.json
+index db542f6..7ebcf99 100644
+--- a/qapi-schema.json
++++ b/qapi-schema.json
+@@ -602,7 +602,7 @@
+ # Since: 1.2
+ ##
+ { 'enum': 'MigrationCapability',
+-  'data': ['xbzrle'] }
++  'data': ['xbzrle', 'check_for_zero', 'chunk_register_destination'] }
+ 
+ ##
+ # @MigrationCapabilityStatus
+-- 
+1.7.10.4
+

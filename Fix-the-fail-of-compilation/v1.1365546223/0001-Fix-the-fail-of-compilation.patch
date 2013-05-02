@@ -1,0 +1,37 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Lei Li <lilei@linux.vnet.ibm.com>
+To: Lei Li <lilei@linux.vnet.ibm.com>, qemu-devel@nongnu.org
+Cc: pbonzini@redhat.com, qemu-devel@nongnu.org,
+ Lei Li <lilei@linux.vnet.ibm.com>
+Date: Tue,  9 Apr 2013 17:23:43 +0800
+Message-id: 1365499423-19135-1-git-send-email-lilei@linux.vnet.ibm.com
+Subject: [PATCH 1/1] Fix the fail of compilation
+
+Commit 47b5264eb3e1cd2825e48d28fd0d1b239ed53974 broke the compile. It's
+caused by the rename of the file:
+
+hw/9pfs/virtio-9p-device.h => include/hw/virtio/virtio-9p.h
+
+Signed-off-by: Lei Li <lilei@linux.vnet.ibm.com>
+Reviewed-by: Michal Novotny <minovotn@redhat.com>
+---
+ hw/9pfs/virtio-9p-device.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+diff --git a/hw/9pfs/virtio-9p-device.c b/hw/9pfs/virtio-9p-device.c
+index 43f930e..18e3397 100644
+--- a/hw/9pfs/virtio-9p-device.c
++++ b/hw/9pfs/virtio-9p-device.c
+@@ -16,7 +16,7 @@
+ #include "qemu/sockets.h"
+ #include "virtio-9p.h"
+ #include "fsdev/qemu-fsdev.h"
+-#include "virtio-9p-device.h"
++#include "hw/virtio/virtio-9p.h"
+ #include "virtio-9p-xattr.h"
+ #include "virtio-9p-coth.h"
+ 
+-- 
+1.7.7.6
+
+

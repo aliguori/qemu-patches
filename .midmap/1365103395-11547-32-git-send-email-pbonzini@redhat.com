@@ -1,0 +1,1 @@
+../hw--reorganization-part-2/v3.1365128560/0031-hw-move-ARM-CPU-cores-to-hw-cpu--configure-with-default-configs-.patch

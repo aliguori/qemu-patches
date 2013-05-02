@@ -1,0 +1,145 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Markus Armbruster <armbru@redhat.com>
+To: Laszlo Ersek <lersek@redhat.com>, Markus Armbruster <armbru@redhat.com>,
+ qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, blauwirbel@gmail.com,
+ qemu-devel@nongnu.org
+Date: Thu, 14 Mar 2013 18:49:17 +0100
+Message-id: 1363283360-26220-2-git-send-email-armbru@redhat.com
+Subject: [PATCH 1/4] unicode: New mod_utf8_codepoint()
+
+
+Signed-off-by: Markus Armbruster <armbru@redhat.com>
+---
+ include/qemu-common.h |  3 ++
+ util/Makefile.objs    |  1 +
+ util/unicode.c        | 96 +++++++++++++++++++++++++++++++++++++++++++++++++++
+ 3 files changed, 100 insertions(+)
+ create mode 100644 util/unicode.c
+
+diff --git a/include/qemu-common.h b/include/qemu-common.h
+index 5e13708..28c10a0 100644
+--- a/include/qemu-common.h
++++ b/include/qemu-common.h
+@@ -442,4 +442,7 @@ int64_t pow2floor(int64_t value);
+ int uleb128_encode_small(uint8_t *out, uint32_t n);
+ int uleb128_decode_small(const uint8_t *in, uint32_t *n);
+ 
++/* unicode.c */
++int mod_utf8_codepoint(const char *s, size_t n, char **end);
++
+ #endif
+diff --git a/util/Makefile.objs b/util/Makefile.objs
+index cad5ce8..65c8c12 100644
+--- a/util/Makefile.objs
++++ b/util/Makefile.objs
+@@ -9,3 +9,4 @@ util-obj-y += error.o qemu-error.o
+ util-obj-$(CONFIG_POSIX) += compatfd.o
+ util-obj-y += iov.o aes.o qemu-config.o qemu-sockets.o uri.o notify.o
+ util-obj-y += qemu-option.o qemu-progress.o
++util-obj-y += unicode.o
+diff --git a/util/unicode.c b/util/unicode.c
+new file mode 100644
+index 0000000..954bcf7
+--- /dev/null
++++ b/util/unicode.c
+@@ -0,0 +1,96 @@
++/*
++ * Dealing with Unicode
++ *
++ * Copyright (C) 2013 Red Hat, Inc.
++ *
++ * Authors:
++ *  Markus Armbruster <armbru@redhat.com>
++ *
++ * This work is licensed under the terms of the GNU GPL, version 2 or
++ * later.  See the COPYING file in the top-level directory.
++ */
++
++#include "qemu-common.h"
++
++/**
++ * mod_utf8_codepoint:
++ * @s: string encoded in modified UTF-8
++ * @n: maximum number of bytes to read from @s, if less than 6
++ * @end: set to end of sequence on return
++ *
++ * Convert the modified UTF-8 sequence at the start of @s.  Modified
++ * UTF-8 is exactly like UTF-8, except U+0000 is encoded as
++ * "\xC0\x80".
++ *
++ * If @s points to an impossible byte (0xFE or 0xFF) or a continuation
++ * byte, the sequence is invalid, and @end is set to @s + 1
++ *
++ * Else, the first byte determines how many continuation bytes are
++ * expected.  If there are fewer, the sequence is invalid, and @end is
++ * set to @s + 1 + actual number of continuation bytes.  Else, the
++ * sequence is well-formed, and @end is set to @s + 1 + expected
++ * number of continuation bytes.
++ *
++ * A well-formed sequence is valid unless it encodes a code point
++ * outside the Unicode range U+0000..U+10FFFF, one of Unicode's 66
++ * noncharacters, a surrogate code point, or is overlong.  Except the
++ * overlong sequence "\xC0\x80" is valid.
++ *
++ * Conversion succeeds if and only if the sequence is valid.
++ *
++ * Returns: the Unicode code point on success, -1 on failure.
++ */
++int mod_utf8_codepoint(const char *s, size_t n, char **end)
++{
++    static int min_cp[5] = { 0x80, 0x800, 0x10000, 0x200000, 0x4000000 };
++    const unsigned char *p;
++    unsigned byte, mask, len, i;
++    int cp;
++
++    if (n == 0) {
++        *end = (char *)s;
++        return 0;
++    }
++
++    p = (const unsigned char *)s;
++    byte = *p++;
++    if (byte < 0x80) {
++        cp = byte;              /* one byte sequence */
++    } else if (byte >= 0xFE) {
++        cp = -1;                /* impossible bytes 0xFE, 0xFF */
++    } else if ((byte & 0x40) == 0) {
++        cp = -1;                /* unexpected continuation byte */
++    } else {
++        /* multi-byte sequence */
++        len = 0;
++        for (mask = 0x80; byte & mask; mask >>= 1) {
++            len++;
++        }
++        assert(len > 1 && len < 7);
++        cp = byte & (mask - 1);
++        for (i = 1; i < len; i++) {
++            byte = i < n ? *p : 0;
++            if ((byte & 0xC0) != 0x80) {
++                cp = -1;        /* continuation byte missing */
++                goto out;
++            }
++            p++;
++            cp <<= 6;
++            cp |= byte & 0x3F;
++        }
++        if (cp > 0x10FFFF) {
++            cp = -1;            /* beyond Unicode range */
++        } else if ((cp >= 0xFDD0 && cp <= 0xFDEF)
++                   || (cp & 0xFFFE) == 0xFFFE) {
++            cp = -1;            /* noncharacter */
++        } else if (cp >= 0xD800 && cp <= 0xDFFF) {
++            cp = -1;            /* surrogate code point */
++        } else if (cp < min_cp[len - 2] && !(cp == 0 && len == 2)) {
++            cp = -1;            /* overlong, not \xC0\x80 */
++        }
++    }
++
++out:
++    *end = (char *)p;
++    return cp;
++}
+-- 
+1.7.11.7
+

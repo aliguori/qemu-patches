@@ -1,0 +1,6 @@
+0000-trim-down-config-targetmak.txt
+0001-configure-move-TARGET__ALIGNMENT-to-target--cpuh.patch
+0002-cpu-default-TARGET_LONG_ALIGNMENT-to-TARGET_LONG_SIZE.patch
+0003-configure-move-CONFIG_QEMU_LDST_OPTIMIZATION-to-config-hostmak.patch
+0004-configure-move-common-libraries-to-config-hostmak.patch
+0005-configure-CONFIG_NO_XEN-is-duplicated.patch

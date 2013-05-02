@@ -1,0 +1,92 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+To: edgar.iglesias@gmail.com, qemu-devel@nongnu.org
+Cc: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+Date: Wed,  3 Apr 2013 15:17:08 +1000
+Message-id: 13506f726e50f7349c242d165247b0fe5dd04380.1364965814.git.peter.crosthwaite@xilinx.com
+Subject: [PATCH 08/16] xilinx_axidma: converted init->realize
+
+The prescribed transition from SysBusDevice::init to Device::realize. I'm going
+with Andreas suggestion to move the sysbus foo to Object::init for early IRQ
+visibility.
+
+Signed-off-by: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+Acked-by: Edgar E. Iglesias <edgar.iglesias@xilinx.com>
+---
+
+ hw/xilinx_axidma.c |   25 ++++++++++++-------------
+ 1 files changed, 12 insertions(+), 13 deletions(-)
+
+diff --git a/hw/xilinx_axidma.c b/hw/xilinx_axidma.c
+index ac62245..2c95765 100644
+--- a/hw/xilinx_axidma.c
++++ b/hw/xilinx_axidma.c
+@@ -475,33 +475,33 @@ static const MemoryRegionOps axidma_ops = {
+     .endianness = DEVICE_NATIVE_ENDIAN,
+ };
+ 
+-static int xilinx_axidma_init(SysBusDevice *dev)
++static void xilinx_axidma_realize(DeviceState *dev, Error **errp)
+ {
+     XilinxAXIDMA *s = XILINX_AXI_DMA(dev);
+     int i;
+ 
+-    sysbus_init_irq(dev, &s->streams[0].irq);
+-    sysbus_init_irq(dev, &s->streams[1].irq);
+-
+-    memory_region_init_io(&s->iomem, &axidma_ops, s,
+-                          "xlnx.axi-dma", R_MAX * 4 * 2);
+-    sysbus_init_mmio(dev, &s->iomem);
+-
+     for (i = 0; i < 2; i++) {
+         s->streams[i].nr = i;
+         s->streams[i].bh = qemu_bh_new(timer_hit, &s->streams[i]);
+         s->streams[i].ptimer = ptimer_init(s->streams[i].bh);
+         ptimer_set_freq(s->streams[i].ptimer, s->freqhz);
+     }
+-    return 0;
+ }
+ 
+-static void xilinx_axidma_initfn(Object *obj)
++static void xilinx_axidma_init(Object *obj)
+ {
+     XilinxAXIDMA *s = XILINX_AXI_DMA(obj);
++    SysBusDevice *sbd = SYS_BUS_DEVICE(obj);
+ 
+     object_property_add_link(obj, "axistream-connected", TYPE_STREAM_SLAVE,
+                              (Object **) &s->tx_dev, NULL);
++
++    sysbus_init_irq(sbd, &s->streams[0].irq);
++    sysbus_init_irq(sbd, &s->streams[1].irq);
++
++    memory_region_init_io(&s->iomem, &axidma_ops, s,
++                          "xlnx.axi-dma", R_MAX * 4 * 2);
++    sysbus_init_mmio(sbd, &s->iomem);
+ }
+ 
+ static Property axidma_properties[] = {
+@@ -512,10 +512,9 @@ static Property axidma_properties[] = {
+ static void axidma_class_init(ObjectClass *klass, void *data)
+ {
+     DeviceClass *dc = DEVICE_CLASS(klass);
+-    SysBusDeviceClass *k = SYS_BUS_DEVICE_CLASS(klass);
+     StreamSlaveClass *ssc = STREAM_SLAVE_CLASS(klass);
+ 
+-    k->init = xilinx_axidma_init;
++    dc->realize = xilinx_axidma_realize,
+     dc->reset = xilinx_axidma_reset;
+     dc->props = axidma_properties;
+     ssc->push = axidma_push;
+@@ -526,7 +525,7 @@ static const TypeInfo axidma_info = {
+     .parent        = TYPE_SYS_BUS_DEVICE,
+     .instance_size = sizeof(XilinxAXIDMA),
+     .class_init    = axidma_class_init,
+-    .instance_init = xilinx_axidma_initfn,
++    .instance_init = xilinx_axidma_init,
+     .interfaces = (InterfaceInfo[]) {
+         { TYPE_STREAM_SLAVE },
+         { }
+-- 
+1.7.0.4
+
+

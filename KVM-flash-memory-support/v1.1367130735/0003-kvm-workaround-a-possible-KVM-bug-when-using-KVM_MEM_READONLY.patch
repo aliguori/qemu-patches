@@ -1,0 +1,46 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Jordan Justen <jordan.l.justen@intel.com>
+To: Jan Kiszka <jan.kiszka@siemens.com>, qemu-devel@nongnu.org,
+ Jordan Justen <jordan.l.justen@intel.com>
+Cc: Xiao Guangrong <xiaoguangrong@linux.vnet.ibm.com>, qemu-devel@nongnu.org,
+ Jordan Justen <jordan.l.justen@intel.com>, qemu-devel <qemu-devel@nongnu.org>
+Date: Sun, 28 Apr 2013 01:32:18 -0700
+Message-id: 1367137941-4310-4-git-send-email-jordan.l.justen@intel.com
+Subject: [PATCH 3/6] kvm: workaround a possible KVM bug when using
+ KVM_MEM_READONLY
+
+On a Linux 3.8.0 based kernel, I occasionally saw a situation
+where the memory region would continue to trap on memory
+read even though KVM_MEM_READONLY was set.
+
+I found that if I set the slot to a size of 0, and before
+setting the slot, it would then behave as expected.
+
+Signed-off-by: Jordan Justen <jordan.l.justen@intel.com>
+Cc: Xiao Guangrong <xiaoguangrong@linux.vnet.ibm.com>
+---
+ kvm-all.c |    7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/kvm-all.c b/kvm-all.c
+index 95e6bf2..e2ddbcb 100644
+--- a/kvm-all.c
++++ b/kvm-all.c
+@@ -205,6 +205,13 @@ static int kvm_set_user_memory_region(KVMState *s, KVMSlot *slot)
+     if (s->migration_log) {
+         mem.flags |= KVM_MEM_LOG_DIRTY_PAGES;
+     }
++    if (mem.flags & KVM_MEM_READONLY && mem.memory_size != 0) {
++        /* Workaround an issue with setting a READONLY slot. Set the
++         * slot size to 0 before setting the slot to the desired value. */
++        mem.memory_size = 0;
++        kvm_vm_ioctl(s, KVM_SET_USER_MEMORY_REGION, &mem);
++        mem.memory_size = slot->memory_size;
++    }
+     return kvm_vm_ioctl(s, KVM_SET_USER_MEMORY_REGION, &mem);
+ }
+ 
+-- 
+1.7.10.4
+
+

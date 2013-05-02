@@ -1,0 +1,1 @@
+../libqtest-only-call-fclose-on-open-files/v1.1367250772/0001-libqtest-only-call-fclose-on-open-files.patch

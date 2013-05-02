@@ -1,0 +1,54 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Marcelo Tosatti <mtosatti@redhat.com>
+To: Anthony Liguori <aliguori@us.ibm.com>
+Cc: Marcelo Tosatti <mtosatti@redhat.com>, Jan Kiszka <jan.kiszka@siemens.com>,
+ qemu-devel@nongnu.org, kvm@vger.kernel.org
+Date: Wed, 17 Apr 2013 23:48:26 -0300
+Message-id: 007e986ff2dd140348e76feb21cde1a51ce6c5b4.1366253306.git.mtosatti@redhat.com
+Subject: [PATCH 5/5] vmxcap: Update according to SDM of January 2013
+
+From: Jan Kiszka <jan.kiszka@siemens.com>
+
+This adds reporting of VMCS shadowing, #VE, IA32_SMBASE, unrestricted
+VMWRITE and fixes the range of the MSEG revision ID.
+
+Signed-off-by: Jan Kiszka <jan.kiszka@siemens.com>
+Signed-off-by: Marcelo Tosatti <mtosatti@redhat.com>
+---
+ scripts/kvm/vmxcap | 6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/scripts/kvm/vmxcap b/scripts/kvm/vmxcap
+index a79f816..c90eda4 100755
+--- a/scripts/kvm/vmxcap
++++ b/scripts/kvm/vmxcap
+@@ -168,6 +168,8 @@ controls = [
+             11: 'RDRAND exiting',
+             12: 'Enable INVPCID',
+             13: 'Enable VM functions',
++            14: 'VMCS shadowing',
++            18: 'EPT-violation #VE'
+             },
+         cap_msr = MSR_IA32_VMX_PROCBASED_CTLS2,
+         ),
+@@ -212,10 +214,12 @@ controls = [
+             6: 'HLT activity state',
+             7: 'Shutdown activity state',
+             8: 'Wait-for-SIPI activity state',
++            15: 'IA32_SMBASE support',
+             (16,24): 'Number of CR3-target values',
+             (25,27): 'MSR-load/store count recommenation',
+             28: 'IA32_SMM_MONITOR_CTL[2] can be set to 1',
+-            (32,62): 'MSEG revision identifier',
++            29: 'VMWRITE to VM-exit information fields',
++            (32,63): 'MSEG revision identifier',
+             },
+         msr = MSR_IA32_VMX_MISC_CTLS,
+         ),
+-- 
+1.8.1.4
+
+--
+To unsubscribe from this list: send the line "unsubscribe kvm" in
+the body of a message to majordomo@vger.kernel.org
+More majordomo info at  http://vger.kernel.org/majordomo-info.html

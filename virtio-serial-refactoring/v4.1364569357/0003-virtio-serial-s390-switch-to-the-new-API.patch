@@ -1,0 +1,125 @@
+From patches Mon Sep 17 00:00:00 2001
+From: fred.konrad@greensocs.com
+To: Anthony Liguori <aliguori@us.ibm.com>, qemu-devel@nongnu.org
+Cc: cornelia.huck@de.ibm.com, peter.maydell@linaro.org,
+ mark.burton@greensocs.com, fred.konrad@greensocs.com
+Date: Fri, 29 Mar 2013 10:02:40 +0100
+Message-id: 1364547764-6627-4-git-send-email-fred.konrad@greensocs.com
+Subject: [PATCH 3/7] virtio-serial-s390: switch to the new API.
+
+From: KONRAD Frederic <fred.konrad@greensocs.com>
+
+Here the virtio-serial-s390 is modified for the new API. The device
+virtio-serial-s390 extends virtio-s390-device as before. It creates and
+connects a virtio-serial during the init. The properties are not
+modified.
+
+Signed-off-by: KONRAD Frederic <fred.konrad@greensocs.com>
+---
+ hw/s390x/s390-virtio-bus.c | 32 +++++++++++++++++++++-----------
+ hw/s390x/s390-virtio-bus.h | 12 +++++++++++-
+ 2 files changed, 32 insertions(+), 12 deletions(-)
+
+diff --git a/hw/s390x/s390-virtio-bus.c b/hw/s390x/s390-virtio-bus.c
+index 8c529c1..68d0fcb 100644
+--- a/hw/s390x/s390-virtio-bus.c
++++ b/hw/s390x/s390-virtio-bus.c
+@@ -181,27 +181,36 @@ static void s390_virtio_blk_instance_init(Object *obj)
+     object_property_add_child(obj, "virtio-backend", OBJECT(&dev->vdev), NULL);
+ }
+ 
+-static int s390_virtio_serial_init(VirtIOS390Device *dev)
++static int s390_virtio_serial_init(VirtIOS390Device *s390_dev)
+ {
++    VirtIOSerialS390 *dev = VIRTIO_SERIAL_S390(s390_dev);
++    DeviceState *vdev = DEVICE(&dev->vdev);
++    DeviceState *qdev = DEVICE(s390_dev);
+     VirtIOS390Bus *bus;
+-    VirtIODevice *vdev;
+     int r;
+ 
+-    bus = DO_UPCAST(VirtIOS390Bus, bus, dev->qdev.parent_bus);
++    bus = DO_UPCAST(VirtIOS390Bus, bus, qdev->parent_bus);
+ 
+-    vdev = virtio_serial_init((DeviceState *)dev, &dev->serial);
+-    if (!vdev) {
++    qdev_set_parent_bus(vdev, BUS(&s390_dev->bus));
++    if (qdev_init(vdev) < 0) {
+         return -1;
+     }
+ 
+-    r = s390_virtio_device_init(dev, vdev);
++    r = s390_virtio_device_init(s390_dev, VIRTIO_DEVICE(vdev));
+     if (!r) {
+-        bus->console = dev;
++        bus->console = s390_dev;
+     }
+ 
+     return r;
+ }
+ 
++static void s390_virtio_serial_instance_init(Object *obj)
++{
++    VirtIOSerialS390 *dev = VIRTIO_SERIAL_S390(obj);
++    object_initialize(OBJECT(&dev->vdev), TYPE_VIRTIO_SERIAL);
++    object_property_add_child(obj, "virtio-backend", OBJECT(&dev->vdev), NULL);
++}
++
+ static int s390_virtio_scsi_init(VirtIOS390Device *s390_dev)
+ {
+     VirtIOSCSIS390 *dev = VIRTIO_SCSI_S390(s390_dev);
+@@ -465,8 +474,8 @@ static const TypeInfo s390_virtio_blk = {
+ };
+ 
+ static Property s390_virtio_serial_properties[] = {
+-    DEFINE_PROP_UINT32("max_ports", VirtIOS390Device,
+-                       serial.max_virtserial_ports, 31),
++    DEFINE_PROP_UINT32("max_ports", VirtIOSerialS390,
++                       vdev.serial.max_virtserial_ports, 31),
+     DEFINE_PROP_END_OF_LIST(),
+ };
+ 
+@@ -480,9 +489,10 @@ static void s390_virtio_serial_class_init(ObjectClass *klass, void *data)
+ }
+ 
+ static const TypeInfo s390_virtio_serial = {
+-    .name          = "virtio-serial-s390",
++    .name          = TYPE_VIRTIO_SERIAL_S390,
+     .parent        = TYPE_VIRTIO_S390_DEVICE,
+-    .instance_size = sizeof(VirtIOS390Device),
++    .instance_size = sizeof(VirtIOSerialS390),
++    .instance_init = s390_virtio_serial_instance_init,
+     .class_init    = s390_virtio_serial_class_init,
+ };
+ 
+diff --git a/hw/s390x/s390-virtio-bus.h b/hw/s390x/s390-virtio-bus.h
+index ebe8794..95610e0 100644
+--- a/hw/s390x/s390-virtio-bus.h
++++ b/hw/s390x/s390-virtio-bus.h
+@@ -91,7 +91,6 @@ struct VirtIOS390Device {
+     VirtIODevice *vdev;
+     NICConf nic;
+     uint32_t host_features;
+-    virtio_serial_conf serial;
+     virtio_net_conf net;
+     VirtIORNGConf rng;
+     VirtioBusState bus;
+@@ -141,4 +140,15 @@ typedef struct VirtIOSCSIS390 {
+     VirtIOSCSI vdev;
+ } VirtIOSCSIS390;
+ 
++/* virtio-serial-s390 */
++
++#define TYPE_VIRTIO_SERIAL_S390 "virtio-serial-s390"
++#define VIRTIO_SERIAL_S390(obj) \
++        OBJECT_CHECK(VirtIOSerialS390, (obj), TYPE_VIRTIO_SERIAL_S390)
++
++typedef struct VirtIOSerialS390 {
++    VirtIOS390Device parent_obj;
++    VirtIOSerial vdev;
++} VirtIOSerialS390;
++
+ #endif
+-- 
+1.7.11.7
+

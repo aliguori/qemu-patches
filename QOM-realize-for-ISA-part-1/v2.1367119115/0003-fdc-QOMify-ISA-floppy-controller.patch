@@ -1,0 +1,135 @@
+From patches Mon Sep 17 00:00:00 2001
+From: =?utf-8?q?Andreas_F=C3=A4rber_=3Cafaerber=40suse=2Ede=3E?=
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>,
+ =?utf-8?b?IkFuZHJlYXMgRsOkcmJlciI=?= <afaerber@suse.de>,
+ Stefan Hajnoczi <stefanha@redhat.com>, Kevin Wolf <kwolf@redhat.com>,
+ Markus Armbruster <armbru@redhat.com>
+Date: Sat, 27 Apr 2013 22:18:38 +0200
+Message-id: 1367093935-29091-4-git-send-email-afaerber@suse.de
+Subject: [PATCH 03/20] fdc: QOM'ify ISA floppy controller
+
+Introduce type constant and cast macro to obsolete DO_UPCAST().
+Reuse type constant for PC machine compatibility settings.
+
+Prepares for ISA realizefn.
+
+Signed-off-by: Andreas Färber <afaerber@suse.de>
+Cc: Markus Armbruster <armbru@redhat.com>
+---
+ hw/block/fdc.c         | 21 ++++++++++++---------
+ hw/i386/pc_piix.c      |  2 +-
+ include/hw/block/fdc.h |  2 ++
+ 3 files changed, 15 insertions(+), 10 deletions(-)
+
+diff --git a/hw/block/fdc.c b/hw/block/fdc.c
+index f1f1fd7..0888652 100644
+--- a/hw/block/fdc.c
++++ b/hw/block/fdc.c
+@@ -549,8 +549,11 @@ typedef struct FDCtrlSysBus {
+     struct FDCtrl state;
+ } FDCtrlSysBus;
+ 
++#define ISA_FDC(obj) OBJECT_CHECK(FDCtrlISABus, (obj), TYPE_ISA_FDC)
++
+ typedef struct FDCtrlISABus {
+-    ISADevice busdev;
++    ISADevice parent_obj;
++
+     uint32_t iobase;
+     uint32_t irq;
+     uint32_t dma;
+@@ -778,7 +781,7 @@ static void fdctrl_external_reset_sysbus(DeviceState *d)
+ 
+ static void fdctrl_external_reset_isa(DeviceState *d)
+ {
+-    FDCtrlISABus *isa = container_of(d, FDCtrlISABus, busdev.qdev);
++    FDCtrlISABus *isa = ISA_FDC(d);
+     FDCtrl *s = &isa->state;
+ 
+     fdctrl_reset(s, 0);
+@@ -2021,7 +2024,7 @@ ISADevice *fdctrl_init_isa(ISABus *bus, DriveInfo **fds)
+ {
+     ISADevice *dev;
+ 
+-    dev = isa_try_create(bus, "isa-fdc");
++    dev = isa_try_create(bus, TYPE_ISA_FDC);
+     if (!dev) {
+         return NULL;
+     }
+@@ -2116,13 +2119,13 @@ static const MemoryRegionPortio fdc_portio_list[] = {
+ 
+ static int isabus_fdc_init1(ISADevice *dev)
+ {
+-    FDCtrlISABus *isa = DO_UPCAST(FDCtrlISABus, busdev, dev);
++    FDCtrlISABus *isa = ISA_FDC(dev);
+     FDCtrl *fdctrl = &isa->state;
+     int ret;
+ 
+     isa_register_portio_list(dev, isa->iobase, fdc_portio_list, fdctrl, "fdc");
+ 
+-    isa_init_irq(&isa->busdev, &fdctrl->irq, isa->irq);
++    isa_init_irq(dev, &fdctrl->irq, isa->irq);
+     fdctrl->dma_chann = isa->dma;
+ 
+     qdev_set_legacy_instance_id(&dev->qdev, isa->iobase, 2);
+@@ -2169,7 +2172,7 @@ static int sun4m_fdc_init1(SysBusDevice *dev)
+ 
+ FDriveType isa_fdc_get_drive_type(ISADevice *fdc, int i)
+ {
+-    FDCtrlISABus *isa = DO_UPCAST(FDCtrlISABus, busdev, fdc);
++    FDCtrlISABus *isa = ISA_FDC(fdc);
+ 
+     return isa->state.drives[i].drive;
+ }
+@@ -2197,7 +2200,7 @@ static Property isa_fdc_properties[] = {
+     DEFINE_PROP_END_OF_LIST(),
+ };
+ 
+-static void isabus_fdc_class_init1(ObjectClass *klass, void *data)
++static void isabus_fdc_class_init(ObjectClass *klass, void *data)
+ {
+     DeviceClass *dc = DEVICE_CLASS(klass);
+     ISADeviceClass *ic = ISA_DEVICE_CLASS(klass);
+@@ -2210,10 +2213,10 @@ static void isabus_fdc_class_init1(ObjectClass *klass, void *data)
+ }
+ 
+ static const TypeInfo isa_fdc_info = {
+-    .name          = "isa-fdc",
++    .name          = TYPE_ISA_FDC,
+     .parent        = TYPE_ISA_DEVICE,
+     .instance_size = sizeof(FDCtrlISABus),
+-    .class_init    = isabus_fdc_class_init1,
++    .class_init    = isabus_fdc_class_init,
+ };
+ 
+ static const VMStateDescription vmstate_sysbus_fdc ={
+diff --git a/hw/i386/pc_piix.c b/hw/i386/pc_piix.c
+index 89b4cb4..08dd61d 100644
+--- a/hw/i386/pc_piix.c
++++ b/hw/i386/pc_piix.c
+@@ -458,7 +458,7 @@ static QEMUMachine pc_machine_v1_1 = {
+             .property = "rom_only",\
+             .value    = stringify(1),\
+         }, {\
+-            .driver   = "isa-fdc",\
++            .driver   = TYPE_ISA_FDC,\
+             .property = "check_media_rate",\
+             .value    = "off",\
+         }, {\
+diff --git a/include/hw/block/fdc.h b/include/hw/block/fdc.h
+index a8f6f7c..d48b2f8 100644
+--- a/include/hw/block/fdc.h
++++ b/include/hw/block/fdc.h
+@@ -13,6 +13,8 @@ typedef enum FDriveType {
+     FDRIVE_DRV_NONE = 0x03,   /* No drive connected     */
+ } FDriveType;
+ 
++#define TYPE_ISA_FDC "isa-fdc"
++
+ ISADevice *fdctrl_init_isa(ISABus *bus, DriveInfo **fds);
+ void fdctrl_init_sysbus(qemu_irq irq, int dma_chann,
+                         hwaddr mmio_base, DriveInfo **fds);
+-- 
+1.8.1.4
+

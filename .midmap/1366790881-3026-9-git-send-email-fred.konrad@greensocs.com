@@ -1,0 +1,1 @@
+../virtio-rng-refactoring/v4.1366816073/0008-virtio-rng-cleanup-use-QOM-casts.patch

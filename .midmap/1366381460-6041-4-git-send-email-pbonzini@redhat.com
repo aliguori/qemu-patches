@@ -1,0 +1,1 @@
+../SCSI-updates-for-2013-04-13/v1.1366406651/0003-vhost-Add-vhost_commit-callback-for-SeaBIOS-ROM-region-re-mapping.patch

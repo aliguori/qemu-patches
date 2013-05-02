@@ -1,0 +1,63 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Igor Mammedov <imammedo@redhat.com>
+To: Eduardo Habkost <ehabkost@redhat.com>, Igor Mammedov <imammedo@redhat.com>,
+ qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>,
+ Eduardo Habkost <ehabkost@redhat.com>, aliguori@us.ibm.com,
+ ehabkost@redhat.com, claudio.fontana@huawei.com, qemu-devel@nongnu.org,
+ aderumier@odiso.com, lcapitulino@redhat.com, jfrei@linux.vnet.ibm.com,
+ yang.z.zhang@intel.com, pbonzini@redhat.com, eblake@redhat.com,
+ afaerber@suse.de, lig.fnst@cn.fujitsu.com, rth@twiddle.net
+Date: Thu, 11 Apr 2013 16:51:46 +0200
+Message-id: 1365691918-30594-8-git-send-email-imammedo@redhat.com
+Subject: [PATCH 07/19] rtc: update rtc_cmos on CPU hot-plug
+
+... so that on reboot BIOS could read current available CPU count
+
+Signed-off-by: Igor Mammedov <imammedo@redhat.com>
+v2:
+  * s/qemu_register_cpu_add_notifier()/qemu_register_cpu_added_notifier()/
+---
+ hw/timer/mc146818rtc.c | 12 ++++++++++++
+ 1 file changed, 12 insertions(+)
+
+diff --git a/hw/timer/mc146818rtc.c b/hw/timer/mc146818rtc.c
+index 69e6844..958ed6b 100644
+--- a/hw/timer/mc146818rtc.c
++++ b/hw/timer/mc146818rtc.c
+@@ -82,6 +82,7 @@ typedef struct RTCState {
+     Notifier clock_reset_notifier;
+     LostTickPolicy lost_tick_policy;
+     Notifier suspend_notifier;
++    Notifier cpu_added_notifier;
+ } RTCState;
+ 
+ static void rtc_set_time(RTCState *s);
+@@ -759,6 +760,14 @@ static void rtc_notify_suspend(Notifier *notifier, void *data)
+     rtc_set_memory(&s->dev, 0xF, 0xFE);
+ }
+ 
++static void rtc_notify_cpu_added(Notifier *notifier, void *data)
++{
++    RTCState *s = container_of(notifier, RTCState, cpu_added_notifier);
++
++    /* increment the number of CPUs */
++    s->cmos_data[0x5f] += 1;
++}
++
+ static void rtc_reset(void *opaque)
+ {
+     RTCState *s = opaque;
+@@ -852,6 +861,9 @@ static int rtc_initfn(ISADevice *dev)
+     s->suspend_notifier.notify = rtc_notify_suspend;
+     qemu_register_suspend_notifier(&s->suspend_notifier);
+ 
++    s->cpu_added_notifier.notify = rtc_notify_cpu_added;
++    qemu_register_cpu_added_notifier(&s->cpu_added_notifier);
++
+     memory_region_init_io(&s->io, &cmos_ops, s, "rtc", 2);
+     isa_register_ioport(dev, &s->io, base);
+ 
+-- 
+1.8.2
+

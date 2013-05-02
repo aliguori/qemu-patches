@@ -1,0 +1,1 @@
+../ui-cocoam-Fix-compiler-and-runtime-warnings-on-108/v2.1364268690/0004-ui-cocoam-Avoid-deprecated-NSOpenPanel-beginSheetForDirectory.patch

@@ -1,0 +1,23 @@
+From patches Mon Sep 17 00:00:00 2001
+From: peter.crosthwaite@xilinx.com
+To: peter.crosthwaite@xilinx.com, qemu-devel@nongnu.org
+Cc: blauwirbel@gmail.com, pbonzini@redhat.com, qemu-devel@nongnu.org,
+ peter.maydell@linaro.org
+Date: Mon, 22 Apr 2013 14:40:09 +1000
+Message-id: cover.1366605200.git.peter.crosthwaite@xilinx.com
+Subject: [PATCH 0/2] Fix DTC sub-module issues
+
+From: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+
+Two issues reported by Blue for building the DTC submodule with clang
+and mingw.
+
+
+Peter Crosthwaite (2):
+  Makefile: Don't build shared libfdt
+  Makefile: Use QEMU_FLAGS for DTC compilation
+
+ Makefile |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
+
+

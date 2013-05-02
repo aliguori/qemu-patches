@@ -1,0 +1,106 @@
+From patches Mon Sep 17 00:00:00 2001
+From: "Stefan Hajnoczi" <stefanha@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, Paolo Bonzini <pbonzini@redhat.com>,
+ Stefan Hajnoczi <stefanha@redhat.com>, pingfank@linux.vnet.ibm.com,
+ Kevin Wolf <kwolf@redhat.com>
+Date: Wed, 17 Apr 2013 15:07:43 +0200
+Message-id: 1366204073-8468-8-git-send-email-stefanha@redhat.com
+Subject: [PATCH 07/17] block/gluster: drop qemu_gluster_aio_flush_cb()
+
+Since .io_flush() is no longer called we do not need
+qemu_gluster_aio_flush_cb() anymore.  It turns out that qemu_aio_count
+is unused now and can be dropped.
+
+Signed-off-by: Stefan Hajnoczi <stefanha@redhat.com>
+---
+ block/gluster.c | 16 +---------------
+ 1 file changed, 1 insertion(+), 15 deletions(-)
+
+diff --git a/block/gluster.c b/block/gluster.c
+index 9ccd4d4..ba80f41 100644
+--- a/block/gluster.c
++++ b/block/gluster.c
+@@ -32,7 +32,6 @@ typedef struct BDRVGlusterState {
+     struct glfs *glfs;
+     int fds[2];
+     struct glfs_fd *fd;
+-    int qemu_aio_count;
+     int event_reader_pos;
+     GlusterAIOCB *event_acb;
+ } BDRVGlusterState;
+@@ -247,7 +246,6 @@ static void qemu_gluster_complete_aio(GlusterAIOCB *acb, BDRVGlusterState *s)
+         ret = -EIO; /* Partial read/write - fail it */
+     }
+ 
+-    s->qemu_aio_count--;
+     qemu_aio_release(acb);
+     cb(opaque, ret);
+     if (finished) {
+@@ -275,13 +273,6 @@ static void qemu_gluster_aio_event_reader(void *opaque)
+     } while (ret < 0 && errno == EINTR);
+ }
+ 
+-static int qemu_gluster_aio_flush_cb(void *opaque)
+-{
+-    BDRVGlusterState *s = opaque;
+-
+-    return (s->qemu_aio_count > 0);
+-}
+-
+ static int qemu_gluster_open(BlockDriverState *bs, const char *filename,
+     QDict *options, int bdrv_flags)
+ {
+@@ -319,7 +310,7 @@ static int qemu_gluster_open(BlockDriverState *bs, const char *filename,
+     }
+     fcntl(s->fds[GLUSTER_FD_READ], F_SETFL, O_NONBLOCK);
+     qemu_aio_set_fd_handler(s->fds[GLUSTER_FD_READ],
+-        qemu_gluster_aio_event_reader, NULL, qemu_gluster_aio_flush_cb, s);
++        qemu_gluster_aio_event_reader, NULL, NULL, s);
+ 
+ out:
+     qemu_gluster_gconf_free(gconf);
+@@ -415,7 +406,6 @@ static void gluster_finish_aiocb(struct glfs_fd *fd, ssize_t ret, void *arg)
+         qemu_mutex_lock_iothread(); /* We are in gluster thread context */
+         acb->common.cb(acb->common.opaque, -EIO);
+         qemu_aio_release(acb);
+-        s->qemu_aio_count--;
+         close(s->fds[GLUSTER_FD_READ]);
+         close(s->fds[GLUSTER_FD_WRITE]);
+         qemu_aio_set_fd_handler(s->fds[GLUSTER_FD_READ], NULL, NULL, NULL,
+@@ -437,7 +427,6 @@ static BlockDriverAIOCB *qemu_gluster_aio_rw(BlockDriverState *bs,
+ 
+     offset = sector_num * BDRV_SECTOR_SIZE;
+     size = nb_sectors * BDRV_SECTOR_SIZE;
+-    s->qemu_aio_count++;
+ 
+     acb = qemu_aio_get(&gluster_aiocb_info, bs, cb, opaque);
+     acb->size = size;
+@@ -458,7 +447,6 @@ static BlockDriverAIOCB *qemu_gluster_aio_rw(BlockDriverState *bs,
+     return &acb->common;
+ 
+ out:
+-    s->qemu_aio_count--;
+     qemu_aio_release(acb);
+     return NULL;
+ }
+@@ -488,7 +476,6 @@ static BlockDriverAIOCB *qemu_gluster_aio_flush(BlockDriverState *bs,
+     acb->size = 0;
+     acb->ret = 0;
+     acb->finished = NULL;
+-    s->qemu_aio_count++;
+ 
+     ret = glfs_fsync_async(s->fd, &gluster_finish_aiocb, acb);
+     if (ret < 0) {
+@@ -497,7 +484,6 @@ static BlockDriverAIOCB *qemu_gluster_aio_flush(BlockDriverState *bs,
+     return &acb->common;
+ 
+ out:
+-    s->qemu_aio_count--;
+     qemu_aio_release(acb);
+     return NULL;
+ }
+-- 
+1.8.1.4
+
+

@@ -1,0 +1,55 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Kevin Wolf <kwolf@redhat.com>
+To: Kevin Wolf <kwolf@redhat.com>, qemu-devel@nongnu.org
+Cc: kwolf@redhat.com, anthony@codemonkey.ws, afaerber@suse.de,
+ stefanha@redhat.com, qemu-devel@nongnu.org
+Date: Mon, 22 Apr 2013 17:48:40 +0200
+Message-id: 1366645720-11384-1-git-send-email-kwolf@redhat.com
+Subject: [PATCH 1/1] block: Fix build with tracing enabled
+
+filename was still uninitialised when it's used as a parameter to a
+tracing function, so let's move the initialisation. Also, commit c2ad1b0c
+forgot to add a NULL check, which this patch adds while we're at it.
+
+Signed-off-by: Kevin Wolf <kwolf@redhat.com>
+Reviewed-by: Eric Blake <eblake@redhat.com>
+Tested-by: Andreas Färber <afaerber@suse.de>
+---
+ block.c | 14 +++++++-------
+ 1 file changed, 7 insertions(+), 7 deletions(-)
+
+diff --git a/block.c b/block.c
+index 819eb4e..aa9a533 100644
+--- a/block.c
++++ b/block.c
+@@ -676,7 +676,13 @@ static int bdrv_open_common(BlockDriverState *bs, BlockDriverState *file,
+     assert(bs->file == NULL);
+     assert(options != NULL && bs->options != options);
+ 
+-    trace_bdrv_open_common(bs, filename, flags, drv->format_name);
++    if (file != NULL) {
++        filename = file->filename;
++    } else {
++        filename = qdict_get_try_str(options, "filename");
++    }
++
++    trace_bdrv_open_common(bs, filename ?: "", flags, drv->format_name);
+ 
+     if (use_bdrv_whitelist && !bdrv_is_whitelisted(drv)) {
+         return -ENOTSUP;
+@@ -698,12 +704,6 @@ static int bdrv_open_common(BlockDriverState *bs, BlockDriverState *file,
+         bdrv_enable_copy_on_read(bs);
+     }
+ 
+-    if (file != NULL) {
+-        filename = file->filename;
+-    } else {
+-        filename = qdict_get_try_str(options, "filename");
+-    }
+-
+     if (filename != NULL) {
+         pstrcpy(bs->filename, sizeof(bs->filename), filename);
+     } else {
+-- 
+1.8.1.4
+

@@ -1,0 +1,81 @@
+From patches Mon Sep 17 00:00:00 2001
+From: =?utf-8?q?Andreas_F=C3=A4rber_=3Cafaerber=40suse=2Ede=3E?=
+To: qemu-devel@nongnu.org
+Cc: Igor Mammedov <imammedo@redhat.com>,
+ =?UTF-8?q?Andreas=20F=C3=A4rber?= <afaerber@suse.de>
+Date: Thu,  2 May 2013 15:35:36 +0200
+Message-id: 1367501755-32272-11-git-send-email-afaerber@suse.de
+Subject: [PATCH 10/29] cpu: Add helper cpu_exists(),
+ to check if CPU with specified id exists
+
+From: Igor Mammedov <imammedo@redhat.com>
+
+Signed-off-by: Igor Mammedov <imammedo@redhat.com>
+Signed-off-by: Andreas Färber <afaerber@suse.de>
+---
+ include/qom/cpu.h | 10 ++++++++++
+ qom/cpu.c         | 26 ++++++++++++++++++++++++++
+ 2 files changed, 36 insertions(+)
+
+diff --git a/include/qom/cpu.h b/include/qom/cpu.h
+index a28e5ff..e54579b 100644
+--- a/include/qom/cpu.h
++++ b/include/qom/cpu.h
+@@ -234,6 +234,16 @@ void qemu_for_each_cpu(void (*func)(CPUState *cpu, void *data), void *data);
+  */
+ CPUState *qemu_get_cpu(int index);
+ 
++/**
++ * cpu_exists:
++ * @id: Guest-exposed CPU ID to lookup.
++ *
++ * Search for CPU with specified ID.
++ *
++ * Returns: %true - CPU is found, %false - CPU isn't found.
++ */
++bool cpu_exists(int64_t id);
++
+ #ifndef CONFIG_USER_ONLY
+ 
+ typedef void (*CPUInterruptHandler)(CPUState *, int);
+diff --git a/qom/cpu.c b/qom/cpu.c
+index 9a4457b..3dc8208 100644
+--- a/qom/cpu.c
++++ b/qom/cpu.c
+@@ -24,6 +24,32 @@
+ #include "qemu/notify.h"
+ #include "sysemu/sysemu.h"
+ 
++typedef struct CPUExistsArgs {
++    int64_t id;
++    bool found;
++} CPUExistsArgs;
++
++static void cpu_exist_cb(CPUState *cpu, void *data)
++{
++    CPUClass *klass = CPU_GET_CLASS(cpu);
++    CPUExistsArgs *arg = data;
++
++    if (klass->get_arch_id(cpu) == arg->id) {
++        arg->found = true;
++    }
++}
++
++bool cpu_exists(int64_t id)
++{
++    CPUExistsArgs data = {
++        .id = id,
++        .found = false,
++    };
++
++    qemu_for_each_cpu(cpu_exist_cb, &data);
++    return data.found;
++}
++
+ /* CPU hot-plug notifiers */
+ static NotifierList cpu_added_notifiers =
+     NOTIFIER_LIST_INITIALIZER(cpu_add_notifiers);
+-- 
+1.8.1.4
+
+

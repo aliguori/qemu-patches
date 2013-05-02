@@ -1,0 +1,8 @@
+0000-rdma-migration-support.txt
+0001-rdma-introduce-qemu_ram_foreach_block.patch
+0002-rdma-new-QEMUFileOps-hooks.patch
+0003-rdma-introduce-capability-for-chunk-registration.patch
+0004-rdma-core-logic.patch
+0005-rdma-send-pcram.patch
+0006-rdma-print-throughput-while-debugging.patch
+0007-rdma-add-documentation.patch

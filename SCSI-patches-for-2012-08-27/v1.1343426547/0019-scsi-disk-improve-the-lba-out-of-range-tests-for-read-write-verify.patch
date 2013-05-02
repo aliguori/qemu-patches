@@ -1,0 +1,54 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Ronnie Sahlberg <ronniesahlberg@gmail.com>
+Date: Fri, 27 Jul 2012 17:02:46 +0200
+Message-id: 1343401379-19495-20-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 19/32] scsi-disk: improve the lba-out-of-range tests for
+ read/write/verify
+
+From: Ronnie Sahlberg <ronniesahlberg@gmail.com>
+
+Improve the tests for the LBA to cover more cases.
+
+For the 16 byte opcodes, the lba is a uint64, so we need to check is to
+make sure that we do not wrap.  For example if an opcode would specify
+the LBA:0xffffffffffffffff and LEN:2 then lba+len would wrap to 1.
+
+Also verify that ALL requested blocks are available, not just the first one.
+
+Signed-off-by: Ronnie Sahlberg <ronniesahlberg@gmail.com>
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ hw/scsi-disk.c |    6 ++++--
+ 1 file changed, 4 insertions(+), 2 deletions(-)
+
+diff --git a/hw/scsi-disk.c b/hw/scsi-disk.c
+index 526da4b..3c03159 100644
+--- a/hw/scsi-disk.c
++++ b/hw/scsi-disk.c
+@@ -1777,7 +1777,8 @@ static int32_t scsi_disk_dma_command(SCSIRequest *req, uint8_t *buf)
+         if (r->req.cmd.buf[1] & 0xe0) {
+             goto illegal_request;
+         }
+-        if (r->req.cmd.lba > s->qdev.max_lba) {
++        if (r->req.cmd.lba > r->req.cmd.lba + len ||
++            r->req.cmd.lba + len - 1 > s->qdev.max_lba) {
+             goto illegal_lba;
+         }
+         r->sector = r->req.cmd.lba * (s->qdev.blocksize / 512);
+@@ -1800,7 +1801,8 @@ static int32_t scsi_disk_dma_command(SCSIRequest *req, uint8_t *buf)
+         if (r->req.cmd.buf[1] & 0xe0) {
+             goto illegal_request;
+         }
+-        if (r->req.cmd.lba > s->qdev.max_lba) {
++        if (r->req.cmd.lba > r->req.cmd.lba + len ||
++            r->req.cmd.lba + len - 1 > s->qdev.max_lba) {
+             goto illegal_lba;
+         }
+         r->sector = r->req.cmd.lba * (s->qdev.blocksize / 512);
+-- 
+1.7.10.4
+
+
+

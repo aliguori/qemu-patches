@@ -1,0 +1,1 @@
+../vhost-scsi-new-device-supporting-the-tcm_vhost-Linux-kernel-module/v3.1363700082/0001-virtio-scsi-create-VirtIOSCSICommon.patch

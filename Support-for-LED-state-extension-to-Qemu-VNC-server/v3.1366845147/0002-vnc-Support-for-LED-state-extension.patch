@@ -1,0 +1,125 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Lei Li <lilei@linux.vnet.ibm.com>
+To: Lei Li <lilei@linux.vnet.ibm.com>, Gerd Hoffmann <kraxel@redhat.com>,
+ qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, lagarcia@br.ibm.com,
+ qemu-devel@nongnu.org, Lei Li <lilei@linux.vnet.ibm.com>
+Date: Wed, 24 Apr 2013 18:12:29 +0800
+Message-id: 1366798350-27068-3-git-send-email-lilei@linux.vnet.ibm.com
+Subject: [PATCH 2/3] vnc: Support for LED state extension
+
+Signed-off-by: Lei Li <lilei@linux.vnet.ibm.com>
+---
+ ui/vnc.c |   45 +++++++++++++++++++++++++++++++++++++++++++++
+ ui/vnc.h |    4 +++-
+ 2 files changed, 48 insertions(+), 1 deletions(-)
+
+diff --git a/ui/vnc.c b/ui/vnc.c
+index f574962..44189d7 100644
+--- a/ui/vnc.c
++++ b/ui/vnc.c
+@@ -1522,6 +1522,42 @@ static void press_key(VncState *vs, int keysym)
+     kbd_put_keycode(keycode | SCANCODE_UP);
+ }
+ 
++static int current_led_state(VncState *vs)
++{
++    int ledstate = 0;
++
++    if (vs->modifiers_state[0x46]) {
++        ledstate |= QEMU_SCROLL_LOCK_LED;
++    }
++    if (vs->modifiers_state[0x45]) {
++        ledstate |= QEMU_NUM_LOCK_LED;
++    }
++    if (vs->modifiers_state[0x3a]) {
++        ledstate |= QEMU_CAPS_LOCK_LED;
++    }
++
++    return ledstate;
++}
++
++static void vnc_led_state_change(VncState *vs)
++{
++    int ledstate = 0;
++
++    if (!vnc_has_feature(vs, VNC_FEATURE_LED_STATE)) {
++        return;
++    }
++
++    ledstate = current_led_state(vs);
++    vnc_lock_output(vs);
++    vnc_write_u8(vs, VNC_MSG_SERVER_FRAMEBUFFER_UPDATE);
++    vnc_write_u8(vs, 0);
++    vnc_write_u16(vs, 1);
++    vnc_framebuffer_update(vs, 0, 0, 1, 1, VNC_ENCODING_LED_STATE);
++    vnc_write_u8(vs, ledstate);
++    vnc_unlock_output(vs);
++    vnc_flush(vs);
++}
++
+ static void kbd_leds(void *opaque, int ledstate)
+ {
+     VncState *vs = opaque;
+@@ -1540,6 +1576,11 @@ static void kbd_leds(void *opaque, int ledstate)
+     if (vs->modifiers_state[0x46] != scr) {
+         vs->modifiers_state[0x46] = scr;
+     }
++
++    /* Sending the current led state message to the client */
++    if (ledstate != current_led_state(vs)) {
++        vnc_led_state_change(vs);
++    }
+ }
+ 
+ static void do_key_event(VncState *vs, int down, int keycode, int sym)
+@@ -1893,6 +1934,9 @@ static void set_encodings(VncState *vs, int32_t *encodings, size_t n_encodings)
+         case VNC_ENCODING_WMVi:
+             vs->features |= VNC_FEATURE_WMVI_MASK;
+             break;
++        case VNC_ENCODING_LED_STATE:
++            vs->features |= VNC_FEATURE_LED_STATE_MASK;
++            break;
+         case VNC_ENCODING_COMPRESSLEVEL0 ... VNC_ENCODING_COMPRESSLEVEL0 + 9:
+             vs->tight.compression = (enc & 0x0F);
+             break;
+@@ -1908,6 +1952,7 @@ static void set_encodings(VncState *vs, int32_t *encodings, size_t n_encodings)
+     }
+     vnc_desktop_resize(vs);
+     check_pointer_type_change(&vs->mouse_mode_notifier, NULL);
++    vnc_led_state_change(vs);
+ }
+ 
+ static void set_pixel_conversion(VncState *vs)
+diff --git a/ui/vnc.h b/ui/vnc.h
+index ad1dec2..e873377 100644
+--- a/ui/vnc.h
++++ b/ui/vnc.h
+@@ -384,6 +384,7 @@ enum {
+ #define VNC_ENCODING_EXT_KEY_EVENT        0XFFFFFEFE /* -258 */
+ #define VNC_ENCODING_AUDIO                0XFFFFFEFD /* -259 */
+ #define VNC_ENCODING_TIGHT_PNG            0xFFFFFEFC /* -260 */
++#define VNC_ENCODING_LED_STATE            0XFFFFFEFB /* -261 */
+ #define VNC_ENCODING_WMVi                 0x574D5669
+ 
+ /*****************************************************************************
+@@ -422,6 +423,7 @@ enum {
+ #define VNC_FEATURE_TIGHT_PNG                8
+ #define VNC_FEATURE_ZRLE                     9
+ #define VNC_FEATURE_ZYWRLE                  10
++#define VNC_FEATURE_LED_STATE               11
+ 
+ #define VNC_FEATURE_RESIZE_MASK              (1 << VNC_FEATURE_RESIZE)
+ #define VNC_FEATURE_HEXTILE_MASK             (1 << VNC_FEATURE_HEXTILE)
+@@ -434,7 +436,7 @@ enum {
+ #define VNC_FEATURE_TIGHT_PNG_MASK           (1 << VNC_FEATURE_TIGHT_PNG)
+ #define VNC_FEATURE_ZRLE_MASK                (1 << VNC_FEATURE_ZRLE)
+ #define VNC_FEATURE_ZYWRLE_MASK              (1 << VNC_FEATURE_ZYWRLE)
+-
++#define VNC_FEATURE_LED_STATE_MASK           (1 << VNC_FEATURE_LED_STATE)
+ 
+ /* Client -> Server message IDs */
+ #define VNC_MSG_CLIENT_SET_PIXEL_FORMAT           0
+-- 
+1.7.7.6
+

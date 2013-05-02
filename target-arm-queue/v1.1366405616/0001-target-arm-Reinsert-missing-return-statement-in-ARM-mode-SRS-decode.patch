@@ -1,0 +1,43 @@
+From patches Mon Sep 17 00:00:00 2001
+From: "Peter Maydell" <peter.maydell@linaro.org>
+To: Blue Swirl <blauwirbel@gmail.com>, Aurelien Jarno <aurelien@aurel32.net>
+Cc: Anthony Liguori <aliguori@us.ibm.com>, Paul Brook <paul@codesourcery.com>,
+ qemu-devel@nongnu.org
+Date: Fri, 19 Apr 2013 16:06:57 +0100
+Message-id: 1366384020-13253-2-git-send-email-peter.maydell@linaro.org
+Subject: [PATCH 1/4] target-arm: Reinsert missing return statement in ARM mode
+ SRS decode
+
+From: Peter Chubb <peter.chubb@nicta.com.au>
+
+Since patch
+   81465888c5306cd94abb9847e560796fd13d3c2f
+   target-arm: factor out handling of SRS instruction
+the ARM mode SRS instruction has not worked in QEMU.
+
+The problem is a missing return directive that was removed in the
+refactoring, so after decoding the instruction, qemu would fall through
+to generate an UNDEF exception for an illegal instruction.
+
+Signed-off-by: Peter Chubb <peter.chubb@nicta.com.au>
+Signed-off-by: Peter Maydell <peter.maydell@linaro.org>
+---
+ target-arm/translate.c |    1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/target-arm/translate.c b/target-arm/translate.c
+index 35a21be..a1b7b8c 100644
+--- a/target-arm/translate.c
++++ b/target-arm/translate.c
+@@ -6762,6 +6762,7 @@ static void disas_arm_insn(CPUARMState * env, DisasContext *s)
+             }
+             ARCH(6);
+             gen_srs(s, (insn & 0x1f), (insn >> 23) & 3, insn & (1 << 21));
++            return;
+         } else if ((insn & 0x0e50ffe0) == 0x08100a00) {
+             /* rfe */
+             int32_t offset;
+-- 
+1.7.9.5
+
+

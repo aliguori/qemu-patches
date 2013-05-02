@@ -1,0 +1,36 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Artyom Tarasenko <atar4qemu@gmail.com>
+To: qemu-devel@nongnu.org
+Cc: blauwirbel@gmail.com, Artyom Tarasenko <atar4qemu@gmail.com>
+Date: Sat, 27 Apr 2013 07:55:13 +0200
+Message-id: 34aa76c8608984ca537823062c0192a4f30218a2.1366987353.git.atar4qemu@gmail.com
+Subject: [PATCH 3/3] sparc64: use direct interrupt mapping for PCI devices
+
+Every PCI Slot in PBM has 4 directly mapped IRQ lines.
+Use the IRQ routing schema 0bssnn (Bus, Slot, interrupt Number)
+described in Section 19.3.3 of UltraSPARC™-IIi User's Manual.
+
+Please note that this patch requires the OpenBIOS counterpart patch.
+
+Signed-off-by: Artyom Tarasenko <atar4qemu@gmail.com>
+---
+ hw/pci-host/apb.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+diff --git a/hw/pci-host/apb.c b/hw/pci-host/apb.c
+index 356853a..93ce46d 100644
+--- a/hw/pci-host/apb.c
++++ b/hw/pci-host/apb.c
+@@ -365,7 +365,7 @@ static int pci_pbm_map_irq(PCIDevice *pci_dev, int irq_num)
+         bus_offset = 16;
+     else
+         bus_offset = 0;
+-    return bus_offset + irq_num;
++    return (bus_offset + (PCI_SLOT(pci_dev->devfn) << 2) + irq_num) & 0x1f;
+ }
+ 
+ static void pci_apb_set_irq(void *opaque, int irq_num, int level)
+-- 
+1.7.1
+
+

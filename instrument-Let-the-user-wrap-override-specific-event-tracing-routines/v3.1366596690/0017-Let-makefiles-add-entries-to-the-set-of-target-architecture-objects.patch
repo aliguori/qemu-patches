@@ -1,0 +1,28 @@
+From patches Mon Sep 17 00:00:00 2001
+From: =?utf-8?q?Llu=C3=ADs_Vilanova_=3Cvilanova=40ac=2Eupc=2Eedu=3E?=
+To: qemu-devel@nongnu.org
+Cc: 
+Date: Sun, 21 Apr 2013 21:13:05 +0200
+Message-id: 20130421191305.8947.73747.stgit@fimbulvetr.bsc.es
+Subject: [PATCH 17/24] Let makefiles add entries to the set of target
+ architecture objects
+
+Signed-off-by: Lluís Vilanova <vilanova@ac.upc.edu>
+---
+ Makefile.target |    1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/Makefile.target b/Makefile.target
+index 114fc39..fe48432 100644
+--- a/Makefile.target
++++ b/Makefile.target
+@@ -149,6 +149,7 @@ include $(SRC_PATH)/Makefile.objs
+ all-obj-y = $(obj-y)
+ all-obj-y += $(addprefix ../, $(common-obj-y))
+ 
++all-obj-y += $(target-obj-y)
+ all-obj-y += $(LIBTRACE_INSTRUMENT)
+ 
+ ifdef QEMU_PROGW
+
+

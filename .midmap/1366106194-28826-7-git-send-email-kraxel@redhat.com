@@ -1,0 +1,1 @@
+../spice-patch-queue/v1.1366131385/0006-spice-qemu-char-Remove-ifdef-ed-code-for-old-spice-server-compat.patch

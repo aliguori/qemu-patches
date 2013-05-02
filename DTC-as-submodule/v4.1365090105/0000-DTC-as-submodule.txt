@@ -1,0 +1,44 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+To: qemu-devel@nongnu.org, Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+Cc: peter.maydell@linaro.org, edgar.iglesias@gmail.com, qemu-devel@nongnu.org,
+ dantesu@faraday-tech.com, Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+Date: Thu,  4 Apr 2013 10:41:45 +1000
+Message-id: cover.1365036050.git.peter.crosthwaite@xilinx.com
+Subject: [PATCH 0/3] DTC as submodule
+
+These two patches add and use dtc as a submodule as per the RFC:
+
+http://lists.gnu.org/archive/html/qemu-devel/2013-01/msg05000.html
+
+There is a remaining action item to mandate libfdt for arm/microblaze and PPC
+which is left as follow up work for after review of this series.
+
+Also fixed the configure to properly build pixman when cross compiling.
+
+changed since v3:
+Rebase against recent configure devls.
+changed since v2:
+Fixed P1 implementation (PMM review)
+Fixed CC/AR/LD quoting issue P3 (PMM review)
+Addressed PMM review
+changed since v1:
+Fixed cross compilation of submodules (new P1)
+Fixed passing of ARFLAGS to dtc submake
+
+
+Peter Crosthwaite (3):
+  configure: Put cross compile flags in EXTRA_CFLAGS
+  dtc: add submodule
+  configure/Make: Build libfdt from submodule DTC
+
+ .gitmodules |    3 +++
+ Makefile    |   10 ++++++++++
+ configure   |   47 ++++++++++++++++++++++++++++++++++++-----------
+ dtc         |    1 +
+ 4 files changed, 50 insertions(+), 11 deletions(-)
+ create mode 160000 dtc
+
+
+
+Reviewed-by: Peter Maydell <peter.maydell@linaro.org>

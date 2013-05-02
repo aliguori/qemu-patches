@@ -1,0 +1,38 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Alon Levy <alevy@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: mlureau@redhat.com
+Date: Mon, 22 Apr 2013 18:04:32 +0300
+Message-id: 1366643098-2566-3-git-send-email-alevy@redhat.com
+Subject: [PATCH 02/28] ccid-card-emul: do not crash if backend is not provided
+
+From: Marc-André Lureau <marcandre.lureau@gmail.com>
+
+Program received signal SIGSEGV, Segmentation fault.
+__strcmp_sse42 () at ../sysdeps/x86_64/multiarch/strcmp-sse42.S:164
+164               movdqu        (%rsi), %xmm2
+(gdb) bt
+    at /home/elmarco/320g/src/qemu/hw/ccid-card-emulated.c:477
+    at /home/elmarco/320g/src/qemu/hw/ccid-card-emulated.c:503
+---
+ hw/usb/ccid-card-emulated.c | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/hw/usb/ccid-card-emulated.c b/hw/usb/ccid-card-emulated.c
+index d534c94..6cbb176 100644
+--- a/hw/usb/ccid-card-emulated.c
++++ b/hw/usb/ccid-card-emulated.c
+@@ -473,6 +473,9 @@ static uint32_t parse_enumeration(char *str,
+ {
+     uint32_t ret = not_found_value;
+ 
++    if (str == NULL)
++        return 0;
++
+     while (table->name != NULL) {
+         if (strcmp(table->name, str) == 0) {
+             ret = table->value;
+-- 
+1.8.2
+
+

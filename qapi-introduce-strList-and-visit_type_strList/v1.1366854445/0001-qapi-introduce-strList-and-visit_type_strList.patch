@@ -1,0 +1,108 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Amos Kong <akong@redhat.com>
+To: Anthony Liguori <aliguori@us.ibm.com>, Eric Blake <eblake@redhat.com>
+Cc: Anthony Liguori <aliguori@us.ibm.com>, qemu-devel@nongnu.org,
+ lcapitulino@redhat.com, jyang@redhat.com, pbonzini@redhat.com,
+ eblake@redhat.com
+Date: Wed, 24 Apr 2013 20:47:25 +0800
+Message-id: 1366807646-8473-1-git-send-email-akong@redhat.com
+Subject: [PATCH 1/2] qapi: introduce strList and visit_type_strList()
+
+Currently we can only use ['String'] to add string to a list,
+it contains some additional JSON structure.
+    "multicast": [
+        {
+            "str": "01:80:c2:00:00:21"
+        },
+        {
+            "str": "00:00:00:00:00:00"
+        }
+    ]
+
+This patch introdued strList, we can use ['str']
+
+    "multicast": [
+        "01:00:5e:00:00:01",
+        "33:33:ff:12:34:57"
+    ]
+
+Signed-off-by: Amos Kong <akong@redhat.com>
+Reviewed-by: Eric Blake <eblake@redhat.com>
+---
+I used an _ugly_ "#ifndef" to limit it only be defined in qapi-types.h.
+do you have some suggestion to fix it?
+---
+ include/qapi/visitor.h |    2 ++
+ qapi/qapi-visit-core.c |   23 +++++++++++++++++++++++
+ scripts/qapi-types.py  |    8 ++++++++
+ 3 files changed, 33 insertions(+), 0 deletions(-)
+
+diff --git a/include/qapi/visitor.h b/include/qapi/visitor.h
+index 1fef18c..a79ce79 100644
+--- a/include/qapi/visitor.h
++++ b/include/qapi/visitor.h
+@@ -50,6 +50,8 @@ void visit_type_int64(Visitor *v, int64_t *obj, const char *name, Error **errp);
+ void visit_type_size(Visitor *v, uint64_t *obj, const char *name, Error **errp);
+ void visit_type_bool(Visitor *v, bool *obj, const char *name, Error **errp);
+ void visit_type_str(Visitor *v, char **obj, const char *name, Error **errp);
++void visit_type_strList(Visitor *m, strList ** obj, const char *name,
++                        Error **errp);
+ void visit_type_number(Visitor *v, double *obj, const char *name, Error **errp);
+ 
+ #endif
+diff --git a/qapi/qapi-visit-core.c b/qapi/qapi-visit-core.c
+index 401ee6e..dc54cc8 100644
+--- a/qapi/qapi-visit-core.c
++++ b/qapi/qapi-visit-core.c
+@@ -257,6 +257,29 @@ void visit_type_str(Visitor *v, char **obj, const char *name, Error **errp)
+     }
+ }
+ 
++void visit_type_strList(Visitor *m, strList ** obj, const char *name,
++                        Error **errp)
++{
++    GenericList *i, **prev = (GenericList **)obj;
++    Error *err = NULL;
++
++    if (!error_is_set(errp)) {
++        visit_start_list(m, name, &err);
++        if (!err) {
++            for (; (i = visit_next_list(m, prev, &err)) != NULL; prev = &i) {
++                strList *native_i = (strList *)i;
++                visit_type_str(m, &native_i->value, NULL, &err);
++            }
++            error_propagate(errp, err);
++            err = NULL;
++
++            /* Always call end_list if start_list succeeded.  */
++            visit_end_list(m, &err);
++        }
++        error_propagate(errp, err);
++    }
++}
++
+ void visit_type_number(Visitor *v, double *obj, const char *name, Error **errp)
+ {
+     if (!error_is_set(errp)) {
+diff --git a/scripts/qapi-types.py b/scripts/qapi-types.py
+index 9e19920..f2ca373 100644
+--- a/scripts/qapi-types.py
++++ b/scripts/qapi-types.py
+@@ -276,6 +276,14 @@ fdecl.write(mcgen('''
+ #include <stdbool.h>
+ #include <stdint.h>
+ 
++#ifndef QGA_QAPI_TYPES_H
++typedef struct strList
++{
++  char *value;
++  struct strList *next;
++} strList;
++#endif
++
+ ''',
+                   guard=guardname(h_file)))
+ 
+-- 
+1.7.1
+

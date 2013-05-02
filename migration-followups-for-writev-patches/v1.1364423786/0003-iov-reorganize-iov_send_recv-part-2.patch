@@ -1,0 +1,84 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: Paolo Bonzini <pbonzini@redhat.com>, qemu-devel@nongnu.org
+Cc: owasserm@redhat.com, qemu-devel@nongnu.org, quintela@redhat.com
+Date: Wed, 27 Mar 2013 17:36:29 +0100
+Message-id: 1364402192-18169-4-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 3/6] iov: reorganize iov_send_recv, part 2
+
+Do not touch the "bytes" argument anymore.  Instead, remember the
+original length of the last iovec if we touch it, and restore it
+afterwards.
+
+This requires undoing the changes in opposite order.  The previous
+algorithm didn't care.
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+Reviewed-by: Juan Quintela <quintela@redhat.com>
+---
+ util/iov.c | 28 ++++++++++++++--------------
+ 1 file changed, 14 insertions(+), 14 deletions(-)
+
+diff --git a/util/iov.c b/util/iov.c
+index adb9a70..110d18e 100644
+--- a/util/iov.c
++++ b/util/iov.c
+@@ -145,7 +145,9 @@ ssize_t iov_send_recv(int sockfd, struct iovec *iov, unsigned iov_cnt,
+                       bool do_send)
+ {
+     ssize_t ret;
++    size_t orig_len, tail;
+     unsigned si, ei;            /* start and end indexes */
++
+     if (bytes == 0) {
+         /* Catch the do-nothing case early, as otherwise we will pass an
+          * empty iovec to sendmsg/recvmsg(), and not all implementations
+@@ -174,31 +176,29 @@ ssize_t iov_send_recv(int sockfd, struct iovec *iov, unsigned iov_cnt,
+     }
+     /* Find the end position skipping `bytes' bytes: */
+     /* first, skip all full-sized elements */
+-    for (ei = 0; ei < iov_cnt && iov[ei].iov_len <= bytes; ++ei) {
+-        bytes -= iov[ei].iov_len;
++    tail = bytes;
++    for (ei = 0; ei < iov_cnt && iov[ei].iov_len <= tail; ++ei) {
++        tail -= iov[ei].iov_len;
+     }
+-    if (bytes) {
+-        /* second, fixup the last element, and remember
+-         * the length we've cut from the end of it in `bytes' */
+-        size_t tail;
++    if (tail) {
++        /* second, fixup the last element, and remember the original
++         * length */
+         assert(ei < iov_cnt);
+-        assert(iov[ei].iov_len > bytes);
+-        tail = iov[ei].iov_len - bytes;
+-        iov[ei].iov_len = bytes;
+-        bytes = tail;  /* bytes is now equal to the tail size */
+-        ++ei;
++        assert(iov[ei].iov_len > tail);
++        orig_len = iov[ei].iov_len;
++        iov[ei++].iov_len = tail;
+     }
+ 
+     ret = do_send_recv(sockfd, iov, ei, do_send);
+ 
+     /* Undo the changes above */
++    if (tail) {
++        iov[ei-1].iov_len = orig_len;
++    }
+     if (offset) {
+         iov[0].iov_base -= offset;
+         iov[0].iov_len += offset;
+     }
+-    if (bytes) {
+-        iov[ei-1].iov_len += bytes;
+-    }
+ 
+     return ret;
+ }
+-- 
+1.8.1.4
+
+
+

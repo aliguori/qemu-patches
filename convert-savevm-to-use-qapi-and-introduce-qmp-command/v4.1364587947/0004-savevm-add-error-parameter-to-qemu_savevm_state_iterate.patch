@@ -1,0 +1,70 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Pavel Hrdina <phrdina@redhat.com>
+To: qemu-devel@nongnu.org, Pavel Hrdina <phrdina@redhat.com>
+Cc: qemu-devel@nongnu.org, phrdina@redhat.com, armbru@redhat.com,
+ lcapitulino@redhat.com
+Date: Fri, 29 Mar 2013 15:12:31 +0100
+Message-id: 4f8753c0e4f07511d20648df7340180de1a9e7f1.1364565637.git.phrdina@redhat.com
+Subject: [PATCH 04/11] savevm: add error parameter to
+ qemu_savevm_state_iterate()
+
+Signed-off-by: Pavel Hrdina <phrdina@redhat.com>
+Reviewed-by: Eric Blake <eblake@redhat.com>
+---
+ include/sysemu/sysemu.h | 2 +-
+ migration.c             | 2 +-
+ savevm.c                | 4 ++--
+ 3 files changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/include/sysemu/sysemu.h b/include/sysemu/sysemu.h
+index 2f35a05..af4f699 100644
+--- a/include/sysemu/sysemu.h
++++ b/include/sysemu/sysemu.h
+@@ -76,7 +76,7 @@ bool qemu_savevm_state_blocked(Error **errp);
+ void qemu_savevm_state_begin(QEMUFile *f,
+                              const MigrationParams *params,
+                              Error **errp);
+-int qemu_savevm_state_iterate(QEMUFile *f);
++int qemu_savevm_state_iterate(QEMUFile *f, Error **errp);
+ void qemu_savevm_state_complete(QEMUFile *f);
+ void qemu_savevm_state_cancel(void);
+ uint64_t qemu_savevm_state_pending(QEMUFile *f, uint64_t max_size);
+diff --git a/migration.c b/migration.c
+index d517dd6..e9d2f40 100644
+--- a/migration.c
++++ b/migration.c
+@@ -516,7 +516,7 @@ static void *migration_thread(void *opaque)
+             pending_size = qemu_savevm_state_pending(s->file, max_size);
+             DPRINTF("pending size %lu max %lu\n", pending_size, max_size);
+             if (pending_size && pending_size >= max_size) {
+-                qemu_savevm_state_iterate(s->file);
++                qemu_savevm_state_iterate(s->file, NULL);
+             } else {
+                 DPRINTF("done iterating\n");
+                 qemu_mutex_lock_iothread();
+diff --git a/savevm.c b/savevm.c
+index 56da096..575f1b2 100644
+--- a/savevm.c
++++ b/savevm.c
+@@ -1784,7 +1784,7 @@ void qemu_savevm_state_begin(QEMUFile *f,
+  *   0 : We haven't finished, caller have to go again
+  *   1 : We have finished, we can go to complete phase
+  */
+-int qemu_savevm_state_iterate(QEMUFile *f)
++int qemu_savevm_state_iterate(QEMUFile *f, Error **errp)
+ {
+     SaveStateEntry *se;
+     int ret = 1;
+@@ -1926,7 +1926,7 @@ static int qemu_savevm_state(QEMUFile *f)
+     qemu_mutex_lock_iothread();
+ 
+     while (qemu_file_get_error(f) == 0) {
+-        if (qemu_savevm_state_iterate(f) > 0) {
++        if (qemu_savevm_state_iterate(f, NULL) > 0) {
+             break;
+         }
+     }
+-- 
+1.8.1.4
+
+

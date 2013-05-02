@@ -1,0 +1,1 @@
+../pseries-Update-SLOF-firmware-image/v1.1367383343/0001-pseries-Update-SLOF-firmware-image.patch

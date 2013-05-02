@@ -1,0 +1,816 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Jean-Christophe DUBOIS <jcd@tribudubois.net>
+To: qemu-devel@nongnu.org
+Cc: peter.maydell@linaro.org, peter.chubb@nicta.com.au,
+ Jean-Christophe DUBOIS <jcd@tribudubois.net>, philipo@ok-labs.com
+Date: Fri, 26 Apr 2013 16:01:42 +0200
+Message-id: 1366984902-18649-1-git-send-email-jcd@tribudubois.net
+Subject: [PATCH 1/2] Add i.MX FEC ethernet controller
+
+This port is based on the cold fire FEC emulator.
+
+A generic PHY was added (borrowed from lan9118).
+
+The buffer management is also modified as buffers are
+slightly different between coldfire and i.MX.
+
+Signed-off-by: Jean-Christophe DUBOIS <jcd@tribudubois.net>
+---
+ default-configs/arm-softmmu.mak |   1 +
+ hw/net/Makefile.objs            |   1 +
+ hw/net/imx_fec.c                | 746 ++++++++++++++++++++++++++++++++++++++++
+ include/hw/arm/imx.h            |   1 +
+ 4 files changed, 749 insertions(+)
+ create mode 100644 hw/net/imx_fec.c
+
+diff --git a/default-configs/arm-softmmu.mak b/default-configs/arm-softmmu.mak
+index 27cbe3d..b3a0207 100644
+--- a/default-configs/arm-softmmu.mak
++++ b/default-configs/arm-softmmu.mak
+@@ -28,6 +28,7 @@ CONFIG_SSI_SD=y
+ CONFIG_SSI_M25P80=y
+ CONFIG_LAN9118=y
+ CONFIG_SMC91C111=y
++CONFIG_IMX_FEC=y
+ CONFIG_DS1338=y
+ CONFIG_PFLASH_CFI01=y
+ CONFIG_PFLASH_CFI02=y
+diff --git a/hw/net/Makefile.objs b/hw/net/Makefile.objs
+index 951cca3..5c84727 100644
+--- a/hw/net/Makefile.objs
++++ b/hw/net/Makefile.objs
+@@ -18,6 +18,7 @@ common-obj-$(CONFIG_OPENCORES_ETH) += opencores_eth.o
+ common-obj-$(CONFIG_XGMAC) += xgmac.o
+ common-obj-$(CONFIG_MIPSNET) += mipsnet.o
+ common-obj-$(CONFIG_XILINX_AXI) += xilinx_axienet.o
++common-obj-$(CONFIG_IMX_FEC) += imx_fec.o
+ 
+ common-obj-$(CONFIG_CADENCE) += cadence_gem.o
+ common-obj-$(CONFIG_STELLARIS_ENET) += stellaris_enet.o
+diff --git a/hw/net/imx_fec.c b/hw/net/imx_fec.c
+new file mode 100644
+index 0000000..7ce34b7
+--- /dev/null
++++ b/hw/net/imx_fec.c
+@@ -0,0 +1,746 @@
++/*
++ * i.MX Fast Ethernet Controller emulation.
++ *
++ * Copyright (c) 2013 Jean-Christophe Dubois.
++ *
++ * Based on Coldfire Fast Ethernet Controller emulation.
++ *
++ * Copyright (c) 2007 CodeSourcery.
++ *
++ * This code is licensed under the GPL
++ */
++#include "hw/sysbus.h"
++#include "net/net.h"
++#include "hw/devices.h"
++
++/* For crc32 */
++#include <zlib.h>
++
++#include "hw/arm/imx.h"
++
++//#define DEBUG_FEC 1
++//#define DEBUG_PHY 1
++
++#ifdef DEBUG_FEC
++#define DPRINTF(fmt, ...) \
++do { printf("imx_fec: " fmt , ## __VA_ARGS__); } while (0)
++#else
++#define DPRINTF(fmt, ...) do {} while(0)
++#endif
++
++#ifdef DEBUG_PHY
++#define DPPRINTF(fmt, ...) \
++do { printf("imx_fec_phy: " fmt , ## __VA_ARGS__); } while (0)
++#else
++#define DPPRINTF(fmt, ...) do {} while(0)
++#endif
++
++#define FEC_MAX_FRAME_SIZE 2032
++
++typedef struct {
++    SysBusDevice busdev;
++    NICState *nic;
++    NICConf conf;
++    qemu_irq irq;
++    MemoryRegion iomem;
++
++    uint32_t irq_state;
++    uint32_t eir;
++    uint32_t eimr;
++    uint32_t rx_enabled;
++    uint32_t rx_descriptor;
++    uint32_t tx_descriptor;
++    uint32_t ecr;
++    uint32_t mmfr;
++    uint32_t mscr;
++    uint32_t mibc;
++    uint32_t rcr;
++    uint32_t tcr;
++    uint32_t tfwr;
++    uint32_t frsr;
++    uint32_t erdsr;
++    uint32_t etdsr;
++    uint32_t emrbr;
++    uint32_t miigsk_cfgr;
++    uint32_t miigsk_enr;
++
++    uint32_t phy_status;
++    uint32_t phy_control;
++    uint32_t phy_advertise;
++    uint32_t phy_int;
++    uint32_t phy_int_mask;
++} imx_fec_state;
++
++static const VMStateDescription vmstate_imx_fec = {
++    .name = "fec",
++    .version_id = 1,
++    .minimum_version_id = 1,
++    .fields = (VMStateField[]) {
++        VMSTATE_UINT32(irq_state, imx_fec_state),
++        VMSTATE_UINT32(eir, imx_fec_state),
++        VMSTATE_UINT32(eimr, imx_fec_state),
++        VMSTATE_UINT32(rx_enabled, imx_fec_state),
++        VMSTATE_UINT32(rx_descriptor, imx_fec_state),
++        VMSTATE_UINT32(tx_descriptor, imx_fec_state),
++        VMSTATE_UINT32(ecr, imx_fec_state),
++        VMSTATE_UINT32(mmfr, imx_fec_state),
++        VMSTATE_UINT32(mscr, imx_fec_state),
++        VMSTATE_UINT32(mibc, imx_fec_state),
++        VMSTATE_UINT32(rcr, imx_fec_state),
++        VMSTATE_UINT32(tcr, imx_fec_state),
++        VMSTATE_UINT32(tfwr, imx_fec_state),
++        VMSTATE_UINT32(frsr, imx_fec_state),
++        VMSTATE_UINT32(erdsr, imx_fec_state),
++        VMSTATE_UINT32(etdsr, imx_fec_state),
++        VMSTATE_UINT32(emrbr, imx_fec_state),
++        VMSTATE_UINT32(miigsk_cfgr, imx_fec_state),
++        VMSTATE_UINT32(miigsk_enr, imx_fec_state),
++
++        VMSTATE_UINT32(phy_status, imx_fec_state),
++        VMSTATE_UINT32(phy_control, imx_fec_state),
++        VMSTATE_UINT32(phy_advertise, imx_fec_state),
++        VMSTATE_UINT32(phy_int, imx_fec_state),
++        VMSTATE_UINT32(phy_int_mask, imx_fec_state),
++        VMSTATE_END_OF_LIST()
++    }
++};
++
++#define PHY_INT_ENERGYON            (1 << 7)
++#define PHY_INT_AUTONEG_COMPLETE    (1 << 6)
++#define PHY_INT_FAULT               (1 << 5)
++#define PHY_INT_DOWN                (1 << 4)
++#define PHY_INT_AUTONEG_LP          (1 << 3)
++#define PHY_INT_PARFAULT            (1 << 2)
++#define PHY_INT_AUTONEG_PAGE        (1 << 1)
++
++static void imx_fec_update(imx_fec_state *s);
++
++/*
++ * The MII phy could raise a GPIO to the processor which in turn
++ * could be handled as an interrpt by the OS.
++ * For now we don't handle any GPIO/interrupt line, so the OS will
++ * have to poll for the PHY status.
++ */
++static void phy_update_irq(imx_fec_state *s)
++{
++    if (s->phy_int & s->phy_int_mask) {
++    } else {
++    }
++    imx_fec_update(s);
++}
++
++static void phy_update_link(imx_fec_state *s)
++{
++    /* Autonegotiation status mirrors link status.  */
++    if (qemu_get_queue(s->nic)->link_down) {
++        DPPRINTF("%s: link is down\n", __func__);
++        s->phy_status &= ~0x0024;
++        s->phy_int |= PHY_INT_DOWN;
++    } else {
++        DPPRINTF("%s: link is up\n", __func__);
++        s->phy_status |= 0x0024;
++        s->phy_int |= PHY_INT_ENERGYON;
++        s->phy_int |= PHY_INT_AUTONEG_COMPLETE;
++    }
++    phy_update_irq(s);
++}
++
++static void imx_fec_set_link(NetClientState *nc)
++{
++    phy_update_link(qemu_get_nic_opaque(nc));
++}
++
++static void phy_reset(imx_fec_state *s)
++{
++    DPPRINTF("%s\n", __func__);
++
++    s->phy_status = 0x7809;
++    s->phy_control = 0x3000;
++    s->phy_advertise = 0x01e1;
++    s->phy_int_mask = 0;
++    s->phy_int = 0;
++    phy_update_link(s);
++}
++
++static uint32_t do_phy_read(imx_fec_state *s, int reg)
++{
++    uint32_t val;
++
++    switch (reg) {
++    case 0:     /* Basic Control */
++        DPPRINTF("PHY read reg %d = %04x\n", reg, s->phy_control);
++        return s->phy_control;
++    case 1:     /* Basic Status */
++        DPPRINTF("PHY read reg %d = %04x\n", reg, s->phy_status);
++        return s->phy_status;
++    case 2:     /* ID1 */
++        DPPRINTF("PHY read reg %d = %04x\n", reg, 0x0007);
++        return 0x0007;
++    case 3:     /* ID2 */
++        DPPRINTF("PHY read reg %d = %04x\n", reg, 0xc0d1);
++        return 0xc0d1;
++    case 4:     /* Auto-neg advertisement */
++        DPPRINTF("PHY read reg %d = %04x\n", reg, s->phy_advertise);
++        return s->phy_advertise;
++    case 5:     /* Auto-neg Link Partner Ability */
++        DPPRINTF("PHY read reg %d = %04x\n", reg, 0x0f71);
++        return 0x0f71;
++    case 6:     /* Auto-neg Expansion */
++        DPPRINTF("PHY read reg %d = %04x\n", reg, 1);
++        return 1;
++        /* TODO 17, 18, 27, 29, 30, 31 */
++    case 29:    /* Interrupt source.  */
++        val = s->phy_int;
++        s->phy_int = 0;
++        phy_update_irq(s);
++        return val;
++    case 30:    /* Interrupt mask */
++        return s->phy_int_mask;
++    default:
++        DPPRINTF("PHY read reg %d, ignored, returning 0\n", reg);
++        return 0;
++    }
++}
++
++static void do_phy_write(imx_fec_state *s, int reg, uint32_t val)
++{
++    switch (reg) {
++    case 0:     /* Basic Control */
++        if (val & 0x8000) {
++            phy_reset(s);
++        } else {
++            s->phy_control = val & 0x7980;
++            /* Complete autonegotiation immediately.  */
++            if (val & 0x1000) {
++                s->phy_status |= 0x0020;
++            }
++        }
++        break;
++    case 4:     /* Auto-neg advertisement */
++        s->phy_advertise = (val & 0x2d7f) | 0x80;
++        break;
++        /* TODO 17, 18, 27, 31 */
++    case 30:    /* Interrupt mask */
++        s->phy_int_mask = val & 0xff;
++        phy_update_irq(s);
++        break;
++    default:
++        DPPRINTF("PHY write reg %d = 0x%04x, ignored\n", reg, val);
++    }
++}
++
++#define FEC_INT_HB      (1 << 31)
++#define FEC_INT_BABR    (1 << 30)
++#define FEC_INT_BABT    (1 << 29)
++#define FEC_INT_GRA     (1 << 28)
++#define FEC_INT_TXF     (1 << 27)
++#define FEC_INT_TXB     (1 << 26)
++#define FEC_INT_RXF     (1 << 25)
++#define FEC_INT_RXB     (1 << 24)
++#define FEC_INT_MII     (1 << 23)
++#define FEC_INT_EBERR   (1 << 22)
++#define FEC_INT_LC      (1 << 21)
++#define FEC_INT_RL      (1 << 20)
++#define FEC_INT_UN      (1 << 19)
++
++#define FEC_EN      2
++#define FEC_RESET   1
++
++/* Buffer Descriptor.  */
++typedef struct {
++    uint16_t length;
++    uint16_t flags;
++    uint32_t data;
++} imx_fec_bd;
++
++#define FEC_BD_R    (1 << 15)
++#define FEC_BD_E    (1 << 15)
++#define FEC_BD_O1   (1 << 14)
++#define FEC_BD_W    (1 << 13)
++#define FEC_BD_O2   (1 << 12)
++#define FEC_BD_L    (1 << 11)
++#define FEC_BD_TC   (1 << 10)
++#define FEC_BD_ABC  (1 << 9)
++#define FEC_BD_M    (1 << 8)
++#define FEC_BD_BC   (1 << 7)
++#define FEC_BD_MC   (1 << 6)
++#define FEC_BD_LG   (1 << 5)
++#define FEC_BD_NO   (1 << 4)
++#define FEC_BD_CR   (1 << 2)
++#define FEC_BD_OV   (1 << 1)
++#define FEC_BD_TR   (1 << 0)
++
++static void imx_fec_read_bd(imx_fec_bd *bd, uint32_t addr)
++{
++    cpu_physical_memory_read(addr, (uint8_t *) bd, sizeof(*bd));
++}
++
++static void imx_fec_write_bd(imx_fec_bd *bd, uint32_t addr)
++{
++    cpu_physical_memory_write(addr, (uint8_t *) bd, sizeof(*bd));
++}
++
++static void imx_fec_update(imx_fec_state *s)
++{
++    uint32_t active;
++    uint32_t changed;
++
++    active = s->eir & s->eimr;
++    changed = active ^ s->irq_state;
++    qemu_set_irq(s->irq, changed);
++    s->irq_state = active;
++}
++
++static void imx_fec_do_tx(imx_fec_state *s)
++{
++    uint32_t addr;
++    imx_fec_bd bd;
++    int frame_size;
++    int len;
++    uint8_t frame[FEC_MAX_FRAME_SIZE];
++    uint8_t *ptr;
++
++    DPRINTF("%s:\n", __func__);
++    ptr = frame;
++    frame_size = 0;
++    addr = s->tx_descriptor;
++    while (1) {
++        imx_fec_read_bd(&bd, addr);
++        DPRINTF("%s: tx_bd %x flags %04x len %d data %08x\n",
++                __func__, addr, bd.flags, bd.length, bd.data);
++        if ((bd.flags & FEC_BD_R) == 0) {
++            /* Run out of descriptors to transmit.  */
++            break;
++        }
++        len = bd.length;
++        if (frame_size + len > FEC_MAX_FRAME_SIZE) {
++            len = FEC_MAX_FRAME_SIZE - frame_size;
++            s->eir |= FEC_INT_BABT;
++        }
++        cpu_physical_memory_read(bd.data, ptr, len);
++        ptr += len;
++        frame_size += len;
++        if (bd.flags & FEC_BD_L) {
++            /* Last buffer in frame.  */
++            DPRINTF("Sending packet\n");
++            qemu_send_packet(qemu_get_queue(s->nic), frame, len);
++            ptr = frame;
++            frame_size = 0;
++            s->eir |= FEC_INT_TXF;
++        }
++        s->eir |= FEC_INT_TXB;
++        bd.flags &= ~FEC_BD_R;
++        /* Write back the modified descriptor.  */
++        imx_fec_write_bd(&bd, addr);
++        /* Advance to the next descriptor.  */
++        if ((bd.flags & FEC_BD_W) != 0) {
++            addr = s->etdsr;
++        } else {
++            addr += 8;
++        }
++    }
++    s->tx_descriptor = addr;
++    imx_fec_update(s);
++}
++
++static void imx_fec_enable_rx(imx_fec_state *s)
++{
++    imx_fec_bd bd;
++
++    imx_fec_read_bd(&bd, s->rx_descriptor);
++    s->rx_enabled = ((bd.flags & FEC_BD_E) != 0);
++    if (!s->rx_enabled) {
++        DPRINTF("%s: RX buffer full\n", __func__);
++    }
++}
++
++static void imx_fec_reset(DeviceState *d)
++{
++    imx_fec_state *s = FROM_SYSBUS(imx_fec_state, SYS_BUS_DEVICE(d));
++
++    /* Reset the FEC */
++    s->eir = 0;
++    s->eimr = 0;
++    s->rx_enabled = 0;
++    s->ecr = 0;
++    s->mscr = 0;
++    s->mibc = 0xc0000000;
++    s->rcr = 0x05ee0001;
++    s->tcr = 0;
++    s->tfwr = 0;
++    s->frsr = 0x500;
++    s->miigsk_cfgr = 0;
++    s->miigsk_enr = 0x6;
++
++    /* We also reset the PHY */
++    phy_reset(s);
++}
++
++static uint64_t imx_fec_read(void *opaque, hwaddr addr, unsigned size)
++{
++    imx_fec_state *s = (imx_fec_state *) opaque;
++
++    DPRINTF("%s: addr = 0x%x\n", __func__, (int)addr);
++
++    switch (addr & 0x3ff) {
++    case 0x004:
++        return s->eir;
++    case 0x008:
++        return s->eimr;
++    case 0x010:
++        return s->rx_enabled ? (1 << 24) : 0;   /* RDAR */
++    case 0x014:
++        return 0;   /* TDAR */
++    case 0x024:
++        return s->ecr;
++    case 0x040:
++        return s->mmfr;
++    case 0x044:
++        return s->mscr;
++    case 0x064:
++        return s->mibc; /* MIBC */
++    case 0x084:
++        return s->rcr;
++    case 0x0c4:
++        return s->tcr;
++    case 0x0e4:     /* PALR */
++        return (s->conf.macaddr.a[0] << 24) | (s->conf.macaddr.
++                                               a[1] << 16)
++               | (s->conf.macaddr.a[2] << 8) | s->conf.macaddr.a[3];
++        break;
++    case 0x0e8:     /* PAUR */
++        return (s->conf.macaddr.a[4] << 24) | (s->conf.macaddr.
++                                               a[5] << 16) | 0x8808;
++    case 0x0ec:
++        return 0x10000; /* OPD */
++    case 0x118:
++        return 0;
++    case 0x11c:
++        return 0;
++    case 0x120:
++        return 0;
++    case 0x124:
++        return 0;
++    case 0x144:
++        return s->tfwr;
++    case 0x14c:
++        return 0x600;
++    case 0x150:
++        return s->frsr;
++    case 0x180:
++        return s->erdsr;
++    case 0x184:
++        return s->etdsr;
++    case 0x188:
++        return s->emrbr;
++    case 0x300:
++        return s->miigsk_cfgr;
++    case 0x308:
++        return s->miigsk_enr;
++    default:
++        hw_error("imx_fec_read: Bad address 0x%x\n", (int)addr);
++        return 0;
++    }
++}
++
++static void imx_fec_write(void *opaque, hwaddr addr,
++                          uint64_t value, unsigned size)
++{
++    imx_fec_state *s = (imx_fec_state *) opaque;
++
++    DPRINTF("%s: 0x%x @ addr = 0x%x\n", __func__, (int)value, (int)addr);
++
++    switch (addr & 0x3ff) {
++    case 0x004: /* EIR */
++        s->eir &= ~value;
++        break;
++    case 0x008: /* EIMR */
++        s->eimr = value;
++        break;
++    case 0x010: /* RDAR */
++        if ((s->ecr & FEC_EN) && !s->rx_enabled) {
++            DPRINTF("RX enable\n");
++            imx_fec_enable_rx(s);
++        }
++        break;
++    case 0x014: /* TDAR */
++        if (s->ecr & FEC_EN) {
++            imx_fec_do_tx(s);
++        }
++        break;
++    case 0x024: /* ECR */
++        s->ecr = value;
++        if (value & FEC_RESET) {
++            DPRINTF("Reset\n");
++            imx_fec_reset(&s->busdev.qdev);
++        }
++        if ((s->ecr & FEC_EN) == 0) {
++            s->rx_enabled = 0;
++        }
++        break;
++    case 0x040: /* MMFR */
++        /* store the value */
++        s->mmfr = value;
++        if (value & (1 << 28)) {
++            DPRINTF("PHY write %d = 0x%04x\n",
++                    ((int)value >> 18) & 0x1f, (int)value & 0xffff);
++            do_phy_write(s, (value >> 18) & 0x1f, value & 0xffff);
++        } else {
++            s->mmfr = do_phy_read(s, (value >> 18) & 0x1f);
++            DPRINTF("PHY read %d = 0x%04x\n",
++                    ((int)value >> 18) & 0x1f, s->mmfr & 0xffff);
++        }
++        /* raise the interrupt as the PHY operation is done */
++        s->eir |= FEC_INT_MII;
++        break;
++    case 0x044: /* MSCR */
++        s->mscr = value & 0xfe;
++        break;
++    case 0x064: /* MIBC */
++        /* TODO: Implement MIB.  */
++        s->mibc = (value & 0x80000000) ? 0xc0000000 : 0;
++        break;
++    case 0x084: /* RCR */
++        s->rcr = value & 0x07ff003f;
++        /* TODO: Implement LOOP mode.  */
++        break;
++    case 0x0c4: /* TCR */
++        /* We transmit immediately, so raise GRA immediately.  */
++        s->tcr = value;
++        if (value & 1) {
++            s->eir |= FEC_INT_GRA;
++        }
++        break;
++    case 0x0e4: /* PALR */
++        s->conf.macaddr.a[0] = value >> 24;
++        s->conf.macaddr.a[1] = value >> 16;
++        s->conf.macaddr.a[2] = value >> 8;
++        s->conf.macaddr.a[3] = value;
++        break;
++    case 0x0e8: /* PAUR */
++        s->conf.macaddr.a[4] = value >> 24;
++        s->conf.macaddr.a[5] = value >> 16;
++        break;
++    case 0x0ec: /* OPDR */
++        break;
++    case 0x118: /* IAUR */
++    case 0x11c: /* IALR */
++    case 0x120: /* GAUR */
++    case 0x124: /* GALR */
++        /* TODO: implement MAC hash filtering.  */
++        break;
++    case 0x144: /* TFWR */
++        s->tfwr = value & 3;
++        break;
++    case 0x14c: /* FRBR */
++        /* FRBR writes ignored.  */
++        break;
++    case 0x150: /* FRSR */
++        s->frsr = (value & 0x3fc) | 0x400;
++        break;
++    case 0x180: /* ERDSR */
++        s->erdsr = value & ~3;
++        s->rx_descriptor = s->erdsr;
++        break;
++    case 0x184: /* ETDSR */
++        s->etdsr = value & ~3;
++        s->tx_descriptor = s->etdsr;
++        break;
++    case 0x188: /* EMRBR */
++        s->emrbr = value & 0x7f0;
++        break;
++    case 0x300: /* MIIGSK_CFGR */
++        s->miigsk_cfgr = value & 0x53;
++        break;
++    case 0x308: /* MIIGSK_ENR */
++        s->miigsk_enr = (value & 0x2) ? 0x6 : 0;
++        break;
++    default:
++        hw_error("imx_fec_write Bad address 0x%x\n", (int)addr);
++    }
++    imx_fec_update(s);
++}
++
++static int imx_fec_can_receive(NetClientState *nc)
++{
++    imx_fec_state *s = qemu_get_nic_opaque(nc);
++
++    return s->rx_enabled;
++}
++
++static ssize_t imx_fec_receive(NetClientState *nc, const uint8_t *buf,
++                               size_t len)
++{
++    imx_fec_state *s = qemu_get_nic_opaque(nc);
++    imx_fec_bd bd;
++    uint32_t flags = 0;
++    uint32_t addr;
++    uint32_t crc;
++    uint32_t buf_addr;
++    uint8_t *crc_ptr;
++    unsigned int buf_len;
++    size_t size = len;
++
++    DPRINTF("%s: len %d\n", __func__, (int)size);
++
++    if (!s->rx_enabled) {
++        DPRINTF("%s: Unexpected packet\n", __func__);
++        return 0;
++    }
++    /* 4 bytes for the CRC.  */
++    size += 4;
++    crc = cpu_to_be32(crc32(~0, buf, size));
++    crc_ptr = (uint8_t *) & crc;
++    /* Huge frames are truncted.  */
++    if (size > FEC_MAX_FRAME_SIZE) {
++        size = FEC_MAX_FRAME_SIZE;
++        flags |= FEC_BD_TR | FEC_BD_LG;
++    }
++    /* Frames larger than the user limit just set error flags.  */
++    if (size > (s->rcr >> 16)) {
++        flags |= FEC_BD_LG;
++    }
++    addr = s->rx_descriptor;
++    while (size > 0) {
++        imx_fec_read_bd(&bd, addr);
++        if ((bd.flags & FEC_BD_E) == 0) {
++            /* No descriptors available.  Bail out.  */
++            /*
++             * FIXME: This is wrong. We should probably either
++             * save the remainder for when more RX buffers are
++             * available, or flag an error.
++             */
++            DPRINTF("%s: Lost end of frame\n", __func__);
++            break;
++        }
++        buf_len = (size <= s->emrbr) ? size : s->emrbr;
++        bd.length = buf_len;
++        size -= buf_len;
++        DPRINTF("rx_bd %x length %d\n", addr, bd.length);
++        /* The last 4 bytes are the CRC.  */
++        if (size < 4) {
++            buf_len += size - 4;
++        }
++        buf_addr = bd.data;
++        cpu_physical_memory_write(buf_addr, buf, buf_len);
++        buf += buf_len;
++        if (size < 4) {
++            cpu_physical_memory_write(buf_addr + buf_len, crc_ptr,
++                                      4 - size);
++            crc_ptr += 4 - size;
++        }
++        bd.flags &= ~FEC_BD_E;
++        if (size == 0) {
++            /* Last buffer in frame.  */
++            bd.flags |= flags | FEC_BD_L;
++            DPRINTF("rx frame flags %04x\n", bd.flags);
++            s->eir |= FEC_INT_RXF;
++        } else {
++            s->eir |= FEC_INT_RXB;
++        }
++        imx_fec_write_bd(&bd, addr);
++        /* Advance to the next descriptor.  */
++        if ((bd.flags & FEC_BD_W) != 0) {
++            addr = s->erdsr;
++        } else {
++            addr += 8;
++        }
++    }
++    s->rx_descriptor = addr;
++    imx_fec_enable_rx(s);
++    imx_fec_update(s);
++    return len;
++}
++
++static const MemoryRegionOps imx_fec_ops = {
++    .read = imx_fec_read,
++    .write = imx_fec_write,
++    .endianness = DEVICE_NATIVE_ENDIAN,
++};
++
++static void imx_fec_cleanup(NetClientState *nc)
++{
++    imx_fec_state *s = qemu_get_nic_opaque(nc);
++
++    s->nic = NULL;
++}
++
++static NetClientInfo net_imx_fec_info = {
++    .type = NET_CLIENT_OPTIONS_KIND_NIC,
++    .size = sizeof(NICState),
++    .can_receive = imx_fec_can_receive,
++    .receive = imx_fec_receive,
++    .cleanup = imx_fec_cleanup,
++    .link_status_changed = imx_fec_set_link,
++};
++
++static int imx_fec_init(SysBusDevice *dev)
++{
++    imx_fec_state *s = FROM_SYSBUS(imx_fec_state, dev);
++
++    memory_region_init_io(&s->iomem, &imx_fec_ops, s, "fec_mmio", 0x400);
++    sysbus_init_mmio(dev, &s->iomem);
++    sysbus_init_irq(dev, &s->irq);
++    qemu_macaddr_default_if_unset(&s->conf.macaddr);
++
++    s->conf.peers.ncs[0] = nd_table[0].netdev;
++
++    s->nic = qemu_new_nic(&net_imx_fec_info, &s->conf,
++                          object_get_typename(OBJECT(dev)), dev->qdev.id,
++                          s);
++    qemu_format_nic_info_str(qemu_get_queue(s->nic), s->conf.macaddr.a);
++
++    return 0;
++}
++
++static Property imx_fec_properties[] = {
++    DEFINE_NIC_PROPERTIES(imx_fec_state, conf),
++    DEFINE_PROP_END_OF_LIST(),
++};
++
++static void imx_fec_class_init(ObjectClass *klass, void *data)
++{
++    DeviceClass *dc = DEVICE_CLASS(klass);
++    SysBusDeviceClass *k = SYS_BUS_DEVICE_CLASS(klass);
++
++    k->init = imx_fec_init;
++    dc->reset = imx_fec_reset;
++    dc->vmsd = &vmstate_imx_fec;
++    dc->props = imx_fec_properties;
++}
++
++static const TypeInfo imx_fec_info = {
++    .name = "fec",
++    .parent = TYPE_SYS_BUS_DEVICE,
++    .instance_size = sizeof(imx_fec_state),
++    .class_init = imx_fec_class_init,
++};
++
++static void imx_fec_register_types(void)
++{
++    type_register_static(&imx_fec_info);
++}
++
++void imx_fec_create(int nic, const hwaddr base, qemu_irq irq)
++{
++    NICInfo *nd;
++    DeviceState *dev;
++    SysBusDevice *s;
++
++    if (nic >= MAX_NICS) {
++        hw_error("Cannot assign nic %d: QEMU supports only %d ports\n",
++                 nic, MAX_NICS);
++    }
++
++    nd = &nd_table[nic];
++
++    qemu_check_nic_model(nd, "fec");
++    dev = qdev_create(NULL, "fec");
++    qdev_set_nic_properties(dev, nd);
++    qdev_init_nofail(dev);
++    s = SYS_BUS_DEVICE(dev);
++    sysbus_mmio_map(s, 0, base);
++    sysbus_connect_irq(s, 0, irq);
++};
++
++type_init(imx_fec_register_types)
+diff --git a/include/hw/arm/imx.h b/include/hw/arm/imx.h
+index ea9e093..a875171 100644
+--- a/include/hw/arm/imx.h
++++ b/include/hw/arm/imx.h
+@@ -30,5 +30,6 @@ void imx_timerg_create(const hwaddr addr,
+                       qemu_irq irq,
+                       DeviceState *ccm);
+ 
++void imx_fec_create(int nic, const hwaddr base, qemu_irq irq);
+ 
+ #endif /* IMX_H */
+-- 
+1.8.1.2
+
+

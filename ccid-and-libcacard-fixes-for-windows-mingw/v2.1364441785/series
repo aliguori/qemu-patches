@@ -1,0 +1,11 @@
+0000-ccid-and-libcacard-fixes-for-windows-mingw.txt
+0001-libcacard-change-default-ATR.patch
+0002-ccid-card-passthru-add-atr-check.patch
+0003-ccid-card-passthru-dev-smartcard-reader-add-debug-environment-variables.patch
+0004-dev-smartcard-reader-define-structs-for-CCID_Parameter-internals.patch
+0005-dev-smartcard-reader-change-default-protocol-to-T0.patch
+0006-dev-smartcard-reader-copy-atr-protocol-to-ccid-parameters.patch
+0007-libcacard-vreader-add-debugging-messages-for-apdu.patch
+0008-libcacard-move-atr-setting-from-macro-to-function.patch
+0009-dev-smartcard-reader-empty-implementation-for-Mechanical-fail-correctly.patch
+0010-libcacard-cac-change-big-switch-functions-to-single-return-point.patch

@@ -1,0 +1,58 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: 
+Date: Tue,  2 Apr 2013 16:58:41 +0200
+Message-id: 1364914749-11141-8-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 07/35] hw: make all of hw/usb/ configurable via
+ default-configs/
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ default-configs/arm-softmmu.mak | 1 +
+ hw/arm/Makefile.objs            | 2 +-
+ hw/usb/Makefile.objs            | 1 +
+ 3 files changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/default-configs/arm-softmmu.mak b/default-configs/arm-softmmu.mak
+index 2d53895..4b72019 100644
+--- a/default-configs/arm-softmmu.mak
++++ b/default-configs/arm-softmmu.mak
+@@ -30,6 +30,7 @@ CONFIG_DS1338=y
+ CONFIG_PFLASH_CFI01=y
+ CONFIG_PFLASH_CFI02=y
+ CONFIG_MICRODRIVE=y
++CONFIG_USB_MUSB=y
+ 
+ CONFIG_ARM_TIMER=y
+ CONFIG_PL011=y
+diff --git a/hw/arm/Makefile.objs b/hw/arm/Makefile.objs
+index 6253dbc..d809ad8 100644
+--- a/hw/arm/Makefile.objs
++++ b/hw/arm/Makefile.objs
+@@ -17,7 +17,7 @@ obj-y += omap_lcdc.o omap_dma.o omap_clk.o omap_mmc.o omap_i2c.o \
+ obj-y += omap_dss.o soc_dma.o omap_gptimer.o omap_synctimer.o \
+                 omap_gpmc.o omap_sdrc.o omap_spi.o omap_tap.o omap_l4.o
+ obj-y += tsc210x.o
+-obj-y += blizzard.o onenand.o cbus.o tusb6010.o usb/hcd-musb.o
++obj-y += blizzard.o onenand.o cbus.o tusb6010.o
+ obj-y += mst_fpga.o
+ obj-y += bitbang_i2c.o marvell_88w8618_audio.o
+ obj-y += framebuffer.o
+diff --git a/hw/usb/Makefile.objs b/hw/usb/Makefile.objs
+index 5c20644..f9695e7 100644
+--- a/hw/usb/Makefile.objs
++++ b/hw/usb/Makefile.objs
+@@ -7,6 +7,7 @@ common-obj-$(CONFIG_USB_UHCI) += hcd-uhci.o
+ common-obj-$(CONFIG_USB_OHCI) += hcd-ohci.o
+ common-obj-$(CONFIG_USB_EHCI) += hcd-ehci.o hcd-ehci-pci.o hcd-ehci-sysbus.o
+ common-obj-$(CONFIG_USB_XHCI) += hcd-xhci.o
++common-obj-$(CONFIG_USB_MUSB) += hcd-musb.o
+ 
+ # emulated usb devices
+ common-obj-y += dev-hub.o
+-- 
+1.8.1.4
+
+
+

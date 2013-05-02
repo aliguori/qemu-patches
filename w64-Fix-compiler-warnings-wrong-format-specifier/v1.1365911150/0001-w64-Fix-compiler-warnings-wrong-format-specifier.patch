@@ -1,0 +1,51 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Stefan Weil <sw@weilnetz.de>
+To: qemu-trivial@nongnu.org, Stefan Weil <sw@weilnetz.de>
+Cc: qemu-trivial@nongnu.org, qemu-devel@nongnu.org,
+ Stefan Weil <sw@weilnetz.de>
+Date: Sat, 13 Apr 2013 22:45:50 +0200
+Message-id: 1365885950-27598-1-git-send-email-sw@weilnetz.de
+Subject: [PATCH 1/1] w64: Fix compiler warnings (wrong format specifier)
+
+GetLastError() returns a DWORD value which is unsigned long,
+so the correct format specifier is %lu.
+
+Signed-off-by: Stefan Weil <sw@weilnetz.de>
+---
+
+Debian's w32 cross compiler does not complain about the wrong
+specifiers, but the w64 cross compiler does.
+
+I'm sorry that I did not notice this before sending the pull
+request.
+
+
+ cpus.c |    4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/cpus.c b/cpus.c
+index 97e9ab4..3f754c6 100644
+--- a/cpus.c
++++ b/cpus.c
+@@ -865,7 +865,7 @@ static void qemu_cpu_kick_thread(CPUState *cpu)
+         CONTEXT tcgContext;
+ 
+         if (SuspendThread(cpu->hThread) == (DWORD)-1) {
+-            fprintf(stderr, "qemu:%s: GetLastError:%d\n", __func__,
++            fprintf(stderr, "qemu:%s: GetLastError:%lu\n", __func__,
+                     GetLastError());
+             exit(1);
+         }
+@@ -881,7 +881,7 @@ static void qemu_cpu_kick_thread(CPUState *cpu)
+         cpu_signal(0);
+ 
+         if (ResumeThread(cpu->hThread) == (DWORD)-1) {
+-            fprintf(stderr, "qemu:%s: GetLastError:%d\n", __func__,
++            fprintf(stderr, "qemu:%s: GetLastError:%lu\n", __func__,
+                     GetLastError());
+             exit(1);
+         }
+-- 
+1.7.10.4
+
+

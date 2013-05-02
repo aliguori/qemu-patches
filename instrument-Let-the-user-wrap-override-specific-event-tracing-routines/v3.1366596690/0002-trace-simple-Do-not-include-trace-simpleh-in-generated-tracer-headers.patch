@@ -1,0 +1,56 @@
+From patches Mon Sep 17 00:00:00 2001
+From: =?utf-8?q?Llu=C3=ADs_Vilanova_=3Cvilanova=40ac=2Eupc=2Eedu=3E?=
+To: qemu-devel@nongnu.org
+Cc: 
+Date: Sun, 21 Apr 2013 21:11:41 +0200
+Message-id: 20130421191141.8947.42302.stgit@fimbulvetr.bsc.es
+Subject: [PATCH 02/24] trace: [simple] Do not include "trace/simple.h" in
+ generated tracer headers
+
+The header is not necessary, given that the simple backend does not define any
+inlined tracing routines.
+
+Signed-off-by: Lluís Vilanova <vilanova@ac.upc.edu>
+---
+ scripts/tracetool/backend/simple.py |    5 +----
+ trace/simple.c                      |    2 ++
+ 2 files changed, 3 insertions(+), 4 deletions(-)
+
+diff --git a/scripts/tracetool/backend/simple.py b/scripts/tracetool/backend/simple.py
+index 37ef599..e754f0d 100644
+--- a/scripts/tracetool/backend/simple.py
++++ b/scripts/tracetool/backend/simple.py
+@@ -6,7 +6,7 @@ Simple built-in backend.
+ """
+ 
+ __author__     = "Lluís Vilanova <vilanova@ac.upc.edu>"
+-__copyright__  = "Copyright 2012, Lluís Vilanova <vilanova@ac.upc.edu>"
++__copyright__  = "Copyright 2012-2013, Lluís Vilanova <vilanova@ac.upc.edu>"
+ __license__    = "GPL version 2 or (at your option) any later version"
+ 
+ __maintainer__ = "Stefan Hajnoczi"
+@@ -93,9 +93,6 @@ def c(events):
+ 
+ 
+ def h(events):
+-    out('#include "trace/simple.h"',
+-        '')
+-
+     for event in events:
+         out('void trace_%(name)s(%(args)s);',
+             name = event.name,
+diff --git a/trace/simple.c b/trace/simple.c
+index 1e3f691..8b59760 100644
+--- a/trace/simple.c
++++ b/trace/simple.c
+@@ -8,6 +8,8 @@
+  *
+  */
+ 
++#include "trace/simple.h"
++
+ #include <stdlib.h>
+ #include <stdint.h>
+ #include <stdio.h>
+
+

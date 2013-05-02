@@ -1,0 +1,241 @@
+From patches Mon Sep 17 00:00:00 2001
+From: =?utf-8?q?Beno=C3=AEt_Canet_=3Cbenoit=40irqsave=2Enet=3E?=
+To: =?UTF-8?Q?Beno=C3=AEt_Canet?= <benoit@irqsave.net>, qemu-devel@nongnu.org,
+ =?UTF-8?B?QmVub8OudCBDYW5ldA==?= <benoit@irqsave.net>
+Cc: =?UTF-8?q?Beno=C3=AEt=20Canet?= <benoit@irqsave.net>, qemu-devel@nongnu.org,
+ aneesh.kumar@linux.vnet.ibm.com, quintela@redhat.com
+Date: Thu, 11 Apr 2013 14:14:25 +0200
+Message-id: 1365682468-12301-2-git-send-email-benoit@irqsave.net
+Subject: [PATCH 1/4] migration: Create the pre migration flush hook
+ infrastructure.
+
+This patch will allow the block layer and virtio-9p to cleanly register io flush
+hooks to be executed by cpus.c.
+
+Signed-off-by: Benoit Canet <benoit@irqsave.net>
+---
+ Makefile                                  |    6 +--
+ Makefile.objs                             |    2 +-
+ block.c                                   |    8 ++++
+ cpus.c                                    |    6 ++-
+ include/migration/migration-flush-hooks.h |   30 ++++++++++++++
+ migration-flush-hooks.c                   |   62 +++++++++++++++++++++++++++++
+ vl.c                                      |    6 +++
+ 7 files changed, 114 insertions(+), 6 deletions(-)
+ create mode 100644 include/migration/migration-flush-hooks.h
+ create mode 100644 migration-flush-hooks.c
+
+diff --git a/Makefile b/Makefile
+index 80344d9..bb11da5 100644
+--- a/Makefile
++++ b/Makefile
+@@ -170,9 +170,9 @@ libqemuutil.a: $(util-obj-y)
+ 
+ qemu-img.o: qemu-img-cmds.h
+ 
+-qemu-img$(EXESUF): qemu-img.o $(block-obj-y) libqemuutil.a libqemustub.a
+-qemu-nbd$(EXESUF): qemu-nbd.o $(block-obj-y) libqemuutil.a libqemustub.a
+-qemu-io$(EXESUF): qemu-io.o cmd.o $(block-obj-y) libqemuutil.a libqemustub.a
++qemu-img$(EXESUF): qemu-img.o $(block-obj-y) libqemuutil.a libqemustub.a migration-flush-hooks.o
++qemu-nbd$(EXESUF): qemu-nbd.o $(block-obj-y) libqemuutil.a libqemustub.a migration-flush-hooks.o
++qemu-io$(EXESUF): qemu-io.o cmd.o $(block-obj-y) libqemuutil.a libqemustub.a migration-flush-hooks.o
+ 
+ qemu-bridge-helper$(EXESUF): qemu-bridge-helper.o
+ 
+diff --git a/Makefile.objs b/Makefile.objs
+index f99841c..707faa4 100644
+--- a/Makefile.objs
++++ b/Makefile.objs
+@@ -57,7 +57,7 @@ common-obj-$(CONFIG_POSIX) += os-posix.o
+ 
+ common-obj-$(CONFIG_LINUX) += fsdev/
+ 
+-common-obj-y += migration.o migration-tcp.o
++common-obj-y += migration.o migration-tcp.o migration-flush-hooks.o
+ common-obj-y += qemu-char.o #aio.o
+ common-obj-y += block-migration.o
+ common-obj-y += page_cache.o xbzrle.o
+diff --git a/block.c b/block.c
+index 0ae2e93..b8d8ccc 100644
+--- a/block.c
++++ b/block.c
+@@ -34,6 +34,7 @@
+ #include "block/coroutine.h"
+ #include "qmp-commands.h"
+ #include "qemu/timer.h"
++#include "migration/migration-flush-hooks.h"
+ 
+ #ifdef CONFIG_BSD
+ #include <sys/types.h>
+@@ -4131,8 +4132,15 @@ BlockDriverAIOCB *bdrv_aio_discard(BlockDriverState *bs,
+     return &acb->common;
+ }
+ 
++static void bdrv_migration_flush_hook(void)
++{
++    bdrv_drain_all();
++    bdrv_flush_all();
++}
++
+ void bdrv_init(void)
+ {
++    register_migration_flush_hook(bdrv_migration_flush_hook);
+     module_call_init(MODULE_INIT_BLOCK);
+ }
+ 
+diff --git a/cpus.c b/cpus.c
+index e919dd7..9beaebc 100644
+--- a/cpus.c
++++ b/cpus.c
+@@ -38,6 +38,8 @@
+ #include "qemu/main-loop.h"
+ #include "qemu/bitmap.h"
+ 
++#include "migration/migration-flush-hooks.h"
++
+ #ifndef _WIN32
+ #include "qemu/compatfd.h"
+ #endif
+@@ -444,8 +446,8 @@ static void do_vm_stop(RunState state)
+         pause_all_vcpus();
+         runstate_set(state);
+         vm_state_notify(0, state);
+-        bdrv_drain_all();
+-        bdrv_flush_all();
++        /* Here we will flush remaining ios */
++        exec_migration_flush_hooks();
+         monitor_protocol_event(QEVENT_STOP, NULL);
+     }
+ }
+diff --git a/include/migration/migration-flush-hooks.h b/include/migration/migration-flush-hooks.h
+new file mode 100644
+index 0000000..be9e597
+--- /dev/null
++++ b/include/migration/migration-flush-hooks.h
+@@ -0,0 +1,30 @@
++/*
++ * QEMU live pre migration flush hooks
++ *
++ * Copyright Nodalink, SARL. 2013
++ *
++ * Authors:
++ *  Benoît Canet <benoit@irqsave.net>
++ *
++ * This work is licensed under the terms of the GNU GPL, version 2 or later.
++ * See the COPYING file in the top-level directory.
++ *
++ */
++
++#ifndef QEMU_MIGRATION_FLUSH_HOOKS_H
++#define QEMU_MIGRATION_FLUSH_HOOKS_H
++
++#include "qemu/queue.h"
++
++typedef struct MigrationFlushHookEntry {
++    void (*flush_hook)(void);
++    QTAILQ_ENTRY(MigrationFlushHookEntry) node;
++} MigrationFlushHookEntry;
++
++void init_migration_flush_hooks(void);
++
++void register_migration_flush_hook(void (*fn)(void));
++
++void exec_migration_flush_hooks(void);
++
++#endif
+diff --git a/migration-flush-hooks.c b/migration-flush-hooks.c
+new file mode 100644
+index 0000000..b8e1bf4
+--- /dev/null
++++ b/migration-flush-hooks.c
+@@ -0,0 +1,62 @@
++/*
++ * QEMU live pre migration flush hooks
++ *
++ * Copyright Nodalink, SARL. 2013
++ *
++ * Modeled after utils/modules.c
++ *
++ * Authors:
++ *  Benoît Canet <benoit@irqsave.net>
++ *
++ * This work is licensed under the terms of the GNU GPL, version 2 or later.
++ * See the COPYING file in the top-level directory.
++ *
++ * The purpose of this file is to allow various part of QEMU to register hooks
++ * used to flush ios after vcpus are paused on live migration preparation.
++ *
++ */
++#include <glib.h>
++#include "migration/migration-flush-hooks.h"
++
++
++typedef QTAILQ_HEAD(, MigrationFlushHookEntry) FlushHookList;
++
++/* the static NULL pointer will disable the feature if not initialized */
++static FlushHookList *flush_hooks;
++
++void init_migration_flush_hooks(void)
++{
++    if (flush_hooks) {
++        return;
++    }
++
++    flush_hooks = g_new0(FlushHookList, 1);
++    QTAILQ_INIT(flush_hooks);
++}
++
++void register_migration_flush_hook(void (*fn)(void))
++{
++    MigrationFlushHookEntry *e;
++
++    if (!flush_hooks) {
++        return;
++    }
++
++    e = g_new0(MigrationFlushHookEntry, 1);
++    e->flush_hook = fn;
++
++    QTAILQ_INSERT_TAIL(flush_hooks, e, node);
++}
++
++void exec_migration_flush_hooks(void)
++{
++    MigrationFlushHookEntry *e;
++
++    if (!flush_hooks) {
++        return;
++    }
++
++    QTAILQ_FOREACH(e, flush_hooks, node) {
++        e->flush_hook();
++    }
++}
+diff --git a/vl.c b/vl.c
+index e2c9706..b4fbcf7 100644
+--- a/vl.c
++++ b/vl.c
+@@ -139,6 +139,7 @@ int main(int argc, char **argv)
+ #include "sysemu/blockdev.h"
+ #include "hw/block-common.h"
+ #include "migration/block.h"
++#include "migration/migration-flush-hooks.h"
+ #include "tpm/tpm.h"
+ #include "sysemu/dma.h"
+ #include "audio/audio.h"
+@@ -2941,6 +2942,11 @@ int main(int argc, char **argv, char **envp)
+     nb_numa_nodes = 0;
+     nb_nics = 0;
+ 
++    /* Initialize the list containing pre migration flush hooks before
++     * registeriring the first hook in bdrv_init().
++     */
++    init_migration_flush_hooks();
++
+     bdrv_init_with_whitelist();
+ 
+     autostart= 1;
+-- 
+1.7.10.4
+
+

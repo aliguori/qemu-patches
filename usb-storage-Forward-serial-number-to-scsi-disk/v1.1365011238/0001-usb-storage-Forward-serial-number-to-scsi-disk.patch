@@ -1,0 +1,101 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Kevin Wolf <kwolf@redhat.com>
+To: Gerd Hoffmann <kraxel@redhat.com>, Kevin Wolf <kwolf@redhat.com>,
+ qemu-devel@nongnu.org
+Cc: kwolf@redhat.com, kraxel@redhat.com, qemu-devel@nongnu.org
+Date: Wed,  3 Apr 2013 12:47:18 +0200
+Message-id: 1364986038-17514-1-git-send-email-kwolf@redhat.com
+Subject: [PATCH 1/1] usb-storage: Forward serial number to scsi-disk
+
+usb-storage takes care to fetch the USB serial number from -drive
+options, but it neglected to pass its own 'serial' property to the
+scsi-disk it creates. With this patch, the 'serial' qdev property and
+the 'serial' option in -drive behave the same and correctly apply the
+serial number on both USB and SCSI level.
+
+Signed-off-by: Kevin Wolf <kwolf@redhat.com>
+Acked-by: Gerd Hoffmann <kraxel@redhat.com>
+---
+ hw/pci/pci-hotplug.c | 2 +-
+ hw/scsi-bus.c        | 8 ++++++--
+ hw/scsi.h            | 3 ++-
+ hw/usb/dev-storage.c | 2 +-
+ 4 files changed, 10 insertions(+), 5 deletions(-)
+
+diff --git a/hw/pci/pci-hotplug.c b/hw/pci/pci-hotplug.c
+index f38df30..180ee07 100644
+--- a/hw/pci/pci-hotplug.c
++++ b/hw/pci/pci-hotplug.c
+@@ -99,7 +99,7 @@ static int scsi_hot_add(Monitor *mon, DeviceState *adapter,
+     dinfo->unit = qemu_opt_get_number(dinfo->opts, "unit", -1);
+     dinfo->bus = scsibus->busnr;
+     scsidev = scsi_bus_legacy_add_drive(scsibus, dinfo->bdrv, dinfo->unit,
+-                                        false, -1);
++                                        false, -1, NULL);
+     if (!scsidev) {
+         return -1;
+     }
+diff --git a/hw/scsi-bus.c b/hw/scsi-bus.c
+index 08787c2..ac2093a 100644
+--- a/hw/scsi-bus.c
++++ b/hw/scsi-bus.c
+@@ -207,7 +207,8 @@ static int scsi_qdev_exit(DeviceState *qdev)
+ 
+ /* handle legacy '-drive if=scsi,...' cmd line args */
+ SCSIDevice *scsi_bus_legacy_add_drive(SCSIBus *bus, BlockDriverState *bdrv,
+-                                      int unit, bool removable, int bootindex)
++                                      int unit, bool removable, int bootindex,
++                                      const char *serial)
+ {
+     const char *driver;
+     DeviceState *dev;
+@@ -221,6 +222,9 @@ SCSIDevice *scsi_bus_legacy_add_drive(SCSIBus *bus, BlockDriverState *bdrv,
+     if (object_property_find(OBJECT(dev), "removable", NULL)) {
+         qdev_prop_set_bit(dev, "removable", removable);
+     }
++    if (serial) {
++        qdev_prop_set_string(dev, "serial", serial);
++    }
+     if (qdev_prop_set_drive(dev, "drive", bdrv) < 0) {
+         qdev_free(dev);
+         return NULL;
+@@ -243,7 +247,7 @@ int scsi_bus_legacy_handle_cmdline(SCSIBus *bus)
+             continue;
+         }
+         qemu_opts_loc_restore(dinfo->opts);
+-        if (!scsi_bus_legacy_add_drive(bus, dinfo->bdrv, unit, false, -1)) {
++        if (!scsi_bus_legacy_add_drive(bus, dinfo->bdrv, unit, false, -1, NULL)) {
+             res = -1;
+             break;
+         }
+diff --git a/hw/scsi.h b/hw/scsi.h
+index 33e2e0b..02a1497 100644
+--- a/hw/scsi.h
++++ b/hw/scsi.h
+@@ -160,7 +160,8 @@ static inline SCSIBus *scsi_bus_from_device(SCSIDevice *d)
+ }
+ 
+ SCSIDevice *scsi_bus_legacy_add_drive(SCSIBus *bus, BlockDriverState *bdrv,
+-                                      int unit, bool removable, int bootindex);
++                                      int unit, bool removable, int bootindex,
++                                      const char *serial);
+ int scsi_bus_legacy_handle_cmdline(SCSIBus *bus);
+ 
+ /*
+diff --git a/hw/usb/dev-storage.c b/hw/usb/dev-storage.c
+index d3f01aa..21651b3 100644
+--- a/hw/usb/dev-storage.c
++++ b/hw/usb/dev-storage.c
+@@ -625,7 +625,7 @@ static int usb_msd_initfn_storage(USBDevice *dev)
+     usb_desc_init(dev);
+     scsi_bus_new(&s->bus, &s->dev.qdev, &usb_msd_scsi_info_storage);
+     scsi_dev = scsi_bus_legacy_add_drive(&s->bus, bs, 0, !!s->removable,
+-                                            s->conf.bootindex);
++                                            s->conf.bootindex, s->serial);
+     if (!scsi_dev) {
+         return -1;
+     }
+-- 
+1.8.1.4
+
+

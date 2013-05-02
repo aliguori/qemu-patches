@@ -1,0 +1,64 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: Paolo Bonzini <pbonzini@redhat.com>, Jan Kiszka <jan.kiszka@siemens.com>,
+ qemu-devel@nongnu.org
+Cc: qemu-devel@nongnu.org, "qemu-devel@nongnu.org" <qemu-devel@nongnu.org>
+Date: Fri, 27 Jul 2012 17:02:30 +0200
+Message-id: 1343401379-19495-4-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 03/32] lsi: use qdev_reset_all
+
+By first resetting the devices, lsi_soft_reset will find the queue
+already cleared so there is no need to do that forcibly (which may also
+leak SCSIRequests, and/or worse due to dangling references to the
+lsi_request in the hba_private field).
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ hw/lsi53c895a.c |   15 +++------------
+ 1 file changed, 3 insertions(+), 12 deletions(-)
+
+diff --git a/hw/lsi53c895a.c b/hw/lsi53c895a.c
+index 2fe141d..f04cc68 100644
+--- a/hw/lsi53c895a.c
++++ b/hw/lsi53c895a.c
+@@ -282,8 +282,6 @@ static inline int lsi_irq_on_rsl(LSIState *s)
+ 
+ static void lsi_soft_reset(LSIState *s)
+ {
+-    lsi_request *p;
+-
+     DPRINTF("Reset\n");
+     s->carry = 0;
+ 
+@@ -350,15 +348,8 @@ static void lsi_soft_reset(LSIState *s)
+     s->sbc = 0;
+     s->csbc = 0;
+     s->sbr = 0;
+-    while (!QTAILQ_EMPTY(&s->queue)) {
+-        p = QTAILQ_FIRST(&s->queue);
+-        QTAILQ_REMOVE(&s->queue, p, next);
+-        g_free(p);
+-    }
+-    if (s->current) {
+-        g_free(s->current);
+-        s->current = NULL;
+-    }
++    assert(QTAILQ_EMPTY(&s->queue));
++    assert(!s->current);
+ }
+ 
+ static int lsi_dma_40bit(LSIState *s)
+@@ -1738,7 +1729,7 @@ static void lsi_reg_writeb(LSIState *s, int offset, uint8_t val)
+             lsi_execute_script(s);
+         }
+         if (val & LSI_ISTAT0_SRST) {
+-            lsi_soft_reset(s);
++            qdev_reset_all(&s->dev.qdev);
+         }
+         break;
+     case 0x16: /* MBOX0 */
+-- 
+1.7.10.4
+
+
+

@@ -1,0 +1,49 @@
+From patches Mon Sep 17 00:00:00 2001
+From: mrhines@linux.vnet.ibm.com
+To: qemu-devel@nongnu.org, mrhines@linux.vnet.ibm.com
+Cc: Anthony Liguori <aliguori@us.ibm.com>, mst@redhat.com,
+ qemu-devel@nongnu.org, Michael R Hines <mrhines@us.ibm.com>,
+ Bulent Abali <abali@us.ibm.com>, owasserm@redhat.com, pbonzini@redhat.com,
+ Gokul B Kandiraju <gokul@us.ibm.com>
+Date: Mon, 8 Apr 2013 23:04:39 -0400
+Message-id: 1365476681-31593-11-git-send-email-mrhines@linux.vnet.ibm.com
+Subject: [PATCH 10/12] new header file prototypes for savevm.c
+
+From: "Michael R. Hines" <mrhines@us.ibm.com>
+
+
+Signed-off-by: Michael R. Hines <mrhines@us.ibm.com>
+---
+ include/migration/migration.h |    3 +++
+ include/migration/qemu-file.h |    3 +++
+ 2 files changed, 6 insertions(+)
+
+diff --git a/include/migration/migration.h b/include/migration/migration.h
+index e2acec6..40de049 100644
+--- a/include/migration/migration.h
++++ b/include/migration/migration.h
+@@ -127,4 +127,7 @@ int migrate_use_xbzrle(void);
+ int64_t migrate_xbzrle_cache_size(void);
+ 
+ int64_t xbzrle_cache_resize(int64_t new_size);
++
++bool migrate_check_for_zero(void);
++bool migrate_chunk_register_destination(void);
+ #endif
+diff --git a/include/migration/qemu-file.h b/include/migration/qemu-file.h
+index 623c434..4ee0ed2 100644
+--- a/include/migration/qemu-file.h
++++ b/include/migration/qemu-file.h
+@@ -80,6 +80,9 @@ void qemu_put_byte(QEMUFile *f, int v);
+  * The buffer should be available till it is sent asynchronously.
+  */
+ void qemu_put_buffer_async(QEMUFile *f, const uint8_t *buf, int size);
++void *qemu_file_ops_are(QEMUFile *f, const QEMUFileOps *ops);
++bool qemu_file_mode_is_not_valid(const char * mode);
++void qemu_file_update_position(QEMUFile *f, int64_t inc);
+ 
+ static inline void qemu_put_ubyte(QEMUFile *f, unsigned int v)
+ {
+-- 
+1.7.10.4
+

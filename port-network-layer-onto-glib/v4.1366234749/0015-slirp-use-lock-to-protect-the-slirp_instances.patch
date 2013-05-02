@@ -1,0 +1,107 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Liu Ping Fan <qemulist@gmail.com>
+To: Liu Ping Fan <qemulist@gmail.com>, Jan Kiszka <jan.kiszka@siemens.com>,
+ qemu-devel@nongnu.org, Paolo Bonzini <pbonzini@redhat.com>
+Cc: Paolo Bonzini <pbonzini@redhat.com>,
+ Anthony Liguori <anthony@codemonkey.ws>,
+ "qemu-devel@nongnu.org" <qemu-devel@nongnu.org>, qemu-devel@nongnu.org,
+ Liu Ping Fan <qemulist@gmail.com>, mdroth <mdroth@linux.vnet.ibm.com>,
+ Jan Kiszka <jan.kiszka@siemens.com>, Stefan Hajnoczi <stefanha@redhat.com>
+Date: Wed, 17 Apr 2013 16:39:24 +0800
+Message-id: 1366187964-14265-16-git-send-email-qemulist@gmail.com
+Subject: [PATCH 15/15] slirp: use lock to protect the slirp_instances
+
+From: Liu Ping Fan <pingfank@linux.vnet.ibm.com>
+
+slirps will run on dedicated thread, so need to protect the global
+list.
+
+Signed-off-by: Liu Ping Fan <pingfank@linux.vnet.ibm.com>
+---
+ include/qemu/module.h |    2 ++
+ slirp/slirp.c         |   20 ++++++++++++++++++++
+ 2 files changed, 22 insertions(+), 0 deletions(-)
+
+diff --git a/include/qemu/module.h b/include/qemu/module.h
+index c4ccd57..2720943 100644
+--- a/include/qemu/module.h
++++ b/include/qemu/module.h
+@@ -22,6 +22,7 @@ static void __attribute__((constructor)) do_qemu_init_ ## function(void) {  \
+ 
+ typedef enum {
+     MODULE_INIT_BLOCK,
++    MODULE_INIT_SLIRP,
+     MODULE_INIT_MACHINE,
+     MODULE_INIT_QAPI,
+     MODULE_INIT_QOM,
+@@ -29,6 +30,7 @@ typedef enum {
+ } module_init_type;
+ 
+ #define block_init(function) module_init(function, MODULE_INIT_BLOCK)
++#define slirplayer_init(function) module_init(function, MODULE_INIT_SLIRP)
+ #define machine_init(function) module_init(function, MODULE_INIT_MACHINE)
+ #define qapi_init(function) module_init(function, MODULE_INIT_QAPI)
+ #define type_init(function) module_init(function, MODULE_INIT_QOM)
+diff --git a/slirp/slirp.c b/slirp/slirp.c
+index 6bfcc67..4cbf04d 100644
+--- a/slirp/slirp.c
++++ b/slirp/slirp.c
+@@ -42,6 +42,7 @@ static const uint8_t zero_ethaddr[ETH_ALEN] = { 0, 0, 0, 0, 0, 0 };
+ 
+ u_int curtime;
+ 
++static QemuMutex slirp_instances_lock;
+ static QTAILQ_HEAD(slirp_instances, Slirp) slirp_instances =
+     QTAILQ_HEAD_INITIALIZER(slirp_instances);
+ 
+@@ -236,14 +237,18 @@ Slirp *slirp_init(int restricted, struct in_addr vnetwork,
+     register_savevm(NULL, "slirp", 0, 3,
+                     slirp_state_save, slirp_state_load, slirp);
+ 
++    qemu_mutex_lock(&slirp_instances_lock);
+     QTAILQ_INSERT_TAIL(&slirp_instances, slirp, entry);
++    qemu_mutex_unlock(&slirp_instances_lock);
+ 
+     return slirp;
+ }
+ 
+ void slirp_cleanup(Slirp *slirp)
+ {
++    qemu_mutex_lock(&slirp_instances_lock);
+     QTAILQ_REMOVE(&slirp_instances, slirp, entry);
++    qemu_mutex_unlock(&slirp_instances_lock);
+ 
+     unregister_savevm(NULL, "slirp", slirp);
+ 
+@@ -262,9 +267,12 @@ void slirp_cleanup(Slirp *slirp)
+ 
+ void slirp_update_timeout(uint32_t *timeout)
+ {
++    qemu_mutex_lock(&slirp_instances_lock);
+     if (!QTAILQ_EMPTY(&slirp_instances)) {
+         *timeout = MIN(1000, *timeout);
+     }
++    qemu_mutex_unlock(&slirp_instances_lock);
++
+     curtime = qemu_get_clock_ms(rt_clock);
+ }
+ 
+@@ -1140,3 +1148,15 @@ static int slirp_state_load(QEMUFile *f, void *opaque, int version_id)
+ 
+     return 0;
+ }
++
++static void slirplayer_cleanup(void)
++{
++    qemu_mutex_destroy(&slirp_instances_lock);
++}
++
++static void slirplayer_bootup(void)
++{
++    qemu_mutex_init(&slirp_instances_lock);
++    atexit(&slirplayer_cleanup);
++}
++slirplayer_init(slirplayer_bootup)
+-- 
+1.7.4.4
+

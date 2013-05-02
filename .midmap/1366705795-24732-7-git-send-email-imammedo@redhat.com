@@ -1,0 +1,1 @@
+../target-i386-CPU-hot-add-with-cpu-add-QMP-command/v5.1366730974/0006-target-i386-pc-update-rtc_cmos-on-CPU-hot-plug.patch

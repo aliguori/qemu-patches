@@ -1,0 +1,894 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Jason Wang <jasowang@redhat.com>
+To: aliguori@us.ibm.com, shajnocz@redhat.com, qemu-devel@nongnu.org,
+ mst@redhat.com
+Cc: krkumar2@in.ibm.com, kvm@vger.kernel.org, mprivozn@redhat.com,
+ rusty@rustcorp.com.au, Jason Wang <jasowang@redhat.com>,
+ gaowanlong@cn.fujitsu.com, jwhan@filewood.snu.ac.kr, shiyer@redhat.com
+Date: Fri, 25 Jan 2013 18:35:25 +0800
+Message-id: 1359110143-42984-3-git-send-email-jasowang@redhat.com
+Subject: [PATCH 02/20] net: introduce qemu_get_nic()
+
+To support multiqueue, this patch introduces a helper qemu_get_nic() to get
+NICState from a NetClientState. The following patches would refactor this helper
+to support multiqueue.
+
+Signed-off-by: Jason Wang <jasowang@redhat.com>
+---
+ hw/cadence_gem.c        |    8 ++++----
+ hw/dp8393x.c            |    6 +++---
+ hw/e1000.c              |    8 ++++----
+ hw/eepro100.c           |    6 +++---
+ hw/etraxfs_eth.c        |    6 +++---
+ hw/lan9118.c            |    6 +++---
+ hw/lance.c              |    2 +-
+ hw/mcf_fec.c            |    6 +++---
+ hw/milkymist-minimac2.c |    6 +++---
+ hw/mipsnet.c            |    6 +++---
+ hw/musicpal.c           |    4 ++--
+ hw/ne2000-isa.c         |    2 +-
+ hw/ne2000.c             |    6 +++---
+ hw/opencores_eth.c      |    6 +++---
+ hw/pcnet-pci.c          |    2 +-
+ hw/pcnet.c              |    6 +++---
+ hw/rtl8139.c            |    8 ++++----
+ hw/smc91c111.c          |    6 +++---
+ hw/spapr_llan.c         |    4 ++--
+ hw/stellaris_enet.c     |    6 +++---
+ hw/usb/dev-network.c    |    6 +++---
+ hw/virtio-net.c         |   10 +++++-----
+ hw/xen_nic.c            |    4 ++--
+ hw/xgmac.c              |    6 +++---
+ hw/xilinx_axienet.c     |    6 +++---
+ hw/xilinx_ethlite.c     |    6 +++---
+ include/net/net.h       |    2 ++
+ net/net.c               |   20 ++++++++++++++++----
+ 28 files changed, 92 insertions(+), 78 deletions(-)
+
+diff --git a/hw/cadence_gem.c b/hw/cadence_gem.c
+index 9de688f..ab35329 100644
+--- a/hw/cadence_gem.c
++++ b/hw/cadence_gem.c
+@@ -409,7 +409,7 @@ static int gem_can_receive(NetClientState *nc)
+ {
+     GemState *s;
+ 
+-    s = DO_UPCAST(NICState, nc, nc)->opaque;
++    s = qemu_get_nic_opaque(nc);
+ 
+     DB_PRINT("\n");
+ 
+@@ -612,7 +612,7 @@ static ssize_t gem_receive(NetClientState *nc, const uint8_t *buf, size_t size)
+     uint8_t    rxbuf[2048];
+     uint8_t   *rxbuf_ptr;
+ 
+-    s = DO_UPCAST(NICState, nc, nc)->opaque;
++    s = qemu_get_nic_opaque(nc);
+ 
+     /* Do nothing if receive is not enabled. */
+     if (!(s->regs[GEM_NWCTRL] & GEM_NWCTRL_RXENA)) {
+@@ -1149,7 +1149,7 @@ static const MemoryRegionOps gem_ops = {
+ 
+ static void gem_cleanup(NetClientState *nc)
+ {
+-    GemState *s = DO_UPCAST(NICState, nc, nc)->opaque;
++    GemState *s = qemu_get_nic_opaque(nc);
+ 
+     DB_PRINT("\n");
+     s->nic = NULL;
+@@ -1158,7 +1158,7 @@ static void gem_cleanup(NetClientState *nc)
+ static void gem_set_link(NetClientState *nc)
+ {
+     DB_PRINT("\n");
+-    phy_update_link(DO_UPCAST(NICState, nc, nc)->opaque);
++    phy_update_link(qemu_get_nic_opaque(nc));
+ }
+ 
+ static NetClientInfo net_gem_info = {
+diff --git a/hw/dp8393x.c b/hw/dp8393x.c
+index c2d0bc8..0273fad 100644
+--- a/hw/dp8393x.c
++++ b/hw/dp8393x.c
+@@ -676,7 +676,7 @@ static const MemoryRegionOps dp8393x_ops = {
+ 
+ static int nic_can_receive(NetClientState *nc)
+ {
+-    dp8393xState *s = DO_UPCAST(NICState, nc, nc)->opaque;
++    dp8393xState *s = qemu_get_nic_opaque(nc);
+ 
+     if (!(s->regs[SONIC_CR] & SONIC_CR_RXEN))
+         return 0;
+@@ -725,7 +725,7 @@ static int receive_filter(dp8393xState *s, const uint8_t * buf, int size)
+ 
+ static ssize_t nic_receive(NetClientState *nc, const uint8_t * buf, size_t size)
+ {
+-    dp8393xState *s = DO_UPCAST(NICState, nc, nc)->opaque;
++    dp8393xState *s = qemu_get_nic_opaque(nc);
+     uint16_t data[10];
+     int packet_type;
+     uint32_t available, address;
+@@ -861,7 +861,7 @@ static void nic_reset(void *opaque)
+ 
+ static void nic_cleanup(NetClientState *nc)
+ {
+-    dp8393xState *s = DO_UPCAST(NICState, nc, nc)->opaque;
++    dp8393xState *s = qemu_get_nic_opaque(nc);
+ 
+     memory_region_del_subregion(s->address_space, &s->mmio);
+     memory_region_destroy(&s->mmio);
+diff --git a/hw/e1000.c b/hw/e1000.c
+index 7b310d7..36f4051 100644
+--- a/hw/e1000.c
++++ b/hw/e1000.c
+@@ -743,7 +743,7 @@ receive_filter(E1000State *s, const uint8_t *buf, int size)
+ static void
+ e1000_set_link_status(NetClientState *nc)
+ {
+-    E1000State *s = DO_UPCAST(NICState, nc, nc)->opaque;
++    E1000State *s = qemu_get_nic_opaque(nc);
+     uint32_t old_status = s->mac_reg[STATUS];
+ 
+     if (nc->link_down) {
+@@ -777,7 +777,7 @@ static bool e1000_has_rxbufs(E1000State *s, size_t total_size)
+ static int
+ e1000_can_receive(NetClientState *nc)
+ {
+-    E1000State *s = DO_UPCAST(NICState, nc, nc)->opaque;
++    E1000State *s = qemu_get_nic_opaque(nc);
+ 
+     return (s->mac_reg[RCTL] & E1000_RCTL_EN) && e1000_has_rxbufs(s, 1);
+ }
+@@ -793,7 +793,7 @@ static uint64_t rx_desc_base(E1000State *s)
+ static ssize_t
+ e1000_receive(NetClientState *nc, const uint8_t *buf, size_t size)
+ {
+-    E1000State *s = DO_UPCAST(NICState, nc, nc)->opaque;
++    E1000State *s = qemu_get_nic_opaque(nc);
+     struct e1000_rx_desc desc;
+     dma_addr_t base;
+     unsigned int n, rdt;
+@@ -1230,7 +1230,7 @@ e1000_mmio_setup(E1000State *d)
+ static void
+ e1000_cleanup(NetClientState *nc)
+ {
+-    E1000State *s = DO_UPCAST(NICState, nc, nc)->opaque;
++    E1000State *s = qemu_get_nic_opaque(nc);
+ 
+     s->nic = NULL;
+ }
+diff --git a/hw/eepro100.c b/hw/eepro100.c
+index 5b77bdc..f9856ae 100644
+--- a/hw/eepro100.c
++++ b/hw/eepro100.c
+@@ -1619,7 +1619,7 @@ static const MemoryRegionOps eepro100_ops = {
+ 
+ static int nic_can_receive(NetClientState *nc)
+ {
+-    EEPRO100State *s = DO_UPCAST(NICState, nc, nc)->opaque;
++    EEPRO100State *s = qemu_get_nic_opaque(nc);
+     TRACE(RXTX, logout("%p\n", s));
+     return get_ru_state(s) == ru_ready;
+ #if 0
+@@ -1633,7 +1633,7 @@ static ssize_t nic_receive(NetClientState *nc, const uint8_t * buf, size_t size)
+      * - Magic packets should set bit 30 in power management driver register.
+      * - Interesting packets should set bit 29 in power management driver register.
+      */
+-    EEPRO100State *s = DO_UPCAST(NICState, nc, nc)->opaque;
++    EEPRO100State *s = qemu_get_nic_opaque(nc);
+     uint16_t rfd_status = 0xa000;
+ #if defined(CONFIG_PAD_RECEIVED_FRAMES)
+     uint8_t min_buf[60];
+@@ -1835,7 +1835,7 @@ static const VMStateDescription vmstate_eepro100 = {
+ 
+ static void nic_cleanup(NetClientState *nc)
+ {
+-    EEPRO100State *s = DO_UPCAST(NICState, nc, nc)->opaque;
++    EEPRO100State *s = qemu_get_nic_opaque(nc);
+ 
+     s->nic = NULL;
+ }
+diff --git a/hw/etraxfs_eth.c b/hw/etraxfs_eth.c
+index 9df476a..d426311 100644
+--- a/hw/etraxfs_eth.c
++++ b/hw/etraxfs_eth.c
+@@ -515,7 +515,7 @@ static int eth_can_receive(NetClientState *nc)
+ static ssize_t eth_receive(NetClientState *nc, const uint8_t *buf, size_t size)
+ {
+ 	unsigned char sa_bcast[6] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff };
+-	struct fs_eth *eth = DO_UPCAST(NICState, nc, nc)->opaque;
++        struct fs_eth *eth = qemu_get_nic_opaque(nc);
+ 	int use_ma0 = eth->regs[RW_REC_CTRL] & 1;
+ 	int use_ma1 = eth->regs[RW_REC_CTRL] & 2;
+ 	int r_bcast = eth->regs[RW_REC_CTRL] & 8;
+@@ -551,7 +551,7 @@ static int eth_tx_push(void *opaque, unsigned char *buf, int len, bool eop)
+ 
+ static void eth_set_link(NetClientState *nc)
+ {
+-	struct fs_eth *eth = DO_UPCAST(NICState, nc, nc)->opaque;
++    struct fs_eth *eth = qemu_get_nic_opaque(nc);
+ 	D(printf("%s %d\n", __func__, nc->link_down));
+ 	eth->phy.link = !nc->link_down;
+ }
+@@ -568,7 +568,7 @@ static const MemoryRegionOps eth_ops = {
+ 
+ static void eth_cleanup(NetClientState *nc)
+ {
+-	struct fs_eth *eth = DO_UPCAST(NICState, nc, nc)->opaque;
++    struct fs_eth *eth = qemu_get_nic_opaque(nc);
+ 
+ 	/* Disconnect the client.  */
+ 	eth->dma_out->client.push = NULL;
+diff --git a/hw/lan9118.c b/hw/lan9118.c
+index 262f389..0e844e5 100644
+--- a/hw/lan9118.c
++++ b/hw/lan9118.c
+@@ -386,7 +386,7 @@ static void phy_update_link(lan9118_state *s)
+ 
+ static void lan9118_set_link(NetClientState *nc)
+ {
+-    phy_update_link(DO_UPCAST(NICState, nc, nc)->opaque);
++    phy_update_link(qemu_get_nic_opaque(nc));
+ }
+ 
+ static void phy_reset(lan9118_state *s)
+@@ -512,7 +512,7 @@ static int lan9118_filter(lan9118_state *s, const uint8_t *addr)
+ static ssize_t lan9118_receive(NetClientState *nc, const uint8_t *buf,
+                                size_t size)
+ {
+-    lan9118_state *s = DO_UPCAST(NICState, nc, nc)->opaque;
++    lan9118_state *s = qemu_get_nic_opaque(nc);
+     int fifo_len;
+     int offset;
+     int src_pos;
+@@ -1306,7 +1306,7 @@ static const MemoryRegionOps lan9118_16bit_mem_ops = {
+ 
+ static void lan9118_cleanup(NetClientState *nc)
+ {
+-    lan9118_state *s = DO_UPCAST(NICState, nc, nc)->opaque;
++    lan9118_state *s = qemu_get_nic_opaque(nc);
+ 
+     s->nic = NULL;
+ }
+diff --git a/hw/lance.c b/hw/lance.c
+index a5997fd..4b92425 100644
+--- a/hw/lance.c
++++ b/hw/lance.c
+@@ -87,7 +87,7 @@ static const MemoryRegionOps lance_mem_ops = {
+ 
+ static void lance_cleanup(NetClientState *nc)
+ {
+-    PCNetState *d = DO_UPCAST(NICState, nc, nc)->opaque;
++    PCNetState *d = qemu_get_nic_opaque(nc);
+ 
+     pcnet_common_cleanup(d);
+ }
+diff --git a/hw/mcf_fec.c b/hw/mcf_fec.c
+index 8a90bf8..909e32b 100644
+--- a/hw/mcf_fec.c
++++ b/hw/mcf_fec.c
+@@ -353,13 +353,13 @@ static void mcf_fec_write(void *opaque, hwaddr addr,
+ 
+ static int mcf_fec_can_receive(NetClientState *nc)
+ {
+-    mcf_fec_state *s = DO_UPCAST(NICState, nc, nc)->opaque;
++    mcf_fec_state *s = qemu_get_nic_opaque(nc);
+     return s->rx_enabled;
+ }
+ 
+ static ssize_t mcf_fec_receive(NetClientState *nc, const uint8_t *buf, size_t size)
+ {
+-    mcf_fec_state *s = DO_UPCAST(NICState, nc, nc)->opaque;
++    mcf_fec_state *s = qemu_get_nic_opaque(nc);
+     mcf_fec_bd bd;
+     uint32_t flags = 0;
+     uint32_t addr;
+@@ -441,7 +441,7 @@ static const MemoryRegionOps mcf_fec_ops = {
+ 
+ static void mcf_fec_cleanup(NetClientState *nc)
+ {
+-    mcf_fec_state *s = DO_UPCAST(NICState, nc, nc)->opaque;
++    mcf_fec_state *s = qemu_get_nic_opaque(nc);
+ 
+     memory_region_del_subregion(s->sysmem, &s->iomem);
+     memory_region_destroy(&s->iomem);
+diff --git a/hw/milkymist-minimac2.c b/hw/milkymist-minimac2.c
+index 2a8a4ef..9992dcc 100644
+--- a/hw/milkymist-minimac2.c
++++ b/hw/milkymist-minimac2.c
+@@ -280,7 +280,7 @@ static void update_rx_interrupt(MilkymistMinimac2State *s)
+ 
+ static ssize_t minimac2_rx(NetClientState *nc, const uint8_t *buf, size_t size)
+ {
+-    MilkymistMinimac2State *s = DO_UPCAST(NICState, nc, nc)->opaque;
++    MilkymistMinimac2State *s = qemu_get_nic_opaque(nc);
+ 
+     uint32_t r_count;
+     uint32_t r_state;
+@@ -410,7 +410,7 @@ static const MemoryRegionOps minimac2_ops = {
+ 
+ static int minimac2_can_rx(NetClientState *nc)
+ {
+-    MilkymistMinimac2State *s = DO_UPCAST(NICState, nc, nc)->opaque;
++    MilkymistMinimac2State *s = qemu_get_nic_opaque(nc);
+ 
+     if (s->regs[R_STATE0] == STATE_LOADED) {
+         return 1;
+@@ -424,7 +424,7 @@ static int minimac2_can_rx(NetClientState *nc)
+ 
+ static void minimac2_cleanup(NetClientState *nc)
+ {
+-    MilkymistMinimac2State *s = DO_UPCAST(NICState, nc, nc)->opaque;
++    MilkymistMinimac2State *s = qemu_get_nic_opaque(nc);
+ 
+     s->nic = NULL;
+ }
+diff --git a/hw/mipsnet.c b/hw/mipsnet.c
+index 15761b1..ff6bf7f 100644
+--- a/hw/mipsnet.c
++++ b/hw/mipsnet.c
+@@ -64,7 +64,7 @@ static int mipsnet_buffer_full(MIPSnetState *s)
+ 
+ static int mipsnet_can_receive(NetClientState *nc)
+ {
+-    MIPSnetState *s = DO_UPCAST(NICState, nc, nc)->opaque;
++    MIPSnetState *s = qemu_get_nic_opaque(nc);
+ 
+     if (s->busy)
+         return 0;
+@@ -73,7 +73,7 @@ static int mipsnet_can_receive(NetClientState *nc)
+ 
+ static ssize_t mipsnet_receive(NetClientState *nc, const uint8_t *buf, size_t size)
+ {
+-    MIPSnetState *s = DO_UPCAST(NICState, nc, nc)->opaque;
++    MIPSnetState *s = qemu_get_nic_opaque(nc);
+ 
+     trace_mipsnet_receive(size);
+     if (!mipsnet_can_receive(nc))
+@@ -211,7 +211,7 @@ static const VMStateDescription vmstate_mipsnet = {
+ 
+ static void mipsnet_cleanup(NetClientState *nc)
+ {
+-    MIPSnetState *s = DO_UPCAST(NICState, nc, nc)->opaque;
++    MIPSnetState *s = qemu_get_nic_opaque(nc);
+ 
+     s->nic = NULL;
+ }
+diff --git a/hw/musicpal.c b/hw/musicpal.c
+index 9e22f69..272cb80 100644
+--- a/hw/musicpal.c
++++ b/hw/musicpal.c
+@@ -190,7 +190,7 @@ static int eth_can_receive(NetClientState *nc)
+ 
+ static ssize_t eth_receive(NetClientState *nc, const uint8_t *buf, size_t size)
+ {
+-    mv88w8618_eth_state *s = DO_UPCAST(NICState, nc, nc)->opaque;
++    mv88w8618_eth_state *s = qemu_get_nic_opaque(nc);
+     uint32_t desc_addr;
+     mv88w8618_rx_desc desc;
+     int i;
+@@ -369,7 +369,7 @@ static const MemoryRegionOps mv88w8618_eth_ops = {
+ 
+ static void eth_cleanup(NetClientState *nc)
+ {
+-    mv88w8618_eth_state *s = DO_UPCAST(NICState, nc, nc)->opaque;
++    mv88w8618_eth_state *s = qemu_get_nic_opaque(nc);
+ 
+     s->nic = NULL;
+ }
+diff --git a/hw/ne2000-isa.c b/hw/ne2000-isa.c
+index fa47e12..342c6bd 100644
+--- a/hw/ne2000-isa.c
++++ b/hw/ne2000-isa.c
+@@ -38,7 +38,7 @@ typedef struct ISANE2000State {
+ 
+ static void isa_ne2000_cleanup(NetClientState *nc)
+ {
+-    NE2000State *s = DO_UPCAST(NICState, nc, nc)->opaque;
++    NE2000State *s = qemu_get_nic_opaque(nc);
+ 
+     s->nic = NULL;
+ }
+diff --git a/hw/ne2000.c b/hw/ne2000.c
+index 03c4209..c989190 100644
+--- a/hw/ne2000.c
++++ b/hw/ne2000.c
+@@ -167,7 +167,7 @@ static int ne2000_buffer_full(NE2000State *s)
+ 
+ int ne2000_can_receive(NetClientState *nc)
+ {
+-    NE2000State *s = DO_UPCAST(NICState, nc, nc)->opaque;
++    NE2000State *s = qemu_get_nic_opaque(nc);
+ 
+     if (s->cmd & E8390_STOP)
+         return 1;
+@@ -178,7 +178,7 @@ int ne2000_can_receive(NetClientState *nc)
+ 
+ ssize_t ne2000_receive(NetClientState *nc, const uint8_t *buf, size_t size_)
+ {
+-    NE2000State *s = DO_UPCAST(NICState, nc, nc)->opaque;
++    NE2000State *s = qemu_get_nic_opaque(nc);
+     int size = size_;
+     uint8_t *p;
+     unsigned int total_len, next, avail, len, index, mcast_idx;
+@@ -706,7 +706,7 @@ void ne2000_setup_io(NE2000State *s, unsigned size)
+ 
+ static void ne2000_cleanup(NetClientState *nc)
+ {
+-    NE2000State *s = DO_UPCAST(NICState, nc, nc)->opaque;
++    NE2000State *s = qemu_get_nic_opaque(nc);
+ 
+     s->nic = NULL;
+ }
+diff --git a/hw/opencores_eth.c b/hw/opencores_eth.c
+index 2496d4e..f9ba5ee 100644
+--- a/hw/opencores_eth.c
++++ b/hw/opencores_eth.c
+@@ -313,7 +313,7 @@ static void open_eth_int_source_write(OpenEthState *s,
+ 
+ static void open_eth_set_link_status(NetClientState *nc)
+ {
+-    OpenEthState *s = DO_UPCAST(NICState, nc, nc)->opaque;
++    OpenEthState *s = qemu_get_nic_opaque(nc);
+ 
+     if (GET_REGBIT(s, MIICOMMAND, SCANSTAT)) {
+         SET_REGFIELD(s, MIISTATUS, LINKFAIL, nc->link_down);
+@@ -344,7 +344,7 @@ static void open_eth_reset(void *opaque)
+ 
+ static int open_eth_can_receive(NetClientState *nc)
+ {
+-    OpenEthState *s = DO_UPCAST(NICState, nc, nc)->opaque;
++    OpenEthState *s = qemu_get_nic_opaque(nc);
+ 
+     return GET_REGBIT(s, MODER, RXEN) &&
+         (s->regs[TX_BD_NUM] < 0x80) &&
+@@ -354,7 +354,7 @@ static int open_eth_can_receive(NetClientState *nc)
+ static ssize_t open_eth_receive(NetClientState *nc,
+         const uint8_t *buf, size_t size)
+ {
+-    OpenEthState *s = DO_UPCAST(NICState, nc, nc)->opaque;
++    OpenEthState *s = qemu_get_nic_opaque(nc);
+     size_t maxfl = GET_REGFIELD(s, PACKETLEN, MAXFL);
+     size_t minfl = GET_REGFIELD(s, PACKETLEN, MINFL);
+     size_t fcsl = 4;
+diff --git a/hw/pcnet-pci.c b/hw/pcnet-pci.c
+index 54a849d..26c90bf 100644
+--- a/hw/pcnet-pci.c
++++ b/hw/pcnet-pci.c
+@@ -266,7 +266,7 @@ static void pci_physical_memory_read(void *dma_opaque, hwaddr addr,
+ 
+ static void pci_pcnet_cleanup(NetClientState *nc)
+ {
+-    PCNetState *d = DO_UPCAST(NICState, nc, nc)->opaque;
++    PCNetState *d = qemu_get_nic_opaque(nc);
+ 
+     pcnet_common_cleanup(d);
+ }
+diff --git a/hw/pcnet.c b/hw/pcnet.c
+index 2126e22..e0de1e3 100644
+--- a/hw/pcnet.c
++++ b/hw/pcnet.c
+@@ -1006,7 +1006,7 @@ static int pcnet_tdte_poll(PCNetState *s)
+ 
+ int pcnet_can_receive(NetClientState *nc)
+ {
+-    PCNetState *s = DO_UPCAST(NICState, nc, nc)->opaque;
++    PCNetState *s = qemu_get_nic_opaque(nc);
+     if (CSR_STOP(s) || CSR_SPND(s))
+         return 0;
+ 
+@@ -1017,7 +1017,7 @@ int pcnet_can_receive(NetClientState *nc)
+ 
+ ssize_t pcnet_receive(NetClientState *nc, const uint8_t *buf, size_t size_)
+ {
+-    PCNetState *s = DO_UPCAST(NICState, nc, nc)->opaque;
++    PCNetState *s = qemu_get_nic_opaque(nc);
+     int is_padr = 0, is_bcast = 0, is_ladr = 0;
+     uint8_t buf1[60];
+     int remaining;
+@@ -1199,7 +1199,7 @@ ssize_t pcnet_receive(NetClientState *nc, const uint8_t *buf, size_t size_)
+ 
+ void pcnet_set_link_status(NetClientState *nc)
+ {
+-    PCNetState *d = DO_UPCAST(NICState, nc, nc)->opaque;
++    PCNetState *d = qemu_get_nic_opaque(nc);
+ 
+     d->lnkst = nc->link_down ? 0 : 0x40;
+ }
+diff --git a/hw/rtl8139.c b/hw/rtl8139.c
+index 22d24ae..b825e83 100644
+--- a/hw/rtl8139.c
++++ b/hw/rtl8139.c
+@@ -786,7 +786,7 @@ static bool rtl8139_cp_rx_valid(RTL8139State *s)
+ 
+ static int rtl8139_can_receive(NetClientState *nc)
+ {
+-    RTL8139State *s = DO_UPCAST(NICState, nc, nc)->opaque;
++    RTL8139State *s = qemu_get_nic_opaque(nc);
+     int avail;
+ 
+     /* Receive (drop) packets if card is disabled.  */
+@@ -808,7 +808,7 @@ static int rtl8139_can_receive(NetClientState *nc)
+ 
+ static ssize_t rtl8139_do_receive(NetClientState *nc, const uint8_t *buf, size_t size_, int do_interrupt)
+ {
+-    RTL8139State *s = DO_UPCAST(NICState, nc, nc)->opaque;
++    RTL8139State *s = qemu_get_nic_opaque(nc);
+     /* size is the length of the buffer passed to the driver */
+     int size = size_;
+     const uint8_t *dot1q_buf = NULL;
+@@ -3429,7 +3429,7 @@ static void rtl8139_timer(void *opaque)
+ 
+ static void rtl8139_cleanup(NetClientState *nc)
+ {
+-    RTL8139State *s = DO_UPCAST(NICState, nc, nc)->opaque;
++    RTL8139State *s = qemu_get_nic_opaque(nc);
+ 
+     s->nic = NULL;
+ }
+@@ -3451,7 +3451,7 @@ static void pci_rtl8139_uninit(PCIDevice *dev)
+ 
+ static void rtl8139_set_link_status(NetClientState *nc)
+ {
+-    RTL8139State *s = DO_UPCAST(NICState, nc, nc)->opaque;
++    RTL8139State *s = qemu_get_nic_opaque(nc);
+ 
+     if (nc->link_down) {
+         s->BasicModeStatus &= ~0x04;
+diff --git a/hw/smc91c111.c b/hw/smc91c111.c
+index b097d6b..1c0ec8e 100644
+--- a/hw/smc91c111.c
++++ b/hw/smc91c111.c
+@@ -630,7 +630,7 @@ static uint32_t smc91c111_readl(void *opaque, hwaddr offset)
+ 
+ static int smc91c111_can_receive(NetClientState *nc)
+ {
+-    smc91c111_state *s = DO_UPCAST(NICState, nc, nc)->opaque;
++    smc91c111_state *s = qemu_get_nic_opaque(nc);
+ 
+     if ((s->rcr & RCR_RXEN) == 0 || (s->rcr & RCR_SOFT_RST))
+         return 1;
+@@ -641,7 +641,7 @@ static int smc91c111_can_receive(NetClientState *nc)
+ 
+ static ssize_t smc91c111_receive(NetClientState *nc, const uint8_t *buf, size_t size)
+ {
+-    smc91c111_state *s = DO_UPCAST(NICState, nc, nc)->opaque;
++    smc91c111_state *s = qemu_get_nic_opaque(nc);
+     int status;
+     int packetsize;
+     uint32_t crc;
+@@ -730,7 +730,7 @@ static const MemoryRegionOps smc91c111_mem_ops = {
+ 
+ static void smc91c111_cleanup(NetClientState *nc)
+ {
+-    smc91c111_state *s = DO_UPCAST(NICState, nc, nc)->opaque;
++    smc91c111_state *s = qemu_get_nic_opaque(nc);
+ 
+     s->nic = NULL;
+ }
+diff --git a/hw/spapr_llan.c b/hw/spapr_llan.c
+index d53d4ae..6ef2936 100644
+--- a/hw/spapr_llan.c
++++ b/hw/spapr_llan.c
+@@ -85,7 +85,7 @@ typedef struct VIOsPAPRVLANDevice {
+ 
+ static int spapr_vlan_can_receive(NetClientState *nc)
+ {
+-    VIOsPAPRVLANDevice *dev = DO_UPCAST(NICState, nc, nc)->opaque;
++    VIOsPAPRVLANDevice *dev = qemu_get_nic_opaque(nc);
+ 
+     return (dev->isopen && dev->rx_bufs > 0);
+ }
+@@ -93,7 +93,7 @@ static int spapr_vlan_can_receive(NetClientState *nc)
+ static ssize_t spapr_vlan_receive(NetClientState *nc, const uint8_t *buf,
+                                   size_t size)
+ {
+-    VIOsPAPRDevice *sdev = DO_UPCAST(NICState, nc, nc)->opaque;
++    VIOsPAPRDevice *sdev = qemu_get_nic_opaque(nc);
+     VIOsPAPRVLANDevice *dev = (VIOsPAPRVLANDevice *)sdev;
+     vlan_bd_t rxq_bd = vio_ldq(sdev, dev->buf_list + VLAN_RXQ_BD_OFF);
+     vlan_bd_t bd;
+diff --git a/hw/stellaris_enet.c b/hw/stellaris_enet.c
+index 99d4730..6c701fb 100644
+--- a/hw/stellaris_enet.c
++++ b/hw/stellaris_enet.c
+@@ -80,7 +80,7 @@ static void stellaris_enet_update(stellaris_enet_state *s)
+ /* TODO: Implement MAC address filtering.  */
+ static ssize_t stellaris_enet_receive(NetClientState *nc, const uint8_t *buf, size_t size)
+ {
+-    stellaris_enet_state *s = DO_UPCAST(NICState, nc, nc)->opaque;
++    stellaris_enet_state *s = qemu_get_nic_opaque(nc);
+     int n;
+     uint8_t *p;
+     uint32_t crc;
+@@ -122,7 +122,7 @@ static ssize_t stellaris_enet_receive(NetClientState *nc, const uint8_t *buf, si
+ 
+ static int stellaris_enet_can_receive(NetClientState *nc)
+ {
+-    stellaris_enet_state *s = DO_UPCAST(NICState, nc, nc)->opaque;
++    stellaris_enet_state *s = qemu_get_nic_opaque(nc);
+ 
+     if ((s->rctl & SE_RCTL_RXEN) == 0)
+         return 1;
+@@ -384,7 +384,7 @@ static int stellaris_enet_load(QEMUFile *f, void *opaque, int version_id)
+ 
+ static void stellaris_enet_cleanup(NetClientState *nc)
+ {
+-    stellaris_enet_state *s = DO_UPCAST(NICState, nc, nc)->opaque;
++    stellaris_enet_state *s = qemu_get_nic_opaque(nc);
+ 
+     unregister_savevm(&s->busdev.qdev, "stellaris_enet", s);
+ 
+diff --git a/hw/usb/dev-network.c b/hw/usb/dev-network.c
+index a131f9c..abc6eac 100644
+--- a/hw/usb/dev-network.c
++++ b/hw/usb/dev-network.c
+@@ -1261,7 +1261,7 @@ static void usb_net_handle_data(USBDevice *dev, USBPacket *p)
+ 
+ static ssize_t usbnet_receive(NetClientState *nc, const uint8_t *buf, size_t size)
+ {
+-    USBNetState *s = DO_UPCAST(NICState, nc, nc)->opaque;
++    USBNetState *s = qemu_get_nic_opaque(nc);
+     uint8_t *in_buf = s->in_buf;
+     size_t total_size = size;
+ 
+@@ -1308,7 +1308,7 @@ static ssize_t usbnet_receive(NetClientState *nc, const uint8_t *buf, size_t siz
+ 
+ static int usbnet_can_receive(NetClientState *nc)
+ {
+-    USBNetState *s = DO_UPCAST(NICState, nc, nc)->opaque;
++    USBNetState *s = qemu_get_nic_opaque(nc);
+ 
+     if (is_rndis(s) && s->rndis_state != RNDIS_DATA_INITIALIZED) {
+         return 1;
+@@ -1319,7 +1319,7 @@ static int usbnet_can_receive(NetClientState *nc)
+ 
+ static void usbnet_cleanup(NetClientState *nc)
+ {
+-    USBNetState *s = DO_UPCAST(NICState, nc, nc)->opaque;
++    USBNetState *s = qemu_get_nic_opaque(nc);
+ 
+     s->nic = NULL;
+ }
+diff --git a/hw/virtio-net.c b/hw/virtio-net.c
+index 551f6dc..0b43add 100644
+--- a/hw/virtio-net.c
++++ b/hw/virtio-net.c
+@@ -169,7 +169,7 @@ static void virtio_net_set_status(struct VirtIODevice *vdev, uint8_t status)
+ 
+ static void virtio_net_set_link_status(NetClientState *nc)
+ {
+-    VirtIONet *n = DO_UPCAST(NICState, nc, nc)->opaque;
++    VirtIONet *n = qemu_get_nic_opaque(nc);
+     uint16_t old_status = n->status;
+ 
+     if (nc->link_down)
+@@ -473,7 +473,7 @@ static void virtio_net_handle_rx(VirtIODevice *vdev, VirtQueue *vq)
+ 
+ static int virtio_net_can_receive(NetClientState *nc)
+ {
+-    VirtIONet *n = DO_UPCAST(NICState, nc, nc)->opaque;
++    VirtIONet *n = qemu_get_nic_opaque(nc);
+     if (!n->vdev.vm_running) {
+         return 0;
+     }
+@@ -604,7 +604,7 @@ static int receive_filter(VirtIONet *n, const uint8_t *buf, int size)
+ 
+ static ssize_t virtio_net_receive(NetClientState *nc, const uint8_t *buf, size_t size)
+ {
+-    VirtIONet *n = DO_UPCAST(NICState, nc, nc)->opaque;
++    VirtIONet *n = qemu_get_nic_opaque(nc);
+     struct iovec mhdr_sg[VIRTQUEUE_MAX_SIZE];
+     struct virtio_net_hdr_mrg_rxbuf mhdr;
+     unsigned mhdr_cnt = 0;
+@@ -703,7 +703,7 @@ static int32_t virtio_net_flush_tx(VirtIONet *n, VirtQueue *vq);
+ 
+ static void virtio_net_tx_complete(NetClientState *nc, ssize_t len)
+ {
+-    VirtIONet *n = DO_UPCAST(NICState, nc, nc)->opaque;
++    VirtIONet *n = qemu_get_nic_opaque(nc);
+ 
+     virtqueue_push(n->tx_vq, &n->async_tx.elem, 0);
+     virtio_notify(&n->vdev, n->tx_vq);
+@@ -1002,7 +1002,7 @@ static int virtio_net_load(QEMUFile *f, void *opaque, int version_id)
+ 
+ static void virtio_net_cleanup(NetClientState *nc)
+ {
+-    VirtIONet *n = DO_UPCAST(NICState, nc, nc)->opaque;
++    VirtIONet *n = qemu_get_nic_opaque(nc);
+ 
+     n->nic = NULL;
+ }
+diff --git a/hw/xen_nic.c b/hw/xen_nic.c
+index d5b39ea..55b7960 100644
+--- a/hw/xen_nic.c
++++ b/hw/xen_nic.c
+@@ -236,7 +236,7 @@ static void net_rx_response(struct XenNetDev *netdev,
+ 
+ static int net_rx_ok(NetClientState *nc)
+ {
+-    struct XenNetDev *netdev = DO_UPCAST(NICState, nc, nc)->opaque;
++    struct XenNetDev *netdev = qemu_get_nic_opaque(nc);
+     RING_IDX rc, rp;
+ 
+     if (netdev->xendev.be_state != XenbusStateConnected) {
+@@ -257,7 +257,7 @@ static int net_rx_ok(NetClientState *nc)
+ 
+ static ssize_t net_rx_packet(NetClientState *nc, const uint8_t *buf, size_t size)
+ {
+-    struct XenNetDev *netdev = DO_UPCAST(NICState, nc, nc)->opaque;
++    struct XenNetDev *netdev = qemu_get_nic_opaque(nc);
+     netif_rx_request_t rxreq;
+     RING_IDX rc, rp;
+     void *page;
+diff --git a/hw/xgmac.c b/hw/xgmac.c
+index 4d7bb13..5072298 100644
+--- a/hw/xgmac.c
++++ b/hw/xgmac.c
+@@ -310,7 +310,7 @@ static const MemoryRegionOps enet_mem_ops = {
+ 
+ static int eth_can_rx(NetClientState *nc)
+ {
+-    struct XgmacState *s = DO_UPCAST(NICState, nc, nc)->opaque;
++    struct XgmacState *s = qemu_get_nic_opaque(nc);
+ 
+     /* RX enabled?  */
+     return s->regs[DMA_CONTROL] & DMA_CONTROL_SR;
+@@ -318,7 +318,7 @@ static int eth_can_rx(NetClientState *nc)
+ 
+ static ssize_t eth_rx(NetClientState *nc, const uint8_t *buf, size_t size)
+ {
+-    struct XgmacState *s = DO_UPCAST(NICState, nc, nc)->opaque;
++    struct XgmacState *s = qemu_get_nic_opaque(nc);
+     static const unsigned char sa_bcast[6] = {0xff, 0xff, 0xff,
+                                               0xff, 0xff, 0xff};
+     int unicast, broadcast, multicast;
+@@ -366,7 +366,7 @@ out:
+ 
+ static void eth_cleanup(NetClientState *nc)
+ {
+-    struct XgmacState *s = DO_UPCAST(NICState, nc, nc)->opaque;
++    struct XgmacState *s = qemu_get_nic_opaque(nc);
+     s->nic = NULL;
+ }
+ 
+diff --git a/hw/xilinx_axienet.c b/hw/xilinx_axienet.c
+index a7e8e2c..34e344c 100644
+--- a/hw/xilinx_axienet.c
++++ b/hw/xilinx_axienet.c
+@@ -617,7 +617,7 @@ static const MemoryRegionOps enet_ops = {
+ 
+ static int eth_can_rx(NetClientState *nc)
+ {
+-    struct XilinxAXIEnet *s = DO_UPCAST(NICState, nc, nc)->opaque;
++    struct XilinxAXIEnet *s = qemu_get_nic_opaque(nc);
+ 
+     /* RX enabled?  */
+     return !axienet_rx_resetting(s) && axienet_rx_enabled(s);
+@@ -640,7 +640,7 @@ static int enet_match_addr(const uint8_t *buf, uint32_t f0, uint32_t f1)
+ 
+ static ssize_t eth_rx(NetClientState *nc, const uint8_t *buf, size_t size)
+ {
+-    struct XilinxAXIEnet *s = DO_UPCAST(NICState, nc, nc)->opaque;
++    struct XilinxAXIEnet *s = qemu_get_nic_opaque(nc);
+     static const unsigned char sa_bcast[6] = {0xff, 0xff, 0xff,
+                                               0xff, 0xff, 0xff};
+     static const unsigned char sa_ipmcast[3] = {0x01, 0x00, 0x52};
+@@ -785,7 +785,7 @@ static ssize_t eth_rx(NetClientState *nc, const uint8_t *buf, size_t size)
+ static void eth_cleanup(NetClientState *nc)
+ {
+     /* FIXME.  */
+-    struct XilinxAXIEnet *s = DO_UPCAST(NICState, nc, nc)->opaque;
++    struct XilinxAXIEnet *s = qemu_get_nic_opaque(nc);
+     g_free(s->rxmem);
+     g_free(s);
+ }
+diff --git a/hw/xilinx_ethlite.c b/hw/xilinx_ethlite.c
+index 5ab3915..ca07c3d 100644
+--- a/hw/xilinx_ethlite.c
++++ b/hw/xilinx_ethlite.c
+@@ -162,7 +162,7 @@ static const MemoryRegionOps eth_ops = {
+ 
+ static int eth_can_rx(NetClientState *nc)
+ {
+-    struct xlx_ethlite *s = DO_UPCAST(NICState, nc, nc)->opaque;
++    struct xlx_ethlite *s = qemu_get_nic_opaque(nc);
+     int r;
+     r = !(s->regs[R_RX_CTRL0] & CTRL_S);
+     return r;
+@@ -170,7 +170,7 @@ static int eth_can_rx(NetClientState *nc)
+ 
+ static ssize_t eth_rx(NetClientState *nc, const uint8_t *buf, size_t size)
+ {
+-    struct xlx_ethlite *s = DO_UPCAST(NICState, nc, nc)->opaque;
++    struct xlx_ethlite *s = qemu_get_nic_opaque(nc);
+     unsigned int rxbase = s->rxbuf * (0x800 / 4);
+ 
+     /* DA filter.  */
+@@ -196,7 +196,7 @@ static ssize_t eth_rx(NetClientState *nc, const uint8_t *buf, size_t size)
+ 
+ static void eth_cleanup(NetClientState *nc)
+ {
+-    struct xlx_ethlite *s = DO_UPCAST(NICState, nc, nc)->opaque;
++    struct xlx_ethlite *s = qemu_get_nic_opaque(nc);
+ 
+     s->nic = NULL;
+ }
+diff --git a/include/net/net.h b/include/net/net.h
+index 5d8aecf..96e05c4 100644
+--- a/include/net/net.h
++++ b/include/net/net.h
+@@ -78,6 +78,8 @@ NICState *qemu_new_nic(NetClientInfo *info,
+                        const char *name,
+                        void *opaque);
+ NetClientState *qemu_get_queue(NICState *nic);
++NICState *qemu_get_nic(NetClientState *nc);
++void *qemu_get_nic_opaque(NetClientState *nc);
+ void qemu_del_net_client(NetClientState *nc);
+ NetClientState *qemu_find_vlan_client_by_name(Monitor *mon, int vlan_id,
+                                               const char *client_str);
+diff --git a/net/net.c b/net/net.c
+index e9a0d15..41dc12c 100644
+--- a/net/net.c
++++ b/net/net.c
+@@ -227,7 +227,7 @@ NICState *qemu_new_nic(NetClientInfo *info,
+ 
+     nc = qemu_new_net_client(info, conf->peer, model, name);
+ 
+-    nic = DO_UPCAST(NICState, nc, nc);
++    nic = qemu_get_nic(nc);
+     nic->conf = conf;
+     nic->opaque = opaque;
+ 
+@@ -239,6 +239,18 @@ NetClientState *qemu_get_queue(NICState *nic)
+     return &nic->nc;
+ }
+ 
++NICState *qemu_get_nic(NetClientState *nc)
++{
++    return DO_UPCAST(NICState, nc, nc);
++}
++
++void *qemu_get_nic_opaque(NetClientState *nc)
++{
++    NICState *nic = qemu_get_nic(nc);
++
++    return nic->opaque;
++}
++
+ static void qemu_cleanup_net_client(NetClientState *nc)
+ {
+     QTAILQ_REMOVE(&net_clients, nc, next);
+@@ -265,7 +277,7 @@ void qemu_del_net_client(NetClientState *nc)
+ {
+     /* If there is a peer NIC, delete and cleanup client, but do not free. */
+     if (nc->peer && nc->peer->info->type == NET_CLIENT_OPTIONS_KIND_NIC) {
+-        NICState *nic = DO_UPCAST(NICState, nc, nc->peer);
++        NICState *nic = qemu_get_nic(nc->peer);
+         if (nic->peer_deleted) {
+             return;
+         }
+@@ -281,7 +293,7 @@ void qemu_del_net_client(NetClientState *nc)
+ 
+     /* If this is a peer NIC and peer has already been deleted, free it now. */
+     if (nc->peer && nc->info->type == NET_CLIENT_OPTIONS_KIND_NIC) {
+-        NICState *nic = DO_UPCAST(NICState, nc, nc);
++        NICState *nic = qemu_get_nic(nc);
+         if (nic->peer_deleted) {
+             qemu_free_net_client(nc->peer);
+         }
+@@ -297,7 +309,7 @@ void qemu_foreach_nic(qemu_nic_foreach func, void *opaque)
+ 
+     QTAILQ_FOREACH(nc, &net_clients, next) {
+         if (nc->info->type == NET_CLIENT_OPTIONS_KIND_NIC) {
+-            func(DO_UPCAST(NICState, nc, nc), opaque);
++            func(qemu_get_nic(nc), opaque);
+         }
+     }
+ }
+-- 
+1.7.1
+
+--
+To unsubscribe from this list: send the line "unsubscribe kvm" in
+the body of a message to majordomo@vger.kernel.org
+More majordomo info at  http://vger.kernel.org/majordomo-info.html

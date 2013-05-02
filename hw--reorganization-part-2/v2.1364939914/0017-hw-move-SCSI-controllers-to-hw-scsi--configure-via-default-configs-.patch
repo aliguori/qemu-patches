@@ -1,0 +1,47 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: 
+Date: Tue,  2 Apr 2013 16:58:51 +0200
+Message-id: 1364914749-11141-18-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 17/35] hw: move SCSI controllers to hw/scsi/,
+ configure via default-configs/
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ hw/ppc/Makefile.objs        | 2 +-
+ hw/scsi/Makefile.objs       | 1 +
+ hw/{ => scsi}/spapr_vscsi.c | 0
+ 3 files changed, 2 insertions(+), 1 deletion(-)
+ rename hw/{ => scsi}/spapr_vscsi.c (100%)
+
+diff --git a/hw/ppc/Makefile.objs b/hw/ppc/Makefile.objs
+index 42c7d08..2d51ae9 100644
+--- a/hw/ppc/Makefile.objs
++++ b/hw/ppc/Makefile.objs
+@@ -1,5 +1,5 @@
+ # IBM pSeries (sPAPR)
+-obj-$(CONFIG_PSERIES) += spapr_vty.o spapr_vscsi.o
++obj-$(CONFIG_PSERIES) += spapr_vty.o
+ obj-$(CONFIG_PSERIES) += spapr_pci.o
+ obj-$(CONFIG_PSERIES) += spapr_nvram.o
+ # PowerPC 4xx boards
+diff --git a/hw/scsi/Makefile.objs b/hw/scsi/Makefile.objs
+index b76b9c3..aab0e9b 100644
+--- a/hw/scsi/Makefile.objs
++++ b/hw/scsi/Makefile.objs
+@@ -4,4 +4,5 @@ common-obj-$(CONFIG_LSI_SCSI_PCI) += lsi53c895a.o
+ common-obj-$(CONFIG_MEGASAS_SCSI_PCI) += megasas.o
+ common-obj-$(CONFIG_ESP) += esp.o
+ common-obj-$(CONFIG_ESP_PCI) += esp-pci.o
++obj-$(CONFIG_PSERIES) += spapr_vscsi.o
+ obj-$(CONFIG_VIRTIO) += virtio-scsi.o
+diff --git a/hw/spapr_vscsi.c b/hw/scsi/spapr_vscsi.c
+similarity index 100%
+rename from hw/spapr_vscsi.c
+rename to hw/scsi/spapr_vscsi.c
+-- 
+1.8.1.4
+
+
+

@@ -1,0 +1,109 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Fabien Chouteau <chouteau@adacore.com>
+To: qemu-devel@nongnu.org
+Cc: qemu-ppc@nongnu.org, agraf@suse.de
+Date: Wed,  3 Apr 2013 18:40:12 +0200
+Message-id: 1365007213-27603-3-git-send-email-chouteau@adacore.com
+Subject: [PATCH 2/3] PPC PReP: Use kernel entry to set nip at reset
+
+When we load an ELF kernel we can start the board at the entry point.
+
+Signed-off-by: Fabien Chouteau <chouteau@adacore.com>
+---
+ hw/ppc/prep.c |   34 ++++++++++++++++++++++++++++++----
+ 1 file changed, 30 insertions(+), 4 deletions(-)
+
+diff --git a/hw/ppc/prep.c b/hw/ppc/prep.c
+index a2730c8..12198ff 100644
+--- a/hw/ppc/prep.c
++++ b/hw/ppc/prep.c
+@@ -56,6 +56,12 @@
+ #define KERNEL_LOAD_ADDR 0x01000000
+ #define INITRD_LOAD_ADDR 0x01800000
+ 
++typedef struct ResetData {
++    PowerPCCPU   *cpu;
++    bool          use_entry;
++    target_ulong  entry;        /* save kernel entry in case of reset */
++} ResetData;
++
+ #if defined (HARD_DEBUG_PPC_IO) && !defined (DEBUG_PPC_IO)
+ #define DEBUG_PPC_IO
+ #endif
+@@ -425,8 +431,13 @@ static void cpu_request_exit(void *opaque, int irq, int level)
+ 
+ static void ppc_prep_reset(void *opaque)
+ {
+-    PowerPCCPU *cpu = opaque;
++    ResetData  *s   = (ResetData *)opaque;
++    PowerPCCPU *cpu = s->cpu;
++
+ 
++    if (s->use_entry) {
++        cpu->env.nip = s->entry;
++    }
+     cpu_reset(CPU(cpu));
+ }
+ 
+@@ -463,11 +474,14 @@ static void ppc_prep_init(QEMUMachineInitArgs *args)
+     qemu_irq *cpu_exit_irq;
+     int ppc_boot_device;
+     DriveInfo *hd[MAX_IDE_BUS * MAX_IDE_DEVS];
++    ResetData *reset_data;
+ 
+     sysctrl = g_malloc0(sizeof(sysctrl_t));
+ 
+     linux_boot = (kernel_filename != NULL);
+ 
++    reset_data = g_malloc0(sizeof(ResetData) * smp_cpus);
++
+     /* init CPUs */
+     if (cpu_model == NULL)
+         cpu_model = "602";
+@@ -486,7 +500,11 @@ static void ppc_prep_init(QEMUMachineInitArgs *args)
+             /* Set time-base frequency to 100 Mhz */
+             cpu_ppc_tb_init(env, 100UL * 1000UL * 1000UL);
+         }
+-        qemu_register_reset(ppc_prep_reset, cpu);
++
++        /* Reset data */
++        reset_data[i].cpu       = cpu;
++        reset_data[i].use_entry = false;
++        qemu_register_reset(ppc_prep_reset, &reset_data[i]);
+     }
+ 
+     /* allocate RAM */
+@@ -521,19 +539,27 @@ static void ppc_prep_init(QEMUMachineInitArgs *args)
+     }
+ 
+     if (linux_boot) {
++        uint64_t entry;
++
+         kernel_base = KERNEL_LOAD_ADDR;
+ 
+         /* Try to load the kernel as an ELF file */
+-        kernel_size = load_elf(kernel_filename, NULL, NULL, NULL, NULL, NULL,
++        kernel_size = load_elf(kernel_filename, NULL, NULL, &entry, NULL, NULL,
+                                1, ELF_MACHINE, 0);
+-        if (kernel_size < 0) {
++        if (kernel_size > 0) {
++            /* Entry point for CPU #0 */
++            reset_data[0].entry = entry;
++            reset_data[0].use_entry = true;
++        } else {
+             /* Try to load the kernel as an binary file */
+             kernel_size = load_image_targphys(kernel_filename, kernel_base,
+                                               ram_size - kernel_base);
+         }
++
+         if (kernel_size < 0) {
+             hw_error("qemu: could not load kernel '%s'\n", kernel_filename);
+         }
++
+         /* load initrd */
+         if (initrd_filename) {
+             initrd_base = INITRD_LOAD_ADDR;
+-- 
+1.7.9.5
+
+

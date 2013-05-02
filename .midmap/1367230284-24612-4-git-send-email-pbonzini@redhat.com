@@ -1,0 +1,1 @@
+../fix-win32-compilation/v6.1367255480/0003-win32-generate-console-executable-again.patch

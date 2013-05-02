@@ -1,0 +1,32 @@
+From patches Mon Sep 17 00:00:00 2001
+From: liguang <lig.fnst@cn.fujitsu.com>
+To: Anthony Liguori <aliguori@us.ibm.com>, peter.maydell@linaro.org,
+ stefanha@gmail.com, qemu-devel@nongnu.org, pbonzini@redhat.com,
+ afaerber@suse.de
+Cc: liguang <lig.fnst@cn.fujitsu.com>
+Date: Fri, 5 Apr 2013 12:28:09 +0800
+Message-id: 1365136091-26148-6-git-send-email-lig.fnst@cn.fujitsu.com
+Subject: [PATCH 5/7] qdev: add power_signal_in for DeviceState
+
+so, devices can connect power signal with power chip
+
+Signed-off-by: liguang <lig.fnst@cn.fujitsu.com>
+---
+ hw/qdev-core.h |    1 +
+ 1 files changed, 1 insertions(+), 0 deletions(-)
+
+diff --git a/hw/qdev-core.h b/hw/qdev-core.h
+index 547fbc7..abbb570 100644
+--- a/hw/qdev-core.h
++++ b/hw/qdev-core.h
+@@ -121,6 +121,7 @@ struct DeviceState {
+     qemu_irq *gpio_out;
+     int num_gpio_in;
+     qemu_irq *gpio_in;
++    qemu_irq *power_signal_in;
+     QLIST_HEAD(, BusState) child_bus;
+     int num_child_bus;
+     int instance_id_alias;
+-- 
+1.7.2.5
+

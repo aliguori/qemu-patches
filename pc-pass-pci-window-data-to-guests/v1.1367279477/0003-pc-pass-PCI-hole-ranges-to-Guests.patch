@@ -1,0 +1,157 @@
+From patches Mon Sep 17 00:00:00 2001
+From: "Michael S. Tsirkin" <mst@redhat.com>
+To: Anthony Liguori <aliguori@us.ibm.com>, kevin@koconnor.net,
+ lersek@redhat.com, qemu-devel@nongnu.org
+Cc: 
+Date: Mon, 29 Apr 2013 18:51:30 +0300
+Message-id: a2744f635e7809a35e248b14fdae84c80748affd.1367250562.git.mst@redhat.com
+Subject: [PATCH 3/3] pc: pass PCI hole ranges to Guests
+
+Guest currently has to jump through lots of
+hoops to guess the PCI hole ranges.
+It's fragile, and makes us change BIOS each time we add a new chipset.
+Let's report the window in a ROM file, to make
+BIOS do exactly what QEMU intends.
+
+Signed-off-by: Michael S. Tsirkin <mst@redhat.com>
+---
+ hw/i386/pc.c         | 19 ++++++++++++++++---
+ hw/i386/pc_piix.c    |  2 +-
+ hw/i386/pc_q35.c     |  2 +-
+ include/hw/i386/pc.h | 18 ++++++++++++++----
+ 4 files changed, 32 insertions(+), 9 deletions(-)
+
+diff --git a/hw/i386/pc.c b/hw/i386/pc.c
+index fbea5d0..35c0dd9 100644
+--- a/hw/i386/pc.c
++++ b/hw/i386/pc.c
+@@ -567,7 +567,7 @@ static unsigned int pc_apic_id_limit(unsigned int max_cpus)
+     return x86_cpu_apic_id_from_index(max_cpus - 1) + 1;
+ }
+ 
+-static FWCfgState *bochs_bios_init(void)
++static FWCfgState *bochs_bios_init(PcGuestInfo *guest_info)
+ {
+     FWCfgState *fw_cfg;
+     uint8_t *smbios_table;
+@@ -629,6 +629,9 @@ static FWCfgState *bochs_bios_init(void)
+                      (1 + apic_id_limit + nb_numa_nodes) *
+                      sizeof(*numa_fw_cfg));
+ 
++    fw_cfg_add_file(fw_cfg, "etc/pci-info", guest_info->pci_info_rom,
++                    sizeof *guest_info->pci_info_rom);
++
+     return fw_cfg;
+ }
+ 
+@@ -926,6 +929,8 @@ void pc_guest_info_init(PcGuestInfo *guest_info,
+                         ram_addr_t below_4g_mem_size,
+                         ram_addr_t above_4g_mem_size)
+ {
++    PcRomPciInfo *pci_info;
++
+     guest_info->pci_info.w32.min = below_4g_mem_size;
+     guest_info->pci_info.w32.max = 0x100000000ULL - 0x1;
+     if (sizeof(hwaddr) == 4) {
+@@ -935,6 +940,13 @@ void pc_guest_info_init(PcGuestInfo *guest_info,
+     } else {
+         guest_info->pci_info.w64.min = guest_info->pci_info.w64.max =  0;
+     }
++
++    guest_info->pci_info_rom = pci_info = g_malloc0(sizeof *pci_info);
++    pci_info->w32_min = cpu_to_le64(guest_info->pci_info.w32.min);
++    pci_info->w32_max = cpu_to_le64(MIN(guest_info->pci_info.w32.max,
++                                        IO_APIC_DEFAULT_ADDRESS));
++    pci_info->w64_min = cpu_to_le64(guest_info->pci_info.w64.min);
++    pci_info->w64_max = cpu_to_le64(guest_info->pci_info.w64.max);
+ }
+ 
+ FWCfgState *pc_memory_init(MemoryRegion *system_memory,
+@@ -944,7 +956,8 @@ FWCfgState *pc_memory_init(MemoryRegion *system_memory,
+                            ram_addr_t below_4g_mem_size,
+                            ram_addr_t above_4g_mem_size,
+                            MemoryRegion *rom_memory,
+-                           MemoryRegion **ram_memory)
++                           MemoryRegion **ram_memory,
++                           PcGuestInfo *guest_info)
+ {
+     int linux_boot, i;
+     MemoryRegion *ram, *option_rom_mr;
+@@ -986,7 +999,7 @@ FWCfgState *pc_memory_init(MemoryRegion *system_memory,
+                                         option_rom_mr,
+                                         1);
+ 
+-    fw_cfg = bochs_bios_init();
++    fw_cfg = bochs_bios_init(guest_info);
+     rom_set_fw(fw_cfg);
+ 
+     if (linux_boot) {
+diff --git a/hw/i386/pc_piix.c b/hw/i386/pc_piix.c
+index 539f72a..524ce9b 100644
+--- a/hw/i386/pc_piix.c
++++ b/hw/i386/pc_piix.c
+@@ -118,7 +118,7 @@ static void pc_init1(MemoryRegion *system_memory,
+         fw_cfg = pc_memory_init(system_memory,
+                        kernel_filename, kernel_cmdline, initrd_filename,
+                        below_4g_mem_size, above_4g_mem_size,
+-                       rom_memory, &ram_memory);
++                       rom_memory, &ram_memory, &guest_info);
+     }
+ 
+     gsi_state = g_malloc0(sizeof(*gsi_state));
+diff --git a/hw/i386/pc_q35.c b/hw/i386/pc_q35.c
+index 50dc14d..5ac4f33 100644
+--- a/hw/i386/pc_q35.c
++++ b/hw/i386/pc_q35.c
+@@ -116,7 +116,7 @@ static void pc_q35_init(QEMUMachineInitArgs *args)
+     if (!xen_enabled()) {
+         pc_memory_init(get_system_memory(), kernel_filename, kernel_cmdline,
+                        initrd_filename, below_4g_mem_size, above_4g_mem_size,
+-                       rom_memory, &ram_memory);
++                       rom_memory, &ram_memory, &guest_info);
+     }
+ 
+     /* irq lines */
+diff --git a/include/hw/i386/pc.h b/include/hw/i386/pc.h
+index cf3b263..afd494f 100644
+--- a/include/hw/i386/pc.h
++++ b/include/hw/i386/pc.h
+@@ -14,13 +14,22 @@
+ 
+ /* PC-style peripherals (also used by other machines).  */
+ 
+-typedef struct PciGuestInfo {
++typedef struct PcPciInfo {
+     Range w32;
+     Range w64;
+-} PciGuestInfo;
++} PcPciInfo;
++
++/* pci-info ROM file. Little endian format */
++typedef struct PcRomPciInfo {
++    uint64_t w32_min;
++    uint64_t w32_max;
++    uint64_t w64_min;
++    uint64_t w64_max;
++} PcRomPciInfo;
+ 
+ typedef struct PcGuestInfo {
+-    PciGuestInfo pci_info;
++    PcPciInfo pci_info;
++    PcRomPciInfo *pci_info_rom;
+ } PcGuestInfo;
+ 
+ /* parallel.c */
+@@ -101,7 +110,8 @@ FWCfgState *pc_memory_init(MemoryRegion *system_memory,
+                            ram_addr_t below_4g_mem_size,
+                            ram_addr_t above_4g_mem_size,
+                            MemoryRegion *rom_memory,
+-                           MemoryRegion **ram_memory);
++                           MemoryRegion **ram_memory,
++                           PcGuestInfo *guest_info);
+ qemu_irq *pc_allocate_cpu_irq(void);
+ DeviceState *pc_vga_init(ISABus *isa_bus, PCIBus *pci_bus);
+ void pc_basic_device_init(ISABus *isa_bus, qemu_irq *gsi,
+-- 
+MST
+

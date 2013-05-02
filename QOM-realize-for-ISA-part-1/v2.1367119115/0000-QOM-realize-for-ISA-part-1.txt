@@ -1,0 +1,99 @@
+From patches Mon Sep 17 00:00:00 2001
+From: =?utf-8?q?Andreas_F=C3=A4rber_=3Cafaerber=40suse=2Ede=3E?=
+To: None <afaerber@suse.de>, qemu-devel@nongnu.org
+Cc: Blue Swirl <blauwirbel@gmail.com>, Paolo Bonzini <pbonzini@redhat.com>,
+ None <afaerber@suse.de>, Anthony Liguori <anthony@codemonkey.ws>,
+ =?UTF-8?q?Aur=C3=A9lien=20Jarno?= <aurelien@aurel32.net>,
+ None <aurelien@aurel32.net>, Igor Mammedov <imammedo@redhat.com>,
+ =?UTF-8?q?Andreas=20F=C3=A4rber?= <afaerber@suse.de>,
+ Artyom Tarasenko <atar4qemu@gmail.com>
+Date: Sat, 27 Apr 2013 22:18:35 +0200
+Message-id: 1367093935-29091-1-git-send-email-afaerber@suse.de
+Subject: [PATCH 00/20] QOM realize for ISA, part 1
+
+Hello,
+
+Here is my next batch of QOM realize patches.
+
+These mostly introduce QOM cast macros for ISADevice-derived types,
+so should hopefully be safe to apply for 1.5.
+
+The mc146818 patch is also queued on qom-cpu and reused for CPU hot-add.
+
+Available from:
+https://github.com/afaerber/qemu-cpu/commits/realize-isa.cleanup.v2
+git://github.com/afaerber/qemu-cpu.git realize-isa.cleanup.v2
+
+Regards,
+Andreas
+
+v1 -> v2:
+* QOM realize infrastructure was split off and applied.
+* isa-debugcon was QOM'ified.
+* Rebased onto multiple hw/ reorganizations.
+* Renamed M48T59_ISA() to ISA_M48T59() to match dominant specific <- base scheme.
+* Deferred ISADevice::init removal to follow-up series.
+
+Cc: Anthony Liguori <anthony@codemonkey.ws>
+Cc: Blue Swirl <blauwirbel@gmail.com>
+Cc: Aurélien Jarno <aurelien@aurel32.net>
+
+Cc: Paolo Bonzini <pbonzini@redhat.com>
+Cc: Igor Mammedov <imammedo@redhat.com>
+Cc: Artyom Tarasenko <atar4qemu@gmail.com>
+
+Andreas Färber (20):
+  applesmc: QOM'ify
+  cirrus_vga: QOM'ify ISA Cirrus VGA
+  fdc: QOM'ify ISA floppy controller
+  i82374: QOM'ify
+  i8259: QOM cleanups
+  ide: QOM'ify ISA IDE
+  m48t59: QOM'ify ISA M48T59 NVRAM
+  mc146818rtc: QOM'ify
+  ne2000-isa: QOM'ify
+  parallel: QOM'ify
+  pc: QOM'ify port 92
+  pckbd: QOM'ify
+  pcspk: QOM'ify
+  sb16: QOM'ify
+  serial: QOM'ify ISA serial
+  sga: QOM'ify
+  vga-isa: QOM'ify ISA VGA
+  vmmouse: QOM'ify
+  vmport: QOM'ify
+  wdt_ib700: QOM'ify
+
+ hw/audio/pcspk.c                |  9 ++++++---
+ hw/audio/sb16.c                 | 14 ++++++++------
+ hw/block/fdc.c                  | 21 ++++++++++++---------
+ hw/char/parallel.c              | 11 ++++++++---
+ hw/char/serial-isa.c            | 11 +++++++----
+ hw/display/cirrus_vga.c         | 15 ++++++++++-----
+ hw/display/vga-isa.c            | 29 +++++++++++++++++------------
+ hw/dma/i82374.c                 | 10 +++++++---
+ hw/i386/kvm/i8259.c             |  2 +-
+ hw/i386/pc.c                    | 14 +++++++++-----
+ hw/i386/pc_piix.c               |  2 +-
+ hw/ide/isa.c                    | 39 ++++++++++++++++++++++++---------------
+ hw/input/pckbd.c                | 16 +++++++++++-----
+ hw/input/vmmouse.c              | 14 +++++++++-----
+ hw/intc/i8259.c                 | 16 +++++++++-------
+ hw/intc/i8259_common.c          |  8 ++++----
+ hw/misc/applesmc.c              | 33 +++++++++++++++++++--------------
+ hw/misc/sga.c                   | 10 +++++++---
+ hw/misc/vmport.c                | 12 ++++++++----
+ hw/net/ne2000-isa.c             | 10 +++++++---
+ hw/timer/m48t59.c               | 35 +++++++++++++++++++++--------------
+ hw/timer/mc146818rtc.c          | 36 ++++++++++++++++++++----------------
+ hw/watchdog/wdt_ib700.c         | 12 ++++++++----
+ include/hw/audio/pcspk.h        |  4 +++-
+ include/hw/block/fdc.h          |  2 ++
+ include/hw/char/serial.h        |  1 +
+ include/hw/isa/i8259_internal.h |  3 ++-
+ include/hw/timer/mc146818rtc.h  |  2 ++
+ 28 files changed, 243 insertions(+), 148 deletions(-)
+
+-- 
+1.8.1.4
+

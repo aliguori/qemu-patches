@@ -1,0 +1,37 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Alon Levy <alevy@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: mlureau@redhat.com
+Date: Mon, 22 Apr 2013 18:04:47 +0300
+Message-id: 1366643098-2566-18-git-send-email-alevy@redhat.com
+Subject: [PATCH 17/28] dev-smartcard-reader: support windows guest
+
+By not advertising USB wakeup support (which we don't).
+
+Signed-off-by: Alon Levy <alevy@redhat.com>
+---
+ hw/usb/dev-smartcard-reader.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/hw/usb/dev-smartcard-reader.c b/hw/usb/dev-smartcard-reader.c
+index 6133edf..38c3c0e 100644
+--- a/hw/usb/dev-smartcard-reader.c
++++ b/hw/usb/dev-smartcard-reader.c
+@@ -359,11 +359,11 @@ static const uint8_t qemu_ccid_descriptor[] = {
+                      * 20000 Short APDU level exchange with CCID
+                      * 40000 Short and Extended APDU level exchange with CCID
+                      *
+-                     * + 100000 USB Wake up signaling supported on card
++                     * 100000 USB Wake up signaling supported on card
+                      * insertion and removal. Must set bit 5 in bmAttributes
+                      * in Configuration descriptor if 100000 is set.
+                      */
+-        0xfe, 0x04, 0x11, 0x00,
++        0xfe, 0x04, 0x01, 0x00,
+                     /*
+                      * u32 dwMaxCCIDMessageLength; For extended APDU in
+                      * [261 + 10 , 65544 + 10]. Otherwise the minimum is
+-- 
+1.8.2
+
+

@@ -1,0 +1,1 @@
+../directory-reorganization-final-part/v1.1365721821/0012-hw-move-memory-API-to-hw-core.patch

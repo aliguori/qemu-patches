@@ -1,0 +1,1 @@
+../Add-pvpanic-device-to-deal-with-guest-panic-event/v17.1365190576/0001-Wire-up-disabled-wait-a-panicked-event-on-s390.patch

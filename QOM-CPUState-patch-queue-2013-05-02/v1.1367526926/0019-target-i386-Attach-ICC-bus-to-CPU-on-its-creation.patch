@@ -1,0 +1,174 @@
+From patches Mon Sep 17 00:00:00 2001
+From: =?utf-8?q?Andreas_F=C3=A4rber_=3Cafaerber=40suse=2Ede=3E?=
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>,
+ =?utf-8?b?IkFuZHJlYXMgRsOkcmJlciI=?= <afaerber@suse.de>,
+ Igor Mammedov <imammedo@redhat.com>
+Date: Thu, 2 May 2013 15:35:45 +0200
+Message-id: 1367501755-32272-20-git-send-email-afaerber@suse.de
+Subject: [PATCH 19/29] target-i386: Attach ICC bus to CPU on its creation
+
+From: Igor Mammedov <imammedo@redhat.com>
+
+X86CPU should have parent bus so it could provide bus for child APIC.
+
+Signed-off-by: Igor Mammedov <imammedo@redhat.com>
+Signed-off-by: Andreas Färber <afaerber@suse.de>
+---
+ hw/i386/pc.c         | 10 ++++++----
+ hw/i386/pc_piix.c    |  2 +-
+ hw/i386/pc_q35.c     |  2 +-
+ include/hw/i386/pc.h |  2 +-
+ target-i386/cpu.c    | 15 +++++++++++++--
+ target-i386/cpu.h    |  3 ++-
+ 6 files changed, 24 insertions(+), 10 deletions(-)
+
+diff --git a/hw/i386/pc.c b/hw/i386/pc.c
+index 6568173..c4c4e35 100644
+--- a/hw/i386/pc.c
++++ b/hw/i386/pc.c
+@@ -894,12 +894,13 @@ void pc_acpi_smi_interrupt(void *opaque, int irq, int level)
+     }
+ }
+ 
+-static X86CPU *pc_new_cpu(const char *cpu_model, int64_t apic_id, Error **errp)
++static X86CPU *pc_new_cpu(const char *cpu_model, int64_t apic_id,
++                          DeviceState *icc_bridge, Error **errp)
+ {
+     X86CPU *cpu;
+     Error *local_err = NULL;
+ 
+-    cpu = cpu_x86_create(cpu_model, errp);
++    cpu = cpu_x86_create(cpu_model, icc_bridge, errp);
+     if (!cpu) {
+         return cpu;
+     }
+@@ -917,7 +918,7 @@ static X86CPU *pc_new_cpu(const char *cpu_model, int64_t apic_id, Error **errp)
+     return cpu;
+ }
+ 
+-void pc_cpus_init(const char *cpu_model)
++void pc_cpus_init(const char *cpu_model, DeviceState *icc_bridge)
+ {
+     int i;
+     Error *error = NULL;
+@@ -932,7 +933,8 @@ void pc_cpus_init(const char *cpu_model)
+     }
+ 
+     for (i = 0; i < smp_cpus; i++) {
+-        pc_new_cpu(cpu_model, x86_cpu_apic_id_from_index(i), &error);
++        pc_new_cpu(cpu_model, x86_cpu_apic_id_from_index(i),
++                   icc_bridge, &error);
+         if (error) {
+             fprintf(stderr, "%s\n", error_get_pretty(error));
+             error_free(error);
+diff --git a/hw/i386/pc_piix.c b/hw/i386/pc_piix.c
+index 0ce3fc2..251e18f 100644
+--- a/hw/i386/pc_piix.c
++++ b/hw/i386/pc_piix.c
+@@ -95,7 +95,7 @@ static void pc_init1(MemoryRegion *system_memory,
+     object_property_add_child(qdev_get_machine(), "icc-bridge",
+                               OBJECT(icc_bridge), NULL);
+ 
+-    pc_cpus_init(cpu_model);
++    pc_cpus_init(cpu_model, icc_bridge);
+     pc_acpi_init("acpi-dsdt.aml");
+ 
+     if (kvmclock_enabled) {
+diff --git a/hw/i386/pc_q35.c b/hw/i386/pc_q35.c
+index a6ba809..f46295b 100644
+--- a/hw/i386/pc_q35.c
++++ b/hw/i386/pc_q35.c
+@@ -82,7 +82,7 @@ static void pc_q35_init(QEMUMachineInitArgs *args)
+     object_property_add_child(qdev_get_machine(), "icc-bridge",
+                               OBJECT(icc_bridge), NULL);
+ 
+-    pc_cpus_init(cpu_model);
++    pc_cpus_init(cpu_model, icc_bridge);
+     pc_acpi_init("q35-acpi-dsdt.aml");
+ 
+     kvmclock_create();
+diff --git a/include/hw/i386/pc.h b/include/hw/i386/pc.h
+index dd6bc24..d0bc972 100644
+--- a/include/hw/i386/pc.h
++++ b/include/hw/i386/pc.h
+@@ -78,7 +78,7 @@ extern int fd_bootchk;
+ void pc_register_ferr_irq(qemu_irq irq);
+ void pc_acpi_smi_interrupt(void *opaque, int irq, int level);
+ 
+-void pc_cpus_init(const char *cpu_model);
++void pc_cpus_init(const char *cpu_model, DeviceState *icc_bridge);
+ void pc_acpi_init(const char *default_dsdt);
+ void *pc_memory_init(MemoryRegion *system_memory,
+                     const char *kernel_filename,
+diff --git a/target-i386/cpu.c b/target-i386/cpu.c
+index 40d51be..a165bcf 100644
+--- a/target-i386/cpu.c
++++ b/target-i386/cpu.c
+@@ -41,6 +41,7 @@
+ #endif
+ 
+ #include "sysemu/sysemu.h"
++#include "hw/cpu/icc_bus.h"
+ #ifndef CONFIG_USER_ONLY
+ #include "hw/xen/xen.h"
+ #include "hw/sysbus.h"
+@@ -1618,7 +1619,8 @@ static void cpu_x86_register(X86CPU *cpu, const char *name, Error **errp)
+     object_property_set_str(OBJECT(cpu), def->model_id, "model-id", errp);
+ }
+ 
+-X86CPU *cpu_x86_create(const char *cpu_model, Error **errp)
++X86CPU *cpu_x86_create(const char *cpu_model, DeviceState *icc_bridge,
++                       Error **errp)
+ {
+     X86CPU *cpu = NULL;
+     CPUX86State *env;
+@@ -1635,6 +1637,14 @@ X86CPU *cpu_x86_create(const char *cpu_model, Error **errp)
+     features = model_pieces[1];
+ 
+     cpu = X86_CPU(object_new(TYPE_X86_CPU));
++#ifndef CONFIG_USER_ONLY
++    if (icc_bridge == NULL) {
++        error_setg(&error, "Invalid icc-bridge value");
++        goto out;
++    }
++    qdev_set_parent_bus(DEVICE(cpu), qdev_get_child_bus(icc_bridge, "icc"));
++    object_unref(OBJECT(cpu));
++#endif
+     env = &cpu->env;
+     env->cpu_model_str = cpu_model;
+ 
+@@ -1659,7 +1669,7 @@ X86CPU *cpu_x86_init(const char *cpu_model)
+     Error *error = NULL;
+     X86CPU *cpu;
+ 
+-    cpu = cpu_x86_create(cpu_model, &error);
++    cpu = cpu_x86_create(cpu_model, NULL, &error);
+     if (error) {
+         goto out;
+     }
+@@ -2346,6 +2356,7 @@ static void x86_cpu_common_class_init(ObjectClass *oc, void *data)
+ 
+     xcc->parent_realize = dc->realize;
+     dc->realize = x86_cpu_realizefn;
++    dc->bus_type = TYPE_ICC_BUS;
+ 
+     xcc->parent_reset = cc->reset;
+     cc->reset = x86_cpu_reset;
+diff --git a/target-i386/cpu.h b/target-i386/cpu.h
+index ab151d5..f193752 100644
+--- a/target-i386/cpu.h
++++ b/target-i386/cpu.h
+@@ -897,7 +897,8 @@ typedef struct CPUX86State {
+ #include "cpu-qom.h"
+ 
+ X86CPU *cpu_x86_init(const char *cpu_model);
+-X86CPU *cpu_x86_create(const char *cpu_model, Error **errp);
++X86CPU *cpu_x86_create(const char *cpu_model, DeviceState *icc_bridge,
++                       Error **errp);
+ int cpu_x86_exec(CPUX86State *s);
+ void x86_cpu_list(FILE *f, fprintf_function cpu_fprintf);
+ void x86_cpudef_setup(void);
+-- 
+1.8.1.4
+

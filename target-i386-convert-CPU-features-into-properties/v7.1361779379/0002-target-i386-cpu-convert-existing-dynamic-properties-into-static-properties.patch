@@ -1,0 +1,353 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Igor Mammedov <imammedo@redhat.com>
+To: Igor Mammedov <imammedo@redhat.com>, qemu-devel@nongnu.org
+Cc: qemu-devel@nongnu.org, ehabkost@redhat.com, afaerber@suse.de
+Date: Mon, 25 Feb 2013 02:03:01 +0100
+Message-id: 1361754189-29809-3-git-send-email-imammedo@redhat.com
+Subject: [PATCH 02/10] target-i386: cpu: convert existing dynamic properties
+ into static properties
+
+Following properties are converted:
+    * vendor
+    * xlevel
+        * custom setter/getter replaced by qdev's DEFINE_PROP_UINT32
+    * level
+        * custom setter/getter replaced by qdev's DEFINE_PROP_UINT32
+    * tsc-frequency
+    * stepping
+    * model
+    * family
+    * model-id
+        * check "if (model_id == NULL)" looks unnecessary now, since all
+        builtin model-ids are not NULL and user shouldn't be able to set
+        it NULL (cpumodel string parsing code takes care of it, if feature
+        is specified as "model-id=" on command line, its parsing will
+        result in an empty string as value).
+
+Common changes to all properties:
+    * string properties: changed function signature to conform to form used in
+      qdev-properties.c
+
+* extra change is addition of feat2prop() helper to deal with properties
+  naming using '-' instead of '_'. Used in this patch for 'model_id' name
+  conversion and converting along the way 'hv-spinlocks', but will be
+  reused in following patches for "hv_*" and +-foo conversions as well.
+
+Signed-off-by: Igor Mammedov <imammedo@redhat.com>
+v2:
+  - removed s/error_set/error_setg/;s/QERR*/with similar message/
+  - made PropertyInfo static
+  - Left setters/getters atwher they have been, only signature change
+    + usin visitors where needed
+  - use g_malloc0() instead of g_malloc() in x86_cpuid_get_model_id()
+---
+ target-i386/cpu.c |  174 ++++++++++++++++++++++++++++++++---------------------
+ 1 files changed, 105 insertions(+), 69 deletions(-)
+
+diff --git a/target-i386/cpu.c b/target-i386/cpu.c
+index dfcf86e..5626931 100644
+--- a/target-i386/cpu.c
++++ b/target-i386/cpu.c
+@@ -41,6 +41,7 @@
+ #endif
+ 
+ #include "sysemu/sysemu.h"
++#include "hw/qdev-properties.h"
+ #ifndef CONFIG_USER_ONLY
+ #include "hw/xen.h"
+ #include "hw/sysbus.h"
+@@ -1055,6 +1056,14 @@ static void x86_cpuid_version_set_family(Object *obj, Visitor *v, void *opaque,
+     }
+ }
+ 
++static PropertyInfo qdev_prop_family = {
++    .name  = "uint32",
++    .get   = x86_cpuid_version_get_family,
++    .set   = x86_cpuid_version_set_family,
++};
++#define DEFINE_PROP_FAMILY(_n)                                                 \
++    DEFINE_PROP(_n, X86CPU, env.cpuid_version, qdev_prop_family, uint32_t)
++
+ static void x86_cpuid_version_get_model(Object *obj, Visitor *v, void *opaque,
+                                         const char *name, Error **errp)
+ {
+@@ -1090,6 +1099,14 @@ static void x86_cpuid_version_set_model(Object *obj, Visitor *v, void *opaque,
+     env->cpuid_version |= ((value & 0xf) << 4) | ((value >> 4) << 16);
+ }
+ 
++static PropertyInfo qdev_prop_model = {
++    .name  = "uint32",
++    .get   = x86_cpuid_version_get_model,
++    .set   = x86_cpuid_version_set_model,
++};
++#define DEFINE_PROP_MODEL(_n)                                                  \
++    DEFINE_PROP(_n, X86CPU, env.cpuid_version, qdev_prop_model, uint32_t)
++
+ static void x86_cpuid_version_get_stepping(Object *obj, Visitor *v,
+                                            void *opaque, const char *name,
+                                            Error **errp)
+@@ -1126,57 +1143,41 @@ static void x86_cpuid_version_set_stepping(Object *obj, Visitor *v,
+     env->cpuid_version |= value & 0xf;
+ }
+ 
+-static void x86_cpuid_get_level(Object *obj, Visitor *v, void *opaque,
+-                                const char *name, Error **errp)
+-{
+-    X86CPU *cpu = X86_CPU(obj);
+-
+-    visit_type_uint32(v, &cpu->env.cpuid_level, name, errp);
+-}
+-
+-static void x86_cpuid_set_level(Object *obj, Visitor *v, void *opaque,
+-                                const char *name, Error **errp)
+-{
+-    X86CPU *cpu = X86_CPU(obj);
+-
+-    visit_type_uint32(v, &cpu->env.cpuid_level, name, errp);
+-}
+-
+-static void x86_cpuid_get_xlevel(Object *obj, Visitor *v, void *opaque,
+-                                 const char *name, Error **errp)
+-{
+-    X86CPU *cpu = X86_CPU(obj);
+-
+-    visit_type_uint32(v, &cpu->env.cpuid_xlevel, name, errp);
+-}
++static PropertyInfo qdev_prop_stepping = {
++    .name  = "uint32",
++    .get   = x86_cpuid_version_get_stepping,
++    .set   = x86_cpuid_version_set_stepping,
++};
++#define DEFINE_PROP_STEPPING(_n)                                               \
++    DEFINE_PROP(_n, X86CPU, env.cpuid_version, qdev_prop_stepping, uint32_t)
+ 
+-static void x86_cpuid_set_xlevel(Object *obj, Visitor *v, void *opaque,
++static void x86_cpuid_get_vendor(Object *obj, Visitor *v, void *opaque,
+                                  const char *name, Error **errp)
+ {
+     X86CPU *cpu = X86_CPU(obj);
+-
+-    visit_type_uint32(v, &cpu->env.cpuid_xlevel, name, errp);
+-}
+-
+-static char *x86_cpuid_get_vendor(Object *obj, Error **errp)
+-{
+-    X86CPU *cpu = X86_CPU(obj);
+     CPUX86State *env = &cpu->env;
+     char *value;
+ 
+     value = (char *)g_malloc(CPUID_VENDOR_SZ + 1);
+     x86_cpu_vendor_words2str(value, env->cpuid_vendor1, env->cpuid_vendor2,
+                              env->cpuid_vendor3);
+-    return value;
++    visit_type_str(v, &value, name, errp);
++    g_free(value);
+ }
+ 
+-static void x86_cpuid_set_vendor(Object *obj, const char *value,
+-                                 Error **errp)
++static void x86_cpuid_set_vendor(Object *obj, Visitor *v, void *opaque,
++                                 const char *name, Error **errp)
+ {
+     X86CPU *cpu = X86_CPU(obj);
+     CPUX86State *env = &cpu->env;
++    char *value;
+     int i;
+ 
++    visit_type_str(v, &value, name, errp);
++    if (error_is_set(errp)) {
++        return;
++    }
++
+     if (strlen(value) != CPUID_VENDOR_SZ) {
+         error_set(errp, QERR_PROPERTY_VALUE_BAD, "",
+                   "vendor", value);
+@@ -1191,9 +1192,21 @@ static void x86_cpuid_set_vendor(Object *obj, const char *value,
+         env->cpuid_vendor2 |= ((uint8_t)value[i + 4]) << (8 * i);
+         env->cpuid_vendor3 |= ((uint8_t)value[i + 8]) << (8 * i);
+     }
++    g_free(value);
+ }
+ 
+-static char *x86_cpuid_get_model_id(Object *obj, Error **errp)
++static PropertyInfo qdev_prop_vendor = {
++    .name  = "string",
++    .get   = x86_cpuid_get_vendor,
++    .set   = x86_cpuid_set_vendor,
++};
++#define DEFINE_PROP_VENDOR(_n) {                                               \
++    .name = _n,                                                                \
++    .info  = &qdev_prop_vendor                                                 \
++}
++
++static void x86_cpuid_get_model_id(Object *obj, Visitor *v, void *opaque,
++                                   const char *name, Error **errp)
+ {
+     X86CPU *cpu = X86_CPU(obj);
+     CPUX86State *env = &cpu->env;
+@@ -1205,19 +1218,23 @@ static char *x86_cpuid_get_model_id(Object *obj, Error **errp)
+         value[i] = env->cpuid_model[i >> 2] >> (8 * (i & 3));
+     }
+     value[48] = '\0';
+-    return value;
++    visit_type_str(v, &value, name, errp);
++    g_free(value);
+ }
+ 
+-static void x86_cpuid_set_model_id(Object *obj, const char *model_id,
+-                                   Error **errp)
++static void x86_cpuid_set_model_id(Object *obj, Visitor *v, void *opaque,
++                                   const char *name, Error **errp)
+ {
+     X86CPU *cpu = X86_CPU(obj);
+     CPUX86State *env = &cpu->env;
+     int c, len, i;
++    char *model_id;
+ 
+-    if (model_id == NULL) {
+-        model_id = "";
++    visit_type_str(v, &model_id, name, errp);
++    if (error_is_set(errp)) {
++        return;
+     }
++
+     len = strlen(model_id);
+     memset(env->cpuid_model, 0, 48);
+     for (i = 0; i < 48; i++) {
+@@ -1228,6 +1245,17 @@ static void x86_cpuid_set_model_id(Object *obj, const char *model_id,
+         }
+         env->cpuid_model[i >> 2] |= c << (8 * (i & 3));
+     }
++    g_free(model_id);
++}
++
++static PropertyInfo qdev_prop_model_id = {
++    .name  = "string",
++    .get   = x86_cpuid_get_model_id,
++    .set   = x86_cpuid_set_model_id,
++};
++#define DEFINE_PROP_MODEL_ID(_n) {                                             \
++    .name  = _n,                                                               \
++    .info  = &qdev_prop_model_id                                               \
+ }
+ 
+ static void x86_cpuid_get_tsc_freq(Object *obj, Visitor *v, void *opaque,
+@@ -1261,6 +1289,26 @@ static void x86_cpuid_set_tsc_freq(Object *obj, Visitor *v, void *opaque,
+     cpu->env.tsc_khz = value / 1000;
+ }
+ 
++static PropertyInfo qdev_prop_tsc_freq = {
++    .name  = "int64",
++    .get   = x86_cpuid_get_tsc_freq,
++    .set   = x86_cpuid_set_tsc_freq,
++};
++#define DEFINE_PROP_TSC_FREQ(_n)                                               \
++    DEFINE_PROP(_n, X86CPU, env.tsc_khz, qdev_prop_tsc_freq, int32_t)
++
++static Property cpu_x86_properties[] = {
++    DEFINE_PROP_FAMILY("family"),
++    DEFINE_PROP_MODEL("model"),
++    DEFINE_PROP_STEPPING("stepping"),
++    DEFINE_PROP_UINT32("level", X86CPU, env.cpuid_level, 0),
++    DEFINE_PROP_UINT32("xlevel", X86CPU, env.cpuid_xlevel, 0),
++    DEFINE_PROP_VENDOR("vendor"),
++    DEFINE_PROP_MODEL_ID("model-id"),
++    DEFINE_PROP_TSC_FREQ("tsc-frequency"),
++    DEFINE_PROP_END_OF_LIST(),
++};
++
+ static int cpu_x86_find_by_name(x86_def_t *x86_cpu_def, const char *name)
+ {
+     x86_def_t *def;
+@@ -1297,6 +1345,17 @@ static int cpu_x86_find_by_name(x86_def_t *x86_cpu_def, const char *name)
+     return -1;
+ }
+ 
++/* It converts all '_' in a feature string option name to '-', to make
++ * feature name to conform property naming rule which uses '-' instead of '_'
++ */
++static inline void feat2prop(char *s)
++{
++    char *delimiter = strchr(s, '=');
++    while ((s = strchr(s, '_')) && ((delimiter == NULL) || (s < delimiter))) {
++        *s = '-';
++    }
++}
++
+ /* Parse "+feature,-feature,feature=foo" CPU feature string
+  */
+ static void cpu_x86_parse_featurestr(X86CPU *cpu, char *features, Error **errp)
+@@ -1318,6 +1377,7 @@ static void cpu_x86_parse_featurestr(X86CPU *cpu, char *features, Error **errp)
+         } else if (featurestr[0] == '-') {
+             add_flagname_to_bitmaps(featurestr + 1, minus_features);
+         } else if ((val = strchr(featurestr, '='))) {
++            feat2prop(featurestr);
+             *val = 0; val++;
+             if (!strcmp(featurestr, "family")) {
+                 object_property_parse(OBJECT(cpu), val, featurestr, errp);
+@@ -1345,9 +1405,9 @@ static void cpu_x86_parse_featurestr(X86CPU *cpu, char *features, Error **errp)
+                 object_property_parse(OBJECT(cpu), num, featurestr, errp);
+             } else if (!strcmp(featurestr, "vendor")) {
+                 object_property_parse(OBJECT(cpu), val, featurestr, errp);
+-            } else if (!strcmp(featurestr, "model_id")) {
+-                object_property_parse(OBJECT(cpu), val, "model-id", errp);
+-            } else if (!strcmp(featurestr, "tsc_freq")) {
++            } else if (!strcmp(featurestr, "model-id")) {
++                object_property_parse(OBJECT(cpu), val, featurestr, errp);
++            } else if (!strcmp(featurestr, "tsc-freq")) {
+                 int64_t tsc_freq;
+                 char *err;
+                 char num[32];
+@@ -1360,7 +1420,7 @@ static void cpu_x86_parse_featurestr(X86CPU *cpu, char *features, Error **errp)
+                 }
+                 snprintf(num, sizeof(num), "%" PRId64, tsc_freq);
+                 object_property_parse(OBJECT(cpu), num, "tsc-frequency", errp);
+-            } else if (!strcmp(featurestr, "hv_spinlocks")) {
++            } else if (!strcmp(featurestr, "hv-spinlocks")) {
+                 char *err;
+                 numvalue = strtoul(val, &err, 0);
+                 if (!*val || *err) {
+@@ -2191,31 +2251,6 @@ static void x86_cpu_initfn(Object *obj)
+     cs->env_ptr = env;
+     cpu_exec_init(env);
+ 
+-    object_property_add(obj, "family", "int",
+-                        x86_cpuid_version_get_family,
+-                        x86_cpuid_version_set_family, NULL, NULL, NULL);
+-    object_property_add(obj, "model", "int",
+-                        x86_cpuid_version_get_model,
+-                        x86_cpuid_version_set_model, NULL, NULL, NULL);
+-    object_property_add(obj, "stepping", "int",
+-                        x86_cpuid_version_get_stepping,
+-                        x86_cpuid_version_set_stepping, NULL, NULL, NULL);
+-    object_property_add(obj, "level", "int",
+-                        x86_cpuid_get_level,
+-                        x86_cpuid_set_level, NULL, NULL, NULL);
+-    object_property_add(obj, "xlevel", "int",
+-                        x86_cpuid_get_xlevel,
+-                        x86_cpuid_set_xlevel, NULL, NULL, NULL);
+-    object_property_add_str(obj, "vendor",
+-                            x86_cpuid_get_vendor,
+-                            x86_cpuid_set_vendor, NULL);
+-    object_property_add_str(obj, "model-id",
+-                            x86_cpuid_get_model_id,
+-                            x86_cpuid_set_model_id, NULL);
+-    object_property_add(obj, "tsc-frequency", "int",
+-                        x86_cpuid_get_tsc_freq,
+-                        x86_cpuid_set_tsc_freq, NULL, NULL, NULL);
+-
+     env->cpuid_apic_id = x86_cpu_apic_id_from_index(cs->cpu_index);
+ 
+     /* init various static tables used in TCG mode */
+@@ -2235,6 +2270,7 @@ static void x86_cpu_common_class_init(ObjectClass *oc, void *data)
+     DeviceClass *dc = DEVICE_CLASS(oc);
+ 
+     xcc->parent_realize = dc->realize;
++    dc->props = cpu_x86_properties;
+     dc->realize = x86_cpu_realizefn;
+ 
+     xcc->parent_reset = cc->reset;
+-- 
+1.7.1
+
+

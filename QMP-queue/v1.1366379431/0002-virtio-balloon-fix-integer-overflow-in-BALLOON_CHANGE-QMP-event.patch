@@ -1,0 +1,49 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Luiz Capitulino <lcapitulino@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>
+Date: Fri, 19 Apr 2013 08:50:33 -0400
+Message-id: 1366375833-995-3-git-send-email-lcapitulino@redhat.com
+Subject: [PATCH 2/2] virtio-balloon: fix integer overflow in BALLOON_CHANGE
+ QMP event
+
+Because dev->actual is uint32_t, the expression 'dev->actual <<
+VIRTIO_BALLOON_PFN_SHIFT' is truncated to 32 bits. This overflows when
+dev->actual >= 1048576.
+
+To reproduce:
+
+ 1. Start a VM with a QMP socket and 5G of RAM
+ 2. Connect to the QMP socket, negotiate capabilities and issue:
+
+   { "execute":"balloon", "arguments": { "value": 1073741824 } }
+
+ 3. Watch for BALLOON_CHANGE QMP events, the last one will incorretly be:
+
+   { "timestamp": { "seconds": 1366228965, "microseconds": 245466 },
+     "event": "BALLOON_CHANGE", "data": { "actual": 5368709120 } }
+
+To fix it this commit casts it to ram_addr_t, which is ram_size's type.
+
+Signed-off-by: Luiz Capitulino <lcapitulino@redhat.com>
+Reviewed-by: Eric Blake <eblake@redhat.com>
+---
+ hw/virtio/virtio-balloon.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/hw/virtio/virtio-balloon.c b/hw/virtio/virtio-balloon.c
+index c2c446e..76e32ce 100644
+--- a/hw/virtio/virtio-balloon.c
++++ b/hw/virtio/virtio-balloon.c
+@@ -275,7 +275,7 @@ static void virtio_balloon_set_config(VirtIODevice *vdev,
+     dev->actual = le32_to_cpu(config.actual);
+     if (dev->actual != oldactual) {
+         qemu_balloon_changed(ram_size -
+-                             (dev->actual << VIRTIO_BALLOON_PFN_SHIFT));
++                       ((ram_addr_t) dev->actual << VIRTIO_BALLOON_PFN_SHIFT));
+     }
+ }
+ 
+-- 
+1.8.1.4
+

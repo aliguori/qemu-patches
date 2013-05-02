@@ -1,0 +1,1 @@
+../monitor-do-not-rely-on-O_NONBLOCK-for-passed-file-descriptors/v1.1365100811/0001-oslib-posix-rename-socket_set_nonblock-to-qemu_set_nonblock.patch

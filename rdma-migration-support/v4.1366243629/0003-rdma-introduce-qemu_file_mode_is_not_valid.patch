@@ -1,0 +1,80 @@
+From patches Mon Sep 17 00:00:00 2001
+From: mrhines@linux.vnet.ibm.com
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, mst@redhat.com, quintela@redhat.com,
+ Michael R Hines <mrhines@us.ibm.com>, Bulent Abali <abali@us.ibm.com>,
+ owasserm@redhat.com, pbonzini@redhat.com, Gokul B Kandiraju <gokul@us.ibm.com>
+Date: Wed, 17 Apr 2013 19:07:12 -0400
+Message-id: 1366240040-10730-4-git-send-email-mrhines@linux.vnet.ibm.com
+Subject: [PATCH 03/11] rdma: introduce qemu_file_mode_is_not_valid()
+
+From: "Michael R. Hines" <mrhines@us.ibm.com>
+
+QEMUFileRDMA also has read and write modes. This function is now
+shared to reduce code duplication.
+
+Signed-off-by: Michael R. Hines <mrhines@us.ibm.com>
+---
+ include/migration/qemu-file.h |    2 ++
+ savevm.c                      |   20 +++++++++++++-------
+ 2 files changed, 15 insertions(+), 7 deletions(-)
+
+diff --git a/include/migration/qemu-file.h b/include/migration/qemu-file.h
+index 7519464..efc9970 100644
+--- a/include/migration/qemu-file.h
++++ b/include/migration/qemu-file.h
+@@ -81,6 +81,8 @@ void qemu_put_byte(QEMUFile *f, int v);
+  */
+ void qemu_put_buffer_async(QEMUFile *f, const uint8_t *buf, int size);
+ 
++bool qemu_file_mode_is_not_valid(const char *mode);
++
+ static inline void qemu_put_ubyte(QEMUFile *f, unsigned int v)
+ {
+     qemu_put_byte(f, (int)v);
+diff --git a/savevm.c b/savevm.c
+index c2e61dd..45389f0 100644
+--- a/savevm.c
++++ b/savevm.c
+@@ -381,14 +381,23 @@ static const QEMUFileOps socket_write_ops = {
+     .close =      socket_close
+ };
+ 
+-QEMUFile *qemu_fopen_socket(int fd, const char *mode)
++bool qemu_file_mode_is_not_valid(const char *mode)
+ {
+-    QEMUFileSocket *s = g_malloc0(sizeof(QEMUFileSocket));
+-
+     if (mode == NULL ||
+         (mode[0] != 'r' && mode[0] != 'w') ||
+         mode[1] != 'b' || mode[2] != 0) {
+         fprintf(stderr, "qemu_fopen: Argument validity check failed\n");
++        return true;
++    }
++
++    return false;
++}
++
++QEMUFile *qemu_fopen_socket(int fd, const char *mode)
++{
++    QEMUFileSocket *s = g_malloc0(sizeof(QEMUFileSocket));
++
++    if (qemu_file_mode_is_not_valid(mode)) {
+         return NULL;
+     }
+ 
+@@ -406,10 +415,7 @@ QEMUFile *qemu_fopen(const char *filename, const char *mode)
+ {
+     QEMUFileStdio *s;
+ 
+-    if (mode == NULL ||
+-	(mode[0] != 'r' && mode[0] != 'w') ||
+-	mode[1] != 'b' || mode[2] != 0) {
+-        fprintf(stderr, "qemu_fopen: Argument validity check failed\n");
++    if (qemu_file_mode_is_not_valid(mode)) {
+         return NULL;
+     }
+ 
+-- 
+1.7.10.4
+

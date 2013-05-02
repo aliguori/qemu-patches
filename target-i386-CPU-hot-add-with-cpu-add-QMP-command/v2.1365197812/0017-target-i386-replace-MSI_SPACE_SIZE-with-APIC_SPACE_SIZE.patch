@@ -1,0 +1,90 @@
+From patches Mon Sep 17 00:00:00 2001
+From: "Igor Mammedov" <imammedo@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: aliguori@us.ibm.com, ehabkost@redhat.com, claudio.fontana@huawei.com,
+ aderumier@odiso.com, lcapitulino@redhat.com, jfrei@linux.vnet.ibm.com,
+ yang.z.zhang@intel.com, pbonzini@redhat.com, afaerber@suse.de,
+ lig.fnst@cn.fujitsu.com, rth@twiddle.net
+Date: Fri,  5 Apr 2013 16:37:09 +0200
+Message-id: 1365172636-28628-18-git-send-email-imammedo@redhat.com
+Subject: [PATCH 17/22] target-i386: replace MSI_SPACE_SIZE with APIC_SPACE_SIZE
+
+... and put APIC_SPACE_SIZE in public header so that it could be
+reused later elsewhere.
+
+Signed-off-by: Igor Mammedov <imammedo@redhat.com>
+---
+ hw/apic.c          | 2 +-
+ hw/apic_internal.h | 2 --
+ hw/kvm/apic.c      | 2 +-
+ hw/xen_apic.c      | 2 +-
+ target-i386/cpu.h  | 1 +
+ 5 files changed, 4 insertions(+), 5 deletions(-)
+
+diff --git a/hw/apic.c b/hw/apic.c
+index d2395f0..d99aeae 100644
+--- a/hw/apic.c
++++ b/hw/apic.c
+@@ -874,7 +874,7 @@ static const MemoryRegionOps apic_io_ops = {
+ static void apic_init(APICCommonState *s)
+ {
+     memory_region_init_io(&s->io_memory, &apic_io_ops, s, "apic-msi",
+-                          MSI_SPACE_SIZE);
++                          APIC_SPACE_SIZE);
+ 
+     s->timer = qemu_new_timer_ns(vm_clock, apic_timer, s);
+     local_apics[s->idx] = s;
+diff --git a/hw/apic_internal.h b/hw/apic_internal.h
+index 578241f..aac6290 100644
+--- a/hw/apic_internal.h
++++ b/hw/apic_internal.h
+@@ -66,8 +66,6 @@
+ 
+ #define MAX_APICS 255
+ 
+-#define MSI_SPACE_SIZE                  0x100000
+-
+ typedef struct APICCommonState APICCommonState;
+ 
+ #define TYPE_APIC_COMMON "apic-common"
+diff --git a/hw/kvm/apic.c b/hw/kvm/apic.c
+index d994ea7..8e272e7 100644
+--- a/hw/kvm/apic.c
++++ b/hw/kvm/apic.c
+@@ -174,7 +174,7 @@ static const MemoryRegionOps kvm_apic_io_ops = {
+ static void kvm_apic_init(APICCommonState *s)
+ {
+     memory_region_init_io(&s->io_memory, &kvm_apic_io_ops, s, "kvm-apic-msi",
+-                          MSI_SPACE_SIZE);
++                          APIC_SPACE_SIZE);
+ 
+     if (kvm_has_gsi_routing()) {
+         msi_supported = true;
+diff --git a/hw/xen_apic.c b/hw/xen_apic.c
+index 8f387b6..86974b7 100644
+--- a/hw/xen_apic.c
++++ b/hw/xen_apic.c
+@@ -39,7 +39,7 @@ static const MemoryRegionOps xen_apic_io_ops = {
+ static void xen_apic_init(APICCommonState *s)
+ {
+     memory_region_init_io(&s->io_memory, &xen_apic_io_ops, s, "xen-apic-msi",
+-                          MSI_SPACE_SIZE);
++                          APIC_SPACE_SIZE);
+ 
+ #if defined(CONFIG_XEN_CTRL_INTERFACE_VERSION) \
+     && CONFIG_XEN_CTRL_INTERFACE_VERSION >= 420
+diff --git a/target-i386/cpu.h b/target-i386/cpu.h
+index b98efd2..df233e6 100644
+--- a/target-i386/cpu.h
++++ b/target-i386/cpu.h
+@@ -1269,5 +1269,6 @@ uint32_t x86_cpu_apic_id_from_index(unsigned int cpu_index);
+ void enable_compat_apic_id_mode(void);
+ 
+ #define APIC_DEFAULT_ADDRESS 0xfee00000
++#define APIC_SPACE_SIZE      0x100000
+ 
+ #endif /* CPU_I386_H */
+-- 
+1.8.1.4
+
+

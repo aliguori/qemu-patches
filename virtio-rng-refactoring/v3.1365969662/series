@@ -1,0 +1,9 @@
+0000-virtio-rng-refactoring.txt
+0001-virtio-rng-dont-use-pointer-for-configuration.patch
+0002-virtio-rng-add-virtio-rng-device.patch
+0003-virtio-rng-pci-switch-to-the-new-API.patch
+0004-virtio-rng-s390-switch-to-the-new-API.patch
+0005-virtio-rng-ccw-switch-to-the-new-API.patch
+0006-virtio-rng-cleanup-init-and-exit-functions.patch
+0007-virtio-rng-cleanup-remove-qdev-field.patch
+0008-virtio-rng-cleanup-use-QOM-casts.patch

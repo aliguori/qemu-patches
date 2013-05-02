@@ -1,0 +1,330 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: 
+Date: Tue,  2 Apr 2013 16:58:48 +0200
+Message-id: 1364914749-11141-15-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 14/35] hw: move display devices to hw/display/,
+ configure via default-configs/
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ default-configs/arm-softmmu.mak    |  6 ++++++
+ default-configs/i386-softmmu.mak   |  1 +
+ default-configs/lm32-softmmu.mak   |  1 +
+ default-configs/sh4-softmmu.mak    |  1 +
+ default-configs/sh4eb-softmmu.mak  |  1 +
+ default-configs/sparc-softmmu.mak  |  1 +
+ default-configs/x86_64-softmmu.mak |  1 +
+ hw/Makefile.objs                   |  5 -----
+ hw/arm/Makefile.objs               | 13 ++++++-------
+ hw/display/Makefile.objs           | 21 +++++++++++++++++++++
+ hw/{ => display}/blizzard.c        |  0
+ hw/{ => display}/exynos4210_fimd.c |  0
+ hw/{ => display}/framebuffer.c     |  0
+ hw/{ => display}/milkymist-tmu2.c  |  0
+ hw/{ => display}/milkymist-vgafb.c |  0
+ hw/{ => display}/omap_dss.c        |  0
+ hw/{ => display}/omap_lcdc.c       |  0
+ hw/{ => display}/pxa2xx_lcd.c      |  0
+ hw/{ => display}/qxl-logger.c      |  0
+ hw/{ => display}/qxl-render.c      |  0
+ hw/{ => display}/qxl.c             |  0
+ hw/{ => display}/sm501.c           |  0
+ hw/{ => display}/tc6393xb.c        |  0
+ hw/{ => display}/tcx.c             |  0
+ hw/{ => display}/vga.c             |  0
+ hw/i386/Makefile.objs              |  1 -
+ hw/lm32/Makefile.objs              |  3 ---
+ hw/sh4/Makefile.objs               |  2 +-
+ hw/sparc/Makefile.objs             |  2 +-
+ 29 files changed, 41 insertions(+), 18 deletions(-)
+ rename hw/{ => display}/blizzard.c (100%)
+ rename hw/{ => display}/exynos4210_fimd.c (100%)
+ rename hw/{ => display}/framebuffer.c (100%)
+ rename hw/{ => display}/milkymist-tmu2.c (100%)
+ rename hw/{ => display}/milkymist-vgafb.c (100%)
+ rename hw/{ => display}/omap_dss.c (100%)
+ rename hw/{ => display}/omap_lcdc.c (100%)
+ rename hw/{ => display}/pxa2xx_lcd.c (100%)
+ rename hw/{ => display}/qxl-logger.c (100%)
+ rename hw/{ => display}/qxl-render.c (100%)
+ rename hw/{ => display}/qxl.c (100%)
+ rename hw/{ => display}/sm501.c (100%)
+ rename hw/{ => display}/tc6393xb.c (100%)
+ rename hw/{ => display}/tcx.c (100%)
+ rename hw/{ => display}/vga.c (100%)
+
+diff --git a/default-configs/arm-softmmu.mak b/default-configs/arm-softmmu.mak
+index c0e0110..a7dd44a 100644
+--- a/default-configs/arm-softmmu.mak
++++ b/default-configs/arm-softmmu.mak
+@@ -48,8 +48,14 @@ CONFIG_PL310=y
+ CONFIG_PL330=y
+ CONFIG_CADENCE=y
+ CONFIG_XGMAC=y
++CONFIG_EXYNOS4=y
++CONFIG_PXA2XX=y
++CONFIG_FRAMEBUFFER=y
+ CONFIG_MARVELL_88W8618=y
++CONFIG_OMAP=y
++CONFIG_BLIZZARD=y
+ CONFIG_ONENAND=y
++CONFIG_ZAURUS=y
+ 
+ CONFIG_VERSATILE_PCI=y
+ CONFIG_VERSATILE_I2C=y
+diff --git a/default-configs/i386-softmmu.mak b/default-configs/i386-softmmu.mak
+index 4f0b3f3..46c28a0 100644
+--- a/default-configs/i386-softmmu.mak
++++ b/default-configs/i386-softmmu.mak
+@@ -3,6 +3,7 @@
+ include pci.mak
+ include usb.mak
+ CONFIG_VGA=y
++CONFIG_QXL=y
+ CONFIG_VGA_PCI=y
+ CONFIG_VGA_ISA=y
+ CONFIG_VGA_CIRRUS=y
+diff --git a/default-configs/lm32-softmmu.mak b/default-configs/lm32-softmmu.mak
+index 2654ad6..6b2ee43 100644
+--- a/default-configs/lm32-softmmu.mak
++++ b/default-configs/lm32-softmmu.mak
+@@ -1,6 +1,7 @@
+ # Default configuration for lm32-softmmu
+ 
+ CONFIG_MILKYMIST=y
++CONFIG_FRAMEBUFFER=y
+ CONFIG_PTIMER=y
+ CONFIG_PFLASH_CFI01=y
+ CONFIG_PFLASH_CFI02=y
+diff --git a/default-configs/sh4-softmmu.mak b/default-configs/sh4-softmmu.mak
+index 20a05f9..f6bf62d 100644
+--- a/default-configs/sh4-softmmu.mak
++++ b/default-configs/sh4-softmmu.mak
+@@ -8,3 +8,4 @@ CONFIG_PFLASH_CFI02=y
+ CONFIG_ISA_MMIO=y
+ CONFIG_SH4=y
+ CONFIG_IDE_MMIO=y
++CONFIG_SM501=y
+diff --git a/default-configs/sh4eb-softmmu.mak b/default-configs/sh4eb-softmmu.mak
+index 875e7e6..c1d513d 100644
+--- a/default-configs/sh4eb-softmmu.mak
++++ b/default-configs/sh4eb-softmmu.mak
+@@ -8,3 +8,4 @@ CONFIG_PFLASH_CFI02=y
+ CONFIG_ISA_MMIO=y
+ CONFIG_SH4=y
+ CONFIG_IDE_MMIO=y
++CONFIG_SM501=y
+diff --git a/default-configs/sparc-softmmu.mak b/default-configs/sparc-softmmu.mak
+index eda8797..25bcbe3 100644
+--- a/default-configs/sparc-softmmu.mak
++++ b/default-configs/sparc-softmmu.mak
+@@ -9,4 +9,5 @@ CONFIG_FDC=y
+ CONFIG_EMPTY_SLOT=y
+ CONFIG_PCNET_COMMON=y
+ CONFIG_LANCE=y
++CONFIG_TCX=y
+ CONFIG_CS4231=y
+diff --git a/default-configs/x86_64-softmmu.mak b/default-configs/x86_64-softmmu.mak
+index 6fba70f..606b8ee 100644
+--- a/default-configs/x86_64-softmmu.mak
++++ b/default-configs/x86_64-softmmu.mak
+@@ -3,6 +3,7 @@
+ include pci.mak
+ include usb.mak
+ CONFIG_VGA=y
++CONFIG_QXL=y
+ CONFIG_VGA_PCI=y
+ CONFIG_VGA_ISA=y
+ CONFIG_VGA_CIRRUS=y
+diff --git a/hw/Makefile.objs b/hw/Makefile.objs
+index 9dc7596..b2be078 100644
+--- a/hw/Makefile.objs
++++ b/hw/Makefile.objs
+@@ -31,11 +31,6 @@ obj-y += $(devices-dirs-y)
+ 
+ ifeq ($(CONFIG_SOFTMMU),y)
+ 
+-# Per-target files
+-# virtio has to be here due to weird dependency between PCI and virtio-net.
+-# need to fix this properly
+-obj-$(CONFIG_VGA) += vga.o
+-
+ # Inter-VM PCI shared memory & VFIO PCI device assignment
+ ifeq ($(CONFIG_PCI), y)
+ obj-$(CONFIG_KVM) += ivshmem.o
+diff --git a/hw/arm/Makefile.objs b/hw/arm/Makefile.objs
+index 6582f5a..3efefe5 100644
+--- a/hw/arm/Makefile.objs
++++ b/hw/arm/Makefile.objs
+@@ -5,22 +5,21 @@ obj-y += a9scu.o
+ obj-y += realview_gic.o arm_sysctl.o arm11mpcore.o a9mpcore.o
+ obj-y += exynos4210_gic.o exynos4210_combiner.o
+ obj-y += exynos4210_uart.o exynos4210_pwm.o
+-obj-y += exynos4210_pmu.o exynos4210_mct.o exynos4210_fimd.o
++obj-y += exynos4210_pmu.o exynos4210_mct.o
+ obj-y += exynos4210_rtc.o exynos4210_i2c.o
+ obj-y += arm_mptimer.o a15mpcore.o
+ obj-y += armv7m_nvic.o
+ obj-y += pxa2xx_timer.o pxa2xx_dma.o
+-obj-y += pxa2xx_lcd.o pxa2xx_mmci.o pxa2xx_pcmcia.o pxa2xx_keypad.o
+-obj-y += zaurus.o tc6393xb.o
+-obj-y += omap_lcdc.o omap_dma.o omap_clk.o omap_mmc.o omap_i2c.o \
++obj-y += pxa2xx_mmci.o pxa2xx_pcmcia.o pxa2xx_keypad.o
++obj-y += zaurus.o
++obj-y += omap_dma.o omap_clk.o omap_mmc.o omap_i2c.o \
+                 omap_gpio.o omap_intc.o omap_uart.o
+-obj-y += omap_dss.o soc_dma.o omap_gptimer.o omap_synctimer.o \
++obj-y += soc_dma.o omap_gptimer.o omap_synctimer.o \
+                 omap_gpmc.o omap_sdrc.o omap_spi.o omap_tap.o omap_l4.o
+ obj-y += tsc210x.o
+-obj-y += blizzard.o cbus.o tusb6010.o
++obj-y += cbus.o tusb6010.o
+ obj-y += mst_fpga.o
+ obj-y += bitbang_i2c.o
+-obj-y += framebuffer.o
+ obj-y += strongarm.o
+ obj-y += imx_serial.o imx_ccm.o imx_timer.o imx_avic.o
+ obj-$(CONFIG_KVM) += kvm/arm_gic.o
+diff --git a/hw/display/Makefile.objs b/hw/display/Makefile.objs
+index 3ac154d..af0f281 100644
+--- a/hw/display/Makefile.objs
++++ b/hw/display/Makefile.objs
+@@ -11,3 +11,24 @@ common-obj-$(CONFIG_VGA_PCI) += vga-pci.o
+ common-obj-$(CONFIG_VGA_ISA) += vga-isa.o
+ common-obj-$(CONFIG_VGA_ISA_MM) += vga-isa-mm.o
+ common-obj-$(CONFIG_VMWARE_VGA) += vmware_vga.o
++
++obj-$(CONFIG_BLIZZARD) += blizzard.o
++obj-$(CONFIG_EXYNOS4) += exynos4210_fimd.o
++obj-$(CONFIG_FRAMEBUFFER) += framebuffer.o
++obj-$(CONFIG_MILKYMIST) += milkymist-vgafb.o
++obj-$(CONFIG_OMAP) += omap_dss.o
++obj-$(CONFIG_OMAP) += omap_lcdc.o
++obj-$(CONFIG_PXA2XX) += pxa2xx_lcd.o
++obj-$(CONFIG_SM501) += sm501.o
++obj-$(CONFIG_TCX) += tcx.o
++obj-$(CONFIG_ZAURUS) += tc6393xb.o
++
++ifeq ($(CONFIG_GLX),y)
++obj-$(CONFIG_MILKYMIST) += milkymist-tmu2.o
++endif
++
++obj-$(CONFIG_VGA) += vga.o
++
++ifeq ($(CONFIG_SPICE),y)
++obj-$(CONFIG_QXL) += qxl-logger.o qxl-render.o qxl.o
++endif
+diff --git a/hw/blizzard.c b/hw/display/blizzard.c
+similarity index 100%
+rename from hw/blizzard.c
+rename to hw/display/blizzard.c
+diff --git a/hw/exynos4210_fimd.c b/hw/display/exynos4210_fimd.c
+similarity index 100%
+rename from hw/exynos4210_fimd.c
+rename to hw/display/exynos4210_fimd.c
+diff --git a/hw/framebuffer.c b/hw/display/framebuffer.c
+similarity index 100%
+rename from hw/framebuffer.c
+rename to hw/display/framebuffer.c
+diff --git a/hw/milkymist-tmu2.c b/hw/display/milkymist-tmu2.c
+similarity index 100%
+rename from hw/milkymist-tmu2.c
+rename to hw/display/milkymist-tmu2.c
+diff --git a/hw/milkymist-vgafb.c b/hw/display/milkymist-vgafb.c
+similarity index 100%
+rename from hw/milkymist-vgafb.c
+rename to hw/display/milkymist-vgafb.c
+diff --git a/hw/omap_dss.c b/hw/display/omap_dss.c
+similarity index 100%
+rename from hw/omap_dss.c
+rename to hw/display/omap_dss.c
+diff --git a/hw/omap_lcdc.c b/hw/display/omap_lcdc.c
+similarity index 100%
+rename from hw/omap_lcdc.c
+rename to hw/display/omap_lcdc.c
+diff --git a/hw/pxa2xx_lcd.c b/hw/display/pxa2xx_lcd.c
+similarity index 100%
+rename from hw/pxa2xx_lcd.c
+rename to hw/display/pxa2xx_lcd.c
+diff --git a/hw/qxl-logger.c b/hw/display/qxl-logger.c
+similarity index 100%
+rename from hw/qxl-logger.c
+rename to hw/display/qxl-logger.c
+diff --git a/hw/qxl-render.c b/hw/display/qxl-render.c
+similarity index 100%
+rename from hw/qxl-render.c
+rename to hw/display/qxl-render.c
+diff --git a/hw/qxl.c b/hw/display/qxl.c
+similarity index 100%
+rename from hw/qxl.c
+rename to hw/display/qxl.c
+diff --git a/hw/sm501.c b/hw/display/sm501.c
+similarity index 100%
+rename from hw/sm501.c
+rename to hw/display/sm501.c
+diff --git a/hw/tc6393xb.c b/hw/display/tc6393xb.c
+similarity index 100%
+rename from hw/tc6393xb.c
+rename to hw/display/tc6393xb.c
+diff --git a/hw/tcx.c b/hw/display/tcx.c
+similarity index 100%
+rename from hw/tcx.c
+rename to hw/display/tcx.c
+diff --git a/hw/vga.c b/hw/display/vga.c
+similarity index 100%
+rename from hw/vga.c
+rename to hw/display/vga.c
+diff --git a/hw/i386/Makefile.objs b/hw/i386/Makefile.objs
+index 6df5fd9..fe01234 100644
+--- a/hw/i386/Makefile.objs
++++ b/hw/i386/Makefile.objs
+@@ -7,7 +7,6 @@ obj-$(CONFIG_XEN) += xen_platform.o xen_apic.o
+ obj-$(CONFIG_XEN_PCI_PASSTHROUGH) += xen-host-pci-device.o
+ obj-$(CONFIG_XEN_PCI_PASSTHROUGH) += xen_pt.o xen_pt_config_init.o xen_pt_msi.o
+ obj-y += kvm/
+-obj-$(CONFIG_SPICE) += qxl.o qxl-logger.o qxl-render.o
+ obj-y += pc-testdev.o
+ 
+ obj-y := $(addprefix ../,$(obj-y))
+diff --git a/hw/lm32/Makefile.objs b/hw/lm32/Makefile.objs
+index e328ec8..a894c46 100644
+--- a/hw/lm32/Makefile.objs
++++ b/hw/lm32/Makefile.objs
+@@ -9,10 +9,7 @@ obj-y += milkymist-memcard.o
+ obj-y += milkymist-pfpu.o
+ obj-y += milkymist-softusb.o
+ obj-y += milkymist-sysctl.o
+-obj-$(CONFIG_GLX) += milkymist-tmu2.o
+ obj-y += milkymist-uart.o
+-obj-y += milkymist-vgafb.o
+-obj-y += framebuffer.o
+ 
+ obj-y := $(addprefix ../,$(obj-y))
+ 
+diff --git a/hw/sh4/Makefile.objs b/hw/sh4/Makefile.objs
+index efbb9eb..c9b0416 100644
+--- a/hw/sh4/Makefile.objs
++++ b/hw/sh4/Makefile.objs
+@@ -1,4 +1,4 @@
+-obj-y += sh_timer.o sh_serial.o sh_intc.o sh_pci.o sm501.o
++obj-y += sh_timer.o sh_serial.o sh_intc.o sh_pci.o
+ 
+ obj-y := $(addprefix ../,$(obj-y))
+ 
+diff --git a/hw/sparc/Makefile.objs b/hw/sparc/Makefile.objs
+index b2a921e..2354616 100644
+--- a/hw/sparc/Makefile.objs
++++ b/hw/sparc/Makefile.objs
+@@ -1,4 +1,4 @@
+-obj-y = tcx.o sun4m_iommu.o slavio_intctl.o
++obj-y = sun4m_iommu.o slavio_intctl.o
+ obj-y += slavio_timer.o slavio_misc.o sparc32_dma.o
+ obj-y += eccmemctl.o sbi.o sun4c_intctl.o
+ 
+-- 
+1.8.1.4
+
+
+

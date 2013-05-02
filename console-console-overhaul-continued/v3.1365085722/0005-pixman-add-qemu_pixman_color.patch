@@ -1,0 +1,50 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Gerd Hoffmann <kraxel@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, Gerd Hoffmann <kraxel@redhat.com>
+Date: Thu, 4 Apr 2013 09:28:47 +0200
+Message-id: 1365060546-24638-6-git-send-email-kraxel@redhat.com
+Subject: [PATCH 05/24] pixman: add qemu_pixman_color()
+
+Helper function to map qemu colors (32bit integer + matching PixelFormat)
+into pixman_color_t.
+
+Signed-off-by: Gerd Hoffmann <kraxel@redhat.com>
+---
+ include/ui/qemu-pixman.h |    2 ++
+ ui/qemu-pixman.c         |   11 +++++++++++
+ 2 files changed, 13 insertions(+)
+
+diff --git a/include/ui/qemu-pixman.h b/include/ui/qemu-pixman.h
+index b032f52..b0f09b5 100644
+--- a/include/ui/qemu-pixman.h
++++ b/include/ui/qemu-pixman.h
+@@ -43,4 +43,6 @@ pixman_image_t *qemu_pixman_mirror_create(pixman_format_code_t format,
+                                           pixman_image_t *image);
+ void qemu_pixman_image_unref(pixman_image_t *image);
+ 
++pixman_color_t qemu_pixman_color(PixelFormat *pf, uint32_t color);
++
+ #endif /* QEMU_PIXMAN_H */
+diff --git a/ui/qemu-pixman.c b/ui/qemu-pixman.c
+index 6dcbe90..be551e0 100644
+--- a/ui/qemu-pixman.c
++++ b/ui/qemu-pixman.c
+@@ -79,3 +79,14 @@ void qemu_pixman_image_unref(pixman_image_t *image)
+     }
+     pixman_image_unref(image);
+ }
++
++pixman_color_t qemu_pixman_color(PixelFormat *pf, uint32_t color)
++{
++    pixman_color_t c;
++
++    c.red   = ((color & pf->rmask) >> pf->rshift) << (16 - pf->rbits);
++    c.green = ((color & pf->gmask) >> pf->gshift) << (16 - pf->gbits);
++    c.blue  = ((color & pf->bmask) >> pf->bshift) << (16 - pf->bbits);
++    c.alpha = ((color & pf->amask) >> pf->ashift) << (16 - pf->abits);
++    return c;
++}
+-- 
+1.7.9.7
+

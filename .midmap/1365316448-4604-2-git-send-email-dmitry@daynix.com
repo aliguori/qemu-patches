@@ -1,0 +1,1 @@
+../virtio-net-dynamic-network-offloads-configuration/v4.1365345247/0001-virtio-net-dynamic-network-offloads-configuration.patch

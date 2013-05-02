@@ -1,0 +1,1 @@
+../build-ACPI-MADT-for-fw_cfg-clients/v1.1363843392/0005-acpi_table_add-accept-QemuOpts-and-parse-it-with-OptsVisitor.patch

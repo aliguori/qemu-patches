@@ -1,0 +1,1 @@
+../chardev-frontends-Explicitly-check-inc-and-dec-avail_connections-v2/v1.1364434178/0001-qemu-char-Add-qemu_chr_fe_claim---_release-helper-functions.patch

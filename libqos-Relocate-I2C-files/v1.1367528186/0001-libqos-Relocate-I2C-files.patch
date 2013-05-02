@@ -1,0 +1,106 @@
+From patches Mon Sep 17 00:00:00 2001
+From: =?utf-8?q?Andreas_F=C3=A4rber_=3Cafaerber=40suse=2Ede=3E?=
+To: qemu-devel@nongnu.org
+Cc: =?UTF-8?q?Andreas=20F=C3=A4rber?= <afaerber@suse.de>, anthony@codemonkey.ws
+Date: Thu,  2 May 2013 15:56:26 +0200
+Message-id: 1367502986-15104-1-git-send-email-afaerber@suse.de
+Subject: [PATCH 1/1] libqos: Relocate I2C files
+
+Commit c4efe1cada311b9dc0df5beb71c4227ff3414aa1 (qtest: add libqos
+including PCI support) created a libqos/ subdirectory but left the
+existing I2C libqos files libi2c*.[hc] in tests/. Clean this up.
+
+Signed-off-by: Andreas Färber <afaerber@suse.de>
+---
+ tests/Makefile                             | 5 +++--
+ tests/{libi2c-omap.c => libqos/i2c-omap.c} | 2 +-
+ tests/{libi2c.c => libqos/i2c.c}           | 2 +-
+ tests/{libi2c.h => libqos/i2c.h}           | 0
+ tests/tmp105-test.c                        | 2 +-
+ 5 files changed, 6 insertions(+), 5 deletions(-)
+ rename tests/{libi2c-omap.c => libqos/i2c-omap.c} (99%)
+ rename tests/{libi2c.c => libqos/i2c.c} (95%)
+ rename tests/{libi2c.h => libqos/i2c.h} (100%)
+
+diff --git a/tests/Makefile b/tests/Makefile
+index 72bf2cd..bf41d10 100644
+--- a/tests/Makefile
++++ b/tests/Makefile
+@@ -119,14 +119,16 @@ tests/test-visitor-serialization$(EXESUF): tests/test-visitor-serialization.o $(
+ tests/test-mul64$(EXESUF): tests/test-mul64.o libqemuutil.a
+ 
+ libqos-obj-y = tests/libqos/pci.o tests/libqos/fw_cfg.o
++libqos-obj-y += tests/libqos/i2c.o
+ libqos-pc-obj-y = $(libqos-obj-y) tests/libqos/pci-pc.o tests/libqos/fw_cfg-pc.o
+ libqos-pc-obj-y += tests/libqos/malloc-pc.o
++libqos-omap-obj-y = $(libqos-obj-y) tests/libqos/i2c-omap.o
+ 
+ tests/rtc-test$(EXESUF): tests/rtc-test.o
+ tests/m48t59-test$(EXESUF): tests/m48t59-test.o
+ tests/fdc-test$(EXESUF): tests/fdc-test.o
+ tests/hd-geo-test$(EXESUF): tests/hd-geo-test.o
+-tests/tmp105-test$(EXESUF): tests/tmp105-test.o
++tests/tmp105-test$(EXESUF): tests/tmp105-test.o $(libqos-omap-obj-y)
+ tests/i440fx-test$(EXESUF): tests/i440fx-test.o $(libqos-pc-obj-y)
+ tests/fw_cfg-test$(EXESUF): tests/fw_cfg-test.o $(libqos-pc-obj-y)
+ 
+@@ -137,7 +139,6 @@ QTEST_TARGETS=$(foreach TARGET,$(TARGETS), $(if $(check-qtest-$(TARGET)-y), $(TA
+ check-qtest-$(CONFIG_POSIX)=$(foreach TARGET,$(TARGETS), $(check-qtest-$(TARGET)-y))
+ 
+ qtest-obj-y = tests/libqtest.o libqemuutil.a libqemustub.a
+-qtest-obj-y += tests/libi2c.o tests/libi2c-omap.o
+ $(check-qtest-y): $(qtest-obj-y)
+ 
+ .PHONY: check-help
+diff --git a/tests/libi2c-omap.c b/tests/libqos/i2c-omap.c
+similarity index 99%
+rename from tests/libi2c-omap.c
+rename to tests/libqos/i2c-omap.c
+index c52458c..3d4d45d 100644
+--- a/tests/libi2c-omap.c
++++ b/tests/libqos/i2c-omap.c
+@@ -6,7 +6,7 @@
+  * This work is licensed under the terms of the GNU GPL, version 2 or later.
+  * See the COPYING file in the top-level directory.
+  */
+-#include "libi2c.h"
++#include "libqos/i2c.h"
+ 
+ #include <glib.h>
+ #include <string.h>
+diff --git a/tests/libi2c.c b/tests/libqos/i2c.c
+similarity index 95%
+rename from tests/libi2c.c
+rename to tests/libqos/i2c.c
+index 13ec85c..da7592f 100644
+--- a/tests/libi2c.c
++++ b/tests/libqos/i2c.c
+@@ -6,7 +6,7 @@
+  * This work is licensed under the terms of the GNU GPL, version 2 or later.
+  * See the COPYING file in the top-level directory.
+  */
+-#include "libi2c.h"
++#include "libqos/i2c.h"
+ #include "libqtest.h"
+ 
+ void i2c_send(I2CAdapter *i2c, uint8_t addr,
+diff --git a/tests/libi2c.h b/tests/libqos/i2c.h
+similarity index 100%
+rename from tests/libi2c.h
+rename to tests/libqos/i2c.h
+diff --git a/tests/tmp105-test.c b/tests/tmp105-test.c
+index 2869129..fecd6dc 100644
+--- a/tests/tmp105-test.c
++++ b/tests/tmp105-test.c
+@@ -7,7 +7,7 @@
+  * See the COPYING file in the top-level directory.
+  */
+ #include "libqtest.h"
+-#include "libi2c.h"
++#include "libqos/i2c.h"
+ #include "hw/misc/tmp105_regs.h"
+ 
+ #include <glib.h>
+-- 
+1.8.1.4
+

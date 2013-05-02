@@ -1,0 +1,56 @@
+From patches Mon Sep 17 00:00:00 2001
+From: =?utf-8?q?Andreas_F=C3=A4rber_=3Cafaerber=40suse=2Ede=3E?=
+To: qemu-devel@nongnu.org
+Cc: ehabkost@redhat.com, Borislav Petkov <bp@suse.de>,
+ "H. Peter Anvin" <hpa@zytor.com>, "Michael S. Tsirkin" <mst@redhat.com>,
+ =?UTF-8?q?Andreas=20F=C3=A4rber?= <afaerber@suse.de>, anthony@codemonkey.ws,
+ pbonzini@redhat.com, imammedo@redhat.com
+Date: Wed,  1 May 2013 18:07:16 +0200
+Message-id: 1367424440-16687-1-git-send-email-afaerber@suse.de
+Subject: [PATCH 0/4] target-i386: X86CPU compatibility properties
+
+Hello,
+
+It's easier adapting the infrastructure to our needs than working around it:
+X86CPU already has QOM properties today. What's lacking is model subclasses,
+and with the one X86CPU type its global properties are overwritten by models.
+But we already know the designated naming scheme for the models!
+
+So let's simply prepare compat_props for CPU models and make sure they are
+already picked up today.
+
+This works just fine for changing the 486 CPUID model value and avoids to
+redo the PC part once we have X86CPU subclasses.
+Tested using: ./QMP/qom-get /machine/icc-bridge/icc/child[0].model
+
+For changing n270 CPUID flags we'll still need to resort to Eduardo's proposed
+helper functions for now.
+
+Regards,
+Andreas
+
+Cc: Eduardo Habkost <ehabkost@redhat.com>
+Cc: Igor Mammedov <imammedo@redhat.com>
+Cc: H. Peter Anvin <hpa@zytor.com>
+Cc: Borislav Petkov <bp@suse.de>
+Cc: Anthony Liguori <anthony@codemonkey.ws>
+Cc: Paolo Bonzini <pbonzini@redhat.com>
+Cc: Michael S. Tsirkin <mst@redhat.com>
+
+Andreas Färber (4):
+  qdev: Let qdev_prop_parse() pass through Error
+  qdev: Introduce qdev_prop_set_custom_globals()
+  target-i386: Emulate X86CPU subclasses for global properties
+  target-i386: Change CPUID model of 486 to 8
+
+ hw/core/qdev-properties.c    | 50 ++++++++++++++++++++++++++------------------
+ hw/core/qdev.c               |  7 ++++++-
+ include/hw/i386/pc.h         |  4 ++++
+ include/hw/qdev-properties.h |  7 +++++--
+ qdev-monitor.c               |  6 +++++-
+ target-i386/cpu.c            | 11 +++++++++-
+ 6 files changed, 60 insertions(+), 25 deletions(-)
+
+-- 
+1.8.1.4
+

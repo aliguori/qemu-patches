@@ -1,0 +1,33 @@
+From patches Mon Sep 17 00:00:00 2001
+From: =?utf-8?q?Llu=C3=ADs_Vilanova_=3Cvilanova=40ac=2Eupc=2Eedu=3E?=
+To: qemu-devel@nongnu.org
+Cc: 
+Date: Tue, 16 Apr 2013 15:51:50 +0200
+Message-id: 20130416135150.21588.41915.stgit@fimbulvetr.bsc.es
+Subject: [PATCH 21/23] build: Fix installation of target-dependant files
+
+Pass all the relevant sub-directory make variables.
+
+Signed-off-by: Lluís Vilanova <vilanova@ac.upc.edu>
+---
+Cc: Anthony Liguori <aliguori@us.ibm.com>
+Cc: Paul Brook <paul@codesourcery.com>
+---
+ Makefile |    2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/Makefile b/Makefile
+index 7916152..ccf6760 100644
+--- a/Makefile
++++ b/Makefile
+@@ -346,7 +346,7 @@ endif
+ 		$(INSTALL_DATA) $(SRC_PATH)/pc-bios/keymaps/$$x "$(DESTDIR)$(qemu_datadir)/keymaps"; \
+ 	done
+ 	for d in $(TARGET_DIRS); do \
+-	$(MAKE) -C $$d $@ || exit 1 ; \
++	$(MAKE) $(SUBDIR_MAKEFLAGS) TARGET_DIR=$$d/ -C $$d $@ || exit 1 ; \
+         done
+ 
+ # various test targets
+
+

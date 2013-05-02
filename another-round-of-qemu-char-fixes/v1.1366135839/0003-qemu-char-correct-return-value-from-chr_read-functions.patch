@@ -1,0 +1,89 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: kraxel@redhat.com
+Date: Tue, 16 Apr 2013 13:10:42 +0200
+Message-id: 1366110642-22095-4-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 3/3] qemu-char: correct return value from chr_read functions
+
+Even if a CharDriverState's source is blocked by the front-end,
+it must not be dropped. The IOWatchPoll that wraps it will take
+care of adding and removing it to the main loop.  Only remove
+the source when the channel is closed; and in that case, make sure
+that the wrapping IOWatchPoll is removed too.
+
+These should just be theoretical bugs.
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ qemu-char.c | 22 ++++++++++++++++------
+ 1 file changed, 16 insertions(+), 6 deletions(-)
+
+diff --git a/qemu-char.c b/qemu-char.c
+index d14888d..6e897da 100644
+--- a/qemu-char.c
++++ b/qemu-char.c
+@@ -781,12 +781,16 @@ static gboolean fd_chr_read(GIOChannel *chan, GIOCondition cond, void *opaque)
+         len = s->max_size;
+     }
+     if (len == 0) {
+-        return FALSE;
++        return TRUE;
+     }
+ 
+     status = g_io_channel_read_chars(chan, (gchar *)buf,
+                                      len, &bytes_read, NULL);
+     if (status == G_IO_STATUS_EOF) {
++        if (s->fd_in_tag) {
++            g_source_remove(s->fd_in_tag);
++            s->fd_in_tag = 0;
++        }
+         qemu_chr_be_event(chr, CHR_EVENT_CLOSED);
+         return FALSE;
+     }
+@@ -1105,8 +1109,9 @@ static gboolean pty_chr_read(GIOChannel *chan, GIOCondition cond, void *opaque)
+     len = sizeof(buf);
+     if (len > s->read_bytes)
+         len = s->read_bytes;
+-    if (len == 0)
+-        return FALSE;
++    if (len == 0) {
++        return TRUE;
++    }
+     status = g_io_channel_read_chars(s->fd, (gchar *)buf, len, &size, NULL);
+     if (status != G_IO_STATUS_NORMAL) {
+         pty_chr_state(chr, 0);
+@@ -2238,13 +2243,18 @@ static gboolean udp_chr_read(GIOChannel *chan, GIOCondition cond, void *opaque)
+     gsize bytes_read = 0;
+     GIOStatus status;
+ 
+-    if (s->max_size == 0)
+-        return FALSE;
++    if (s->max_size == 0) {
++        return TRUE;
++    }
+     status = g_io_channel_read_chars(s->chan, (gchar *)s->buf, sizeof(s->buf),
+                                      &bytes_read, NULL);
+     s->bufcnt = bytes_read;
+     s->bufptr = s->bufcnt;
+     if (status != G_IO_STATUS_NORMAL) {
++        if (s->tag) {
++            g_source_remove(s->tag);
++            s->tag = 0;
++        }
+         return FALSE;
+     }
+ 
+@@ -2497,7 +2507,7 @@ static gboolean tcp_chr_read(GIOChannel *chan, GIOCondition cond, void *opaque)
+     int len, size;
+ 
+     if (!s->connected || s->max_size <= 0) {
+-        return FALSE;
++        return TRUE;
+     }
+     len = sizeof(buf);
+     if (len > s->max_size)
+-- 
+1.8.1.4
+
+

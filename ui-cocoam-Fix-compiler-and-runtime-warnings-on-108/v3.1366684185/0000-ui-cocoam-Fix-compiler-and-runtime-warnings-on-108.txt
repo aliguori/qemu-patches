@@ -1,0 +1,46 @@
+From patches Mon Sep 17 00:00:00 2001
+From: "Peter Maydell" <peter.maydell@linaro.org>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>,
+ =?utf-8?b?IkFuZHJlYXMgRsOkcmJlciI=?= <afaerber@web.de>,
+ =?UTF-8?q?Andreas=20F=C3=A4rber?= <afaerber@web.de>, patches@linaro.org
+Date: Mon, 22 Apr 2013 21:29:45 +0100
+Message-id: 1366662589-18315-1-git-send-email-peter.maydell@linaro.org
+Subject: [PATCH 0/4] ui/cocoa.m: Fix compiler and runtime warnings on 10.8
+
+These patches fix various compiler and runtime warnings QEMU provokes
+on MacOSX 10.8. The first two fix a leak and some deprecated functions
+which cause warnings in the system log when QEMU runs. The second
+two avoid some functions which cause compile time warnings about
+use of functions deprecated in 10.6.
+
+I believe from my reading of the documentation that these changes
+should still work OK on 10.3, but I don't have any way of testing that.
+
+Andreas: I don't write much ObjC so I don't really have a feel for
+what is good coding style. I mostly tried to follow the existing
+code (eg "//" style comments) and QEMU's C style (eg 80 cols max).
+I'm happy to change any of the indentation or whatever to suit your
+preferences.
+
+With this patch set the only remaining compile time warnings from clang
+on 10.8 are about deprecated methods in audio/coreaudio.c.
+
+Changes v2->v3:
+ * rebased again
+Changes v1->v2:
+ * rebased and fixed up following recent console changes
+
+Peter Maydell (4):
+  ui/cocoa.m: Fix leaks of NSScreen and NSConcreteMapTable
+  ui/cocoa.m: Avoid deprecated CPS* functions
+  ui/cocoa.m: Avoid deprecated NSOpenPanel filename method
+  ui/cocoa.m: Avoid deprecated NSOpenPanel beginSheetForDirectory
+
+ ui/cocoa.m | 52 ++++++++++++++++++++++++++++++++--------------------
+ 1 file changed, 32 insertions(+), 20 deletions(-)
+
+-- 
+1.7.11.4
+
+

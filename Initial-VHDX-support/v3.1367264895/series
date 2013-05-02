@@ -1,0 +1,5 @@
+0000-Initial-VHDX-support.txt
+0001-qemu-add-castagnoli-crc32c-checksum-algorithm.patch
+0002-block-vhdx-header-for-the-QEMU-support-of-VHDX-images.patch
+0003-block-initial-VHDX-driver-support-framework---supports-open-and-probe.patch
+0004-block-add-read-only-support-to-VHDX-image-format.patch

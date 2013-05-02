@@ -1,0 +1,170 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: Anthony Liguori <aliguori@us.ibm.com>, Paolo Bonzini <pbonzini@redhat.com>,
+ qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, amit.shah@redhat.com,
+ peter.crosthwaite@xilinx.com, qemu-devel@nongnu.org, gson@gson.org
+Date: Fri, 5 Apr 2013 09:40:07 +0200
+Message-id: 1365147607-18298-1-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 1/1] qemu-char: eliminate busy waiting on can_read returning
+ zero
+
+The character backend refactoring introduced an undesirable busy wait.
+The busy wait happens if can_read returns zero and there is data available
+on the character device's file descriptor.  Then, the I/O watch will
+fire continuously and, with TCG, the CPU thread will never run.
+
+    1) Char backend asks front end if it can write
+    2) Front end says no
+    3) poll() finds the char backend's descriptor is available
+    4) Goto (1)
+
+What we really want is this (note that step 3 avoids the busy wait):
+
+    1) Char backend asks front end if it can write
+    2) Front end says no
+    3) poll() goes on without char backend's descriptor
+    4) Goto (1) until qemu_chr_accept_input() called
+
+    5) Char backend asks front end if it can write
+    6) Front end says yes
+    7) poll() finds the char backend's descriptor is available
+    8) Backend handler called
+
+After this patch, the IOWatchPoll source and the watch source are
+separated.  The IOWatchPoll is simply a hook that runs during the prepare
+phase on each main loop iteration.  The hook adds/removes the actual
+source depending on the return value from can_read.
+
+A simple reproducer is
+
+    qemu-system-i386 -serial mon:stdio
+
+... followed by banging on the terminal as much as you can. :)  Without
+this patch, emulation will hang.
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+Reviewed-by: Anthony Liguori <aliguori@us.ibm.com>
+---
+        This supersedes Peter's patch.
+
+ qemu-char.c  | 64 +++++++++++++++++++++-------------------------------------------
+ 1 file changed, 21 insertions(+), 43 deletions(-)
+
+diff --git a/qemu-char.c b/qemu-char.c
+index e5eb8dd..d4239b5 100644
+--- a/qemu-char.c
++++ b/qemu-char.c
+@@ -594,65 +594,52 @@ int recv_all(int fd, void *_buf, int len1, bool single_read)
+ 
+ typedef struct IOWatchPoll
+ {
++    GSource parent;
++
+     GSource *src;
+-    int max_size;
++    bool active;
+ 
+     IOCanReadHandler *fd_can_read;
+     void *opaque;
+-
+-    QTAILQ_ENTRY(IOWatchPoll) node;
+ } IOWatchPoll;
+ 
+-static QTAILQ_HEAD(, IOWatchPoll) io_watch_poll_list =
+-    QTAILQ_HEAD_INITIALIZER(io_watch_poll_list);
+-
+ static IOWatchPoll *io_watch_poll_from_source(GSource *source)
+ {
+-    IOWatchPoll *i;
+-
+-    QTAILQ_FOREACH(i, &io_watch_poll_list, node) {
+-        if (i->src == source) {
+-            return i;
+-        }
+-    }
+-
+-    return NULL;
++    return container_of(source, IOWatchPoll, parent);
+ }
+ 
+ static gboolean io_watch_poll_prepare(GSource *source, gint *timeout_)
+ {
+     IOWatchPoll *iwp = io_watch_poll_from_source(source);
+-
+-    iwp->max_size = iwp->fd_can_read(iwp->opaque);
+-    if (iwp->max_size == 0) {
++    bool active = iwp->fd_can_read(iwp->opaque) > 0;
++    if (iwp->active == active) {
+         return FALSE;
+     }
+ 
+-    return g_io_watch_funcs.prepare(source, timeout_);
++    iwp->active = active;
++    if (active) {
++        g_source_attach(iwp->src, NULL);
++    } else {
++        g_source_remove(g_source_get_id(iwp->src));
++    }
++    return FALSE;
+ }
+ 
+ static gboolean io_watch_poll_check(GSource *source)
+ {
+-    IOWatchPoll *iwp = io_watch_poll_from_source(source);
+-
+-    if (iwp->max_size == 0) {
+-        return FALSE;
+-    }
+-
+-    return g_io_watch_funcs.check(source);
++    return FALSE;
+ }
+ 
+ static gboolean io_watch_poll_dispatch(GSource *source, GSourceFunc callback,
+                                        gpointer user_data)
+ {
+-    return g_io_watch_funcs.dispatch(source, callback, user_data);
++    abort();
+ }
+ 
+ static void io_watch_poll_finalize(GSource *source)
+ {
+     IOWatchPoll *iwp = io_watch_poll_from_source(source);
+-    QTAILQ_REMOVE(&io_watch_poll_list, iwp, node);
+-    g_io_watch_funcs.finalize(source);
++    g_source_unref(iwp->src);
+ }
+ 
+ static GSourceFuncs io_watch_poll_funcs = {
+@@ -669,24 +657,15 @@ static guint io_add_watch_poll(GIOChannel *channel,
+                                gpointer user_data)
+ {
+     IOWatchPoll *iwp;
+-    GSource *src;
+-    guint tag;
+-
+-    src = g_io_create_watch(channel, G_IO_IN | G_IO_ERR | G_IO_HUP);
+-    g_source_set_funcs(src, &io_watch_poll_funcs);
+-    g_source_set_callback(src, (GSourceFunc)fd_read, user_data, NULL);
+-    tag = g_source_attach(src, NULL);
+-    g_source_unref(src);
+ 
+-    iwp = g_malloc0(sizeof(*iwp));
+-    iwp->src = src;
+-    iwp->max_size = 0;
++    iwp = (IOWatchPoll *) g_source_new(&io_watch_poll_funcs, sizeof(IOWatchPoll));
++    iwp->active = FALSE;
+     iwp->fd_can_read = fd_can_read;
+     iwp->opaque = user_data;
++    iwp->src = g_io_create_watch(channel, G_IO_IN | G_IO_ERR | G_IO_HUP);
++    g_source_set_callback(iwp->src, (GSourceFunc)fd_read, user_data, NULL);
+ 
+-    QTAILQ_INSERT_HEAD(&io_watch_poll_list, iwp, node);
+-
+-    return tag;
++    return g_source_attach(&iwp->parent, NULL);
+ }
+ 
+ #ifndef _WIN32
+

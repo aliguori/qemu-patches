@@ -1,0 +1,1090 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: peter.maydell@linaro.org, mst@redhat.com
+Date: Thu, 11 Apr 2013 18:10:28 +0200
+Message-id: 1365696633-30727-8-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 07/12] sysemu: avoid proliferation of include/ subdirectories
+
+Move all "simple" header files to include/sysemu.  There is no
+need for separate directories.  Plus, some were in include/qemu
+and some in include/backends.
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ backends/baum.c                                  | 2 +-
+ backends/msmouse.c                               | 2 +-
+ backends/rng-egd.c                               | 4 ++--
+ backends/rng-random.c                            | 4 ++--
+ backends/rng.c                                   | 2 +-
+ backends/tpm.c                                   | 2 +-
+ bt-host.c                                        | 2 +-
+ bt-vhci.c                                        | 2 +-
+ gdbstub.c                                        | 2 +-
+ hmp.c                                            | 2 +-
+ hw/arm/omap2.c                                   | 2 +-
+ hw/arm/pxa2xx.c                                  | 2 +-
+ hw/arm/strongarm.c                               | 2 +-
+ hw/bt/core.c                                     | 2 +-
+ hw/bt/hci-csr.c                                  | 4 ++--
+ hw/bt/hci.c                                      | 2 +-
+ hw/char/cadence_uart.c                           | 2 +-
+ hw/char/debugcon.c                               | 2 +-
+ hw/char/escc.c                                   | 2 +-
+ hw/char/etraxfs_ser.c                            | 2 +-
+ hw/char/exynos4210_uart.c                        | 2 +-
+ hw/char/grlib_apbuart.c                          | 2 +-
+ hw/char/imx_serial.c                             | 2 +-
+ hw/char/ipoctal232.c                             | 2 +-
+ hw/char/lm32_juart.c                             | 2 +-
+ hw/char/lm32_uart.c                              | 2 +-
+ hw/char/mcf_uart.c                               | 2 +-
+ hw/char/milkymist-uart.c                         | 2 +-
+ hw/char/omap_uart.c                              | 2 +-
+ hw/char/parallel.c                               | 2 +-
+ hw/char/pl011.c                                  | 2 +-
+ hw/char/sclpconsole.c                            | 2 +-
+ hw/char/serial.c                                 | 2 +-
+ hw/char/sh_serial.c                              | 2 +-
+ hw/char/spapr_vty.c                              | 2 +-
+ hw/char/virtio-console.c                         | 2 +-
+ hw/char/xen_console.c                            | 2 +-
+ hw/char/xilinx_uartlite.c                        | 2 +-
+ hw/core/qdev-properties-system.c                 | 2 +-
+ hw/core/qdev-properties.c                        | 2 +-
+ hw/display/xenfb.c                               | 2 +-
+ hw/isa/pc87312.c                                 | 2 +-
+ hw/mips/mips_fulong2e.c                          | 2 +-
+ hw/mips/mips_malta.c                             | 2 +-
+ hw/misc/ivshmem.c                                | 2 +-
+ hw/net/xgmac.c                                   | 2 +-
+ hw/ppc/spapr_events.c                            | 2 +-
+ hw/ppc/spapr_rtas.c                              | 2 +-
+ hw/sparc/leon3.c                                 | 2 +-
+ hw/tpm/tpm_passthrough.c                         | 2 +-
+ hw/tpm/tpm_tis.c                                 | 2 +-
+ hw/usb/ccid-card-emulated.c                      | 2 +-
+ hw/usb/ccid-card-passthru.c                      | 2 +-
+ hw/usb/dev-bluetooth.c                           | 2 +-
+ hw/usb/dev-serial.c                              | 2 +-
+ hw/usb/redirect.c                                | 2 +-
+ hw/virtio/virtio-rng.c                           | 2 +-
+ hw/xen/xen_backend.c                             | 2 +-
+ hw/xtensa/xtensa_lx60.c                          | 2 +-
+ include/hw/virtio/virtio-rng.h                   | 4 ++--
+ include/{bt => sysemu}/bt.h                      | 0
+ include/{char => sysemu}/char.h                  | 0
+ include/{qemu => sysemu}/rng-random.h            | 0
+ include/{qemu => sysemu}/rng.h                   | 0
+ include/{backends/tpm.h => sysemu/tpm_backend.h} | 0
+ monitor.c                                        | 2 +-
+ net/slirp.c                                      | 2 +-
+ qemu-char.c                                      | 2 +-
+ qmp.c                                            | 2 +-
+ qtest.c                                          | 2 +-
+ slirp/slirp.c                                    | 2 +-
+ spice-qemu-char.c                                | 2 +-
+ tpm.c                                            | 2 +-
+ ui/console.c                                     | 2 +-
+ ui/gtk.c                                         | 2 +-
+ util/event_notifier-posix.c                      | 2 +-
+ vl.c                                             | 4 ++--
+ xen-all.c                                        | 2 +-
+ 78 files changed, 78 insertions(+), 78 deletions(-)
+ rename include/{bt => sysemu}/bt.h (100%)
+ rename include/{char => sysemu}/char.h (100%)
+ rename include/{qemu => sysemu}/rng-random.h (100%)
+ rename include/{qemu => sysemu}/rng.h (100%)
+ rename include/{backends/tpm.h => sysemu/tpm_backend.h} (100%)
+
+diff --git a/backends/baum.c b/backends/baum.c
+index ea9ffe8..4cba79f 100644
+--- a/backends/baum.c
++++ b/backends/baum.c
+@@ -22,7 +22,7 @@
+  * THE SOFTWARE.
+  */
+ #include "qemu-common.h"
+-#include "char/char.h"
++#include "sysemu/char.h"
+ #include "qemu/timer.h"
+ #include "hw/usb.h"
+ #include <brlapi.h>
+diff --git a/backends/msmouse.c b/backends/msmouse.c
+index 61052fe..0ac05a0 100644
+--- a/backends/msmouse.c
++++ b/backends/msmouse.c
+@@ -23,7 +23,7 @@
+  */
+ #include <stdlib.h>
+ #include "qemu-common.h"
+-#include "char/char.h"
++#include "sysemu/char.h"
+ #include "ui/console.h"
+ 
+ #define MSMOUSE_LO6(n) ((n) & 0x3f)
+diff --git a/backends/rng-egd.c b/backends/rng-egd.c
+index cc6f5ee..9e5a536 100644
+--- a/backends/rng-egd.c
++++ b/backends/rng-egd.c
+@@ -10,8 +10,8 @@
+  * See the COPYING file in the top-level directory.
+  */
+ 
+-#include "qemu/rng.h"
+-#include "char/char.h"
++#include "sysemu/rng.h"
++#include "sysemu/char.h"
+ #include "qapi/qmp/qerror.h"
+ #include "hw/qdev.h" /* just for DEFINE_PROP_CHR */
+ 
+diff --git a/backends/rng-random.c b/backends/rng-random.c
+index acd20af..d5761f2 100644
+--- a/backends/rng-random.c
++++ b/backends/rng-random.c
+@@ -10,8 +10,8 @@
+  * See the COPYING file in the top-level directory.
+  */
+ 
+-#include "qemu/rng-random.h"
+-#include "qemu/rng.h"
++#include "sysemu/rng-random.h"
++#include "sysemu/rng.h"
+ #include "qapi/qmp/qerror.h"
+ #include "qemu/main-loop.h"
+ 
+diff --git a/backends/rng.c b/backends/rng.c
+index 3d33898..85cb83f 100644
+--- a/backends/rng.c
++++ b/backends/rng.c
+@@ -10,7 +10,7 @@
+  * See the COPYING file in the top-level directory.
+  */
+ 
+-#include "qemu/rng.h"
++#include "sysemu/rng.h"
+ #include "qapi/qmp/qerror.h"
+ 
+ void rng_backend_request_entropy(RngBackend *s, size_t size,
+diff --git a/backends/tpm.c b/backends/tpm.c
+index 0580108..b735801 100644
+--- a/backends/tpm.c
++++ b/backends/tpm.c
+@@ -12,7 +12,7 @@
+  * Based on backends/rng.c by Anthony Liguori
+  */
+ 
+-#include "backends/tpm.h"
++#include "sysemu/tpm_backend.h"
+ #include "qapi/qmp/qerror.h"
+ #include "sysemu/tpm.h"
+ #include "qemu/thread.h"
+diff --git a/bt-host.c b/bt-host.c
+index 2da3c32..49205bf 100644
+--- a/bt-host.c
++++ b/bt-host.c
+@@ -18,7 +18,7 @@
+  */
+ 
+ #include "qemu-common.h"
+-#include "bt/bt.h"
++#include "sysemu/bt.h"
+ #include "qemu/main-loop.h"
+ 
+ #ifndef _WIN32
+diff --git a/bt-vhci.c b/bt-vhci.c
+index a6a7ab0..e267c8a 100644
+--- a/bt-vhci.c
++++ b/bt-vhci.c
+@@ -18,7 +18,7 @@
+  */
+ 
+ #include "qemu-common.h"
+-#include "bt/bt.h"
++#include "sysemu/bt.h"
+ #include "hw/bt.h"
+ #include "qemu/main-loop.h"
+ 
+diff --git a/gdbstub.c b/gdbstub.c
+index 22ab12c..e80e1d3 100644
+--- a/gdbstub.c
++++ b/gdbstub.c
+@@ -30,7 +30,7 @@
+ #include "qemu.h"
+ #else
+ #include "monitor/monitor.h"
+-#include "char/char.h"
++#include "sysemu/char.h"
+ #include "sysemu/sysemu.h"
+ #include "exec/gdbstub.h"
+ #endif
+diff --git a/hmp.c b/hmp.c
+index dbe9b90..1675e77 100644
+--- a/hmp.c
++++ b/hmp.c
+@@ -15,7 +15,7 @@
+ 
+ #include "hmp.h"
+ #include "net/net.h"
+-#include "char/char.h"
++#include "sysemu/char.h"
+ #include "qemu/option.h"
+ #include "qemu/timer.h"
+ #include "qmp-commands.h"
+diff --git a/hw/arm/omap2.c b/hw/arm/omap2.c
+index a4b4146..2ff4371 100644
+--- a/hw/arm/omap2.c
++++ b/hw/arm/omap2.c
+@@ -24,7 +24,7 @@
+ #include "hw/arm/omap.h"
+ #include "sysemu/sysemu.h"
+ #include "qemu/timer.h"
+-#include "char/char.h"
++#include "sysemu/char.h"
+ #include "hw/block/flash.h"
+ #include "hw/arm/soc_dma.h"
+ #include "hw/sysbus.h"
+diff --git a/hw/arm/pxa2xx.c b/hw/arm/pxa2xx.c
+index bbecc77..24b03a0 100644
+--- a/hw/arm/pxa2xx.c
++++ b/hw/arm/pxa2xx.c
+@@ -13,7 +13,7 @@
+ #include "hw/char/serial.h"
+ #include "hw/i2c/i2c.h"
+ #include "hw/ssi.h"
+-#include "char/char.h"
++#include "sysemu/char.h"
+ #include "sysemu/blockdev.h"
+ 
+ static struct {
+diff --git a/hw/arm/strongarm.c b/hw/arm/strongarm.c
+index 75a813e..4d49306 100644
+--- a/hw/arm/strongarm.c
++++ b/hw/arm/strongarm.c
+@@ -30,7 +30,7 @@
+ #include "strongarm.h"
+ #include "qemu/error-report.h"
+ #include "hw/arm/arm.h"
+-#include "char/char.h"
++#include "sysemu/char.h"
+ #include "sysemu/sysemu.h"
+ #include "hw/ssi.h"
+ 
+diff --git a/hw/bt/core.c b/hw/bt/core.c
+index 24ef4de..49012e0 100644
+--- a/hw/bt/core.c
++++ b/hw/bt/core.c
+@@ -18,7 +18,7 @@
+  */
+ 
+ #include "qemu-common.h"
+-#include "bt/bt.h"
++#include "sysemu/bt.h"
+ #include "hw/bt.h"
+ 
+ /* Slave implementations can ignore this */
+diff --git a/hw/bt/hci-csr.c b/hw/bt/hci-csr.c
+index 55c819b..16a25cb 100644
+--- a/hw/bt/hci-csr.c
++++ b/hw/bt/hci-csr.c
+@@ -19,10 +19,10 @@
+  */
+ 
+ #include "qemu-common.h"
+-#include "char/char.h"
++#include "sysemu/char.h"
+ #include "qemu/timer.h"
+ #include "hw/irq.h"
+-#include "bt/bt.h"
++#include "sysemu/bt.h"
+ #include "hw/bt.h"
+ 
+ struct csrhci_s {
+diff --git a/hw/bt/hci.c b/hw/bt/hci.c
+index a76edea..b53cd5d 100644
+--- a/hw/bt/hci.c
++++ b/hw/bt/hci.c
+@@ -21,7 +21,7 @@
+ #include "qemu-common.h"
+ #include "qemu/timer.h"
+ #include "hw/usb.h"
+-#include "bt/bt.h"
++#include "sysemu/bt.h"
+ #include "hw/bt.h"
+ 
+ struct bt_hci_s {
+diff --git a/hw/char/cadence_uart.c b/hw/char/cadence_uart.c
+index 421ec99..c2a7834 100644
+--- a/hw/char/cadence_uart.c
++++ b/hw/char/cadence_uart.c
+@@ -17,7 +17,7 @@
+  */
+ 
+ #include "hw/sysbus.h"
+-#include "char/char.h"
++#include "sysemu/char.h"
+ #include "qemu/timer.h"
+ 
+ #ifdef CADENCE_UART_ERR_DEBUG
+diff --git a/hw/char/debugcon.c b/hw/char/debugcon.c
+index 0588eeb..02c9577 100644
+--- a/hw/char/debugcon.c
++++ b/hw/char/debugcon.c
+@@ -25,7 +25,7 @@
+  */
+ 
+ #include "hw/hw.h"
+-#include "char/char.h"
++#include "sysemu/char.h"
+ #include "hw/isa/isa.h"
+ #include "hw/i386/pc.h"
+ 
+diff --git a/hw/char/escc.c b/hw/char/escc.c
+index 067b055..c2cb07f 100644
+--- a/hw/char/escc.c
++++ b/hw/char/escc.c
+@@ -25,7 +25,7 @@
+ #include "hw/hw.h"
+ #include "hw/sysbus.h"
+ #include "hw/char/escc.h"
+-#include "char/char.h"
++#include "sysemu/char.h"
+ #include "ui/console.h"
+ #include "trace.h"
+ 
+diff --git a/hw/char/etraxfs_ser.c b/hw/char/etraxfs_ser.c
+index b7499d7..11820f5 100644
+--- a/hw/char/etraxfs_ser.c
++++ b/hw/char/etraxfs_ser.c
+@@ -23,7 +23,7 @@
+  */
+ 
+ #include "hw/sysbus.h"
+-#include "char/char.h"
++#include "sysemu/char.h"
+ #include "qemu/log.h"
+ 
+ #define D(x)
+diff --git a/hw/char/exynos4210_uart.c b/hw/char/exynos4210_uart.c
+index 8b4e72c..5751816 100644
+--- a/hw/char/exynos4210_uart.c
++++ b/hw/char/exynos4210_uart.c
+@@ -21,7 +21,7 @@
+ 
+ #include "hw/sysbus.h"
+ #include "sysemu/sysemu.h"
+-#include "char/char.h"
++#include "sysemu/char.h"
+ 
+ #include "hw/arm/exynos4210.h"
+ 
+diff --git a/hw/char/grlib_apbuart.c b/hw/char/grlib_apbuart.c
+index 62f7990..a64453f 100644
+--- a/hw/char/grlib_apbuart.c
++++ b/hw/char/grlib_apbuart.c
+@@ -23,7 +23,7 @@
+  */
+ 
+ #include "hw/sysbus.h"
+-#include "char/char.h"
++#include "sysemu/char.h"
+ 
+ #include "trace.h"
+ 
+diff --git a/hw/char/imx_serial.c b/hw/char/imx_serial.c
+index d7ec209..2a2c230 100644
+--- a/hw/char/imx_serial.c
++++ b/hw/char/imx_serial.c
+@@ -20,7 +20,7 @@
+ #include "hw/hw.h"
+ #include "hw/sysbus.h"
+ #include "sysemu/sysemu.h"
+-#include "char/char.h"
++#include "sysemu/char.h"
+ #include "hw/arm/imx.h"
+ 
+ //#define DEBUG_SERIAL 1
+diff --git a/hw/char/ipoctal232.c b/hw/char/ipoctal232.c
+index fcd0af3..c9698a6 100644
+--- a/hw/char/ipoctal232.c
++++ b/hw/char/ipoctal232.c
+@@ -10,7 +10,7 @@
+ 
+ #include "ipack.h"
+ #include "qemu/bitops.h"
+-#include "char/char.h"
++#include "sysemu/char.h"
+ 
+ /* #define DEBUG_IPOCTAL */
+ 
+diff --git a/hw/char/lm32_juart.c b/hw/char/lm32_juart.c
+index 93f0d15..839f3eb 100644
+--- a/hw/char/lm32_juart.c
++++ b/hw/char/lm32_juart.c
+@@ -20,7 +20,7 @@
+ #include "hw/hw.h"
+ #include "hw/sysbus.h"
+ #include "trace.h"
+-#include "char/char.h"
++#include "sysemu/char.h"
+ 
+ #include "hw/lm32/lm32_juart.h"
+ 
+diff --git a/hw/char/lm32_uart.c b/hw/char/lm32_uart.c
+index 32bc37a..99721ab 100644
+--- a/hw/char/lm32_uart.c
++++ b/hw/char/lm32_uart.c
+@@ -25,7 +25,7 @@
+ #include "hw/hw.h"
+ #include "hw/sysbus.h"
+ #include "trace.h"
+-#include "char/char.h"
++#include "sysemu/char.h"
+ #include "qemu/error-report.h"
+ 
+ enum {
+diff --git a/hw/char/mcf_uart.c b/hw/char/mcf_uart.c
+index 6724b1b..3ec4705 100644
+--- a/hw/char/mcf_uart.c
++++ b/hw/char/mcf_uart.c
+@@ -7,7 +7,7 @@
+  */
+ #include "hw/hw.h"
+ #include "hw/m68k/mcf.h"
+-#include "char/char.h"
++#include "sysemu/char.h"
+ #include "exec/address-spaces.h"
+ 
+ typedef struct {
+diff --git a/hw/char/milkymist-uart.c b/hw/char/milkymist-uart.c
+index f3bdf69..cbc7d73 100644
+--- a/hw/char/milkymist-uart.c
++++ b/hw/char/milkymist-uart.c
+@@ -24,7 +24,7 @@
+ #include "hw/hw.h"
+ #include "hw/sysbus.h"
+ #include "trace.h"
+-#include "char/char.h"
++#include "sysemu/char.h"
+ #include "qemu/error-report.h"
+ 
+ enum {
+diff --git a/hw/char/omap_uart.c b/hw/char/omap_uart.c
+index 26c1426..5bb36ed 100644
+--- a/hw/char/omap_uart.c
++++ b/hw/char/omap_uart.c
+@@ -17,7 +17,7 @@
+  * You should have received a copy of the GNU General Public License along
+  * with this program; if not, see <http://www.gnu.org/licenses/>.
+  */
+-#include "char/char.h"
++#include "sysemu/char.h"
+ #include "hw/hw.h"
+ #include "hw/arm/omap.h"
+ #include "hw/char/serial.h"
+diff --git a/hw/char/parallel.c b/hw/char/parallel.c
+index 863a6fb..b5e867f 100644
+--- a/hw/char/parallel.c
++++ b/hw/char/parallel.c
+@@ -23,7 +23,7 @@
+  * THE SOFTWARE.
+  */
+ #include "hw/hw.h"
+-#include "char/char.h"
++#include "sysemu/char.h"
+ #include "hw/isa/isa.h"
+ #include "hw/i386/pc.h"
+ #include "sysemu/sysemu.h"
+diff --git a/hw/char/pl011.c b/hw/char/pl011.c
+index 332d5b9..7079ef6 100644
+--- a/hw/char/pl011.c
++++ b/hw/char/pl011.c
+@@ -8,7 +8,7 @@
+  */
+ 
+ #include "hw/sysbus.h"
+-#include "char/char.h"
++#include "sysemu/char.h"
+ 
+ typedef struct {
+     SysBusDevice busdev;
+diff --git a/hw/char/sclpconsole.c b/hw/char/sclpconsole.c
+index 42ed54c..bcc7893 100644
+--- a/hw/char/sclpconsole.c
++++ b/hw/char/sclpconsole.c
+@@ -18,7 +18,7 @@
+ 
+ #include "hw/s390x/sclp.h"
+ #include "hw/s390x/event-facility.h"
+-#include "char/char.h"
++#include "sysemu/char.h"
+ 
+ typedef struct ASCIIConsoleData {
+     EventBufferHeader ebh;
+diff --git a/hw/char/serial.c b/hw/char/serial.c
+index 1151bf1..66b6348 100644
+--- a/hw/char/serial.c
++++ b/hw/char/serial.c
+@@ -24,7 +24,7 @@
+  */
+ 
+ #include "hw/char/serial.h"
+-#include "char/char.h"
++#include "sysemu/char.h"
+ #include "qemu/timer.h"
+ #include "exec/address-spaces.h"
+ 
+diff --git a/hw/char/sh_serial.c b/hw/char/sh_serial.c
+index 450c7d8..b328643 100644
+--- a/hw/char/sh_serial.c
++++ b/hw/char/sh_serial.c
+@@ -26,7 +26,7 @@
+  */
+ #include "hw/hw.h"
+ #include "hw/sh4/sh.h"
+-#include "char/char.h"
++#include "sysemu/char.h"
+ #include "exec/address-spaces.h"
+ 
+ //#define DEBUG_SERIAL
+diff --git a/hw/char/spapr_vty.c b/hw/char/spapr_vty.c
+index 9df018a..afcec1f 100644
+--- a/hw/char/spapr_vty.c
++++ b/hw/char/spapr_vty.c
+@@ -1,5 +1,5 @@
+ #include "hw/qdev.h"
+-#include "char/char.h"
++#include "sysemu/char.h"
+ #include "hw/ppc/spapr.h"
+ #include "hw/ppc/spapr_vio.h"
+ 
+diff --git a/hw/char/virtio-console.c b/hw/char/virtio-console.c
+index 31f672c..5035030 100644
+--- a/hw/char/virtio-console.c
++++ b/hw/char/virtio-console.c
+@@ -10,7 +10,7 @@
+  * the COPYING file in the top-level directory.
+  */
+ 
+-#include "char/char.h"
++#include "sysemu/char.h"
+ #include "qemu/error-report.h"
+ #include "trace.h"
+ #include "hw/virtio/virtio-serial.h"
+diff --git a/hw/char/xen_console.c b/hw/char/xen_console.c
+index efc3232..eb7f450 100644
+--- a/hw/char/xen_console.c
++++ b/hw/char/xen_console.c
+@@ -30,7 +30,7 @@
+ #include <sys/mman.h>
+ 
+ #include "hw/hw.h"
+-#include "char/char.h"
++#include "sysemu/char.h"
+ #include "hw/xen/xen_backend.h"
+ 
+ #include <xen/io/console.h>
+diff --git a/hw/char/xilinx_uartlite.c b/hw/char/xilinx_uartlite.c
+index 079f4d4..3f7e989 100644
+--- a/hw/char/xilinx_uartlite.c
++++ b/hw/char/xilinx_uartlite.c
+@@ -23,7 +23,7 @@
+  */
+ 
+ #include "hw/sysbus.h"
+-#include "char/char.h"
++#include "sysemu/char.h"
+ 
+ #define DUART(x)
+ 
+diff --git a/hw/core/qdev-properties-system.c b/hw/core/qdev-properties-system.c
+index 8c2e152..0eada32 100644
+--- a/hw/core/qdev-properties-system.c
++++ b/hw/core/qdev-properties-system.c
+@@ -17,7 +17,7 @@
+ #include "hw/block/block.h"
+ #include "net/hub.h"
+ #include "qapi/visitor.h"
+-#include "char/char.h"
++#include "sysemu/char.h"
+ 
+ static void get_pointer(Object *obj, Visitor *v, Property *prop,
+                         const char *(*print)(void *ptr),
+diff --git a/hw/core/qdev-properties.c b/hw/core/qdev-properties.c
+index 9a0872d..ddde18e 100644
+--- a/hw/core/qdev-properties.c
++++ b/hw/core/qdev-properties.c
+@@ -5,7 +5,7 @@
+ #include "hw/block/block.h"
+ #include "net/hub.h"
+ #include "qapi/visitor.h"
+-#include "char/char.h"
++#include "sysemu/char.h"
+ 
+ void qdev_prop_set_after_realize(DeviceState *dev, const char *name,
+                                   Error **errp)
+diff --git a/hw/display/xenfb.c b/hw/display/xenfb.c
+index 8e42661..e371569 100644
+--- a/hw/display/xenfb.c
++++ b/hw/display/xenfb.c
+@@ -37,7 +37,7 @@
+ 
+ #include "hw/hw.h"
+ #include "ui/console.h"
+-#include "char/char.h"
++#include "sysemu/char.h"
+ #include "hw/xen/xen_backend.h"
+ 
+ #include <xen/event_channel.h>
+diff --git a/hw/isa/pc87312.c b/hw/isa/pc87312.c
+index 9f5e185..82f7c80 100644
+--- a/hw/isa/pc87312.c
++++ b/hw/isa/pc87312.c
+@@ -27,7 +27,7 @@
+ #include "qemu/error-report.h"
+ #include "sysemu/blockdev.h"
+ #include "sysemu/sysemu.h"
+-#include "char/char.h"
++#include "sysemu/char.h"
+ #include "trace.h"
+ 
+ 
+diff --git a/hw/mips/mips_fulong2e.c b/hw/mips/mips_fulong2e.c
+index 3cf27fa..1aac93a 100644
+--- a/hw/mips/mips_fulong2e.c
++++ b/hw/mips/mips_fulong2e.c
+@@ -30,7 +30,7 @@
+ #include "hw/mips/mips.h"
+ #include "hw/mips/cpudevs.h"
+ #include "hw/pci/pci.h"
+-#include "char/char.h"
++#include "sysemu/char.h"
+ #include "sysemu/sysemu.h"
+ #include "audio/audio.h"
+ #include "qemu/log.h"
+diff --git a/hw/mips/mips_malta.c b/hw/mips/mips_malta.c
+index a3e936b..86f42b2 100644
+--- a/hw/mips/mips_malta.c
++++ b/hw/mips/mips_malta.c
+@@ -34,7 +34,7 @@
+ #include "hw/mips/mips.h"
+ #include "hw/mips/cpudevs.h"
+ #include "hw/pci/pci.h"
+-#include "char/char.h"
++#include "sysemu/char.h"
+ #include "sysemu/sysemu.h"
+ #include "sysemu/arch_init.h"
+ #include "hw/boards.h"
+diff --git a/hw/misc/ivshmem.c b/hw/misc/ivshmem.c
+index f92ce19..a19a6d6 100644
+--- a/hw/misc/ivshmem.c
++++ b/hw/misc/ivshmem.c
+@@ -24,7 +24,7 @@
+ #include "migration/migration.h"
+ #include "qapi/qmp/qerror.h"
+ #include "qemu/event_notifier.h"
+-#include "char/char.h"
++#include "sysemu/char.h"
+ 
+ #include <sys/mman.h>
+ #include <sys/types.h>
+diff --git a/hw/net/xgmac.c b/hw/net/xgmac.c
+index 5275f48..1d9074a 100644
+--- a/hw/net/xgmac.c
++++ b/hw/net/xgmac.c
+@@ -25,7 +25,7 @@
+  */
+ 
+ #include "hw/sysbus.h"
+-#include "char/char.h"
++#include "sysemu/char.h"
+ #include "qemu/log.h"
+ #include "net/net.h"
+ #include "net/checksum.h"
+diff --git a/hw/ppc/spapr_events.c b/hw/ppc/spapr_events.c
+index ff87ac3..c0d7e62 100644
+--- a/hw/ppc/spapr_events.c
++++ b/hw/ppc/spapr_events.c
+@@ -26,7 +26,7 @@
+  */
+ #include "cpu.h"
+ #include "sysemu/sysemu.h"
+-#include "char/char.h"
++#include "sysemu/char.h"
+ #include "hw/qdev.h"
+ #include "sysemu/device_tree.h"
+ 
+diff --git a/hw/ppc/spapr_rtas.c b/hw/ppc/spapr_rtas.c
+index b71b59c..8ecaa5f 100644
+--- a/hw/ppc/spapr_rtas.c
++++ b/hw/ppc/spapr_rtas.c
+@@ -26,7 +26,7 @@
+  */
+ #include "cpu.h"
+ #include "sysemu/sysemu.h"
+-#include "char/char.h"
++#include "sysemu/char.h"
+ #include "hw/qdev.h"
+ #include "sysemu/device_tree.h"
+ 
+diff --git a/hw/sparc/leon3.c b/hw/sparc/leon3.c
+index 3b27d40..78c77ef 100644
+--- a/hw/sparc/leon3.c
++++ b/hw/sparc/leon3.c
+@@ -24,7 +24,7 @@
+ #include "hw/hw.h"
+ #include "qemu/timer.h"
+ #include "hw/ptimer.h"
+-#include "char/char.h"
++#include "sysemu/char.h"
+ #include "sysemu/sysemu.h"
+ #include "hw/boards.h"
+ #include "hw/loader.h"
+diff --git a/hw/tpm/tpm_passthrough.c b/hw/tpm/tpm_passthrough.c
+index 5781277..416b9b6 100644
+--- a/hw/tpm/tpm_passthrough.c
++++ b/hw/tpm/tpm_passthrough.c
+@@ -27,7 +27,7 @@
+ #include "qemu-common.h"
+ #include "qapi/error.h"
+ #include "qemu/sockets.h"
+-#include "backends/tpm.h"
++#include "sysemu/tpm_backend.h"
+ #include "tpm_int.h"
+ #include "hw/hw.h"
+ #include "hw/i386/pc.h"
+diff --git a/hw/tpm/tpm_tis.c b/hw/tpm/tpm_tis.c
+index faa3cec..d4d8152 100644
+--- a/hw/tpm/tpm_tis.c
++++ b/hw/tpm/tpm_tis.c
+@@ -19,7 +19,7 @@
+  * specification.
+  */
+ 
+-#include "backends/tpm.h"
++#include "sysemu/tpm_backend.h"
+ #include "tpm_int.h"
+ #include "block/block.h"
+ #include "exec/address-spaces.h"
+diff --git a/hw/usb/ccid-card-emulated.c b/hw/usb/ccid-card-emulated.c
+index 29dcd7a..d534c94 100644
+--- a/hw/usb/ccid-card-emulated.c
++++ b/hw/usb/ccid-card-emulated.c
+@@ -32,7 +32,7 @@
+ #include <vcard_emul.h>
+ 
+ #include "qemu/thread.h"
+-#include "char/char.h"
++#include "sysemu/char.h"
+ #include "monitor/monitor.h"
+ #include "ccid.h"
+ 
+diff --git a/hw/usb/ccid-card-passthru.c b/hw/usb/ccid-card-passthru.c
+index 5e017ae..71a45f6 100644
+--- a/hw/usb/ccid-card-passthru.c
++++ b/hw/usb/ccid-card-passthru.c
+@@ -8,7 +8,7 @@
+  * See the COPYING file in the top-level directory.
+  */
+ 
+-#include "char/char.h"
++#include "sysemu/char.h"
+ #include "qemu/sockets.h"
+ #include "monitor/monitor.h"
+ #include "ccid.h"
+diff --git a/hw/usb/dev-bluetooth.c b/hw/usb/dev-bluetooth.c
+index 0f8aa48..68cc1d4 100644
+--- a/hw/usb/dev-bluetooth.c
++++ b/hw/usb/dev-bluetooth.c
+@@ -21,7 +21,7 @@
+ #include "qemu-common.h"
+ #include "hw/usb.h"
+ #include "hw/usb/desc.h"
+-#include "bt/bt.h"
++#include "sysemu/bt.h"
+ #include "hw/bt.h"
+ 
+ struct USBBtState {
+diff --git a/hw/usb/dev-serial.c b/hw/usb/dev-serial.c
+index 7c314dc..dd0a608 100644
+--- a/hw/usb/dev-serial.c
++++ b/hw/usb/dev-serial.c
+@@ -12,7 +12,7 @@
+ #include "qemu/error-report.h"
+ #include "hw/usb.h"
+ #include "hw/usb/desc.h"
+-#include "char/char.h"
++#include "sysemu/char.h"
+ 
+ //#define DEBUG_Serial
+ 
+diff --git a/hw/usb/redirect.c b/hw/usb/redirect.c
+index 0ddb081..a594e95 100644
+--- a/hw/usb/redirect.c
++++ b/hw/usb/redirect.c
+@@ -30,7 +30,7 @@
+ #include "monitor/monitor.h"
+ #include "sysemu/sysemu.h"
+ #include "qemu/iov.h"
+-#include "char/char.h"
++#include "sysemu/char.h"
+ 
+ #include <dirent.h>
+ #include <sys/ioctl.h>
+diff --git a/hw/virtio/virtio-rng.c b/hw/virtio/virtio-rng.c
+index 6079b2a..fcc223a 100644
+--- a/hw/virtio/virtio-rng.c
++++ b/hw/virtio/virtio-rng.c
+@@ -14,7 +14,7 @@
+ #include "qapi/qmp/qerror.h"
+ #include "hw/virtio/virtio.h"
+ #include "hw/virtio/virtio-rng.h"
+-#include "qemu/rng.h"
++#include "sysemu/rng.h"
+ 
+ static bool is_guest_ready(VirtIORNG *vrng)
+ {
+diff --git a/hw/xen/xen_backend.c b/hw/xen/xen_backend.c
+index 2a8c9f5..d82ce5d 100644
+--- a/hw/xen/xen_backend.c
++++ b/hw/xen/xen_backend.c
+@@ -35,7 +35,7 @@
+ #include <sys/signal.h>
+ 
+ #include "hw/hw.h"
+-#include "char/char.h"
++#include "sysemu/char.h"
+ #include "qemu/log.h"
+ #include "hw/xen/xen_backend.h"
+ 
+diff --git a/hw/xtensa/xtensa_lx60.c b/hw/xtensa/xtensa_lx60.c
+index 2682eda..650dd31 100644
+--- a/hw/xtensa/xtensa_lx60.c
++++ b/hw/xtensa/xtensa_lx60.c
+@@ -36,7 +36,7 @@
+ #include "hw/sysbus.h"
+ #include "hw/block/flash.h"
+ #include "sysemu/blockdev.h"
+-#include "char/char.h"
++#include "sysemu/char.h"
+ #include "xtensa_bootparam.h"
+ 
+ typedef struct LxBoardDesc {
+diff --git a/include/hw/virtio/virtio-rng.h b/include/hw/virtio/virtio-rng.h
+index 3711c97..c9cadc2 100644
+--- a/include/hw/virtio/virtio-rng.h
++++ b/include/hw/virtio/virtio-rng.h
+@@ -12,8 +12,8 @@
+ #ifndef _QEMU_VIRTIO_RNG_H
+ #define _QEMU_VIRTIO_RNG_H
+ 
+-#include "qemu/rng.h"
+-#include "qemu/rng-random.h"
++#include "sysemu/rng.h"
++#include "sysemu/rng-random.h"
+ 
+ /* The Virtio ID for the virtio rng device */
+ #define VIRTIO_ID_RNG    4
+diff --git a/include/bt/bt.h b/include/sysemu/bt.h
+similarity index 100%
+rename from include/bt/bt.h
+rename to include/sysemu/bt.h
+diff --git a/include/char/char.h b/include/sysemu/char.h
+similarity index 100%
+rename from include/char/char.h
+rename to include/sysemu/char.h
+diff --git a/include/qemu/rng-random.h b/include/sysemu/rng-random.h
+similarity index 100%
+rename from include/qemu/rng-random.h
+rename to include/sysemu/rng-random.h
+diff --git a/include/qemu/rng.h b/include/sysemu/rng.h
+similarity index 100%
+rename from include/qemu/rng.h
+rename to include/sysemu/rng.h
+diff --git a/include/backends/tpm.h b/include/sysemu/tpm_backend.h
+similarity index 100%
+rename from include/backends/tpm.h
+rename to include/sysemu/tpm_backend.h
+diff --git a/monitor.c b/monitor.c
+index e605822..2909ca1 100644
+--- a/monitor.c
++++ b/monitor.c
+@@ -33,7 +33,7 @@
+ #include "exec/gdbstub.h"
+ #include "net/net.h"
+ #include "net/slirp.h"
+-#include "char/char.h"
++#include "sysemu/char.h"
+ #include "ui/qemu-spice.h"
+ #include "sysemu/sysemu.h"
+ #include "monitor/monitor.h"
+diff --git a/net/slirp.c b/net/slirp.c
+index eabfee6..b3f35d5 100644
+--- a/net/slirp.c
++++ b/net/slirp.c
+@@ -35,7 +35,7 @@
+ #include "monitor/monitor.h"
+ #include "qemu/sockets.h"
+ #include "slirp/libslirp.h"
+-#include "char/char.h"
++#include "sysemu/char.h"
+ 
+ static int get_str_sep(char *buf, int buf_size, const char **pp, int sep)
+ {
+diff --git a/qemu-char.c b/qemu-char.c
+index eae17fc..14707ea 100644
+--- a/qemu-char.c
++++ b/qemu-char.c
+@@ -26,7 +26,7 @@
+ #include "ui/console.h"
+ #include "sysemu/sysemu.h"
+ #include "qemu/timer.h"
+-#include "char/char.h"
++#include "sysemu/char.h"
+ #include "hw/usb.h"
+ #include "qmp-commands.h"
+ 
+diff --git a/qmp.c b/qmp.c
+index 55b056b..ed6c7ef 100644
+--- a/qmp.c
++++ b/qmp.c
+@@ -16,7 +16,7 @@
+ #include "qemu-common.h"
+ #include "sysemu/sysemu.h"
+ #include "qmp-commands.h"
+-#include "char/char.h"
++#include "sysemu/char.h"
+ #include "ui/qemu-spice.h"
+ #include "ui/vnc.h"
+ #include "sysemu/kvm.h"
+diff --git a/qtest.c b/qtest.c
+index b03b68a..3bba3e5 100644
+--- a/qtest.c
++++ b/qtest.c
+@@ -13,7 +13,7 @@
+ 
+ #include "sysemu/qtest.h"
+ #include "hw/qdev.h"
+-#include "char/char.h"
++#include "sysemu/char.h"
+ #include "exec/ioport.h"
+ #include "exec/memory.h"
+ #include "hw/irq.h"
+diff --git a/slirp/slirp.c b/slirp/slirp.c
+index bd9b7cb..80b28ea 100644
+--- a/slirp/slirp.c
++++ b/slirp/slirp.c
+@@ -23,7 +23,7 @@
+  */
+ #include "qemu-common.h"
+ #include "qemu/timer.h"
+-#include "char/char.h"
++#include "sysemu/char.h"
+ #include "slirp.h"
+ #include "hw/hw.h"
+ 
+diff --git a/spice-qemu-char.c b/spice-qemu-char.c
+index 535f955..c9403de 100644
+--- a/spice-qemu-char.c
++++ b/spice-qemu-char.c
+@@ -1,7 +1,7 @@
+ #include "config-host.h"
+ #include "trace.h"
+ #include "ui/qemu-spice.h"
+-#include "char/char.h"
++#include "sysemu/char.h"
+ #include <spice.h>
+ #include <spice-experimental.h>
+ #include <spice/protocol.h>
+diff --git a/tpm.c b/tpm.c
+index 1e94314..c91da43 100644
+--- a/tpm.c
++++ b/tpm.c
+@@ -15,7 +15,7 @@
+ 
+ #include "monitor/monitor.h"
+ #include "qapi/qmp/qerror.h"
+-#include "backends/tpm.h"
++#include "sysemu/tpm_backend.h"
+ #include "sysemu/tpm.h"
+ #include "qemu/config-file.h"
+ #include "qmp-commands.h"
+diff --git a/ui/console.c b/ui/console.c
+index e84ba8b..0ed4211 100644
+--- a/ui/console.c
++++ b/ui/console.c
+@@ -25,7 +25,7 @@
+ #include "ui/console.h"
+ #include "qemu/timer.h"
+ #include "qmp-commands.h"
+-#include "char/char.h"
++#include "sysemu/char.h"
+ 
+ //#define DEBUG_CONSOLE
+ #define DEFAULT_BACKSCROLL 512
+diff --git a/ui/gtk.c b/ui/gtk.c
+index 1a6bee6..1e105e2 100644
+--- a/ui/gtk.c
++++ b/ui/gtk.c
+@@ -62,7 +62,7 @@
+ #include "qmp-commands.h"
+ #include "x_keymap.h"
+ #include "keymaps.h"
+-#include "char/char.h"
++#include "sysemu/char.h"
+ 
+ //#define DEBUG_GTK
+ 
+diff --git a/util/event_notifier-posix.c b/util/event_notifier-posix.c
+index 713d756..8442c6e 100644
+--- a/util/event_notifier-posix.c
++++ b/util/event_notifier-posix.c
+@@ -12,7 +12,7 @@
+ 
+ #include "qemu-common.h"
+ #include "qemu/event_notifier.h"
+-#include "char/char.h"
++#include "sysemu/char.h"
+ #include "qemu/main-loop.h"
+ 
+ #ifdef CONFIG_EVENTFD
+diff --git a/vl.c b/vl.c
+index ce7bed7..cdadad0 100644
+--- a/vl.c
++++ b/vl.c
+@@ -126,7 +126,7 @@ int main(int argc, char **argv)
+ #include "hw/qdev.h"
+ #include "hw/loader.h"
+ #include "monitor/qdev.h"
+-#include "bt/bt.h"
++#include "sysemu/bt.h"
+ #include "net/net.h"
+ #include "net/slirp.h"
+ #include "monitor/monitor.h"
+@@ -134,7 +134,7 @@ int main(int argc, char **argv)
+ #include "sysemu/sysemu.h"
+ #include "exec/gdbstub.h"
+ #include "qemu/timer.h"
+-#include "char/char.h"
++#include "sysemu/char.h"
+ #include "qemu/cache-utils.h"
+ #include "sysemu/blockdev.h"
+ #include "hw/block/block.h"
+diff --git a/xen-all.c b/xen-all.c
+index 31f28fc..539a154 100644
+--- a/xen-all.c
++++ b/xen-all.c
+@@ -16,7 +16,7 @@
+ #include "hw/xen/xen_backend.h"
+ #include "qmp-commands.h"
+ 
+-#include "char/char.h"
++#include "sysemu/char.h"
+ #include "qemu/range.h"
+ #include "sysemu/xen-mapcache.h"
+ #include "trace.h"
+-- 
+1.8.1.4
+
+
+

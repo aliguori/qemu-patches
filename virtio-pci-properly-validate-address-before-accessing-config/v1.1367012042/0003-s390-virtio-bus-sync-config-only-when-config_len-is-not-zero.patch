@@ -1,0 +1,41 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Jason Wang <jasowang@redhat.com>
+To: Anthony Liguori <aliguori@us.ibm.com>, Alexander Graf <agraf@suse.de>,
+ mst@redhat.com, qemu-devel@nongnu.org, "Michael S. Tsirkin" <mst@redhat.com>,
+ Jason Wang <jasowang@redhat.com>
+Cc: Anthony Liguori <aliguori@us.ibm.com>, Alexander Graf <agraf@suse.de>,
+ mst@redhat.com, qemu-devel@nongnu.org, Richard Henderson <rth@twiddle.net>,
+ Jason Wang <jasowang@redhat.com>, pmatouse@redhat.com
+Date: Fri, 26 Apr 2013 16:34:04 +0800
+Message-id: 1366965244-20542-3-git-send-email-jasowang@redhat.com
+Subject: [PATCH 3/3] s390-virtio-bus: sync config only when config_len is not
+ zero
+
+virtio-rng-s390 has zero config length, so no need to sync its config otherwise
+qemu will crash since vdev->config is NULL.
+
+Cc: Alexander Graf <agraf@suse.de>
+Cc: Richard Henderson <rth@twiddle.net>
+Signed-off-by: Jason Wang <jasowang@redhat.com>
+---
+ hw/s390x/s390-virtio-bus.c |    4 ++++
+ 1 files changed, 4 insertions(+), 0 deletions(-)
+
+diff --git a/hw/s390x/s390-virtio-bus.c b/hw/s390x/s390-virtio-bus.c
+index dabbc2e..0f83516 100644
+--- a/hw/s390x/s390-virtio-bus.c
++++ b/hw/s390x/s390-virtio-bus.c
+@@ -350,6 +350,10 @@ void s390_virtio_device_sync(VirtIOS390Device *dev)
+     dev->feat_offs = cur_offs + dev->feat_len;
+     cur_offs += dev->feat_len * 2;
+ 
++    if (!dev->vdev->config_len) {
++        return;
++    }
++
+     /* Sync config space */
+     if (dev->vdev->get_config) {
+         dev->vdev->get_config(dev->vdev, dev->vdev->config);
+-- 
+1.7.1
+

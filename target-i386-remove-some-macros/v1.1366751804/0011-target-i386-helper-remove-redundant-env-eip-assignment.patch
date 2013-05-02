@@ -1,0 +1,32 @@
+From patches Mon Sep 17 00:00:00 2001
+From: liguang <lig.fnst@cn.fujitsu.com>
+To: qemu-devel@nongnu.org
+Cc: peter.maydell@linaro.org, ehabkost@redhat.com,
+ liguang <lig.fnst@cn.fujitsu.com>, blauwirbel@gmail.com, imammedo@redhat.com,
+ pbonzini@redhat.com, afaerber@suse.de, rth@twiddle.net
+Date: Tue, 23 Apr 2013 16:16:55 +0800
+Message-id: 1366705016-30471-12-git-send-email-lig.fnst@cn.fujitsu.com
+Subject: [PATCH 11/12] target-i386/helper: remove redundant env->eip assignment
+
+Signed-off-by: liguang <lig.fnst@cn.fujitsu.com>
+---
+ target-i386/svm_helper.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+diff --git a/target-i386/svm_helper.c b/target-i386/svm_helper.c
+index 649be02..e18fa35 100644
+--- a/target-i386/svm_helper.c
++++ b/target-i386/svm_helper.c
+@@ -249,7 +249,7 @@ void helper_vmrun(CPUX86State *env, int aflag, int next_eip_addend)
+                        R_DS);
+ 
+     env->eip = ldq_phys(env->vm_vmcb + offsetof(struct vmcb, save.rip));
+-    env->eip = env->eip;
++
+     env->regs[R_ESP] = ldq_phys(env->vm_vmcb + offsetof(struct vmcb, save.rsp));
+     env->regs[R_EAX] = ldq_phys(env->vm_vmcb + offsetof(struct vmcb, save.rax));
+     env->dr[7] = ldq_phys(env->vm_vmcb + offsetof(struct vmcb, save.dr7));
+-- 
+1.7.2.5
+
+

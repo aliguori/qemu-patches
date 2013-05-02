@@ -1,0 +1,68 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Jacob Kroon <jacob.kroon@gmail.com>
+Date: Wed,  1 May 2013 18:30:15 +0200
+Message-id: 1367425815-15083-1-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 1/1] win32: fix compilation again
+
+While commit c02817e5bfbb27955cac970019e6670dc427bc41 fixed compilation
+without an installed libtool, moving the dependencies to rules.mak does
+not work because the version-*-y variables are not defined yet.  Building
+in a clean tree thus fails.
+
+Revert the commit and remove the dummy /bin/false assignment to LIBTOOL.
+This makes the build work, at the price of slightly worse errors when
+there are Makefile bugs.
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ Makefile  | 1 +
+ rules.mak | 6 +-----
+ 2 files changed, 2 insertions(+), 5 deletions(-)
+
+diff --git a/Makefile b/Makefile
+index f91f3b0..7dc0204 100644
+--- a/Makefile
++++ b/Makefile
+@@ -172,6 +172,7 @@ version.lo: $(SRC_PATH)/version.rc config-host.h
+ version-obj-$(CONFIG_WIN32) += version.o
+ version-lobj-$(CONFIG_WIN32) += version.lo
+ 
++Makefile: $(version-obj-y) $(version-lobj-y)
+ 
+ ######################################################################
+ # Build libraries
+diff --git a/rules.mak b/rules.mak
+index 197a9d7..d3145b4 100644
+--- a/rules.mak
++++ b/rules.mak
+@@ -22,15 +22,11 @@ QEMU_CFLAGS += -I$(<D) -I$(@D)
+ %.o: %.rc
+ 	$(call quiet-command,$(WINDRES) -I. -o $@ $<,"  RC    $(TARGET_DIR)$@")
+ 
+-Makefile: $(version-obj-y)
+-
+ ifeq ($(LIBTOOL),)
+-LIBTOOL = /bin/false
+ LINK = $(call quiet-command,$(CC) $(QEMU_CFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ \
+        $(sort $(filter %.o, $1)) $(filter-out %.o, $1) $(version-obj-y) \
+        $(LIBS),"  LINK  $(TARGET_DIR)$@")
+ else
+-Makefile: $(version-lobj-y)
+ LIBTOOL += $(if $(V),,--quiet)
+ %.lo: %.c
+ 	$(call quiet-command,$(LIBTOOL) --mode=compile --tag=CC $(CC) $(QEMU_INCLUDES) $(QEMU_CFLAGS) $(QEMU_DGFLAGS) $(CFLAGS) -c -o $@ $<,"  lt CC $@")
+@@ -74,7 +70,7 @@ quiet-command = $(if $(V),$1,$(if $(2),@echo $2 && $1, @$1))
+ cc-option = $(if $(shell $(CC) $1 $2 -S -o /dev/null -xc /dev/null \
+               >/dev/null 2>&1 && echo OK), $2, $3)
+ 
+-VPATH_SUFFIXES = %.c %.h %.S %.m %.mak %.texi %.sh
++VPATH_SUFFIXES = %.c %.h %.S %.m %.mak %.texi %.sh %.rc
+ set-vpath = $(if $1,$(foreach PATTERN,$(VPATH_SUFFIXES),$(eval vpath $(PATTERN) $1)))
+ 
+ # find-in-path
+-- 
+1.8.2
+
+

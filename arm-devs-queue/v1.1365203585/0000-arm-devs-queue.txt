@@ -1,0 +1,66 @@
+From patches Mon Sep 17 00:00:00 2001
+From: "Peter Maydell" <peter.maydell@linaro.org>
+To: Anthony Liguori <aliguori@us.ibm.com>, Blue Swirl <blauwirbel@gmail.com>,
+ Peter Maydell <peter.maydell@linaro.org>
+Cc: Anthony Liguori <aliguori@us.ibm.com>, Paul Brook <paul@codesourcery.com>,
+ qemu-devel@nongnu.org, qemu-devel <qemu-devel@nongnu.org>
+Date: Fri, 5 Apr 2013 18:13:05 +0100
+Message-id: 1365181999-15387-1-git-send-email-peter.maydell@linaro.org
+Subject: [PATCH 00/14] arm-devs queue
+
+Here's the latest set of arm-devs patches; mostly migration
+related fixes, plus a few random minor bug zaps. Please pull.
+
+thanks
+-- PMM
+
+The following changes since commit d05ef160453e98546a4197496dc8a3cb2defac53:
+
+  Allow clock_gettime() monotonic clock to be utilized on more OS's (2013-04-04 20:22:45 -0500)
+
+are available in the git repository at:
+
+  git://git.linaro.org/people/pmaydell/qemu-arm.git arm-devs.next
+
+for you to fetch changes up to 32aea752f47f30c00878dcc323ac4debf0c9e645:
+
+  hw/nand.c: Fix nand erase operation (2013-04-05 17:08:54 +0100)
+
+----------------------------------------------------------------
+Igor Mitsyanko (3):
+      vmstate.h: introduce VMSTATE_BUFFER_POINTER_UNSAFE macro
+      hw/sd.c: fix migration of dynamically allocated buffer "buf"
+      hw/onenand.c: fix migration of dynamically allocated buffer "otp"
+
+Peter Crosthwaite (2):
+      pl330: Don't inhibit ES bits on INTEN
+      cadence_uart: Flush queued characters on reset
+
+Peter Maydell (8):
+      hw/arm/nseries: don't print to stdout or stderr
+      pl050: Don't send always-constant is_mouse field
+      hw/arm_mptimer: Save the timer state
+      vmstate: Add support for two dimensional arrays
+      arm_gic: Fix sizes of state fields in preparation for vmstate support
+      hw/arm_gic_common: Use vmstate struct rather than save/load functions
+      pflash_cfi01: Drop unused 'bypass' field
+      pflash_cfi01: Implement migration support
+
+Wendy Liang (1):
+      hw/nand.c: Fix nand erase operation
+
+ hw/arm/nseries.c            |   18 ++-----
+ hw/arm_gic_common.c         |  112 +++++++++++++++++--------------------------
+ hw/arm_gic_internal.h       |   42 ++++++++--------
+ hw/arm_mptimer.c            |    5 +-
+ hw/armv7m_nvic.c            |    4 +-
+ hw/cadence_uart.c           |    1 +
+ hw/nand.c                   |    1 +
+ hw/onenand.c                |    3 +-
+ hw/pflash_cfi01.c           |   30 +++++++-----
+ hw/pl050.c                  |    5 +-
+ hw/pl330.c                  |    3 +-
+ hw/sd.c                     |    2 +-
+ include/migration/vmstate.h |   36 ++++++++++++++
+ 13 files changed, 137 insertions(+), 125 deletions(-)
+

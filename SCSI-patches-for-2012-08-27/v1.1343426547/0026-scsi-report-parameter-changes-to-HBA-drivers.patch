@@ -1,0 +1,73 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: 
+Date: Fri, 27 Jul 2012 17:02:53 +0200
+Message-id: 1343401379-19495-27-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 26/32] scsi: report parameter changes to HBA drivers
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ hw/scsi-bus.c  |   10 ++++++++++
+ hw/scsi-disk.c |    1 +
+ hw/scsi.h      |    2 ++
+ 3 files changed, 13 insertions(+)
+
+diff --git a/hw/scsi-bus.c b/hw/scsi-bus.c
+index 04262de..e4ec19e 100644
+--- a/hw/scsi-bus.c
++++ b/hw/scsi-bus.c
+@@ -1072,6 +1072,16 @@ int scsi_req_parse(SCSICommand *cmd, SCSIDevice *dev, uint8_t *buf)
+     return 0;
+ }
+ 
++void scsi_device_report_change(SCSIDevice *dev, SCSISense sense)
++{
++    SCSIBus *bus = DO_UPCAST(SCSIBus, qbus, dev->qdev.parent_bus);
++
++    scsi_device_set_ua(dev, sense);
++    if (bus->info->change) {
++        bus->info->change(bus, dev, sense);
++    }
++}
++
+ /*
+  * Predefined sense codes
+  */
+diff --git a/hw/scsi-disk.c b/hw/scsi-disk.c
+index 9ba405f..84b63ff 100644
+--- a/hw/scsi-disk.c
++++ b/hw/scsi-disk.c
+@@ -1869,6 +1869,7 @@ static void scsi_disk_resize_cb(void *opaque)
+      */
+     if (s->qdev.type == TYPE_DISK) {
+         scsi_device_set_ua(&s->qdev, SENSE_CODE(CAPACITY_CHANGED));
++        scsi_device_report_change(&s->qdev, SENSE_CODE(CAPACITY_CHANGED));
+     }
+ }
+ 
+diff --git a/hw/scsi.h b/hw/scsi.h
+index 82a5fc8..1aeee46 100644
+--- a/hw/scsi.h
++++ b/hw/scsi.h
+@@ -133,6 +133,7 @@ struct SCSIBusInfo {
+     void (*cancel)(SCSIRequest *req);
+     void (*hotplug)(SCSIBus *bus, SCSIDevice *dev);
+     void (*hot_unplug)(SCSIBus *bus, SCSIDevice *dev);
++    void (*change)(SCSIBus *bus, SCSIDevice *dev, SCSISense sense);
+     QEMUSGList *(*get_sg_list)(SCSIRequest *req);
+ 
+     void (*save_request)(QEMUFile *f, SCSIRequest *req);
+@@ -242,6 +243,7 @@ void scsi_req_cancel(SCSIRequest *req);
+ void scsi_req_retry(SCSIRequest *req);
+ void scsi_device_purge_requests(SCSIDevice *sdev, SCSISense sense);
+ void scsi_device_set_ua(SCSIDevice *sdev, SCSISense sense);
++void scsi_device_report_change(SCSIDevice *dev, SCSISense sense);
+ int scsi_device_get_sense(SCSIDevice *dev, uint8_t *buf, int len, bool fixed);
+ SCSIDevice *scsi_device_find(SCSIBus *bus, int channel, int target, int lun);
+ 
+-- 
+1.7.10.4
+
+
+

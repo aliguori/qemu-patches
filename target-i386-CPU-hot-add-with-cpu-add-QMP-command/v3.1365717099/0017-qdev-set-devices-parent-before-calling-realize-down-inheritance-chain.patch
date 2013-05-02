@@ -1,0 +1,61 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Igor Mammedov <imammedo@redhat.com>
+To: Igor Mammedov <imammedo@redhat.com>, qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, ehabkost@redhat.com,
+ claudio.fontana@huawei.com, qemu-devel@nongnu.org, aderumier@odiso.com,
+ lcapitulino@redhat.com, jfrei@linux.vnet.ibm.com, yang.z.zhang@intel.com,
+ pbonzini@redhat.com, eblake@redhat.com, afaerber@suse.de,
+ lig.fnst@cn.fujitsu.com, rth@twiddle.net
+Date: Thu, 11 Apr 2013 16:51:56 +0200
+Message-id: 1365691918-30594-18-git-send-email-imammedo@redhat.com
+Subject: [PATCH 17/19] qdev: set device's parent before calling realize() down
+ inheritance chain.
+
+Currently device_set_realized() sets parent only after device was realized,
+But qdev_device_add() sets it before device is realized.
+Make behavior consistent and alter device_set_realized() to behave like
+qdev_device_add().
+
+It will allow to set link<> properties in realize() method in classes
+inherited from DEVICE.
+
+Signed-off-by: Igor Mammedov <imammedo@redhat.com>
+Reviewed-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ * Usage examples
+    - conversion to CPU back-link property in APIC
+    - pre-allocate link<CPU[n]> at board level, and populate them
+      at realize time when CPUs are created.
+---
+ hw/core/qdev.c | 8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/hw/core/qdev.c b/hw/core/qdev.c
+index e2bb37d..b9bd6f5 100644
+--- a/hw/core/qdev.c
++++ b/hw/core/qdev.c
+@@ -671,10 +671,6 @@ static void device_set_realized(Object *obj, bool value, Error **err)
+     Error *local_err = NULL;
+ 
+     if (value && !dev->realized) {
+-        if (dc->realize) {
+-            dc->realize(dev, &local_err);
+-        }
+-
+         if (!obj->parent && local_err == NULL) {
+             static int unattached_count;
+             gchar *name = g_strdup_printf("device[%d]", unattached_count++);
+@@ -685,6 +681,10 @@ static void device_set_realized(Object *obj, bool value, Error **err)
+             g_free(name);
+         }
+ 
++        if (dc->realize) {
++            dc->realize(dev, &local_err);
++        }
++
+         if (qdev_get_vmsd(dev) && local_err == NULL) {
+             vmstate_register_with_alias_id(dev, -1, qdev_get_vmsd(dev), dev,
+                                            dev->instance_id_alias,
+-- 
+1.8.2
+

@@ -1,0 +1,51 @@
+From patches Mon Sep 17 00:00:00 2001
+From: fred.konrad@greensocs.com
+To: Anthony Liguori <aliguori@us.ibm.com>, qemu-devel@nongnu.org,
+ fred.konrad@greensocs.com
+Cc: peter.maydell@linaro.org, mark.burton@greensocs.com,
+ fred.konrad@greensocs.com
+Date: Tue, 23 Apr 2013 11:08:39 +0200
+Message-id: 1366708123-19626-1-git-send-email-fred.konrad@greensocs.com
+Subject: [PATCH 0/4] virtio-9p refactoring.
+
+From: KONRAD Frederic <fred.konrad@greensocs.com>
+
+Basically it creates virtio-9p-device backend which extends virtio-device.
+Then a virtio-9p-device can be connected on a virtio-bus.
+virtio-9p-pci is modified, extends virtio-pci and have a virtio-9p-device.
+
+You can checkout my branch here:
+
+git://project.greensocs.com/qemu-virtio.git virtio-9p-v4
+
+I made basic tests (with linux guests) on:
+    * qemu-system-i386
+
+Changes v3 -> v4:
+    * Fix a compilation bug when virtfs is disabled. (lost during a rebase)
+    * Renamed device "virtio-9p" => "virtio-9p-device".
+    * Rebased.
+
+Changes v2 -> v3:
+    * Rebased.
+
+Thanks,
+
+Fred
+
+KONRAD Frederic (4):
+  virtio-9p: add the virtio-9p device.
+  virtio-9p-pci: switch to the new API.
+  virtio-9p: cleanup: init function.
+  virtio-9p: cleanup: QOM casts.
+
+ hw/9pfs/virtio-9p-device.c | 91 +++++++++++++++++++++++++++++-----------------
+ hw/9pfs/virtio-9p.c        |  2 +-
+ hw/9pfs/virtio-9p.h        | 12 +++++-
+ hw/virtio/virtio-pci.c     | 61 +++++++++++++++++--------------
+ hw/virtio/virtio-pci.h     | 23 ++++++++++--
+ 5 files changed, 123 insertions(+), 66 deletions(-)
+
+-- 
+1.7.11.7
+

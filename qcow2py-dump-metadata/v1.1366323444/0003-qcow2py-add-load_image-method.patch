@@ -1,0 +1,162 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: kwolf@redhat.com, stefanha@redhat.com
+Date: Thu, 18 Apr 2013 17:17:27 +0200
+Message-id: 1366298249-11739-4-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 3/5] qcow2.py: add load_image() method
+
+The load_image() method optionally probes for the image format
+and returns an instance of a subclass of ImageFile.  So far
+only qcow2 is supported.
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ tests/qemu-iotests/qcow2.py | 44 +++++++++++++++++++++++++++++++++-----------
+ 1 file changed, 33 insertions(+), 11 deletions(-)
+
+diff --git a/tests/qemu-iotests/qcow2.py b/tests/qemu-iotests/qcow2.py
+index 773c947..77e03cb 100755
+--- a/tests/qemu-iotests/qcow2.py
++++ b/tests/qemu-iotests/qcow2.py
+@@ -1,6 +1,7 @@
+ #!/usr/bin/env python
+ 
+ import sys
++import os
+ import struct
+ import string
+ 
+@@ -20,6 +21,10 @@ class ImageFile:
+         self.__dict__ = fields
+         self.fd = fd
+ 
++    def close(self):
++        self.fd.close()
++        self.fd = None
++
+     def raw_pread(self, offset, size):
+         self.fd.seek(offset)
+         return self.fd.read(size)
+@@ -28,6 +33,7 @@ class ImageFile:
+         self.fd.seek(offset)
+         return self.fd.write(data)
+ 
++
+ class Qcow(ImageFile):
+ 
+     uint32_t = 'I'
+@@ -58,6 +64,7 @@ class Qcow(ImageFile):
+     ];
+ 
+     HEADER_FMT = '>' + ''.join(field[0] for field in fields)
++    QCOW_MAGIC = 0x514649fb
+ 
+     def __init__(self, fd):
+ 
+@@ -71,6 +78,9 @@ class Qcow(ImageFile):
+             for i, field in enumerate(Qcow.fields))
+ 
+         ImageFile.__init__(self, fd, fields)
++        if self.magic != Qcow.QCOW_MAGIC:
++            raise Error('not a QCOW2 image')
++
+         self.set_defaults()
+         self.cluster_size = 1 << self.cluster_bits
+ 
+@@ -155,31 +165,44 @@ class Qcow(ImageFile):
+             print "%-25s %s" % ("data", data)
+             print ""
+ 
++def load_image(filename, mode='rb', format=None):
++    fd = open(filename, mode)
++    if format is None:
++        fd.seek(0)
++        buf = fd.read(4)
++        magic = struct.unpack('>I', buf)
++        if magic == Qcow.QCOW_MAGIC:
++            format = 'qcow2'
++        else:
++            format = 'raw'
++
++    if format == 'qcow2':
++        return Qcow(fd)
++
++    raise Error('unknown format %s' % format)
++
+ 
+-def cmd_dump_header(fd):
+-    h = Qcow(fd)
++def cmd_dump_header(h):
+     h.dump()
+     h.dump_extensions()
+ 
+-def cmd_add_header_ext(fd, magic, data):
++def cmd_add_header_ext(h, magic, data):
+     try:
+         magic = int(magic, 0)
+     except:
+         print "'%s' is not a valid magic number" % magic
+         sys.exit(1)
+ 
+-    h = Qcow(fd)
+     h.extensions.append(QcowHeaderExtension.create(magic, data))
+     h.update()
+ 
+-def cmd_del_header_ext(fd, magic):
++def cmd_del_header_ext(h, magic):
+     try:
+         magic = int(magic, 0)
+     except:
+         print "'%s' is not a valid magic number" % magic
+         sys.exit(1)
+ 
+-    h = Qcow(fd)
+     found = False
+ 
+     for ex in h.extensions:
+@@ -193,7 +216,7 @@ def cmd_del_header_ext(fd, magic):
+ 
+     h.update()
+ 
+-def cmd_set_feature_bit(fd, group, bit):
++def cmd_set_feature_bit(h, group, bit):
+     try:
+         bit = int(bit, 0)
+         if bit < 0 or bit >= 64:
+@@ -202,7 +225,6 @@ def cmd_set_feature_bit(fd, group, bit):
+         print "'%s' is not a valid bit number in range [0, 64)" % bit
+         sys.exit(1)
+ 
+-    h = Qcow(fd)
+     if group == 'incompatible':
+         h.incompatible_features |= 1 << bit
+     elif group == 'compatible':
+@@ -223,7 +245,7 @@ cmds = [
+ ]
+ 
+ def main(filename, cmd, args):
+-    fd = open(filename, "r+b")
++    h = load_image(filename, 'r+b', 'qcow2')
+     try:
+         for name, handler, num_args, desc in cmds:
+             if name != cmd:
+@@ -232,11 +254,11 @@ def main(filename, cmd, args):
+                 usage()
+                 return
+             else:
+-                handler(fd, *args)
++                handler(h, *args)
+                 return
+         print "Unknown command '%s'" % cmd
+     finally:
+-        fd.close()
++        h.close()
+ 
+ def usage():
+     print "Usage: %s <file> <cmd> [<arg>, ...]" % sys.argv[0]
+-- 
+1.8.2
+
+
+

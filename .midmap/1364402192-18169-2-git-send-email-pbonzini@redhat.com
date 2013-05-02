@@ -1,0 +1,1 @@
+../migration-followups-for-writev-patches/v1.1364423786/0001-qemu-file-drop-socket_put_buffer.patch

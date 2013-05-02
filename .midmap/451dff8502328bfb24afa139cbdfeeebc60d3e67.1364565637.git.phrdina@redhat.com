@@ -1,0 +1,1 @@
+../convert-savevm-to-use-qapi-and-introduce-qmp-command/v4.1364587947/0002-block-add-error-parameter-to-del_existing_snapshots.patch

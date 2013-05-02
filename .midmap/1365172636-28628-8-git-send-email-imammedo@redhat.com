@@ -1,0 +1,1 @@
+../target-i386-CPU-hot-add-with-cpu-add-QMP-command/v2.1365197812/0007-target-i386-kvmvapic-replace-FROM_SYSBUS-with-QOM-type-cast.patch

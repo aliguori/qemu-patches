@@ -1,0 +1,8 @@
+0000-target-i386-CPU-hot-add-with-cpu-add-QMP-command.txt
+0001-target-i386-Introduce-ICC-bus-device-bridge.patch
+0002-target-i386-Attach-ICC-bus-to-CPU-on-its-creation.patch
+0003-target-i386-Move-APIC-to-ICC-bus.patch
+0004-pc-pass-QEMUMachineInitArgs-down-to-pc_cpus_init.patch
+0005-add-hot_add_cpu-hook-to-QEMUMachine-and-export-machine_args.patch
+0006-target-i386-implement-machine-hot_add_cpu-hook.patch
+0007-QMP-add-cpu-add-command.patch

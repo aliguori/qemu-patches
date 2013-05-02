@@ -1,0 +1,70 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Hu Tao <hutao@cn.fujitsu.com>
+To: Hu Tao <hutao@cn.fujitsu.com>, qemu-devel@nongnu.org
+Cc: Paolo Bonzini <pbonzini@redhat.com>, qemu-devel@nongnu.org,
+ Markus Armbruster <armbru@redhat.com>
+Date: Fri, 26 Apr 2013 11:24:41 +0800
+Message-id: cf0bc45ecf9ecd3699bc72dc39f8cbab8ed79d8c.1366945969.git.hutao@cn.fujitsu.com
+Subject: [PATCH 2/8] add a new qevent: QEVENT_GUEST_PANICKED
+
+This event will be emited when qemu detects guest panic.
+
+Signed-off-by: Wen Congyang <wency@cn.fujitsu.com>
+Signed-off-by: Hu Tao <hutao@cn.fujitsu.com>
+Reviewed-by: Markus Armbruster <armbru@redhat.com>
+---
+ QMP/qmp-events.txt        | 14 ++++++++++++++
+ include/monitor/monitor.h |  1 +
+ monitor.c                 |  1 +
+ 3 files changed, 16 insertions(+)
+
+diff --git a/QMP/qmp-events.txt b/QMP/qmp-events.txt
+index dcc826d..92fe5fb 100644
+--- a/QMP/qmp-events.txt
++++ b/QMP/qmp-events.txt
+@@ -446,3 +446,17 @@ Example:
+ 
+ Note: If action is "reset", "shutdown", or "pause" the WATCHDOG event is
+ followed respectively by the RESET, SHUTDOWN, or STOP events.
++
++GUEST_PANICKED
++--------------
++
++Emitted when guest OS panic is detected.
++
++Data:
++
++- "action": Action that has been taken (json-string, currently always "pause").
++
++Example:
++
++{ "event": "GUEST_PANICKED",
++     "data": { "action": "pause" } }
+diff --git a/include/monitor/monitor.h b/include/monitor/monitor.h
+index b868760..1a6cfcf 100644
+--- a/include/monitor/monitor.h
++++ b/include/monitor/monitor.h
+@@ -46,6 +46,7 @@ typedef enum MonitorEvent {
+     QEVENT_WAKEUP,
+     QEVENT_BALLOON_CHANGE,
+     QEVENT_SPICE_MIGRATE_COMPLETED,
++    QEVENT_GUEST_PANICKED,
+ 
+     /* Add to 'monitor_event_names' array in monitor.c when
+      * defining new events here */
+diff --git a/monitor.c b/monitor.c
+index 332abe7..059726e 100644
+--- a/monitor.c
++++ b/monitor.c
+@@ -496,6 +496,7 @@ static const char *monitor_event_names[] = {
+     [QEVENT_WAKEUP] = "WAKEUP",
+     [QEVENT_BALLOON_CHANGE] = "BALLOON_CHANGE",
+     [QEVENT_SPICE_MIGRATE_COMPLETED] = "SPICE_MIGRATE_COMPLETED",
++    [QEVENT_GUEST_PANICKED] = "GUEST_PANICKED",
+ };
+ QEMU_BUILD_BUG_ON(ARRAY_SIZE(monitor_event_names) != QEVENT_MAX)
+ 
+-- 
+1.8.1.4
+
+

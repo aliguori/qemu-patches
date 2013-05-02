@@ -1,0 +1,58 @@
+From patches Mon Sep 17 00:00:00 2001
+From: "Richard W.M. Jones" <rjones@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: 
+Date: Fri,  5 Apr 2013 10:55:59 +0100
+Message-id: 1365155759-3477-3-git-send-email-rjones@redhat.com
+Subject: [PATCH 2/2] iotests: Add 'check -ssh' option to test Secure Shell
+ block device.
+
+From: "Richard W.M. Jones" <rjones@redhat.com>
+
+Signed-off-by: Richard W.M. Jones <rjones@redhat.com>
+---
+ tests/qemu-iotests/common    | 5 +++++
+ tests/qemu-iotests/common.rc | 3 +++
+ 2 files changed, 8 insertions(+)
+
+diff --git a/tests/qemu-iotests/common b/tests/qemu-iotests/common
+index b3aad89..6826ea7 100644
+--- a/tests/qemu-iotests/common
++++ b/tests/qemu-iotests/common
+@@ -137,6 +137,7 @@ check options
+     -rbd                test rbd
+     -sheepdog           test sheepdog
+     -nbd                test nbd
++    -ssh                test ssh
+     -xdiff		graphical mode diff
+     -nocache		use O_DIRECT on backing file
+     -misalign		misalign memory allocations
+@@ -206,6 +207,10 @@ testlist options
+ 	    IMGPROTO=nbd
+ 	    xpand=false
+ 	    ;;
++        -ssh)
++            IMGPROTO=ssh
++            xpand=false
++            ;;
+ 	-nocache)
+ 	    QEMU_IO_OPTIONS="$QEMU_IO_OPTIONS --nocache"
+ 	    xpand=false
+diff --git a/tests/qemu-iotests/common.rc b/tests/qemu-iotests/common.rc
+index e522d61..a536bf7 100644
+--- a/tests/qemu-iotests/common.rc
++++ b/tests/qemu-iotests/common.rc
+@@ -52,6 +52,9 @@ if [ "$IMGPROTO" = "file" ]; then
+ elif [ "$IMGPROTO" = "nbd" ]; then
+     TEST_IMG_FILE=$TEST_DIR/t.$IMGFMT
+     TEST_IMG="nbd:127.0.0.1:10810"
++elif [ "$IMGPROTO" = "ssh" ]; then
++    TEST_IMG_FILE=$TEST_DIR/t.$IMGFMT
++    TEST_IMG="ssh://127.0.0.1$TEST_IMG_FILE"
+ else
+     TEST_IMG=$IMGPROTO:$TEST_DIR/t.$IMGFMT
+ fi
+-- 
+1.8.1.4
+
+

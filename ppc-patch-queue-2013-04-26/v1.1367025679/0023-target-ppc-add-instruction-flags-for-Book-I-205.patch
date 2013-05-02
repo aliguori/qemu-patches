@@ -1,0 +1,54 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Alexander Graf <agraf@suse.de>
+To: qemu-ppc@nongnu.org
+Cc: Blue Swirl <blauwirbel@gmail.com>, Aurelien Jarno <aurelien@aurel32.net>,
+ qemu-devel@nongnu.org
+Date: Fri, 26 Apr 2013 20:21:42 +0200
+Message-id: 1367000509-8833-24-git-send-email-agraf@suse.de
+Subject: [PATCH 23/30] target-ppc: add instruction flags for Book I 2.05
+
+From: Aurelien Jarno <aurelien@aurel32.net>
+
+.. and enable it on POWER7 CPU.
+
+Reviewed-by: Richard Henderson <rth@twiddle.net>
+Signed-off-by: Aurelien Jarno <aurelien@aurel32.net>
+Signed-off-by: Alexander Graf <agraf@suse.de>
+---
+ target-ppc/cpu.h            |    4 +++-
+ target-ppc/translate_init.c |    2 +-
+ 2 files changed, 4 insertions(+), 2 deletions(-)
+
+diff --git a/target-ppc/cpu.h b/target-ppc/cpu.h
+index b8b09b9..7cacb56 100644
+--- a/target-ppc/cpu.h
++++ b/target-ppc/cpu.h
+@@ -1870,8 +1870,10 @@ enum {
+     PPC2_PRCNTL        = 0x0000000000000008ULL,
+     /* Byte-reversed, indexed, double-word load and store                    */
+     PPC2_DBRX          = 0x0000000000000010ULL,
++    /* Book I 2.05 PowerPC specification                                     */
++    PPC2_ISA205        = 0x0000000000000020ULL,
+ 
+-#define PPC_TCG_INSNS2 (PPC2_BOOKE206 | PPC2_PRCNTL | PPC2_DBRX)
++#define PPC_TCG_INSNS2 (PPC2_BOOKE206 | PPC2_PRCNTL | PPC2_DBRX | PPC2_ISA205)
+ };
+ 
+ /*****************************************************************************/
+diff --git a/target-ppc/translate_init.c b/target-ppc/translate_init.c
+index b0e3536..6feb62a 100644
+--- a/target-ppc/translate_init.c
++++ b/target-ppc/translate_init.c
+@@ -7042,7 +7042,7 @@ POWERPC_FAMILY(POWER7)(ObjectClass *oc, void *data)
+                        PPC_64B | PPC_ALTIVEC |
+                        PPC_SEGMENT_64B | PPC_SLBI |
+                        PPC_POPCNTB | PPC_POPCNTWD;
+-    pcc->insns_flags2 = PPC2_VSX | PPC2_DFP | PPC2_DBRX;
++    pcc->insns_flags2 = PPC2_VSX | PPC2_DFP | PPC2_DBRX | PPC2_ISA205;
+     pcc->msr_mask = 0x800000000204FF36ULL;
+     pcc->mmu_model = POWERPC_MMU_2_06;
+ #if defined(CONFIG_SOFTMMU)
+-- 
+1.6.0.2
+
+

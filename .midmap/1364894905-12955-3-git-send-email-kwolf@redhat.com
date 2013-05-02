@@ -1,0 +1,1 @@
+../More-translation-improvements/v1.1364920103/0002-po-Update-German-translation.patch

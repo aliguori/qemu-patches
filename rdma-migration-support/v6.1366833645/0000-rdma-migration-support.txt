@@ -1,0 +1,105 @@
+From patches Mon Sep 17 00:00:00 2001
+From: "" <mrhines@linux.vnet.ibm.com>
+To: Paolo Bonzini <pbonzini@redhat.com>, mrhines@linux.vnet.ibm.com,
+ quintela@redhat.com
+Cc: Anthony Liguori <aliguori@us.ibm.com>, quintela@redhat.com,
+ qemu-devel@nongnu.org, Michael R Hines <mrhines@us.ibm.com>,
+ Bulent Abali <abali@us.ibm.com>, owasserm@redhat.com, pbonzini@redhat.com,
+ Gokul B Kandiraju <gokul@us.ibm.com>, eblake@redhat.com
+Date: Wed, 24 Apr 2013 15:00:45 -0400
+Message-id: 1366830057-16964-1-git-send-email-mrhines@linux.vnet.ibm.com
+Subject: [PATCH 00/11] rdma: migration support
+
+From: "Michael R. Hines" <mrhines@us.ibm.com>
+
+Please pull.
+
+Changes since v5:
+
+- Removed max_size hook.
+- Waiting for Signed-Off bys....
+
+Wiki: http://wiki.qemu.org/Features/RDMALiveMigration
+Github: git@github.com:hinesmr/qemu.git
+
+Here is a brief summary of total migration time and downtime using RDMA:
+
+Using a 40gbps infiniband link performing a worst-case stress test,
+using an 8GB RAM virtual machine:
+Using the following command:
+
+$ apt-get install stress
+$ stress --vm-bytes 7500M --vm 1 --vm-keep
+
+RESULTS:
+
+1. Migration throughput: 26 gigabits/second.
+2. Downtime (stop time) varies between 15 and 100 milliseconds.
+
+EFFECTS of memory registration on bulk phase round:
+
+For example, in the same 8GB RAM example with all 8GB of memory in 
+active use and the VM itself is completely idle using the same 40 gbps 
+infiniband link:
+
+1. x-rdma-pin-all disabled total time: approximately 7.5 seconds @ 9.5 Gbps
+2. x-rdma-pin-all enabled total time: approximately 4 seconds @ 26 Gbps
+
+These numbers would of course scale up to whatever size virtual machine
+you have to migrate using RDMA.
+
+Enabling this feature does *not* have any measurable affect on 
+migration *downtime*. This is because, without this feature, all of the 
+memory will have already been registered already in advance during
+the bulk round and does not need to be re-registered during the successive
+iteration rounds.
+
+The following changes since commit f3aa844bbb2922a5b8393d17620eca7d7e921ab3:
+
+  build: include config-{, all-}devices.mak after defining CONFIG_SOFTMMU and CONFIG_USER_ONLY (2013-04-24 12:18:41 -0500)
+
+are available in the git repository at:
+
+  git@github.com:hinesmr/qemu.git rdma_patch_v6
+
+for you to fetch changes up to 75e6fac1f642885b93cefe6e1874d648e9850f8f:
+
+  rdma: send pc.ram (2013-04-24 14:55:01 -0400)
+
+----------------------------------------------------------------
+Michael R. Hines (11):
+      rdma: add documentation
+      rdma: export yield_until_fd_readable()
+      rdma: export throughput w/ MigrationStats QMP
+      rdma: introduce qemu_file_mode_is_not_valid()
+      rdma: export qemu_fflush()
+      rdma: introduce  ram_handle_compressed()
+      rdma: introduce qemu_ram_foreach_block()
+      rdma: new QEMUFileOps hooks
+      rdma: introduce capability x-rdma-pin-all
+      rdma: core logic
+      rdma: send pc.ram
+
+ Makefile.objs                 |    1 +
+ arch_init.c                   |   59 +-
+ configure                     |   29 +
+ docs/rdma.txt                 |  404 ++++++
+ exec.c                        |    9 +
+ hmp.c                         |    2 +
+ include/block/coroutine.h     |    6 +
+ include/exec/cpu-common.h     |    5 +
+ include/migration/migration.h |   25 +
+ include/migration/qemu-file.h |   30 +
+ migration-rdma.c              | 2707 +++++++++++++++++++++++++++++++++++++++++
+ migration.c                   |   27 +
+ qapi-schema.json              |   12 +-
+ qemu-coroutine-io.c           |   23 +
+ savevm.c                      |  107 +-
+ 15 files changed, 3398 insertions(+), 48 deletions(-)
+ create mode 100644 docs/rdma.txt
+ create mode 100644 migration-rdma.c
+
+Reviewed-by: Paolo Bonzini <pbonzini@redhat.com>
+-- 
+1.7.10.4
+

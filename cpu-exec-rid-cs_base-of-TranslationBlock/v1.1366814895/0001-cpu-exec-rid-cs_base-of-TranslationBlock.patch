@@ -1,0 +1,294 @@
+From patches Mon Sep 17 00:00:00 2001
+From: liguang <lig.fnst@cn.fujitsu.com>
+To: Aurelien Jarno <aurelien@aurel32.net>, qemu-devel@nongnu.org,
+ li guang <lig.fnst@cn.fujitsu.com>, liguang <lig.fnst@cn.fujitsu.com>
+Cc: peter.maydell@linaro.org, Paolo Bonzini <pbonzini@redhat.com>,
+ jan.kiszka@siemens.com, green@moxielogic.com, qemu-devel@nongnu.org,
+ Laurent@Vivier.EU, blauwirbel@gmail.com, jcmvbkbc@gmail.com,
+ edgar.iglesias@gmail.com, gxt@mprc.pku.edu.cn,
+ Anthony Liguori <aliguori@us.ibm.com>, proljc@gmail.com, agraf@suse.de,
+ evgenyvoevodin@gmail.com, ehabkost@redhat.com, sw@weilnetz.de,
+ liguang <lig.fnst@cn.fujitsu.com>, paul@codesourcery.com, stefanha@redhat.com,
+ pbonzini@redhat.com, rth@twiddle.net, Aurelien Jarno <aurelien@aurel32.net>,
+ michael@walle.cc, qemu-ppc@nongnu.org, imammedo@redhat.com, afaerber@suse.de,
+ aurelien@aurel32.net
+Date: Wed, 24 Apr 2013 09:48:15 +0800
+Message-id: 1366768096-2846-1-git-send-email-lig.fnst@cn.fujitsu.com
+Subject: [PATCH 1/2] cpu-exec: rid cs_base of TranslationBlock
+
+cs_base is only meaningful for target-i386/sparc,
+so, get rid of cs_base for other target
+
+Signed-off-by: liguang <lig.fnst@cn.fujitsu.com>
+---
+ cpu-exec.c              |   26 ++++++++++++++++++--------
+ exec.c                  |    6 +++---
+ hw/i386/kvmvapic.c      |    6 ++----
+ include/exec/exec-all.h |    5 +++--
+ target-i386/cpu.h       |    6 ++----
+ translate-all.c         |   24 ++++++++++++------------
+ 6 files changed, 40 insertions(+), 33 deletions(-)
+
+diff --git a/cpu-exec.c b/cpu-exec.c
+index 31c089d..f3c1d1c 100644
+--- a/cpu-exec.c
++++ b/cpu-exec.c
+@@ -84,7 +84,7 @@ static void cpu_exec_nocache(CPUArchState *env, int max_cycles,
+     if (max_cycles > CF_COUNT_MASK)
+         max_cycles = CF_COUNT_MASK;
+ 
+-    tb = tb_gen_code(env, orig_tb->pc, orig_tb->cs_base, orig_tb->flags,
++    tb = tb_gen_code(env, orig_tb->pc, orig_tb->flags,
+                      max_cycles);
+     cpu->current_tb = tb;
+     /* execute the generated code */
+@@ -96,7 +96,6 @@ static void cpu_exec_nocache(CPUArchState *env, int max_cycles,
+ 
+ static TranslationBlock *tb_find_slow(CPUArchState *env,
+                                       target_ulong pc,
+-                                      target_ulong cs_base,
+                                       uint64_t flags)
+ {
+     TranslationBlock *tb, **ptb1;
+@@ -117,7 +116,12 @@ static TranslationBlock *tb_find_slow(CPUArchState *env,
+             goto not_found;
+         if (tb->pc == pc &&
+             tb->page_addr[0] == phys_page1 &&
+-            tb->cs_base == cs_base &&
++#if defined(TARGET_I386)
++            tb->cs_base == env->segs[R_CS].base &&
++#endif
++#if defined(TARGET_SPARC)
++            tb->cs_base == env->npc &&
++#endif
+             tb->flags == flags) {
+             /* check next page if needed */
+             if (tb->page_addr[1] != -1) {
+@@ -136,7 +140,7 @@ static TranslationBlock *tb_find_slow(CPUArchState *env,
+     }
+  not_found:
+    /* if no translated code available, then translate it now */
+-    tb = tb_gen_code(env, pc, cs_base, flags, 0);
++    tb = tb_gen_code(env, pc, flags, 0);
+ 
+  found:
+     /* Move the last found TB to the head of the list */
+@@ -153,17 +157,23 @@ static TranslationBlock *tb_find_slow(CPUArchState *env,
+ static inline TranslationBlock *tb_find_fast(CPUArchState *env)
+ {
+     TranslationBlock *tb;
+-    target_ulong cs_base, pc;
++    target_ulong pc;
+     int flags;
+ 
+     /* we record a subset of the CPU state. It will
+        always be the same before a given translated block
+        is executed. */
+-    cpu_get_tb_cpu_state(env, &pc, &cs_base, &flags);
++    cpu_get_tb_cpu_state(env, &pc, &flags);
+     tb = env->tb_jmp_cache[tb_jmp_cache_hash_func(pc)];
+-    if (unlikely(!tb || tb->pc != pc || tb->cs_base != cs_base ||
++    if (unlikely(!tb || tb->pc != pc ||
++#if defined(TARGET_I386)
++                 tb->cs_base != env->segs[R_CS].base ||
++#endif
++#if defined(TARGET_SPARC)
++                 tb->cs_base != env->npc ||
++#endif
+                  tb->flags != flags)) {
+-        tb = tb_find_slow(env, pc, cs_base, flags);
++        tb = tb_find_slow(env, pc, flags);
+     }
+     return tb;
+ }
+diff --git a/exec.c b/exec.c
+index fa1e0c3..a14db2c 100644
+--- a/exec.c
++++ b/exec.c
+@@ -1471,7 +1471,7 @@ static const MemoryRegionOps notdirty_mem_ops = {
+ static void check_watchpoint(int offset, int len_mask, int flags)
+ {
+     CPUArchState *env = cpu_single_env;
+-    target_ulong pc, cs_base;
++    target_ulong pc;
+     target_ulong vaddr;
+     CPUWatchpoint *wp;
+     int cpu_flags;
+@@ -1495,8 +1495,8 @@ static void check_watchpoint(int offset, int len_mask, int flags)
+                     env->exception_index = EXCP_DEBUG;
+                     cpu_loop_exit(env);
+                 } else {
+-                    cpu_get_tb_cpu_state(env, &pc, &cs_base, &cpu_flags);
+-                    tb_gen_code(env, pc, cs_base, cpu_flags, 1);
++                    cpu_get_tb_cpu_state(env, &pc, &cpu_flags);
++                    tb_gen_code(env, pc, cpu_flags, 1);
+                     cpu_resume_from_signal(env, NULL);
+                 }
+             }
+diff --git a/hw/i386/kvmvapic.c b/hw/i386/kvmvapic.c
+index ed9b448..8b4260e 100644
+--- a/hw/i386/kvmvapic.c
++++ b/hw/i386/kvmvapic.c
+@@ -388,7 +388,6 @@ static void patch_instruction(VAPICROMState *s, X86CPU *cpu, target_ulong ip)
+     uint8_t opcode[2];
+     uint32_t imm32;
+     target_ulong current_pc = 0;
+-    target_ulong current_cs_base = 0;
+     int current_flags = 0;
+ 
+     if (smp_cpus == 1) {
+@@ -399,8 +398,7 @@ static void patch_instruction(VAPICROMState *s, X86CPU *cpu, target_ulong ip)
+ 
+     if (!kvm_enabled()) {
+         cpu_restore_state(env, env->mem_io_pc);
+-        cpu_get_tb_cpu_state(env, &current_pc, &current_cs_base,
+-                             &current_flags);
++        cpu_get_tb_cpu_state(env, &current_pc, &current_flags);
+     }
+ 
+     pause_all_vcpus();
+@@ -440,7 +438,7 @@ static void patch_instruction(VAPICROMState *s, X86CPU *cpu, target_ulong ip)
+ 
+     if (!kvm_enabled()) {
+         cs->current_tb = NULL;
+-        tb_gen_code(env, current_pc, current_cs_base, current_flags, 1);
++        tb_gen_code(env, current_pc, current_flags, 1);
+         cpu_resume_from_signal(env, NULL);
+     }
+ }
+diff --git a/include/exec/exec-all.h b/include/exec/exec-all.h
+index e856191..560a7d1 100644
+--- a/include/exec/exec-all.h
++++ b/include/exec/exec-all.h
+@@ -85,8 +85,7 @@ bool cpu_restore_state(CPUArchState *env, uintptr_t searched_pc);
+ void QEMU_NORETURN cpu_resume_from_signal(CPUArchState *env1, void *puc);
+ void QEMU_NORETURN cpu_io_recompile(CPUArchState *env, uintptr_t retaddr);
+ TranslationBlock *tb_gen_code(CPUArchState *env, 
+-                              target_ulong pc, target_ulong cs_base, int flags,
+-                              int cflags);
++                              target_ulong pc, int flags, int cflags);
+ void cpu_exec_init(CPUArchState *env);
+ void QEMU_NORETURN cpu_loop_exit(CPUArchState *env1);
+ int page_unprotect(target_ulong address, uintptr_t pc, void *puc);
+@@ -135,7 +134,9 @@ static inline void tlb_flush(CPUArchState *env, int flush_global)
+ 
+ struct TranslationBlock {
+     target_ulong pc;   /* simulated PC corresponding to this block (EIP + CS base) */
++#if defined(TARGET_I386) || defined(TARGET_SPARC)
+     target_ulong cs_base; /* CS base for this block */
++#endif
+     uint64_t flags; /* flags defining in which context the code was generated */
+     uint16_t size;      /* size of target code for this block (1 <=
+                            size <= TARGET_PAGE_SIZE) */
+diff --git a/target-i386/cpu.h b/target-i386/cpu.h
+index 2b4e319..3ce1b2e 100644
+--- a/target-i386/cpu.h
++++ b/target-i386/cpu.h
+@@ -1188,11 +1188,9 @@ static inline void cpu_pc_from_tb(CPUX86State *env, TranslationBlock *tb)
+     env->eip = tb->pc - tb->cs_base;
+ }
+ 
+-static inline void cpu_get_tb_cpu_state(CPUX86State *env, target_ulong *pc,
+-                                        target_ulong *cs_base, int *flags)
++static inline void cpu_get_tb_cpu_state(CPUX86State *env, target_ulong *pc, int *flags)
+ {
+-    *cs_base = env->segs[R_CS].base;
+-    *pc = *cs_base + env->eip;
++    *pc = env->segs[R_CS].base + env->eip;
+     *flags = env->hflags |
+         (env->eflags & (IOPL_MASK | TF_MASK | RF_MASK | VM_MASK | AC_MASK));
+ }
+diff --git a/translate-all.c b/translate-all.c
+index a98c646..f9efbbd 100644
+--- a/translate-all.c
++++ b/translate-all.c
+@@ -931,8 +931,7 @@ static void build_page_bitmap(PageDesc *p)
+ }
+ 
+ TranslationBlock *tb_gen_code(CPUArchState *env,
+-                              target_ulong pc, target_ulong cs_base,
+-                              int flags, int cflags)
++                              target_ulong pc, int flags, int cflags)
+ {
+     TranslationBlock *tb;
+     uint8_t *tc_ptr;
+@@ -952,7 +951,12 @@ TranslationBlock *tb_gen_code(CPUArchState *env,
+     }
+     tc_ptr = tcg_ctx.code_gen_ptr;
+     tb->tc_ptr = tc_ptr;
+-    tb->cs_base = cs_base;
++#if defined(TARGET_I386)
++    tb->cs_base = env->segs[R_CS].base;
++#endif
++#if defined(TARGET_SPARC)
++    tb->cs_base = env->npc;
++#endif
+     tb->flags = flags;
+     tb->cflags = cflags;
+     cpu_gen_code(env, tb, &code_gen_size);
+@@ -1007,7 +1011,6 @@ void tb_invalidate_phys_page_range(tb_page_addr_t start, tb_page_addr_t end,
+     TranslationBlock *current_tb = NULL;
+     int current_tb_modified = 0;
+     target_ulong current_pc = 0;
+-    target_ulong current_cs_base = 0;
+     int current_flags = 0;
+ #endif /* TARGET_HAS_PRECISE_SMC */
+ 
+@@ -1063,8 +1066,7 @@ void tb_invalidate_phys_page_range(tb_page_addr_t start, tb_page_addr_t end,
+ 
+                 current_tb_modified = 1;
+                 cpu_restore_state_from_tb(current_tb, env, env->mem_io_pc);
+-                cpu_get_tb_cpu_state(env, &current_pc, &current_cs_base,
+-                                     &current_flags);
++                cpu_get_tb_cpu_state(env, &current_pc, &current_flags);
+             }
+ #endif /* TARGET_HAS_PRECISE_SMC */
+             /* we need to do that to handle the case where a signal
+@@ -1099,7 +1101,7 @@ void tb_invalidate_phys_page_range(tb_page_addr_t start, tb_page_addr_t end,
+            modifying the memory. It will ensure that it cannot modify
+            itself */
+         cpu->current_tb = NULL;
+-        tb_gen_code(env, current_pc, current_cs_base, current_flags, 1);
++        tb_gen_code(env, current_pc, current_flags, 1);
+         cpu_resume_from_signal(env, NULL);
+     }
+ #endif
+@@ -1149,7 +1151,6 @@ static void tb_invalidate_phys_page(tb_page_addr_t addr,
+     CPUState *cpu = NULL;
+     int current_tb_modified = 0;
+     target_ulong current_pc = 0;
+-    target_ulong current_cs_base = 0;
+     int current_flags = 0;
+ #endif
+ 
+@@ -1181,8 +1182,7 @@ static void tb_invalidate_phys_page(tb_page_addr_t addr,
+ 
+             current_tb_modified = 1;
+             cpu_restore_state_from_tb(current_tb, env, pc);
+-            cpu_get_tb_cpu_state(env, &current_pc, &current_cs_base,
+-                                 &current_flags);
++            cpu_get_tb_cpu_state(env, &current_pc, &current_flags);
+         }
+ #endif /* TARGET_HAS_PRECISE_SMC */
+         tb_phys_invalidate(tb, addr);
+@@ -1195,7 +1195,7 @@ static void tb_invalidate_phys_page(tb_page_addr_t addr,
+            modifying the memory. It will ensure that it cannot modify
+            itself */
+         cpu->current_tb = NULL;
+-        tb_gen_code(env, current_pc, current_cs_base, current_flags, 1);
++        tb_gen_code(env, current_pc, current_flags, 1);
+         cpu_resume_from_signal(env, puc);
+     }
+ #endif
+@@ -1463,7 +1463,7 @@ void cpu_io_recompile(CPUArchState *env, uintptr_t retaddr)
+     tb_phys_invalidate(tb, -1);
+     /* FIXME: In theory this could raise an exception.  In practice
+        we have already translated the block once so it's probably ok.  */
+-    tb_gen_code(env, pc, cs_base, flags, cflags);
++    tb_gen_code(env, pc, flags, cflags);
+     /* TODO: If env->pc != tb->pc (i.e. the faulting instruction was not
+        the first in the TB) then we end up generating a whole new TB and
+        repeating the fault, which is horribly inefficient.
+-- 
+1.7.2.5
+

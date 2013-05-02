@@ -1,0 +1,6 @@
+0000-virtio-fix-bus-command-line-compatibility.txt
+0001-virtio-x-bus-force-bus-name-to-virtio-bus.patch
+0002-virtio-add-virtio_device_set_child_bus_name.patch
+0003-scsi-add-bus_name-parameter-to-scsi_bus_new.patch
+0004-virtio-serial-fix-command-line-compatibility.patch
+0005-virtio-scsi-fix-the-command-line-compatibility.patch

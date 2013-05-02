@@ -1,0 +1,87 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Hu Tao <hutao@cn.fujitsu.com>
+To: Paolo Bonzini <pbonzini@redhat.com>, qemu-devel <qemu-devel@nongnu.org>,
+ Luiz Capitulino <lcapitulino@redhat.com>, Wen Congyang <wency@cn.fujitsu.com>,
+ Jan Kiszka <jan.kiszka@siemens.com>,
+ KAMEZAWA Hiroyuki <kamezawa.hiroyu@jp.fujitsu.com>,
+ Anthony Liguori <aliguori@us.ibm.com>, "Michael S. Tsirkin" <mst@redhat.com>,
+ Gleb Natapov <gleb@redhat.com>, Peter Maydell <peter.maydell@linaro.org>,
+ Blue Swirl <blauwirbel@gmail.com>, Alexander Graf <agraf@suse.de>,
+ Christian Borntraeger <borntraeger@de.ibm.com>,
+ Sasha Levin <levinsasha928@gmail.com>, Orit Wasserman <owasserm@redhat.com>,
+ Andrew Jones <drjones@redhat.com>, Markus Armbruster <armbru@redhat.com>,
+ Stefan Hajnoczi <stefanha@redhat.com>, Eric Blake <eblake@redhat.com>,
+ Juan Quintela <quintela@redhat.com>, Hu Tao <hutao@cn.fujitsu.com>,
+ "Daniel P. Berrange" <berrange@redhat.com>,
+ Marcelo Tosatti <mtosatti@redhat.com>,
+ Alex Williamson <alex.williamson@redhat.com>
+Cc: Paolo Bonzini <pbonzini@redhat.com>, qemu-devel <qemu-devel@nongnu.org>,
+ Luiz Capitulino <lcapitulino@redhat.com>, Wen Congyang <wency@cn.fujitsu.com>,
+ Jan Kiszka <jan.kiszka@siemens.com>,
+ KAMEZAWA Hiroyuki <kamezawa.hiroyu@jp.fujitsu.com>,
+ Anthony Liguori <aliguori@us.ibm.com>, "Michael S. Tsirkin" <mst@redhat.com>,
+ Gleb Natapov <gleb@redhat.com>, Peter Maydell <peter.maydell@linaro.org>,
+ Blue Swirl <blauwirbel@gmail.com>, Alexander Graf <agraf@suse.de>,
+ Christian Borntraeger <borntraeger@de.ibm.com>,
+ Sasha Levin <levinsasha928@gmail.com>, Orit Wasserman <owasserm@redhat.com>,
+ Andrew Jones <drjones@redhat.com>, Stefan Hajnoczi <stefanha@redhat.com>,
+ Eric Blake <eblake@redhat.com>, Juan Quintela <quintela@redhat.com>,
+ "Daniel P. Berrange" <berrange@redhat.com>,
+ Marcelo Tosatti <mtosatti@redhat.com>,
+ Alex Williamson <alex.williamson@redhat.com>
+Date: Wed, 10 Apr 2013 11:33:54 +0800
+Message-id: 74e1777fe1cac05f409be8c25150624aeb372a0f.1365564298.git.hutao@cn.fujitsu.com
+Subject: [PATCH 5/7] pvpanic: add document of pvpanic
+
+Signed-off-by: Hu Tao <hutao@cn.fujitsu.com>
+---
+ docs/specs/pvpanic.txt | 37 +++++++++++++++++++++++++++++++++++++
+ 1 file changed, 37 insertions(+)
+ create mode 100644 docs/specs/pvpanic.txt
+
+diff --git a/docs/specs/pvpanic.txt b/docs/specs/pvpanic.txt
+new file mode 100644
+index 0000000..d72d667
+--- /dev/null
++++ b/docs/specs/pvpanic.txt
+@@ -0,0 +1,37 @@
++PVPANIC DEVICE
++==============
++
++pvpanic device is a simulated ISA device, through which a guest panic
++event is sent to qemu, and a QMP event is generated. This allows
++management apps (e.g. libvirt) to be notified and respond to the event.
++
++The management app has the option of waiting for GUEST_PANICKED events,
++and/or polling for guest-panicked RunState, to learn when the pvpanic
++device has fired a panic event.
++
++ISA Interface
++-------------
++
++pvpanic uses port 0x505 to receive a panic event from the guest. On
++write, bit 0 is set to indicate guest panic has happened. On read, bit
++0 is set to indicate guest panic notification is supported. Remaining
++bits are reserved, and should be written as 0, and ignored on read.
++
++ACPI Interface
++--------------
++
++pvpanic device is defined with ACPI ID "QEMU0001". Custom methods:
++
++RDPT:       To determine whether guest panic notification is supported.
++Arguments:  None
++Return:     Returns a byte, bit 0 set to indicate guest panic
++            notification is supported. Other bits are reserved and
++            should be ignored.
++
++WRPT:       To send a guest panic event
++Arguments:  Arg0 is a byte, with bit 0 set to indicate guest panic has
++            happened. Other bits are reserved and should be cleared.
++Return:     None
++
++The ACPI device will automatically refer to the right port in case it
++is modified.
+-- 
+1.8.1.4
+

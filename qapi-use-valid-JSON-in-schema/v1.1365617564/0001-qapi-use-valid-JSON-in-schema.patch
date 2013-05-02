@@ -1,0 +1,37 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Eric Blake <eblake@redhat.com>
+To: Eric Blake <eblake@redhat.com>, qemu-devel@nongnu.org
+Cc: kwolf@redhat.com, qemu-trivial@nongnu.org, qemu-devel@nongnu.org,
+ lcapitulino@redhat.com
+Date: Wed, 10 Apr 2013 13:12:44 -0600
+Message-id: 1365621164-17079-1-git-send-email-eblake@redhat.com
+Subject: [PATCH 1/1] qapi: use valid JSON in schema
+
+* qapi-schema.json: JSON doesn't allow trailing commas.
+
+Signed-off-by: Eric Blake <eblake@redhat.com>
+---
+
+a multi-line regex search for ',[ \n]*[]}]' didn't turn up any
+other violations
+
+ qapi-schema.json | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/qapi-schema.json b/qapi-schema.json
+index db542f6..044517d 100644
+--- a/qapi-schema.json
++++ b/qapi-schema.json
+@@ -1600,7 +1600,7 @@
+ ##
+ { 'union': 'BlockdevAction',
+   'data': {
+-       'blockdev-snapshot-sync': 'BlockdevSnapshot',
++       'blockdev-snapshot-sync': 'BlockdevSnapshot'
+    } }
+
+ ##
+-- 
+1.8.1.4
+
+

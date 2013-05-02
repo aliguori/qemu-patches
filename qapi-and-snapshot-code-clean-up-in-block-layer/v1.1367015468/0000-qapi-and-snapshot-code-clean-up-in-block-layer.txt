@@ -1,0 +1,51 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Wenchao Xia <xiawenc@linux.vnet.ibm.com>
+To: qemu-devel@nongnu.org
+Cc: kwolf@redhat.com, phrdina@redhat.com,
+ Wenchao Xia <xiawenc@linux.vnet.ibm.com>, stefanha@gmail.com,
+ armbru@redhat.com, lcapitulino@redhat.com, pbonzini@redhat.com
+Date: Fri, 26 Apr 2013 17:31:08 +0800
+Message-id: 1366968675-1451-1-git-send-email-xiawenc@linux.vnet.ibm.com
+Subject: [PATCH 0/7] qapi and snapshot code clean up in block layer
+
+These patches are the common part of my hmp/qmp block query series and Pavel's
+qmp snapshot command converion series. It mainly does following things:
+1 move snapshot related code to block/snapshot.c, qmp and info dumping code to
+block/qapi.c.
+2 better bdrv_snapshot_find().
+3 better info dumping function to get rid of buffer, avoid string truncation.
+
+Note patch 2 and 3, 5 and 6 can be squashed. Sperating them to make review
+easier, since some code is already reviewed before.
+
+Stefan Hajnoczi (1):
+  1 block: drop bs_snapshots global variable
+
+Wenchao Xia (6):
+  2 block: move bdrv_snapshot_find() to block/snapshot.c
+  3 block: move snapshot code in block.c to block/snapshot.c
+  4 block: distinguish id and name in bdrv_find_snapshot()
+  5 block: move collect_snapshots() and collect_image_info() to block/qapi.c
+  6 block: move qmp and info dump related code to block/qapi.c
+  7 block: dump to monitor for bdrv_snapshot_dump() and bdrv_image_info_dump()
+
+ block.c                     |  318 -------------------------------------
+ block/Makefile.objs         |    1 +
+ block/qapi.c                |  362 +++++++++++++++++++++++++++++++++++++++++++
+ block/snapshot.c            |  212 +++++++++++++++++++++++++
+ include/block/block.h       |   29 +----
+ include/block/block_int.h   |    1 +
+ include/block/qapi.h        |   41 +++++
+ include/block/snapshot.h    |   55 +++++++
+ include/qemu/error-report.h |    1 +
+ qemu-img.c                  |  163 +------------------
+ savevm.c                    |   75 ++++-----
+ util/qemu-error.c           |   18 ++
+ 12 files changed, 735 insertions(+), 541 deletions(-)
+ create mode 100644 block/qapi.c
+ create mode 100644 block/snapshot.c
+ create mode 100644 include/block/qapi.h
+ create mode 100644 include/block/snapshot.h
+
+
+

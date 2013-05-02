@@ -1,0 +1,1 @@
+../new-formal-protocol-design/v1.1365480269/0011-update-schema-to-define-new-capabilities.patch

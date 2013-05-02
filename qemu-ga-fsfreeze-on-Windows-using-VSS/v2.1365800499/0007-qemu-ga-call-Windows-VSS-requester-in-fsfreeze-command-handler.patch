@@ -1,0 +1,206 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Tomoki Sekiyama <tsekiyam@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: mdroth@linux.vnet.ibm.com, pbonzini@redhat.com, vrozenfe@redhat.com,
+ Tomoki Sekiyama <tomoki.sekiyama@hds.com>, lcapitulino@redhat.com
+Date: Fri, 12 Apr 2013 16:02:02 -0400
+Message-id: 20130412200202.20814.43233.stgit@corona
+Subject: [PATCH 07/11] qemu-ga: call Windows VSS requester in fsfreeze command
+ handler
+
+Support guest-fsfreeze-freeze and guest-fsfreeze-thaw commands for Windows
+guests. When fsfreeze command is issued, it calls the VSS requester to
+freeze filesystems and applications. On thaw command, it again tells the VSS
+requester to thaw them.
+
+This also adds calling of initialize functions for the VSS requester.
+
+Signed-off-by: Tomoki Sekiyama <tomoki.sekiyama@hds.com>
+---
+ qga/commands-win32.c |   74 ++++++++++++++++++++++++++++++++++++++++++++++----
+ qga/main.c           |   33 ++++++++++++++++++++++
+ 2 files changed, 100 insertions(+), 7 deletions(-)
+
+diff --git a/qga/commands-win32.c b/qga/commands-win32.c
+index 24e4ad0..67dca60 100644
+--- a/qga/commands-win32.c
++++ b/qga/commands-win32.c
+@@ -15,6 +15,7 @@
+ #include <wtypes.h>
+ #include <powrprof.h>
+ #include "qga/guest-agent-core.h"
++#include "qga/vss-win32-requester.h"
+ #include "qga-qmp-commands.h"
+ #include "qapi/qmp/qerror.h"
+ 
+@@ -151,34 +152,95 @@ void qmp_guest_file_flush(int64_t handle, Error **err)
+     error_set(err, QERR_UNSUPPORTED);
+ }
+ 
++#ifdef HAS_VSS_SDK
++
+ /*
+  * Return status of freeze/thaw
+  */
+ GuestFsfreezeStatus qmp_guest_fsfreeze_status(Error **err)
+ {
+-    error_set(err, QERR_UNSUPPORTED);
+-    return 0;
++    if (!vss_initialized()) {
++        error_set(err, QERR_UNSUPPORTED);
++        return 0;
++    }
++
++    if (ga_is_frozen(ga_state)) {
++        return GUEST_FSFREEZE_STATUS_FROZEN;
++    }
++
++    return GUEST_FSFREEZE_STATUS_THAWED;
+ }
+ 
+ /*
+- * Walk list of mounted file systems in the guest, and freeze the ones which
+- * are real local file systems.
++ * Freeze local file systems using Volume Shadow-copy Service.
++ * The frozen state is limited for up to 10 seconds by VSS.
+  */
+ int64_t qmp_guest_fsfreeze_freeze(Error **err)
+ {
+-    error_set(err, QERR_UNSUPPORTED);
++    int i;
++
++    slog("guest-fsfreeze called");
++
++    if (!vss_initialized()) {
++        error_set(err, QERR_UNSUPPORTED);
++        return 0;
++    }
++
++    /* cannot risk guest agent blocking itself on a write in this state */
++    ga_set_frozen(ga_state);
++
++    qga_vss_fsfreeze_freeze(&i, err);
++    if (error_is_set(err)) {
++        goto error;
++    }
++
++    return i;
++
++error:
++    qmp_guest_fsfreeze_thaw(NULL);
+     return 0;
+ }
+ 
+ /*
+- * Walk list of frozen file systems in the guest, and thaw them.
++ * Thaw local file systems using Volume Shadow-copy Service.
+  */
+ int64_t qmp_guest_fsfreeze_thaw(Error **err)
+ {
++    int i;
++
++    if (!vss_initialized()) {
++        error_set(err, QERR_UNSUPPORTED);
++        return 0;
++    }
++
++    qga_vss_fsfreeze_thaw(&i, err);
++
++    ga_unset_frozen(ga_state);
++    return i;
++}
++
++#else
++
++GuestFsfreezeStatus qmp_guest_fsfreeze_status(Error **err)
++{
++    error_set(err, QERR_UNSUPPORTED);
++    return 0;
++}
++
++int64_t qmp_guest_fsfreeze_freeze(Error **err)
++{
++    error_set(err, QERR_UNSUPPORTED);
++    return 0;
++}
++
++int64_t qmp_guest_fsfreeze_thaw(Error **err)
++{
+     error_set(err, QERR_UNSUPPORTED);
+     return 0;
+ }
+ 
++#endif
++
+ /*
+  * Walk list of mounted file systems in the guest, and discard unused
+  * areas.
+diff --git a/qga/main.c b/qga/main.c
+index 1841759..92230e9 100644
+--- a/qga/main.c
++++ b/qga/main.c
+@@ -34,6 +34,10 @@
+ #include "qemu/bswap.h"
+ #ifdef _WIN32
+ #include "qga/service-win32.h"
++#ifdef HAS_VSS_SDK
++#include "qga/vss-win32-provider.h"
++#include "qga/vss-win32-requester.h"
++#endif
+ #include <windows.h>
+ #endif
+ #ifdef __linux__
+@@ -685,6 +689,25 @@ static gboolean channel_init(GAState *s, const gchar *method, const gchar *path)
+ }
+ 
+ #ifdef _WIN32
++
++static gboolean vss_win32_init(void)
++{
++#ifdef HAS_VSS_SDK
++    if (FAILED(vss_init())) {
++        g_critical("failed to initialize VSS");
++        return false;
++    }
++#endif
++    return true;
++}
++
++static void vss_win32_deinit(void)
++{
++#ifdef HAS_VSS_SDK
++    vss_deinit();
++#endif
++}
++
+ DWORD WINAPI service_ctrl_handler(DWORD ctrl, DWORD type, LPVOID data,
+                                   LPVOID ctx)
+ {
+@@ -727,8 +750,12 @@ VOID WINAPI service_main(DWORD argc, TCHAR *argv[])
+     service->status.dwWaitHint = 0;
+     SetServiceStatus(service->status_handle, &service->status);
+ 
++    if (!vss_win32_init()) {
++        goto out_bad;
++    }
+     g_main_loop_run(ga_state->main_loop);
+-
++    vss_win32_deinit();
++out_bad:
+     service->status.dwCurrentState = SERVICE_STOPPED;
+     SetServiceStatus(service->status_handle, &service->status);
+ }
+@@ -1132,7 +1159,11 @@ int main(int argc, char **argv)
+             { (char *)QGA_SERVICE_NAME, service_main }, { NULL, NULL } };
+         StartServiceCtrlDispatcher(service_table);
+     } else {
++        if (!vss_win32_init()) {
++            goto out_bad;
++        }
+         g_main_loop_run(ga_state->main_loop);
++        vss_win32_deinit();
+     }
+ #endif
+ 
+
+

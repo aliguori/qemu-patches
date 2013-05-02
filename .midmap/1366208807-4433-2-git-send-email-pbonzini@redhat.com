@@ -1,0 +1,1 @@
+../TARGET__ALIGNMENT-cleanup-and-config-targetmak-trimming/v3.1366233994/0001-configure-QEMU_INCLUDES-are-the-same-for-all-subtargets.patch

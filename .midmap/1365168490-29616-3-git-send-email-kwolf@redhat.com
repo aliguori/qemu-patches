@@ -1,0 +1,1 @@
+../Block-patches/v1.1365193682/0002-usb-storage-Forward-serial-number-to-scsi-disk.patch

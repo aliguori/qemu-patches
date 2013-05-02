@@ -1,0 +1,8 @@
+0000-usb-redir-chardev-flowcontrol-patches-v4.txt
+0001-virtio-console-Also-throttle-when-less-was-written-then-requested.patch
+0002-virtio-console-Remove-any-pending-watches-on-close.patch
+0003-spice-qemu-char-Remove-ifdef-ed-code-for-old-spice-server-compat.patch
+0004-spice-qemu-char-Add-watch-support.patch
+0005-spice-qemu-char-Remove-intermediate-buffer.patch
+0006-spice-qemu-char-vmc_write-Dont-write-more-bytes-then-were-asked-too.patch
+0007-usb-serial-Remove-double-call-to-qemu_chr_add_handlers-NULL-.patch

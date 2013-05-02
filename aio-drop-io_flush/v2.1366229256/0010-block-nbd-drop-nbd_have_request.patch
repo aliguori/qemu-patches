@@ -1,0 +1,67 @@
+From patches Mon Sep 17 00:00:00 2001
+From: "Stefan Hajnoczi" <stefanha@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, Paolo Bonzini <pbonzini@redhat.com>,
+ Stefan Hajnoczi <stefanha@redhat.com>, pingfank@linux.vnet.ibm.com,
+ Kevin Wolf <kwolf@redhat.com>
+Date: Wed, 17 Apr 2013 15:07:46 +0200
+Message-id: 1366204073-8468-11-git-send-email-stefanha@redhat.com
+Subject: [PATCH 10/17] block/nbd: drop nbd_have_request()
+
+.io_flush() is no longer called so drop nbd_have_request().  We cannot
+drop in_flight since it is still used by other block/nbd.c code.
+
+Signed-off-by: Stefan Hajnoczi <stefanha@redhat.com>
+---
+ block/nbd.c | 13 +++----------
+ 1 file changed, 3 insertions(+), 10 deletions(-)
+
+diff --git a/block/nbd.c b/block/nbd.c
+index eff683c..7830aa4 100644
+--- a/block/nbd.c
++++ b/block/nbd.c
+@@ -270,13 +270,6 @@ static void nbd_coroutine_start(BDRVNBDState *s, struct nbd_request *request)
+     request->handle = INDEX_TO_HANDLE(s, i);
+ }
+ 
+-static int nbd_have_request(void *opaque)
+-{
+-    BDRVNBDState *s = opaque;
+-
+-    return s->in_flight > 0;
+-}
+-
+ static void nbd_reply_ready(void *opaque)
+ {
+     BDRVNBDState *s = opaque;
+@@ -333,7 +326,7 @@ static int nbd_co_send_request(BDRVNBDState *s, struct nbd_request *request,
+     qemu_co_mutex_lock(&s->send_mutex);
+     s->send_coroutine = qemu_coroutine_self();
+     qemu_aio_set_fd_handler(s->sock, nbd_reply_ready, nbd_restart_write,
+-                            nbd_have_request, s);
++                            NULL, s);
+     rc = nbd_send_request(s->sock, request);
+     if (rc >= 0 && qiov) {
+         ret = qemu_co_sendv(s->sock, qiov->iov, qiov->niov,
+@@ -343,7 +336,7 @@ static int nbd_co_send_request(BDRVNBDState *s, struct nbd_request *request,
+         }
+     }
+     qemu_aio_set_fd_handler(s->sock, nbd_reply_ready, NULL,
+-                            nbd_have_request, s);
++                            NULL, s);
+     s->send_coroutine = NULL;
+     qemu_co_mutex_unlock(&s->send_mutex);
+     return rc;
+@@ -417,7 +410,7 @@ static int nbd_establish_connection(BlockDriverState *bs)
+      * kick the reply mechanism.  */
+     qemu_set_nonblock(sock);
+     qemu_aio_set_fd_handler(sock, nbd_reply_ready, NULL,
+-                            nbd_have_request, s);
++                            NULL, s);
+ 
+     s->sock = sock;
+     s->size = size;
+-- 
+1.8.1.4
+
+

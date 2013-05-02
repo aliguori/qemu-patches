@@ -1,0 +1,61 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Peter Maydell <peter.maydell@linaro.org>
+To: qemu-devel@nongnu.org
+Cc: Arnd Bergmann <arnd@arndb.de>, patches@linaro.org,
+ Aurelien Jarno <aurelien@aurel32.net>, "Michael S. Tsirkin" <mst@redhat.com>,
+ Paul Brook <paul@codesourcery.com>,
+ =?UTF-8?q?Andreas=20F=C3=A4rber?= <afaerber@suse.de>,
+ Will Deacon <will.deacon@arm.com>
+Date: Tue, 26 Mar 2013 10:22:09 +0000
+Message-id: 1364293331-8722-10-git-send-email-peter.maydell@linaro.org
+Subject: [PATCH 09/11] arm/realview: Fix mapping of PCI regions
+
+Fix the mapping of the PCI regions for the realview board, which were
+all incorrect. (This was never noticed because the Linux kernel
+doesn't actually include a PCI driver for the realview boards.)
+
+Signed-off-by: Peter Maydell <peter.maydell@linaro.org>
+---
+ hw/arm/realview.c |   18 +++++++++---------
+ 1 file changed, 9 insertions(+), 9 deletions(-)
+
+diff --git a/hw/arm/realview.c b/hw/arm/realview.c
+index ba61d18..23c968b 100644
+--- a/hw/arm/realview.c
++++ b/hw/arm/realview.c
+@@ -218,9 +218,9 @@ static void realview_init(QEMUMachineInitArgs *args,
+         busdev = SYS_BUS_DEVICE(dev);
+         qdev_init_nofail(dev);
+         sysbus_mmio_map(busdev, 0, 0x10019000); /* PCI controller registers */
+-        sysbus_mmio_map(busdev, 1, 0x61000000); /* PCI self-config */
+-        sysbus_mmio_map(busdev, 2, 0x62000000); /* PCI config */
+-        sysbus_mmio_map(busdev, 3, 0x63000000); /* PCI I/O */
++        sysbus_mmio_map(busdev, 1, 0x60000000); /* PCI self-config */
++        sysbus_mmio_map(busdev, 2, 0x61000000); /* PCI config */
++        sysbus_mmio_map(busdev, 3, 0x62000000); /* PCI I/O */
+         sysbus_connect_irq(busdev, 0, pic[48]);
+         sysbus_connect_irq(busdev, 1, pic[49]);
+         sysbus_connect_irq(busdev, 2, pic[50]);
+@@ -304,12 +304,12 @@ static void realview_init(QEMUMachineInitArgs *args,
+     /*  0x58000000 PISMO.  */
+     /*  0x5c000000 PISMO.  */
+     /* 0x60000000 PCI.  */
+-    /* 0x61000000 PCI Self Config.  */
+-    /* 0x62000000 PCI Config.  */
+-    /* 0x63000000 PCI IO.  */
+-    /* 0x64000000 PCI mem 0.  */
+-    /* 0x68000000 PCI mem 1.  */
+-    /* 0x6c000000 PCI mem 2.  */
++    /* 0x60000000 PCI Self Config.  */
++    /* 0x61000000 PCI Config.  */
++    /* 0x62000000 PCI IO.  */
++    /* 0x63000000 PCI mem 0.  */
++    /* 0x64000000 PCI mem 1.  */
++    /* 0x68000000 PCI mem 2.  */
+ 
+     /* ??? Hack to map an additional page of ram for the secondary CPU
+        startup code.  I guess this works on real hardware because the
+-- 
+1.7.9.5
+
+

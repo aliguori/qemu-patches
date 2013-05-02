@@ -1,0 +1,70 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Alexander Graf <agraf@suse.de>
+To: qemu-ppc@nongnu.org
+Cc: Blue Swirl <blauwirbel@gmail.com>,
+ Dominik Dingel <dingel@linux.vnet.ibm.com>,
+ Aurelien Jarno <aurelien@aurel32.net>, qemu-devel@nongnu.org
+Date: Fri, 26 Apr 2013 20:19:30 +0200
+Message-id: 1367000373-7972-22-git-send-email-agraf@suse.de
+Subject: [PATCH 21/24] Common: Add quick access to first boot device
+
+From: Dominik Dingel <dingel@linux.vnet.ibm.com>
+
+Instead of manually parsing the boot_list as character stream,
+we can access the nth boot device, specified by the position in the
+boot order.
+
+Signed-off-by: Dominik Dingel <dingel@linux.vnet.ibm.com>
+Reviewed-by: Anthony Liguori <aliguori@us.ibm.com>
+Signed-off-by: Alexander Graf <agraf@suse.de>
+---
+ include/sysemu/sysemu.h |    2 ++
+ vl.c                    |   18 ++++++++++++++++++
+ 2 files changed, 20 insertions(+), 0 deletions(-)
+
+diff --git a/include/sysemu/sysemu.h b/include/sysemu/sysemu.h
+index 6578782..43b961c 100644
+--- a/include/sysemu/sysemu.h
++++ b/include/sysemu/sysemu.h
+@@ -181,6 +181,8 @@ void add_boot_device_path(int32_t bootindex, DeviceState *dev,
+                           const char *suffix);
+ char *get_boot_devices_list(size_t *size);
+ 
++DeviceState *get_boot_device(uint32_t position);
++
+ bool usb_enabled(bool default_usb);
+ 
+ extern QemuOptsList qemu_drive_opts;
+diff --git a/vl.c b/vl.c
+index 2e0d1a7..322ea80 100644
+--- a/vl.c
++++ b/vl.c
+@@ -1222,6 +1222,24 @@ void add_boot_device_path(int32_t bootindex, DeviceState *dev,
+     QTAILQ_INSERT_TAIL(&fw_boot_order, node, link);
+ }
+ 
++DeviceState *get_boot_device(uint32_t position)
++{
++    uint32_t counter = 0;
++    FWBootEntry *i = NULL;
++    DeviceState *res = NULL;
++
++    if (!QTAILQ_EMPTY(&fw_boot_order)) {
++        QTAILQ_FOREACH(i, &fw_boot_order, link) {
++            if (counter == position) {
++                res = i->dev;
++                break;
++            }
++            counter++;
++        }
++    }
++    return res;
++}
++
+ /*
+  * This function returns null terminated string that consist of new line
+  * separated device paths.
+-- 
+1.6.0.2
+
+

@@ -1,0 +1,30 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Richard Henderson <rth@twiddle.net>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, aurelien@aurel32.net
+Date: Fri, 5 Apr 2013 13:47:29 -0500
+Message-id: 1365187661-17023-2-git-send-email-rth@twiddle.net
+Subject: [PATCH 01/13] tcg-s390: Fix movi
+
+The code to load the high 64 bits assumed that the insn used to
+load the low 64 bits zero-extended.  Enforce that.
+---
+ tcg/s390/tcg-target.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/tcg/s390/tcg-target.c b/tcg/s390/tcg-target.c
+index e12a152..0132010 100644
+--- a/tcg/s390/tcg-target.c
++++ b/tcg/s390/tcg-target.c
+@@ -770,7 +770,7 @@ static void tcg_out_movi(TCGContext *s, TCGType type,
+     /* If we get here, both the high and low parts have non-zero bits.  */
+ 
+     /* Recurse to load the lower 32-bits.  */
+-    tcg_out_movi(s, TCG_TYPE_I32, ret, sval);
++    tcg_out_movi(s, TCG_TYPE_I64, ret, uval & 0xffffffff);
+ 
+     /* Insert data into the high 32-bits.  */
+     uval = uval >> 31 >> 1;
+-- 
+1.8.1.4
+

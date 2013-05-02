@@ -1,0 +1,38 @@
+From patches Mon Sep 17 00:00:00 2001
+From: John Rigby <john.rigby@linaro.org>
+To: qemu-devel <qemu-devel@nongnu.org>
+Cc: Riku Voipio <riku.voipio@iki.org>, Peter Maydell <peter.maydell@linaro.org>,
+ Alexander Graf <agraf@suse.de>
+Date: Tue, 30 Apr 2013 00:37:35 -0600
+Message-id: 1367303855-9666-1-git-send-email-john.rigby@linaro.org
+Subject: [PATCH 05/12] linux-user: Don't treat aarch64 cpu names specially
+
+From: Alexander Graf <agraf@suse.de>
+
+32-bit ARM has a lot of different names for different types of CPUs it supports.
+On AArch64, we don't have this, so we really don't want to execute the 32-bit
+logic. Stub it out for AArch64 linux-user guests.
+
+Signed-off-by: Alexander Graf <agraf@suse.de>
+---
+ linux-user/cpu-uname.c |    3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/linux-user/cpu-uname.c b/linux-user/cpu-uname.c
+index 59cd647..89bdb91 100644
+--- a/linux-user/cpu-uname.c
++++ b/linux-user/cpu-uname.c
+@@ -30,7 +30,8 @@
+  * return here */
+ const char *cpu_to_uname_machine(void *cpu_env)
+ {
+-#ifdef TARGET_ARM
++#if defined(TARGET_ARM) && !defined(TARGET_AARCH64)
++
+     /* utsname machine name on linux arm is CPU arch name + endianness, e.g.
+      * armv7l; to get a list of CPU arch names from the linux source, use:
+      *     grep arch_name: -A1 linux/arch/arm/mm/proc-*.S
+-- 
+1.7.9.5
+
+

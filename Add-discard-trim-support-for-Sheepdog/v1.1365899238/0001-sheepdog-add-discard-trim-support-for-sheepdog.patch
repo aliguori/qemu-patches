@@ -1,0 +1,154 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Liu Yuan <namei.unix@gmail.com>
+To: Kevin Wolf <kwolf@redhat.com>, Liu Yuan <namei.unix@gmail.com>,
+ Stefan Hajnoczi <stefanha@gmail.com>, sheepdog@lists.wpkg.org,
+ qemu-devel@nongnu.org
+Cc: Paolo Bonzini <pbonzini@redhat.com>, sheepdog@lists.wpkg.org,
+ MORITA Kazutaka <morita.kazutaka@lab.ntt.co.jp>,
+ Stefan Hajnoczi <stefanha@gmail.com>, Kevin Wolf <kwolf@redhat.com>,
+ qemu-devel@nongnu.org, Liu Yuan <namei.unix@gmail.com>,
+ Stefan Hajnoczi <stefanha@redhat.com>
+Date: Sat, 13 Apr 2013 19:27:22 +0800
+Message-id: 1365852442-28941-5-git-send-email-namei.unix@gmail.com
+Subject: [PATCH 1/1] sheepdog: add discard/trim support for sheepdog
+
+From: Liu Yuan <tailai.ly@taobao.com>
+
+The 'TRIM' command from VM that is to release underlying data storage for
+better thin-provision is already supported by the Sheepdog.
+
+This patch adds the TRIM support at QEMU part.
+
+For older Sheepdog that doesn't support, we return EIO to upper layer.
+
+Cc: MORITA Kazutaka <morita.kazutaka@lab.ntt.co.jp>
+Cc: Kevin Wolf <kwolf@redhat.com>
+Cc: Stefan Hajnoczi <stefanha@redhat.com>
+Signed-off-by: Liu Yuan <tailai.ly@taobao.com>
+
+diff --git a/block/sheepdog.c b/block/sheepdog.c
+index bb67c4c..b4ba559 100644
+--- a/block/sheepdog.c
++++ b/block/sheepdog.c
+@@ -34,6 +34,7 @@
+ #define SD_OP_GET_VDI_INFO   0x14
+ #define SD_OP_READ_VDIS      0x15
+ #define SD_OP_FLUSH_VDI      0x16
++#define SD_OP_DISCARD        0x17
+ 
+ #define SD_FLAG_CMD_WRITE    0x01
+ #define SD_FLAG_CMD_COW      0x02
+@@ -269,6 +270,7 @@ enum AIOCBState {
+     AIOCB_WRITE_UDATA,
+     AIOCB_READ_UDATA,
+     AIOCB_FLUSH_CACHE,
++    AIOCB_DISCARD,
+ };
+ 
+ struct SheepdogAIOCB {
+@@ -656,7 +658,7 @@ static void coroutine_fn aio_read_response(void *opaque)
+     int ret;
+     AIOReq *aio_req = NULL;
+     SheepdogAIOCB *acb;
+-    unsigned long idx;
++    uint64_t idx;
+ 
+     if (QLIST_EMPTY(&s->inflight_aio_head)) {
+         goto out;
+@@ -727,6 +729,18 @@ static void coroutine_fn aio_read_response(void *opaque)
+             rsp.result = SD_RES_SUCCESS;
+         }
+         break;
++    case AIOCB_DISCARD:
++        switch (rsp.result) {
++        case SD_RES_INVALID_PARMS:
++            error_report("you are running the old sheep that doesn't support "
++                         "discard command.\n");
++            break;
++        case SD_RES_SUCCESS:
++            idx = data_oid_to_idx(aio_req->oid);
++            s->inode.data_vdi_id[idx] = 0;
++            break;
++        }
++        break;
+     }
+ 
+     if (rsp.result != SD_RES_SUCCESS) {
+@@ -1016,6 +1030,9 @@ static int coroutine_fn add_aio_request(BDRVSheepdogState *s, AIOReq *aio_req,
+         wlen = datalen;
+         hdr.flags = SD_FLAG_CMD_WRITE | flags;
+         break;
++    case AIOCB_DISCARD:
++        hdr.opcode = SD_OP_DISCARD;
++        break;
+     }
+ 
+     if (s->cache_flags) {
+@@ -1633,6 +1650,11 @@ static int coroutine_fn sd_co_rw_vector(void *p)
+                 flags = SD_FLAG_CMD_COW;
+             }
+             break;
++        case AIOCB_DISCARD:
++            /* We discard it only when the whole object is trimmed */
++            if (len != SD_DATA_OBJ_SIZE) {
++                goto done;
++            }
+         default:
+             break;
+         }
+@@ -2071,6 +2093,28 @@ static int sd_load_vmstate(BlockDriverState *bs, uint8_t *data,
+ }
+ 
+ 
++static int sd_co_discard(BlockDriverState *bs, int64_t sector_num,
++                         int nb_sectors)
++{
++    SheepdogAIOCB *acb;
++    QEMUIOVector dummy;
++    int ret;
++
++    acb = sd_aio_setup(bs, &dummy, sector_num, nb_sectors);
++    acb->aiocb_type = AIOCB_DISCARD;
++    acb->aio_done_func = sd_finish_aiocb;
++
++    ret = sd_co_rw_vector(acb);
++    if (ret <= 0) {
++        qemu_aio_release(acb);
++        return ret;
++    }
++
++    qemu_coroutine_yield();
++
++    return acb->ret;
++}
++
+ static QEMUOptionParameter sd_create_options[] = {
+     {
+         .name = BLOCK_OPT_SIZE,
+@@ -2103,6 +2147,7 @@ static BlockDriver bdrv_sheepdog = {
+     .bdrv_co_readv  = sd_co_readv,
+     .bdrv_co_writev = sd_co_writev,
+     .bdrv_co_flush_to_disk  = sd_co_flush_to_disk,
++    .bdrv_co_discard = sd_co_discard,
+ 
+     .bdrv_snapshot_create   = sd_snapshot_create,
+     .bdrv_snapshot_goto     = sd_snapshot_goto,
+@@ -2128,6 +2173,7 @@ static BlockDriver bdrv_sheepdog_tcp = {
+     .bdrv_co_readv  = sd_co_readv,
+     .bdrv_co_writev = sd_co_writev,
+     .bdrv_co_flush_to_disk  = sd_co_flush_to_disk,
++    .bdrv_co_discard = sd_co_discard,
+ 
+     .bdrv_snapshot_create   = sd_snapshot_create,
+     .bdrv_snapshot_goto     = sd_snapshot_goto,
+@@ -2153,6 +2199,7 @@ static BlockDriver bdrv_sheepdog_unix = {
+     .bdrv_co_readv  = sd_co_readv,
+     .bdrv_co_writev = sd_co_writev,
+     .bdrv_co_flush_to_disk  = sd_co_flush_to_disk,
++    .bdrv_co_discard = sd_co_discard,
+ 
+     .bdrv_snapshot_create   = sd_snapshot_create,
+     .bdrv_snapshot_goto     = sd_snapshot_goto,
+
+
+Reviewed-by: MORITA Kazutaka <morita.kazutaka@lab.ntt.co.jp>

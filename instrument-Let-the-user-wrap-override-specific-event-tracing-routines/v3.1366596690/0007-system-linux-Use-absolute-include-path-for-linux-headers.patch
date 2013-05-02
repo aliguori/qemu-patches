@@ -1,0 +1,35 @@
+From patches Mon Sep 17 00:00:00 2001
+From: =?utf-8?q?Llu=C3=ADs_Vilanova_=3Cvilanova=40ac=2Eupc=2Eedu=3E?=
+To: =?UTF-8?B?TGx1w61zIFZpbGFub3Zh?= <vilanova@ac.upc.edu>,
+ qemu-devel@nongnu.org
+Cc: qemu-devel@nongnu.org
+Date: Sun, 21 Apr 2013 21:12:09 +0200
+Message-id: 20130421191209.8947.17224.stgit@fimbulvetr.bsc.es
+Subject: [PATCH 07/24] system: [linux] Use absolute include path for
+ linux-headers
+
+Lets the include directive work regardless of the current directory.
+
+This is needed for code compiled in directories deeper than one level from the
+build root.
+
+Signed-off-by: Lluís Vilanova <vilanova@ac.upc.edu>
+---
+ Makefile.target |    2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/Makefile.target b/Makefile.target
+index f382559..2f9675a 100644
+--- a/Makefile.target
++++ b/Makefile.target
+@@ -7,7 +7,7 @@ include $(SRC_PATH)/rules.mak
+ 
+ $(call set-vpath, $(SRC_PATH))
+ ifdef CONFIG_LINUX
+-QEMU_CFLAGS += -I../linux-headers
++QEMU_CFLAGS += -I$(BUILD_DIR)/linux-headers
+ endif
+ QEMU_CFLAGS += -I.. -I$(SRC_PATH)/target-$(TARGET_BASE_ARCH) -DNEED_CPU_H
+ 
+
+

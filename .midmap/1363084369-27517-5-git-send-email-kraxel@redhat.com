@@ -1,0 +1,1 @@
+../console-data-structures-overhaul/v1.1363105951/0004-qxl-zap-qxl0-global.patch

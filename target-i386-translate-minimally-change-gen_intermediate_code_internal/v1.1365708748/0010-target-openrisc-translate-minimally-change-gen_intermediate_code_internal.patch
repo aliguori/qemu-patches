@@ -1,0 +1,46 @@
+From patches Mon Sep 17 00:00:00 2001
+From: liguang <lig.fnst@cn.fujitsu.com>
+To: qemu-devel@nongnu.org
+Cc: liguang <lig.fnst@cn.fujitsu.com>
+Date: Thu, 11 Apr 2013 14:32:37 +0800
+Message-id: 1365661963-15396-10-git-send-email-lig.fnst@cn.fujitsu.com
+Subject: [PATCH 10/16] target-openrisc/translate: minimally change
+ gen_intermediate_code_internal
+
+Signed-off-by: liguang <lig.fnst@cn.fujitsu.com>
+---
+ target-openrisc/translate.c |   10 ++++------
+ 1 files changed, 4 insertions(+), 6 deletions(-)
+
+diff --git a/target-openrisc/translate.c b/target-openrisc/translate.c
+index 0eafd02..f6a933d 100644
+--- a/target-openrisc/translate.c
++++ b/target-openrisc/translate.c
+@@ -1703,9 +1703,8 @@ static inline void gen_intermediate_code_internal(OpenRISCCPU *cpu,
+         if (search_pc) {
+             j = tcg_ctx.gen_opc_ptr - tcg_ctx.gen_opc_buf;
+             if (k < j) {
+-                k++;
+-                while (k < j) {
+-                    tcg_ctx.gen_opc_instr_start[k++] = 0;
++                while (++k < j) {
++                    tcg_ctx.gen_opc_instr_start[k] = 0;
+                 }
+             }
+             tcg_ctx.gen_opc_pc[k] = dc->pc;
+@@ -1783,9 +1782,8 @@ static inline void gen_intermediate_code_internal(OpenRISCCPU *cpu,
+     *tcg_ctx.gen_opc_ptr = INDEX_op_end;
+     if (search_pc) {
+         j = tcg_ctx.gen_opc_ptr - tcg_ctx.gen_opc_buf;
+-        k++;
+-        while (k <= j) {
+-            tcg_ctx.gen_opc_instr_start[k++] = 0;
++        while (++k <= j) {
++            tcg_ctx.gen_opc_instr_start[k] = 0;
+         }
+     } else {
+         tb->size = dc->pc - pc_start;
+-- 
+1.7.2.5
+
+

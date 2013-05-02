@@ -1,0 +1,5 @@
+0000-sheepdog-support-online-snapshot-from-qemu-img.txt
+0001-sheepdog-cleanup-find_vdi_name.patch
+0002-sheepdog-add-SD_RES_READONLY-result-code.patch
+0003-sheepdog-add-helper-function-to-reload-inode.patch
+0004-sheepdog-resend-write-requests-when-SD_RES_READONLY-is-received.patch

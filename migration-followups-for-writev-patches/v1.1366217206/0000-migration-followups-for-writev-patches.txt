@@ -1,0 +1,41 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: owasserm@redhat.com, quintela@redhat.com
+Date: Wed, 17 Apr 2013 11:46:46 +0200
+Message-id: 1366192012-14872-1-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 0/6] migration: followups for writev patches
+
+Anthony,
+
+as agreed off-list I'm sending you a pull request for the rebased patches,
+adding some new migration code but mostly touching iov.c.
+
+The following changes since commit e0a83fc2c1582dc8d4453849852ebe6c258b7c3a:
+
+  qom: do nothing on unparent of object without parent (2013-04-16 16:10:21 -0500)
+
+are available in the git repository at:
+
+  git://github.com/bonzini/qemu.git migration-writev
+
+for you to fetch changes up to e9d8fbf53a33983c81d67d18e1baa914eb16cdea:
+
+  qemu-file: do not use stdio for qemu_fdopen (2013-04-17 11:44:22 +0200)
+
+----------------------------------------------------------------
+Paolo Bonzini (6):
+      qemu-file: drop socket_put_buffer
+      iov: reorganize iov_send_recv, part 1
+      iov: reorganize iov_send_recv, part 2
+      iov: reorganize iov_send_recv, part 3
+      iov: handle partial writes from sendmsg and recvmsg
+      qemu-file: do not use stdio for qemu_fdopen
+
+ savevm.c   | 114 ++++++++++++++++++++++++++++++++++++++++++++++++-------------
+ util/iov.c | 104 +++++++++++++++++++++++++++++++------------------------
+ 2 files changed, 149 insertions(+), 69 deletions(-)
+-- 
+1.8.1.4
+
+

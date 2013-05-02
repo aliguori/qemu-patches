@@ -1,0 +1,49 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Stefan Hajnoczi <stefanha@redhat.com>
+To: Stefan Hajnoczi <stefanha@redhat.com>, qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, qemu-devel <qemu-devel@nongnu.org>
+Date: Fri, 12 Apr 2013 14:23:27 +0200
+Message-id: 1365769411-2102-1-git-send-email-stefanha@redhat.com
+Subject: [PATCH 0/4] Trivial patches for 6 to 12 April 2013
+
+The following changes since commit 93b48c201eb6c0404d15550a0eaa3c0f7937e35e:
+
+  virtio-9p: Fix virtio-9p no longer building after hw-dirs branch merge (2013-04-09 07:47:00 -0500)
+
+are available in the git repository at:
+
+  git://github.com/stefanha/qemu.git trivial-patches
+
+for you to fetch changes up to 31112d6187a1e704d3c8ae817ead3a1cb1bde05a:
+
+  cpu-exec: Allow "-d exec" in non-debug builds (drop CONFIG_DEBUG_EXEC) (2013-04-12 13:46:34 +0200)
+
+----------------------------------------------------------------
+Petar Jovanovic (1):
+      linux-user: pass correct host flags to eventfd2 call
+
+Peter Maydell (3):
+      target-moxie: Fix VMState registration
+      Typo, spelling and grammatical fixes
+      cpu-exec: Allow "-d exec" in non-debug builds (drop CONFIG_DEBUG_EXEC)
+
+ configure                  |  3 ---
+ cpu-exec.c                 | 15 ++++++---------
+ docs/bootindex.txt         | 10 +++++-----
+ docs/ccid.txt              |  2 +-
+ hw/block/virtio-blk.c      |  4 ++--
+ hw/intc/armv7m_nvic.c      |  2 +-
+ hw/s390x/s390-virtio-ccw.c |  2 +-
+ hw/s390x/s390-virtio.c     |  2 +-
+ hw/sd/sd.c                 |  4 ++--
+ linux-user/syscall.c       | 11 ++++++++++-
+ target-microblaze/mmu.c    |  2 +-
+ target-moxie/cpu.c         |  2 +-
+ target-moxie/cpu.h         |  2 --
+ target-moxie/machine.c     | 12 +-----------
+ target-s390x/mem_helper.c  |  8 ++++----
+ 15 files changed, 36 insertions(+), 45 deletions(-)
+
+-- 
+1.8.1.4
+

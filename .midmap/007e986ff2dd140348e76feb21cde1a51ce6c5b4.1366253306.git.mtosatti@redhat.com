@@ -1,0 +1,1 @@
+../qemu-kvmgit-uq-master-queue/v1.1366260501/0005-vmxcap-Update-according-to-SDM-of-January-2013.patch

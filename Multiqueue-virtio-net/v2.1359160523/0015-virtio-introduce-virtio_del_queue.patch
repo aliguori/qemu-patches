@@ -1,0 +1,60 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Jason Wang <jasowang@redhat.com>
+To: aliguori@us.ibm.com, shajnocz@redhat.com, qemu-devel@nongnu.org,
+ mst@redhat.com
+Cc: krkumar2@in.ibm.com, kvm@vger.kernel.org, mprivozn@redhat.com,
+ rusty@rustcorp.com.au, Jason Wang <jasowang@redhat.com>,
+ gaowanlong@cn.fujitsu.com, jwhan@filewood.snu.ac.kr, shiyer@redhat.com
+Date: Fri, 25 Jan 2013 18:35:38 +0800
+Message-id: 1359110143-42984-16-git-send-email-jasowang@redhat.com
+Subject: [PATCH 15/20] virtio: introduce virtio_del_queue()
+
+Some device (such as virtio-net) needs the ability to destroy or re-order the
+virtqueues, this patch adds a helper to do this.
+
+Signed-off-by: Jason Wang <jasowang>
+---
+ hw/virtio.c |    9 +++++++++
+ hw/virtio.h |    2 ++
+ 2 files changed, 11 insertions(+), 0 deletions(-)
+
+diff --git a/hw/virtio.c b/hw/virtio.c
+index ca170c3..d8c77b0 100644
+--- a/hw/virtio.c
++++ b/hw/virtio.c
+@@ -701,6 +701,15 @@ VirtQueue *virtio_add_queue(VirtIODevice *vdev, int queue_size,
+     return &vdev->vq[i];
+ }
+ 
++void virtio_del_queue(VirtIODevice *vdev, int n)
++{
++    if (n < 0 || n >= VIRTIO_PCI_QUEUE_MAX) {
++        abort();
++    }
++
++    vdev->vq[n].vring.num = 0;
++}
++
+ void virtio_irq(VirtQueue *vq)
+ {
+     trace_virtio_irq(vq);
+diff --git a/hw/virtio.h b/hw/virtio.h
+index 9cc7b85..d3da1d2 100644
+--- a/hw/virtio.h
++++ b/hw/virtio.h
+@@ -181,6 +181,8 @@ VirtQueue *virtio_add_queue(VirtIODevice *vdev, int queue_size,
+                             void (*handle_output)(VirtIODevice *,
+                                                   VirtQueue *));
+ 
++void virtio_del_queue(VirtIODevice *vdev, int n);
++
+ void virtqueue_push(VirtQueue *vq, const VirtQueueElement *elem,
+                     unsigned int len);
+ void virtqueue_flush(VirtQueue *vq, unsigned int count);
+-- 
+1.7.1
+
+--
+To unsubscribe from this list: send the line "unsubscribe kvm" in
+the body of a message to majordomo@vger.kernel.org
+More majordomo info at  http://vger.kernel.org/majordomo-info.html

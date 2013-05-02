@@ -1,0 +1,1 @@
+../convert-savevm-to-use-qapi-and-introduce-qmp-command/v4.1364587947/0001-block-add-error-parameter-to-bdrv_snapshot_create-and-related-functions.patch

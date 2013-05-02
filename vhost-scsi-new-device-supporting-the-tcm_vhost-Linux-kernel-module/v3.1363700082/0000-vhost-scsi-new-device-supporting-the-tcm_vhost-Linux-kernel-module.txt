@@ -1,0 +1,49 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Asias He <asias@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Rusty Russell <rusty@rustcorp.com.au>, Paolo Bonzini <pbonzini@redhat.com>,
+ Asias He <asias@redhat.com>, kvm@vger.kernel.org,
+ "Michael S. Tsirkin" <mst@redhat.com>,
+ virtualization@lists.linux-foundation.org, target-devel@vger.kernel.org,
+ Nicholas Bellinger <nab@linux-iscsi.org>,
+ Stefan Hajnoczi <stefanha@redhat.com>
+Date: Tue, 19 Mar 2013 08:34:42 +0800
+Message-id: 1363653285-23776-1-git-send-email-asias@redhat.com
+Subject: [PATCH 0/3] vhost-scsi: new device supporting the tcm_vhost Linux
+ kernel module
+
+This is on top of Paolo and Nick's work.
+
+Current status:
+Basically, tcm_vhost + seabios works now. We still have one more issue,
+vhost_verify_ring_mappings fails. The hotplug also works with the latest
+tcm_vhost.ko hotplug patch.
+
+Asias He (1):
+  disable vhost_verify_ring_mappings check
+
+Paolo Bonzini (2):
+  virtio-scsi: create VirtIOSCSICommon
+  vhost-scsi: new device supporting the tcm_vhost Linux kernel module
+
+ configure                  |  15 ++-
+ hw/Makefile.objs           |   5 +-
+ hw/s390x/s390-virtio-bus.c |  35 +++++++
+ hw/vhost-scsi.c            | 242 +++++++++++++++++++++++++++++++++++++++++++++
+ hw/vhost-scsi.h            |  65 ++++++++++++
+ hw/vhost.c                 |   2 +
+ hw/virtio-pci.c            |  62 ++++++++++++
+ hw/virtio-scsi.c           | 199 +++++++++----------------------------
+ hw/virtio-scsi.h           | 129 ++++++++++++++++++++++++
+ include/qemu/osdep.h       |   4 +
+ 10 files changed, 606 insertions(+), 152 deletions(-)
+ create mode 100644 hw/vhost-scsi.c
+ create mode 100644 hw/vhost-scsi.h
+
+-- 
+1.8.1.4
+
+--
+To unsubscribe from this list: send the line "unsubscribe kvm" in
+the body of a message to majordomo@vger.kernel.org
+More majordomo info at  http://vger.kernel.org/majordomo-info.html

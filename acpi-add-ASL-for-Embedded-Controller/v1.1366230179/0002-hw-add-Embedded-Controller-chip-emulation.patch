@@ -1,0 +1,181 @@
+From patches Mon Sep 17 00:00:00 2001
+From: liguang <lig.fnst@cn.fujitsu.com>
+To: Mark Marshall <markmarshall14@gmail.com>,
+ Andreas =?ISO-8859-1?Q?F=E4rber?= <afaerber@suse.de>, seabios@seabios.org,
+ qemu-devel@nongnu.org, liguang <lig.fnst@cn.fujitsu.com>
+Cc: Anthony Liguori <anthony@codemonkey.ws>,
+ Paolo Bonzini <pbonzini@redhat.com>, seabios@seabios.org,
+ qemu-devel@nongnu.org
+Date: Wed, 17 Apr 2013 15:23:00 +0800
+Message-id: 1366183380-24333-2-git-send-email-lig.fnst@cn.fujitsu.com
+Subject: [PATCH 2/2] hw: add Embedded Controller chip emulation
+
+this work implemented Embedded Controller chip emulation
+which was defined at ACPI SEPC v5 chapter 12:
+"ACPI Embedded Controller Interface Specification"
+
+commonly Embedded Controller will emulate keyboard,
+mouse, handle ACPI defined operations and some
+low-speed devices like SMbus.
+
+Signed-off-by: liguang <lig.fnst@cn.fujitsu.com>
+---
+ hw/ec.c |  113 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ hw/ec.h |   20 +++++++++++
+ 2 files changed, 133 insertions(+), 0 deletions(-)
+ create mode 100644 hw/ec.c
+ create mode 100644 hw/ec.h
+
+diff --git a/hw/ec.c b/hw/ec.c
+new file mode 100644
+index 0000000..69c92cf
+--- /dev/null
++++ b/hw/ec.c
+@@ -0,0 +1,113 @@
++#include "ec.h"
++#include "hw/hw.h"
++#include "hw/isa/isa.h"
++#include "sysemu/sysemu.h"
++
++#define TYPE_EC_DEV
++#define EC_DEV(obj) \
++    OBJECT_CHECK(ECState, (obj), TYPE_EC_DEV)
++
++static char ec_acpi_space[EC_ACPI_SPACE_SIZE] = {0};
++
++typedef struct ECState {
++    ISADevice dev;
++    char cmd;
++    char status;
++    char data;
++    char irq;
++    char buf;
++    MemoryRegion io;
++} ECState;
++
++
++static void io62_write(void *opaque, hwaddr addr, uint64_t val, unsigned size)
++{
++    ECState *s = opaque;
++    char tmp = val & 0xff;
++
++    if (s->status & EC_ACPI_CMD) {
++        s->buf = tmp;
++        s->status &= ~EC_ACPI_CMD;
++    } else {
++        if (tmp < EC_ACPI_SPACE_SIZE) {
++            ec_acpi_space[s->buf] = tmp;
++        }
++    }
++}
++
++static uint64_t io62_read(void *opaque, hwaddr addr, unsigned size)
++{
++    return s->data;
++}
++
++static void io66_write(void *opaque, hwaddr addr, uint64_t val, unsigned size)
++{
++    ECState *s = opaque;
++
++    s->status = EC_ACPI_CMD | EC_ACPI_IBF;
++
++    switch (val & 0xff) {
++    case EC_ACPI_CMD_READ:
++    case EC_ACPI_CMD_WRITE:
++    case EC_ACPI_CMD_BURST_EN:
++        s->statu |= EC_ACPI_BST;
++    case EC_ACPI_CMD_BURST_DN:
++        s->statu &= ~EC_ACPI_BST;
++    case EC_ACPI_CMD_QUERY:
++        s->cmd = val & 0xff;
++    case default:
++        break;
++    }
++}
++
++static uint64_t io66_read(void *opaque, hwaddr addr, unsigned size)
++{
++    ECState *s = opaque;
++
++    return s->status;
++}
++
++static const MemoryRegionOps io62_io_ops = {
++    .write = io62_write,
++    .read = io62_read,
++    .endianness = DEVICE_NATIVE_ENDIAN,
++    .impl = {
++        .min_access_size = 1,
++        .max_access_size = 1,
++    },
++};
++
++static const MemoryRegionOps io66_io_ops = {
++    .write = io66_write,
++    .read = io66_read,
++    .endianness = DEVICE_NATIVE_ENDIAN,
++    .impl = {
++        .min_access_size = 1,
++        .max_access_size = 1,
++    },
++};
++
++static void ec_realizefn(DeviceState *dev, Error **err)
++{
++    ISADevice *isadev = ISA_DEVICE(dev);
++    ECState *s = EC_DEV(dev);
++
++    isa_init_irq(isadev, &s->irq, 0xb);
++
++    memory_region_init_io(&s->io, &io62_io_ops, NULL, "ec-acpi-data", 1);
++    isa_register_ioport(isadev, &s->io, 0x62);
++
++    memory_region_init_io(&s->io, &io66_io_ops, NULL, "ec-acpi-cmd", 1);
++    isa_register_ioport(isadev, &s->io, 0x66);
++
++    s->status = 0;
++    s->data = 0;
++}
++
++static void ec_class_initfn(ObjectClass *klass, void *data)
++{
++    DeviceClass *dc = DEVICE_CLASS(klass);
++
++    dc->realize = ec_realizefn;
++    dc->no_user = 1;
++}
+diff --git a/hw/ec.h b/hw/ec.h
+new file mode 100644
+index 0000000..110ce04
+--- /dev/null
++++ b/hw/ec.h
+@@ -0,0 +1,20 @@
++#inndef __EC_H
++#define __EC_H
++
++#define EC_ACPI_SPACE_SIZE 0x80
++
++#define EC_ACPI_CMD_PORT 0x66
++#define EC_ACPI_DATA_PORT 0x62
++
++#define EC_ACPI_OBF 0x1
++#define EC_ACPI_IBF 0x2
++#define EC_ACPI_CMD 0x8
++#define EC_ACPI_BST 0x10
++
++#define EC_ACPI_CMD_READ 0x80
++#define EC_ACPI_CMD_WRITE 0x81
++#define EC_ACPI_BURST_EN 0x82
++#define EC_ACPI_BURST_DN 0x83
++#define EC_ACPI_CMD_QUERY 0x84
++
++#endif
+-- 
+1.7.2.5
+
+
+_______________________________________________
+SeaBIOS mailing list
+SeaBIOS@seabios.org
+http://www.seabios.org/mailman/listinfo/seabios

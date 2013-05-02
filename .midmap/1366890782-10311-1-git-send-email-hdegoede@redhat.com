@@ -1,0 +1,1 @@
+../qemu-char-Set-foo_tag--0-when-returning-FALSE-from-callbacks/v1.1366915982/0001-qemu-char-Set-foo_tag--0-when-returning-FALSE-from-callbacks.patch

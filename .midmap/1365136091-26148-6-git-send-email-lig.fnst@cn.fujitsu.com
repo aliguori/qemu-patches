@@ -1,0 +1,1 @@
+../implement-power-chip/v2.1365182884/0005-qdev-add-power_signal_in-for-DeviceState.patch

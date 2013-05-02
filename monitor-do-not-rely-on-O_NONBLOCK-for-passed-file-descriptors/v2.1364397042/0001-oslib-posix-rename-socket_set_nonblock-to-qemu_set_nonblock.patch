@@ -1,0 +1,326 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Stefan Hajnoczi <stefanha@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, david.pravec@nethost.cz,
+ Eric Blake <eblake@redhat.com>, mprivozn@redhat.com, coreyb@linux.vnet.ibm.com,
+ Juan Quintela <quintela@redhat.com>, Luiz Capitulino <lcapitulino@redhat.com>,
+ Stefan Hajnoczi <stefanha@redhat.com>
+Date: Wed, 27 Mar 2013 10:10:43 +0100
+Message-id: 1364375446-24180-2-git-send-email-stefanha@redhat.com
+Subject: [PATCH 1/4] oslib-posix: rename socket_set_nonblock() to
+ qemu_set_nonblock()
+
+The fcntl(fd, F_SETFL, O_NONBLOCK) flag is not specific to sockets.
+Rename to qemu_set_nonblock() just like qemu_set_cloexec().
+
+Signed-off-by: Stefan Hajnoczi <stefanha@redhat.com>
+---
+ block/nbd.c            | 2 +-
+ block/sheepdog.c       | 2 +-
+ include/qemu/sockets.h | 4 ++--
+ migration.c            | 2 +-
+ nbd.c                  | 8 ++++----
+ net/socket.c           | 6 +++---
+ qemu-char.c            | 8 ++++----
+ savevm.c               | 2 +-
+ slirp/misc.c           | 2 +-
+ slirp/tcp_subr.c       | 4 ++--
+ ui/vnc.c               | 2 +-
+ util/oslib-posix.c     | 4 ++--
+ util/oslib-win32.c     | 4 ++--
+ util/qemu-sockets.c    | 4 ++--
+ 14 files changed, 27 insertions(+), 27 deletions(-)
+
+diff --git a/block/nbd.c b/block/nbd.c
+index 3d711b2..eff683c 100644
+--- a/block/nbd.c
++++ b/block/nbd.c
+@@ -415,7 +415,7 @@ static int nbd_establish_connection(BlockDriverState *bs)
+ 
+     /* Now that we're connected, set the socket to be non-blocking and
+      * kick the reply mechanism.  */
+-    socket_set_nonblock(sock);
++    qemu_set_nonblock(sock);
+     qemu_aio_set_fd_handler(sock, nbd_reply_ready, NULL,
+                             nbd_have_request, s);
+ 
+diff --git a/block/sheepdog.c b/block/sheepdog.c
+index bb67c4c..987018e 100644
+--- a/block/sheepdog.c
++++ b/block/sheepdog.c
+@@ -471,7 +471,7 @@ static int connect_to_sdog(BDRVSheepdogState *s)
+         qerror_report_err(err);
+         error_free(err);
+     } else {
+-        socket_set_nonblock(fd);
++        qemu_set_nonblock(fd);
+     }
+ 
+     return fd;
+diff --git a/include/qemu/sockets.h b/include/qemu/sockets.h
+index d225f6d..c5174d7 100644
+--- a/include/qemu/sockets.h
++++ b/include/qemu/sockets.h
+@@ -37,8 +37,8 @@ int qemu_socket(int domain, int type, int protocol);
+ int qemu_accept(int s, struct sockaddr *addr, socklen_t *addrlen);
+ int socket_set_cork(int fd, int v);
+ int socket_set_nodelay(int fd);
+-void socket_set_block(int fd);
+-void socket_set_nonblock(int fd);
++void qemu_set_block(int fd);
++void qemu_set_nonblock(int fd);
+ int send_all(int fd, const void *buf, int len1);
+ int recv_all(int fd, void *buf, int len1, bool single_read);
+ 
+diff --git a/migration.c b/migration.c
+index 7fb2147..3b4b467 100644
+--- a/migration.c
++++ b/migration.c
+@@ -121,7 +121,7 @@ void process_incoming_migration(QEMUFile *f)
+     int fd = qemu_get_fd(f);
+ 
+     assert(fd != -1);
+-    socket_set_nonblock(fd);
++    qemu_set_nonblock(fd);
+     qemu_coroutine_enter(co, f);
+ }
+ 
+diff --git a/nbd.c b/nbd.c
+index d1a67ee..85187ff 100644
+--- a/nbd.c
++++ b/nbd.c
+@@ -386,7 +386,7 @@ static int nbd_send_negotiate(NBDClient *client)
+         [28 .. 151]   reserved     (0)
+      */
+ 
+-    socket_set_block(csock);
++    qemu_set_block(csock);
+     rc = -EINVAL;
+ 
+     TRACE("Beginning negotiation.");
+@@ -429,7 +429,7 @@ static int nbd_send_negotiate(NBDClient *client)
+     TRACE("Negotiation succeeded.");
+     rc = 0;
+ fail:
+-    socket_set_nonblock(csock);
++    qemu_set_nonblock(csock);
+     return rc;
+ }
+ 
+@@ -443,7 +443,7 @@ int nbd_receive_negotiate(int csock, const char *name, uint32_t *flags,
+ 
+     TRACE("Receiving negotiation.");
+ 
+-    socket_set_block(csock);
++    qemu_set_block(csock);
+     rc = -EINVAL;
+ 
+     if (read_sync(csock, buf, 8) != 8) {
+@@ -558,7 +558,7 @@ int nbd_receive_negotiate(int csock, const char *name, uint32_t *flags,
+     rc = 0;
+ 
+ fail:
+-    socket_set_nonblock(csock);
++    qemu_set_nonblock(csock);
+     return rc;
+ }
+ 
+diff --git a/net/socket.c b/net/socket.c
+index 6c3752b..b5c8e65 100644
+--- a/net/socket.c
++++ b/net/socket.c
+@@ -308,7 +308,7 @@ static int net_socket_mcast_create(struct sockaddr_in *mcastaddr, struct in_addr
+         }
+     }
+ 
+-    socket_set_nonblock(fd);
++    qemu_set_nonblock(fd);
+     return fd;
+ fail:
+     if (fd >= 0)
+@@ -519,7 +519,7 @@ static int net_socket_listen_init(NetClientState *peer,
+         perror("socket");
+         return -1;
+     }
+-    socket_set_nonblock(fd);
++    qemu_set_nonblock(fd);
+ 
+     /* allow fast reuse */
+     val = 1;
+@@ -565,7 +565,7 @@ static int net_socket_connect_init(NetClientState *peer,
+         perror("socket");
+         return -1;
+     }
+-    socket_set_nonblock(fd);
++    qemu_set_nonblock(fd);
+ 
+     connected = 0;
+     for(;;) {
+diff --git a/qemu-char.c b/qemu-char.c
+index 936150f..500a582 100644
+--- a/qemu-char.c
++++ b/qemu-char.c
+@@ -2564,7 +2564,7 @@ static int tcp_chr_add_client(CharDriverState *chr, int fd)
+     if (s->fd != -1)
+ 	return -1;
+ 
+-    socket_set_nonblock(fd);
++    qemu_set_nonblock(fd);
+     if (s->do_nodelay)
+         socket_set_nodelay(fd);
+     s->fd = fd;
+@@ -2716,7 +2716,7 @@ static CharDriverState *qemu_chr_open_socket_fd(int fd, bool do_nodelay,
+         printf("QEMU waiting for connection on: %s\n",
+                chr->filename);
+         tcp_chr_accept(s->listen_chan, G_IO_IN, chr);
+-        socket_set_nonblock(s->listen_fd);
++        qemu_set_nonblock(s->listen_fd);
+     }
+     return chr;
+ }
+@@ -2758,7 +2758,7 @@ static CharDriverState *qemu_chr_open_socket(QemuOpts *opts)
+     }
+ 
+     if (!is_waitconnect)
+-        socket_set_nonblock(fd);
++        qemu_set_nonblock(fd);
+ 
+     chr = qemu_chr_open_socket_fd(fd, do_nodelay, is_listen, is_telnet,
+                                   is_waitconnect, &local_err);
+@@ -3650,7 +3650,7 @@ static CharDriverState *qmp_chardev_open_serial(ChardevHostdev *serial,
+     if (error_is_set(errp)) {
+         return NULL;
+     }
+-    socket_set_nonblock(fd);
++    qemu_set_nonblock(fd);
+     return qemu_chr_open_tty_fd(fd);
+ #else
+     error_setg(errp, "character device backend type 'serial' not supported");
+diff --git a/savevm.c b/savevm.c
+index 406caa9..b1d8988 100644
+--- a/savevm.c
++++ b/savevm.c
+@@ -422,7 +422,7 @@ QEMUFile *qemu_fopen_socket(int fd, const char *mode)
+ 
+     s->fd = fd;
+     if (mode[0] == 'w') {
+-        socket_set_block(s->fd);
++        qemu_set_block(s->fd);
+         s->file = qemu_fopen_ops(s, &socket_write_ops);
+     } else {
+         s->file = qemu_fopen_ops(s, &socket_read_ops);
+diff --git a/slirp/misc.c b/slirp/misc.c
+index 6b9c2c4..8ecced5 100644
+--- a/slirp/misc.c
++++ b/slirp/misc.c
+@@ -215,7 +215,7 @@ fork_exec(struct socket *so, const char *ex, int do_pty)
+                 qemu_setsockopt(so->s, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(int));
+                 opt = 1;
+                 qemu_setsockopt(so->s, SOL_SOCKET, SO_OOBINLINE, &opt, sizeof(int));
+-		socket_set_nonblock(so->s);
++		qemu_set_nonblock(so->s);
+ 
+ 		/* Append the telnet options now */
+                 if (so->so_m != NULL && do_pty == 1)  {
+diff --git a/slirp/tcp_subr.c b/slirp/tcp_subr.c
+index 84a6bb5..e98ce1a 100644
+--- a/slirp/tcp_subr.c
++++ b/slirp/tcp_subr.c
+@@ -336,7 +336,7 @@ int tcp_fconnect(struct socket *so)
+     int opt, s=so->s;
+     struct sockaddr_in addr;
+ 
+-    socket_set_nonblock(s);
++    qemu_set_nonblock(s);
+     opt = 1;
+     qemu_setsockopt(s, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+     opt = 1;
+@@ -425,7 +425,7 @@ void tcp_connect(struct socket *inso)
+         tcp_close(sototcpcb(so)); /* This will sofree() as well */
+         return;
+     }
+-    socket_set_nonblock(s);
++    qemu_set_nonblock(s);
+     opt = 1;
+     qemu_setsockopt(s, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(int));
+     opt = 1;
+diff --git a/ui/vnc.c b/ui/vnc.c
+index bbe1e0f..5ddb696 100644
+--- a/ui/vnc.c
++++ b/ui/vnc.c
+@@ -2732,7 +2732,7 @@ static void vnc_connect(VncDisplay *vd, int csock, int skipauth, bool websocket)
+ 
+     VNC_DEBUG("New client on socket %d\n", csock);
+     vd->dcl.idle = 0;
+-    socket_set_nonblock(vs->csock);
++    qemu_set_nonblock(vs->csock);
+ #ifdef CONFIG_VNC_WS
+     if (websocket) {
+         vs->websocket = 1;
+diff --git a/util/oslib-posix.c b/util/oslib-posix.c
+index 433dd68..4e4b819 100644
+--- a/util/oslib-posix.c
++++ b/util/oslib-posix.c
+@@ -134,14 +134,14 @@ void qemu_vfree(void *ptr)
+     free(ptr);
+ }
+ 
+-void socket_set_block(int fd)
++void qemu_set_block(int fd)
+ {
+     int f;
+     f = fcntl(fd, F_GETFL);
+     fcntl(fd, F_SETFL, f & ~O_NONBLOCK);
+ }
+ 
+-void socket_set_nonblock(int fd)
++void qemu_set_nonblock(int fd)
+ {
+     int f;
+     f = fcntl(fd, F_GETFL);
+diff --git a/util/oslib-win32.c b/util/oslib-win32.c
+index 640194c..dcfa0c2 100644
+--- a/util/oslib-win32.c
++++ b/util/oslib-win32.c
+@@ -100,14 +100,14 @@ struct tm *localtime_r(const time_t *timep, struct tm *result)
+     return p;
+ }
+ 
+-void socket_set_block(int fd)
++void qemu_set_block(int fd)
+ {
+     unsigned long opt = 0;
+     WSAEventSelect(fd, NULL, 0);
+     ioctlsocket(fd, FIONBIO, &opt);
+ }
+ 
+-void socket_set_nonblock(int fd)
++void qemu_set_nonblock(int fd)
+ {
+     unsigned long opt = 1;
+     ioctlsocket(fd, FIONBIO, &opt);
+diff --git a/util/qemu-sockets.c b/util/qemu-sockets.c
+index b6b78f5..b632a74 100644
+--- a/util/qemu-sockets.c
++++ b/util/qemu-sockets.c
+@@ -277,7 +277,7 @@ static int inet_connect_addr(struct addrinfo *addr, bool *in_progress,
+     }
+     qemu_setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
+     if (connect_state != NULL) {
+-        socket_set_nonblock(sock);
++        qemu_set_nonblock(sock);
+     }
+     /* connect to peer */
+     do {
+@@ -737,7 +737,7 @@ int unix_connect_opts(QemuOpts *opts, Error **errp,
+         connect_state = g_malloc0(sizeof(*connect_state));
+         connect_state->callback = callback;
+         connect_state->opaque = opaque;
+-        socket_set_nonblock(sock);
++        qemu_set_nonblock(sock);
+     }
+ 
+     memset(&un, 0, sizeof(un));
+-- 
+1.8.1.4
+

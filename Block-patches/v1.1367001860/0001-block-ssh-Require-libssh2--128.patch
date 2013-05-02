@@ -1,0 +1,78 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Stefan Hajnoczi <stefanha@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>,
+ Stefan Hajnoczi <stefanha@redhat.com>,
+ "Richard W.M. Jones" <rjones@redhat.com>
+Date: Fri, 26 Apr 2013 13:44:22 +0200
+Message-id: 1366976682-10251-3-git-send-email-stefanha@redhat.com
+Subject: [PATCH 01/11] block/ssh: Require libssh2 >= 1.2.8.
+
+From: "Richard W.M. Jones" <rjones@redhat.com>
+
+libssh2 >= 1.2.8 is required to enable this block device (because
+that version introduced the libssh2_session_handshake call).
+
+Change the test to use pkg-config exclusively.  If the user requests
+--enable-libssh2 and the minimum version is not available, then the
+following error is displayed:
+
+  $ ./configure --enable-libssh2
+
+  ERROR: libssh2 >= 1.2.8 required for --enable-libssh2
+
+If --enable-libssh2 is not specified, then the feature is silently
+disabled if sufficiently new libssh2 is not available.
+
+Signed-off-by: Stefan Hajnoczi <stefanha@redhat.com>
+---
+ configure | 24 ++++--------------------
+ 1 file changed, 4 insertions(+), 20 deletions(-)
+
+diff --git a/configure b/configure
+index ee2e7e8..8188a7c 100755
+--- a/configure
++++ b/configure
+@@ -2364,35 +2364,19 @@ fi
+ 
+ ##########################################
+ # libssh2 probe
++min_libssh2_version=1.2.8
+ if test "$libssh2" != "no" ; then
+-  cat > $TMPC <<EOF
+-#include <stdio.h>
+-#include <libssh2.h>
+-#include <libssh2_sftp.h>
+-int main(void) {
+-    LIBSSH2_SESSION *session;
+-    session = libssh2_session_init ();
+-    (void) libssh2_sftp_init (session);
+-    return 0;
+-}
+-EOF
+-
+-  if $pkg_config libssh2 --modversion >/dev/null 2>&1; then
++  if $pkg_config --atleast-version=$min_libssh2_version libssh2 >/dev/null 2>&1
++  then
+     libssh2_cflags=`$pkg_config libssh2 --cflags`
+     libssh2_libs=`$pkg_config libssh2 --libs`
+-  else
+-    libssh2_cflags=
+-    libssh2_libs="-lssh2"
+-  fi
+-
+-  if compile_prog "$libssh2_cflags" "$libssh2_libs" ; then
+     libssh2=yes
+     libs_tools="$libssh2_libs $libs_tools"
+     libs_softmmu="$libssh2_libs $libs_softmmu"
+     QEMU_CFLAGS="$QEMU_CFLAGS $libssh2_cflags"
+   else
+     if test "$libssh2" = "yes" ; then
+-      feature_not_found "libssh2"
++      error_exit "libssh2 >= $min_libssh2_version required for --enable-libssh2"
+     fi
+     libssh2=no
+   fi
+-- 
+1.8.1.4
+

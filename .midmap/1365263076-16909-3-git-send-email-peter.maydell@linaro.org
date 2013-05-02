@@ -1,0 +1,1 @@
+../Fix-versatile_pci/v4.1365284665/0002-versatile_pci-Expose-PCI-I-O-region-on-Versatile-PB.patch

@@ -1,0 +1,228 @@
+From patches Mon Sep 17 00:00:00 2001
+From: =?utf-8?q?Llu=C3=ADs_Vilanova_=3Cvilanova=40ac=2Eupc=2Eedu=3E?=
+To: qemu-devel@nongnu.org
+Cc: 
+Date: Tue, 16 Apr 2013 15:50:19 +0200
+Message-id: 20130416135019.21588.77222.stgit@fimbulvetr.bsc.es
+Subject: [PATCH 05/23] trace: Minimize inclusions of "qemu-common.h" to avoid
+ inclusion loops
+
+This problem arises in the following patches.
+
+Signed-off-by: Lluís Vilanova <vilanova@ac.upc.edu>
+---
+ hw/virtio/virtio.c            |    1 +
+ monitor.c                     |    4 +++-
+ scripts/tracetool/format/h.py |    9 ++++++++-
+ trace/control-internal.h      |    4 +++-
+ trace/control.c               |    4 +++-
+ trace/control.h               |    9 +++++++--
+ trace/default.c               |    4 +++-
+ trace/simple.c                |    4 +++-
+ trace/simple.h                |    1 +
+ trace/stderr.c                |    4 +++-
+ 10 files changed, 35 insertions(+), 9 deletions(-)
+
+diff --git a/hw/virtio/virtio.c b/hw/virtio/virtio.c
+index 1c2282c..a3dda2c 100644
+--- a/hw/virtio/virtio.c
++++ b/hw/virtio/virtio.c
+@@ -14,6 +14,7 @@
+ #include <inttypes.h>
+ 
+ #include "trace.h"
++#include "qemu-common.h"
+ #include "qemu/error-report.h"
+ #include "hw/virtio/virtio.h"
+ #include "qemu/atomic.h"
+diff --git a/monitor.c b/monitor.c
+index c897e80..a8f49d9 100644
+--- a/monitor.c
++++ b/monitor.c
+@@ -22,6 +22,9 @@
+  * THE SOFTWARE.
+  */
+ #include <dirent.h>
++#define TRACE__CONTROL__USE__TRACE_PRINT_EVENTS
++#include "trace/control.h"
++#undef TRACE__CONTROL__USE__TRACE_PRINT_EVENTS
+ #include "hw/hw.h"
+ #include "monitor/qdev.h"
+ #include "hw/usb.h"
+@@ -59,7 +62,6 @@
+ #include "qemu/osdep.h"
+ #include "cpu.h"
+ #include "trace.h"
+-#include "trace/control.h"
+ #ifdef CONFIG_TRACE_SIMPLE
+ #include "trace/simple.h"
+ #endif
+diff --git a/scripts/tracetool/format/h.py b/scripts/tracetool/format/h.py
+index ed7c8a5..c98aebd 100644
+--- a/scripts/tracetool/format/h.py
++++ b/scripts/tracetool/format/h.py
+@@ -22,7 +22,14 @@ def begin(events):
+         '#ifndef TRACE__GENERATED_TRACERS_H',
+         '#define TRACE__GENERATED_TRACERS_H',
+         '',
+-        '#include "qemu-common.h"')
++        '/* Do not directly include "qemu-common.h" to avoid circular dependencies */',
++        '#include <stdint.h>',
++        '#include <inttypes.h>',
++        '#include <stdbool.h>',
++        '#include <stddef.h>',
++        '#include <unistd.h>',
++        '',
++        )
+ 
+ def end(events):
+     out('#endif /* TRACE__GENERATED_TRACERS_H */')
+diff --git a/trace/control-internal.h b/trace/control-internal.h
+index cce2da4..a15a994 100644
+--- a/trace/control-internal.h
++++ b/trace/control-internal.h
+@@ -1,7 +1,7 @@
+ /*
+  * Interface for configuring and controlling the state of tracing events.
+  *
+- * Copyright (C) 2011-2012 Lluís Vilanova <vilanova@ac.upc.edu>
++ * Copyright (C) 2011-2013 Lluís Vilanova <vilanova@ac.upc.edu>
+  *
+  * This work is licensed under the terms of the GNU GPL, version 2 or later.
+  * See the COPYING file in the top-level directory.
+@@ -11,6 +11,8 @@
+ #define TRACE__CONTROL_INTERNAL_H
+ 
+ #include <string.h>
++#include <assert.h>
++#include <stddef.h>
+ 
+ 
+ extern TraceEvent trace_events[];
+diff --git a/trace/control.c b/trace/control.c
+index 49f61e1..dd7b260 100644
+--- a/trace/control.c
++++ b/trace/control.c
+@@ -1,7 +1,7 @@
+ /*
+  * Interface for configuring and controlling the state of tracing events.
+  *
+- * Copyright (C) 2011-2012 Lluís Vilanova <vilanova@ac.upc.edu>
++ * Copyright (C) 2011-2013 Lluís Vilanova <vilanova@ac.upc.edu>
+  *
+  * This work is licensed under the terms of the GNU GPL, version 2 or later.
+  * See the COPYING file in the top-level directory.
+@@ -9,6 +9,8 @@
+ 
+ #include "trace/control.h"
+ 
++#include "qemu-common.h"
++
+ 
+ TraceEvent *trace_event_name(const char *name)
+ {
+diff --git a/trace/control.h b/trace/control.h
+index cde8260..29ff9c1 100644
+--- a/trace/control.h
++++ b/trace/control.h
+@@ -1,7 +1,7 @@
+ /*
+  * Interface for configuring and controlling the state of tracing events.
+  *
+- * Copyright (C) 2011-2012 Lluís Vilanova <vilanova@ac.upc.edu>
++ * Copyright (C) 2011-2013 Lluís Vilanova <vilanova@ac.upc.edu>
+  *
+  * This work is licensed under the terms of the GNU GPL, version 2 or later.
+  * See the COPYING file in the top-level directory.
+@@ -10,7 +10,6 @@
+ #ifndef TRACE__CONTROL_H
+ #define TRACE__CONTROL_H
+ 
+-#include "qemu-common.h"
+ #include "trace/generated-events.h"
+ 
+ 
+@@ -155,6 +154,10 @@ void trace_event_set_state_dynamic_backend(TraceEvent *ev, bool state);
+ 
+ 
+ 
++#if defined(TRACE__CONTROL__USE__TRACE_PRINT_EVENTS)
++/* Minimize inclusions of "qemu-common.h" to avoid circular dependencies */
++#include "qemu-common.h"
++
+ /**
+  * trace_print_events:
+  *
+@@ -164,6 +167,8 @@ void trace_event_set_state_dynamic_backend(TraceEvent *ev, bool state);
+  */
+ void trace_print_events(FILE *stream, fprintf_function stream_printf);
+ 
++#endif  /* defined(TRACE__CONTROL__USE__TRACE_PRINT_EVENTS) */
++
+ /**
+  * trace_backend_init:
+  * @events: Name of file with events to be enabled at startup; may be NULL.
+diff --git a/trace/default.c b/trace/default.c
+index 6e07a47..4dbaf11 100644
+--- a/trace/default.c
++++ b/trace/default.c
+@@ -1,13 +1,15 @@
+ /*
+  * Default implementation for backend initialization from commandline.
+  *
+- * Copyright (C) 2011-2012 Lluís Vilanova <vilanova@ac.upc.edu>
++ * Copyright (C) 2011-2013 Lluís Vilanova <vilanova@ac.upc.edu>
+  *
+  * This work is licensed under the terms of the GNU GPL, version 2.  See
+  * the COPYING file in the top-level directory.
+  */
+ 
++#define TRACE__CONTROL__USE__TRACE_PRINT_EVENTS
+ #include "trace/control.h"
++#undef TRACE__CONTROL__USE__TRACE_PRINT_EVENTS
+ 
+ 
+ void trace_print_events(FILE *stream, fprintf_function stream_printf)
+diff --git a/trace/simple.c b/trace/simple.c
+index 8b59760..cb4361f 100644
+--- a/trace/simple.c
++++ b/trace/simple.c
+@@ -19,8 +19,10 @@
+ #include <pthread.h>
+ #endif
+ #include "qemu/timer.h"
+-#include "trace.h"
++#define TRACE__CONTROL__USE__TRACE_PRINT_EVENTS
+ #include "trace/control.h"
++#undef TRACE__CONTROL__USE__TRACE_PRINT_EVENTS
++#include "trace.h"
+ 
+ /** Trace file header event ID */
+ #define HEADER_EVENT_ID (~(uint64_t)0) /* avoids conflicting with TraceEventIDs */
+diff --git a/trace/simple.h b/trace/simple.h
+index 5260d9a..1541ea0 100644
+--- a/trace/simple.h
++++ b/trace/simple.h
+@@ -16,6 +16,7 @@
+ #include <stdio.h>
+ 
+ #include "trace/generated-events.h"
++#include "qemu-common.h"
+ 
+ 
+ void st_print_trace_file_status(FILE *stream, fprintf_function stream_printf);
+diff --git a/trace/stderr.c b/trace/stderr.c
+index e212efd..3a6f4bd 100644
+--- a/trace/stderr.c
++++ b/trace/stderr.c
+@@ -1,5 +1,7 @@
+-#include "trace.h"
++#define TRACE__CONTROL__USE__TRACE_PRINT_EVENTS
+ #include "trace/control.h"
++#undef TRACE__CONTROL__USE__TRACE_PRINT_EVENTS
++#include "trace.h"
+ 
+ 
+ void trace_print_events(FILE *stream, fprintf_function stream_printf)
+
+

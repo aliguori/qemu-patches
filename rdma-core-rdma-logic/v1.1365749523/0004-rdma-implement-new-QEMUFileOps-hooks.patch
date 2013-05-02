@@ -1,0 +1,139 @@
+From patches Mon Sep 17 00:00:00 2001
+From: mrhines@linux.vnet.ibm.com
+To: Paolo Bonzini <pbonzini@redhat.com>, qemu-devel@nongnu.org,
+ mrhines@linux.vnet.ibm.com
+Cc: Anthony Liguori <aliguori@us.ibm.com>, mst@redhat.com,
+ qemu-devel@nongnu.org, Michael R Hines <mrhines@us.ibm.com>,
+ Bulent Abali <abali@us.ibm.com>, owasserm@redhat.com, pbonzini@redhat.com,
+ Gokul B Kandiraju <gokul@us.ibm.com>
+Date: Fri, 12 Apr 2013 01:52:05 -0400
+Message-id: 1365745929-24871-5-git-send-email-mrhines@linux.vnet.ibm.com
+Subject: [PATCH 4/8] rdma: implement new QEMUFileOps hooks
+
+From: "Michael R. Hines" <mrhines@us.ibm.com>
+
+ These are the actual definitions of the accessor methods
+ which call out to QEMUFileOps hooks during the RAM
+ iteration faces. These hooks are accessed by
+ arch_init.c, which comes later in the patch series.
+
+
+Signed-off-by: Michael R. Hines <mrhines@us.ibm.com>
+---
+ savevm.c |   81 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++------
+ 1 file changed, 74 insertions(+), 7 deletions(-)
+
+diff --git a/savevm.c b/savevm.c
+index b1d8988..fb452fc 100644
+--- a/savevm.c
++++ b/savevm.c
+@@ -409,14 +409,23 @@ static const QEMUFileOps socket_write_ops = {
+     .close =      socket_close
+ };
+ 
+-QEMUFile *qemu_fopen_socket(int fd, const char *mode)
++bool qemu_file_mode_is_not_valid(const char *mode)
+ {
+-    QEMUFileSocket *s = g_malloc0(sizeof(QEMUFileSocket));
+-
+     if (mode == NULL ||
+         (mode[0] != 'r' && mode[0] != 'w') ||
+         mode[1] != 'b' || mode[2] != 0) {
+         fprintf(stderr, "qemu_fopen: Argument validity check failed\n");
++        return true;
++    }
++
++    return false;
++}
++
++QEMUFile *qemu_fopen_socket(int fd, const char *mode)
++{
++    QEMUFileSocket *s = g_malloc0(sizeof(QEMUFileSocket));
++
++    if (qemu_file_mode_is_not_valid(mode)) {
+         return NULL;
+     }
+ 
+@@ -434,10 +443,7 @@ QEMUFile *qemu_fopen(const char *filename, const char *mode)
+ {
+     QEMUFileStdio *s;
+ 
+-    if (mode == NULL ||
+-	(mode[0] != 'r' && mode[0] != 'w') ||
+-	mode[1] != 'b' || mode[2] != 0) {
+-        fprintf(stderr, "qemu_fopen: Argument validity check failed\n");
++    if (qemu_file_mode_is_not_valid(mode)) {
+         return NULL;
+     }
+ 
+@@ -554,6 +560,67 @@ static void qemu_fflush(QEMUFile *f)
+     }
+ }
+ 
++void ram_control_before_iterate(QEMUFile *f, uint32_t flags)
++{
++    int ret = 0;
++
++    if (f->ops->before_ram_iterate) {
++        qemu_fflush(f);
++        ret = f->ops->before_ram_iterate(f, f->opaque, flags);
++        if (ret < 0) {
++            qemu_file_set_error(f, ret);
++        }
++    }
++}
++
++void ram_control_after_iterate(QEMUFile *f, uint32_t flags)
++{
++    int ret = 0;
++
++    if (f->ops->after_ram_iterate) {
++        qemu_fflush(f);
++        ret = f->ops->after_ram_iterate(f, f->opaque, flags);
++        if (ret < 0) {
++            qemu_file_set_error(f, ret);
++        }
++    }
++}
++
++void ram_control_load_hook(QEMUFile *f, uint32_t flags)
++{
++    int ret = 0;
++
++    if (f->ops->hook_ram_load) {
++        qemu_fflush(f);
++        ret = f->ops->hook_ram_load(f, f->opaque, flags);
++        if (ret < 0) {
++            qemu_file_set_error(f, ret);
++        }
++    }
++}
++
++size_t ram_control_save_page(QEMUFile *f,
++                             ram_addr_t block_offset,
++                             ram_addr_t offset,
++                             size_t size, uint8_t *va)
++{
++    if (f->ops->save_page) {
++        size_t bytes;
++
++        qemu_fflush(f);
++
++        bytes = f->ops->save_page(f, f->opaque, block_offset, offset, size, va);
++
++        if (bytes > 0) {
++            f->pos += bytes;
++        }
++
++        return bytes;
++    }
++
++    return -1;
++}
++
+ static void qemu_fill_buffer(QEMUFile *f)
+ {
+     int len;
+-- 
+1.7.10.4
+

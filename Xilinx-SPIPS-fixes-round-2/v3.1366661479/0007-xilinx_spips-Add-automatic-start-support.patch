@@ -1,0 +1,38 @@
+From patches Mon Sep 17 00:00:00 2001
+From: peter.crosthwaite@xilinx.com
+To: qemu-devel@nongnu.org
+Cc: peter.maydell@linaro.org, edgar.iglesias@gmail.com
+Date: Mon, 22 Apr 2013 15:15:51 +1000
+Message-id: c2fe4351c67c861737865cbbd79005b66adea7f1.1366606958.git.peter.crosthwaite@xilinx.com
+Subject: [PATCH 07/15] xilinx_spips: Add automatic start support
+
+From: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+
+SPI has a mode where it automatically starts based on tx fifo
+occupancy. Implemented.
+
+Signed-off-by: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+Reviewed-by: Peter Maydell <peter.maydell@linaro.org>
+---
+
+ hw/ssi/xilinx_spips.c |    3 ++-
+ 1 files changed, 2 insertions(+), 1 deletions(-)
+
+diff --git a/hw/ssi/xilinx_spips.c b/hw/ssi/xilinx_spips.c
+index a7ba702..5580e67 100644
+--- a/hw/ssi/xilinx_spips.c
++++ b/hw/ssi/xilinx_spips.c
+@@ -451,7 +451,8 @@ static void xilinx_spips_write(void *opaque, hwaddr addr,
+     }
+     s->regs[addr] = (s->regs[addr] & ~mask) | (value & mask);
+ no_reg_update:
+-    if (man_start_com) {
++    if ((man_start_com && s->regs[R_CONFIG] & MAN_START_EN) ||
++            (fifo8_is_empty(&s->tx_fifo) && s->regs[R_CONFIG] & MAN_START_EN)) {
+         xilinx_spips_flush_txfifo(s);
+     }
+     xilinx_spips_update_ixr(s);
+-- 
+1.7.0.4
+
+

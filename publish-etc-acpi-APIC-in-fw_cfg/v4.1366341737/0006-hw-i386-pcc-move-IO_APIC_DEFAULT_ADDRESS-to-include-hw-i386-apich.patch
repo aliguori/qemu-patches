@@ -1,0 +1,52 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Laszlo Ersek <lersek@redhat.com>
+To: Laszlo Ersek <lersek@redhat.com>, qemu-devel@nongnu.org, mst@redhat.com
+Cc: 
+Date: Thu, 18 Apr 2013 22:22:23 +0200
+Message-id: 1366316544-1428-7-git-send-email-lersek@redhat.com
+Subject: [PATCH 6/7] hw/i386/pc.c: move IO_APIC_DEFAULT_ADDRESS to
+ include/hw/i386/apic.h
+
+From: Michael S. Tsirkin <mst@redhat.com>
+
+Signed-off-by: Michael S. Tsirkin <mst@redhat.com>
+
+Signed-off-by: Laszlo Ersek <lersek@redhat.com>
+Acked-by: Michael S. Tsirkin <mst@redhat.com>
+Reviewed-by: Anthony Liguori <aliguori@us.ibm.com>
+---
+ include/hw/i386/apic.h |    2 ++
+ hw/i386/pc.c           |    2 --
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/include/hw/i386/apic.h b/include/hw/i386/apic.h
+index 1d48e02..edbb37f 100644
+--- a/include/hw/i386/apic.h
++++ b/include/hw/i386/apic.h
+@@ -26,6 +26,8 @@ void apic_designate_bsp(DeviceState *d);
+ /* pc.c */
+ DeviceState *cpu_get_current_apic(void);
+ 
++#define IO_APIC_DEFAULT_ADDRESS 0xfec00000
++
+ /* cpu.c */
+ bool cpu_is_bsp(X86CPU *cpu);
+ 
+diff --git a/hw/i386/pc.c b/hw/i386/pc.c
+index 3c12b55..8727489 100644
+--- a/hw/i386/pc.c
++++ b/hw/i386/pc.c
+@@ -73,8 +73,6 @@
+ #define FW_CFG_E820_TABLE (FW_CFG_ARCH_LOCAL + 3)
+ #define FW_CFG_HPET (FW_CFG_ARCH_LOCAL + 4)
+ 
+-#define IO_APIC_DEFAULT_ADDRESS 0xfec00000
+-
+ #define E820_NR_ENTRIES		16
+ 
+ struct e820_entry {
+-- 
+1.7.1
+
+
+

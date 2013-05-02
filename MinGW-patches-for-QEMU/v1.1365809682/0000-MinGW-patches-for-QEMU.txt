@@ -1,0 +1,50 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Stefan Weil <sw@weilnetz.de>
+To: Anthony Liguori <aliguori@us.ibm.com>, Stefan Weil <sw@weilnetz.de>
+Cc: Anthony Liguori <aliguori@us.ibm.com>, qemu-devel@nongnu.org
+Date: Fri, 12 Apr 2013 18:34:42 +0200
+Message-id: 1365784486-617-1-git-send-email-sw@weilnetz.de
+Subject: [PATCH 0/4] MinGW patches for QEMU
+
+Hello Anthony,
+
+please pull these patches for QEMU git master.
+All of them were reviewed on qemu-devel.
+
+Thanks,
+Stefan W.
+
+The following changes since commit 93b48c201eb6c0404d15550a0eaa3c0f7937e35e:
+
+  virtio-9p: Fix virtio-9p no longer building after hw-dirs branch merge (2013-04-09 07:47:00 -0500)
+
+are available in the git repository at:
+
+  git://qemu.weilnetz.de/qemu.git mingw
+
+for you to fetch changes up to 0727b867542eea7fedfd2c53568e9782627fd3bd:
+
+  qemu-timer: move timeBeginPeriod/timeEndPeriod to os-win32 (2013-04-12 18:27:16 +0200)
+
+----------------------------------------------------------------
+Fabien Chouteau (1):
+      Release SMP restriction on Windows
+
+Olivier Hainque (2):
+      Check effective suspension of TCG thread
+      Ensure good ordering of memory instruction in cpu_exec
+
+Paolo Bonzini (1):
+      qemu-timer: move timeBeginPeriod/timeEndPeriod to os-win32
+
+ cpu-exec.c   |    8 ++++++++
+ cpus.c       |   24 ++++++++++++++++++++++--
+ os-win32.c   |   29 +++++++++++------------------
+ qemu-timer.c |   24 ++++++------------------
+ 4 files changed, 47 insertions(+), 38 deletions(-)
+
+[PATCH 1/4] Check effective suspension of TCG thread
+[PATCH 2/4] Ensure good ordering of memory instruction in cpu_exec
+[PATCH 3/4] Release SMP restriction on Windows
+[PATCH 4/4] qemu-timer: move timeBeginPeriod/timeEndPeriod to
+

@@ -1,0 +1,57 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Gerd Hoffmann <kraxel@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Igor Mitsyanko <i.mitsyanko@samsung.com>,
+ Dmitry Solodkiy <d.solodkiy@samsung.com>, Maksim Kozlov <m.kozlov@samsung.com>,
+ Gerd Hoffmann <kraxel@redhat.com>, Igor Mitsyanko <i.mitsyanko@gmail.com>,
+ Evgeny Voevodin <e.voevodin@samsung.com>
+Date: Thu,  4 Apr 2013 09:28:43 +0200
+Message-id: 1365060546-24638-2-git-send-email-kraxel@redhat.com
+Subject: [PATCH 01/24] exynos4210_fimd.c: fix display resize bug introduced
+ after console revamp
+
+From: Igor Mitsyanko <i.mitsyanko@gmail.com>
+
+In exynos4210 display update function, we were acquiring DisplaySurface
+pointer before calling screen resize function, not paying attention that resize
+procedure can replace current DisplaySurface with newly allocated one.
+Right thing to do is to initialize DisplaySurface AFTER a call to resize function.
+
+Signed-off-by: Igor Mitsyanko <i.mitsyanko@gmail.com>
+Signed-off-by: Gerd Hoffmann <kraxel@redhat.com>
+---
+ hw/exynos4210_fimd.c |    7 ++++---
+ 1 file changed, 4 insertions(+), 3 deletions(-)
+
+diff --git a/hw/exynos4210_fimd.c b/hw/exynos4210_fimd.c
+index bf316c6..333456a 100644
+--- a/hw/exynos4210_fimd.c
++++ b/hw/exynos4210_fimd.c
+@@ -1243,7 +1243,7 @@ static void exynos4210_update_resolution(Exynos4210fimdState *s)
+ static void exynos4210_fimd_update(void *opaque)
+ {
+     Exynos4210fimdState *s = (Exynos4210fimdState *)opaque;
+-    DisplaySurface *surface = qemu_console_surface(s->console);
++    DisplaySurface *surface;
+     Exynos4210fimdWindow *w;
+     int i, line;
+     hwaddr fb_line_addr, inc_size;
+@@ -1256,11 +1256,12 @@ static void exynos4210_fimd_update(void *opaque)
+     const int global_height = ((s->vidtcon[2] >> FIMD_VIDTCON2_VER_SHIFT) &
+             FIMD_VIDTCON2_SIZE_MASK) + 1;
+ 
+-    if (!s || !s->console || !surface_bits_per_pixel(surface) ||
+-            !s->enabled) {
++    if (!s || !s->console || !s->enabled ||
++        surface_bits_per_pixel(qemu_console_surface(s->console)) == 0) {
+         return;
+     }
+     exynos4210_update_resolution(s);
++    surface = qemu_console_surface(s->console);
+ 
+     for (i = 0; i < NUM_OF_WINDOWS; i++) {
+         w = &s->window[i];
+-- 
+1.7.9.7
+
+

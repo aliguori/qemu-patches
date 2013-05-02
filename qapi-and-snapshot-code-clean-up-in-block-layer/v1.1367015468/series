@@ -1,0 +1,8 @@
+0000-qapi-and-snapshot-code-clean-up-in-block-layer.txt
+0001-block-drop-bs_snapshots-global-variable.patch
+0002-block-move-bdrv_snapshot_find-to-block-snapshotc.patch
+0003-block-move-snapshot-code-in-blockc-to-block-snapshotc.patch
+0004-block-distinguish-id-and-name-in-bdrv_find_snapshot.patch
+0005-block-move-collect_snapshots-and-collect_image_info-to-block-qapic.patch
+0006-block-move-qmp-and-info-dump-related-code-to-block-qapic.patch
+0007-block-dump-to-monitor-for-bdrv_snapshot_dump-and-bdrv_image_info_dump.patch

@@ -1,0 +1,18 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Anthony Liguori <aliguori@us.ibm.com>
+To: Anthony Liguori <aliguori@us.ibm.com>, qemu-devel@nongnu.org
+Cc: 
+Date: Tue, 16 Apr 2013 09:45:14 -0500
+Message-id: 1366123521-4330-1-git-send-email-aliguori@us.ibm.com
+Subject: [PATCH 0/7] qtest: add libqos
+
+This is libqos support for qtest.  A few things are omitted from
+the RFC review in order to help get this merged quickly.  Notably,
+there's still no way to tear down a device (pci_iounmap is hard to
+implement well).  I haven't attempted to refactor i2c support and
+I have not introduced convenience macros.
+
+But otherwise, I think the series is now in very good shape and
+mergable.
+
+

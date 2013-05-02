@@ -1,0 +1,87 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Laszlo Ersek <lersek@redhat.com>
+To: Anthony Liguori <aliguori@us.ibm.com>, kraxel@redhat.com,
+ qemu-devel@nongnu.org, mst@redhat.com
+Cc: 
+Date: Thu, 21 Mar 2013 00:23:20 +0100
+Message-id: 1363821803-3380-9-git-send-email-lersek@redhat.com
+Subject: [PATCH 08/11] extract/unify the constant 0xfee00000 as
+ APIC_DEFAULT_ADDRESS
+
+A common dependency of the constant's current users:
+- hw/apic_common.c
+- hw/i386/kvmvapic.c
+- target-i386/cpu.c
+is "target-i386/cpu.h".
+
+Signed-off-by: Laszlo Ersek <lersek@redhat.com>
+---
+ target-i386/cpu.h  |    2 ++
+ hw/apic_common.c   |    2 +-
+ hw/i386/kvmvapic.c |    2 --
+ target-i386/cpu.c  |    4 +---
+ 4 files changed, 4 insertions(+), 6 deletions(-)
+
+diff --git a/target-i386/cpu.h b/target-i386/cpu.h
+index 5284ebc..069a2e2 100644
+--- a/target-i386/cpu.h
++++ b/target-i386/cpu.h
+@@ -1267,4 +1267,6 @@ const char *get_register_name_32(unsigned int reg);
+ uint32_t x86_cpu_apic_id_from_index(unsigned int cpu_index);
+ void enable_compat_apic_id_mode(void);
+ 
++#define APIC_DEFAULT_ADDRESS 0xfee00000
++
+ #endif /* CPU_I386_H */
+diff --git a/hw/apic_common.c b/hw/apic_common.c
+index d0c2616..3798509 100644
+--- a/hw/apic_common.c
++++ b/hw/apic_common.c
+@@ -218,7 +218,7 @@ static void apic_reset_common(DeviceState *d)
+     bool bsp;
+ 
+     bsp = cpu_is_bsp(s->cpu);
+-    s->apicbase = 0xfee00000 |
++    s->apicbase = APIC_DEFAULT_ADDRESS |
+         (bsp ? MSR_IA32_APICBASE_BSP : 0) | MSR_IA32_APICBASE_ENABLE;
+ 
+     s->vapic_paddr = 0;
+diff --git a/hw/i386/kvmvapic.c b/hw/i386/kvmvapic.c
+index c151c95..cc95e5c 100644
+--- a/hw/i386/kvmvapic.c
++++ b/hw/i386/kvmvapic.c
+@@ -13,8 +13,6 @@
+ #include "sysemu/kvm.h"
+ #include "hw/apic_internal.h"
+ 
+-#define APIC_DEFAULT_ADDRESS    0xfee00000
+-
+ #define VAPIC_IO_PORT           0x7e
+ 
+ #define VAPIC_CPU_SHIFT         7
+diff --git a/target-i386/cpu.c b/target-i386/cpu.c
+index a0640db..764eb65 100644
+--- a/target-i386/cpu.c
++++ b/target-i386/cpu.c
+@@ -2048,8 +2048,6 @@ static void mce_init(X86CPU *cpu)
+     }
+ }
+ 
+-#define MSI_ADDR_BASE 0xfee00000
+-
+ #ifndef CONFIG_USER_ONLY
+ static void x86_cpu_apic_init(X86CPU *cpu, Error **errp)
+ {
+@@ -2089,7 +2087,7 @@ static void x86_cpu_apic_init(X86CPU *cpu, Error **errp)
+            on the global memory bus. */
+         /* XXX: what if the base changes? */
+         sysbus_mmio_map_overlap(SYS_BUS_DEVICE(env->apic_state), 0,
+-                                MSI_ADDR_BASE, 0x1000);
++                                APIC_DEFAULT_ADDRESS, 0x1000);
+         apic_mapped = 1;
+     }
+ }
+-- 
+1.7.1
+
+

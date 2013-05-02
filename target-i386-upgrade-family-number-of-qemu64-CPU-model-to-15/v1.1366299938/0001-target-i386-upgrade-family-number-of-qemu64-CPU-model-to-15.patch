@@ -1,0 +1,49 @@
+From patches Mon Sep 17 00:00:00 2001
+From: "Ren, Yongjie" <yongjie.ren@intel.com>
+To: Marcelo Tosatti <mtosatti@redhat.com>, Gleb Natapov <gleb@redhat.com>, "Ren,
+ Yongjie" <yongjie.ren@intel.com>
+Cc: ehabkost@redhat.com, "qemu-devel@nongnu.org" <qemu-devel@nongnu.org>,
+ Igor Mammedov <imammedo@redhat.com>, Gleb Natapov <gleb@redhat.com>,
+ "ehabkost@redhat.com" <ehabkost@redhat.com>,
+ Marcelo Tosatti <mtosatti@redhat.com>,
+ "kvm@vger.kernel.org" <kvm@vger.kernel.org>
+Date: Thu, 18 Apr 2013 10:45:38 +0000
+Message-id: 1B4B44D9196EFF41AE41FDA404FC0A10C96B9B@SHSMSX101.ccr.corp.intel.com
+Subject: [PATCH 1/1] target-i386: upgrade family number of qemu64 CPU model to
+ 15
+
+qemu64 is the default CPU model for QEMU/KVM on x86-64, but its family number 
+definition is not accurate. The vendor of 'qemu64' is defined as 'AMD'. For AMD 
+processors, AMD K8 (i.e. Family 15) firstly introduced SSE3 instruction set. 
+'qemu64' already has 'CPUID_EXT_SSE3' in its ext_features, but its family 
+number is only 6 which is not equal to or greater than 15.
+So, upgrade the CPU family number of qemu64 model to 15.
+After this upgrade, 32bit Windows 8 can boot up with qemu64 CPU model.
+This upgrade can be also a fix to the below bug about 32bit Windows 8 booting.
+https://bugs.launchpad.net/qemu/+bug/1007269
+
+Signed-off-by: Yongjie Ren <yongjie.ren@intel.com>
+---
+ target-i386/cpu.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+diff --git a/target-i386/cpu.c b/target-i386/cpu.c
+index e2302d8..3f8e6c3 100644
+--- a/target-i386/cpu.c
++++ b/target-i386/cpu.c
+@@ -420,7 +420,7 @@ static x86_def_t builtin_x86_defs[] = {
+         .name = "qemu64",
+         .level = 4,
+         .vendor = CPUID_VENDOR_AMD,
+-        .family = 6,
++        .family = 15,
+         .model = 2,
+         .stepping = 3,
+         .features = PPRO_FEATURES |
+--
+1.7.1
+
+--
+To unsubscribe from this list: send the line "unsubscribe kvm" in
+the body of a message to majordomo@vger.kernel.org
+More majordomo info at  http://vger.kernel.org/majordomo-info.html

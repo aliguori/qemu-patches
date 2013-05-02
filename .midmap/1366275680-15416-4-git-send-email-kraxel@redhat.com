@@ -1,0 +1,1 @@
+../console-qom-ify--extent-screendump-monitor-command/v1.1366300874/0003-console-add-device-link-to-QemuConsoles.patch

@@ -1,0 +1,48 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Felipe Franciosi <felipe.franciosi@citrix.com>
+To: qemu-devel@nongnu.org, Felipe Franciosi <felipe.franciosi@citrix.com>
+Cc: Felipe Franciosi <felipe.franciosi@citrix.com>,
+ Stefano Stabellini <Stefano.Stabellini@eu.citrix.com>,
+ "xen-devel@lists.xen.org" <xen-devel@lists.xen.org>,
+ "qemu-devel@nongnu.org" <qemu-devel@nongnu.org>,
+ Felipe Franciosi <felipe@paradoxo.org>, xen-devel@lists.xen.org,
+ Stefano Stabellini <stefano.stabellini@eu.citrix.com>
+Date: Wed, 3 Apr 2013 15:01:12 +0100
+Message-id: 1364997672-29579-3-git-send-email-felipe.franciosi@citrix.com
+Subject: [PATCH 2/2] Allow xen guests to plug disks of 1 TiB or more
+
+The current xen backend driver implementation uses int64_t variables
+to store the size of the corresponding backend disk/file. It also uses
+an int64_t variable to store the block size of that image. When writing
+the number of sectors (file_size/block_size) to xenstore, however, it
+passes these values as 32 bit signed integers. This will cause an
+overflow for any disk of 1 TiB or more.
+
+This patch changes the xen backend driver to use a 64 bit integer write
+xenstore function.
+
+Signed-off-by: Felipe Franciosi <felipe@paradoxo.org>
+Acked-by: Stefano Stabellini <stefano.stabellini@eu.citrix.com>
+---
+ hw/xen_disk.c |    4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/hw/xen_disk.c b/hw/xen_disk.c
+index 83329e2..6255075 100644
+--- a/hw/xen_disk.c
++++ b/hw/xen_disk.c
+@@ -797,8 +797,8 @@ static int blk_init(struct XenDevice *xendev)
+     xenstore_write_be_int(&blkdev->xendev, "feature-persistent", 1);
+     xenstore_write_be_int(&blkdev->xendev, "info",            info);
+     xenstore_write_be_int(&blkdev->xendev, "sector-size",     blkdev->file_blk);
+-    xenstore_write_be_int(&blkdev->xendev, "sectors",
+-                          blkdev->file_size / blkdev->file_blk);
++    xenstore_write_be_int64(&blkdev->xendev, "sectors",
++                            blkdev->file_size / blkdev->file_blk);
+     return 0;
+ 
+ out_error:
+-- 
+1.7.10.4
+
+

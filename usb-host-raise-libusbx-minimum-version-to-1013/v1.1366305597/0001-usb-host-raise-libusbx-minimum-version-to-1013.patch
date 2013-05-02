@@ -1,0 +1,59 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Gerd Hoffmann <kraxel@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Gerd Hoffmann <kraxel@redhat.com>
+Date: Thu, 18 Apr 2013 12:19:57 +0200
+Message-id: 1366280398-12141-1-git-send-email-kraxel@redhat.com
+Subject: [PATCH 1/1] usb-host: raise libusbx minimum version to 1.0.13
+
+Allows to remove one FIXME.  Makes LIBUSB_LOG_LEVEL_WARNING build errors
+go away.  And starting with that version libusb has a LIBUSBX_API_VERSION
+define which allows to easily #ifdef version dependencies should that
+need arrive in the future.
+
+Signed-off-by: Gerd Hoffmann <kraxel@redhat.com>
+---
+ configure            |    2 +-
+ hw/usb/host-libusb.c |    5 -----
+ 2 files changed, 1 insertion(+), 6 deletions(-)
+
+diff --git a/configure b/configure
+index de93345..ace9948 100755
+--- a/configure
++++ b/configure
+@@ -3014,7 +3014,7 @@ fi
+ 
+ # check for libusb
+ if test "$libusb" != "no" ; then
+-    if $pkg_config libusb-1.0 >/dev/null 2>&1 ; then
++    if $pkg_config --atleast-version=1.0.13 libusb-1.0 >/dev/null 2>&1 ; then
+         libusb="yes"
+ 	usb="libusb"
+         libusb_cflags=$($pkg_config --cflags libusb-1.0 2>/dev/null)
+diff --git a/hw/usb/host-libusb.c b/hw/usb/host-libusb.c
+index 29f35b3..d1186b8 100644
+--- a/hw/usb/host-libusb.c
++++ b/hw/usb/host-libusb.c
+@@ -236,8 +236,6 @@ static int usb_host_init(void)
+ 
+ static int usb_host_get_port(libusb_device *dev, char *port, size_t len)
+ {
+-#if defined(LIBUSBX_API_VERSION) && (LIBUSBX_API_VERSION >= 0x010000ff)
+-    /* have libusb_get_port_path() */
+     uint8_t path[7];
+     size_t off;
+     int rc, i;
+@@ -251,9 +249,6 @@ static int usb_host_get_port(libusb_device *dev, char *port, size_t len)
+         off += snprintf(port+off, len-off, ".%d", path[i]);
+     }
+     return off;
+-#else
+-    return snprintf(port, len, "FIXME");
+-#endif
+ }
+ 
+ static void usb_host_libusb_error(const char *func, int rc)
+-- 
+1.7.9.7
+
+

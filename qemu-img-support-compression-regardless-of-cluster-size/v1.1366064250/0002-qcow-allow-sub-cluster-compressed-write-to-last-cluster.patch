@@ -1,0 +1,54 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Stefan Hajnoczi <stefanha@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Ilkka Tengvall <ilkka.tengvall@cybercom.com>, Fam Zheng <famz@redhat.com>,
+ Stefan Hajnoczi <stefanha@redhat.com>, Kevin Wolf <kwolf@redhat.com>
+Date: Mon, 15 Apr 2013 17:17:32 +0200
+Message-id: 1366039054-32536-3-git-send-email-stefanha@redhat.com
+Subject: [PATCH 2/4] qcow: allow sub-cluster compressed write to last cluster
+
+Compression in qcow requires image length to be a multiple of the
+cluster size.  Lift this requirement by zero-padding the final cluster
+when necessary.  The virtual disk size is still not cluster-aligned, so
+the guest cannot access the zero sectors.
+
+Note that this is almost identical to the qcow2 version of this code.
+qcow2's compression code is drawn from qcow.
+
+Signed-off-by: Stefan Hajnoczi <stefanha@redhat.com>
+---
+ block/qcow.c | 17 +++++++++++++++--
+ 1 file changed, 15 insertions(+), 2 deletions(-)
+
+diff --git a/block/qcow.c b/block/qcow.c
+index 3278e55..e2a64c7 100644
+--- a/block/qcow.c
++++ b/block/qcow.c
+@@ -787,8 +787,21 @@ static int qcow_write_compressed(BlockDriverState *bs, int64_t sector_num,
+     uint8_t *out_buf;
+     uint64_t cluster_offset;
+ 
+-    if (nb_sectors != s->cluster_sectors)
+-        return -EINVAL;
++    if (nb_sectors != s->cluster_sectors) {
++        ret = -EINVAL;
++
++        /* Zero-pad last write if image size is not cluster aligned */
++        if (sector_num + nb_sectors == bs->total_sectors &&
++            nb_sectors < s->cluster_sectors) {
++            uint8_t *pad_buf = qemu_blockalign(bs, s->cluster_size);
++            memset(pad_buf, 0, s->cluster_size);
++            memcpy(pad_buf, buf, nb_sectors * BDRV_SECTOR_SIZE);
++            ret = qcow_write_compressed(bs, sector_num,
++                                        pad_buf, s->cluster_sectors);
++            qemu_vfree(pad_buf);
++        }
++        return ret;
++    }
+ 
+     out_buf = g_malloc(s->cluster_size + (s->cluster_size / 1000) + 128);
+ 
+-- 
+1.8.1.4
+
+

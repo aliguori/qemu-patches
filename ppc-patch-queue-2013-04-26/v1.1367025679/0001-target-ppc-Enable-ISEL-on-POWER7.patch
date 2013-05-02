@@ -1,0 +1,38 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Alexander Graf <agraf@suse.de>
+To: qemu-ppc@nongnu.org
+Cc: Blue Swirl <blauwirbel@gmail.com>, Aurelien Jarno <aurelien@aurel32.net>,
+ qemu-devel@nongnu.org
+Date: Fri, 26 Apr 2013 20:21:20 +0200
+Message-id: 1367000509-8833-2-git-send-email-agraf@suse.de
+Subject: [PATCH 01/30] target-ppc: Enable ISEL on POWER7
+
+From: Aurelien Jarno <aurelien@aurel32.net>
+
+ISEL is a Power ISA 2.06 instruction and thus is available on POWER7.
+Given this is trapped and emulated by the Linux kernel, I guess it went
+unnoticed.
+
+Signed-off-by: Aurelien Jarno <aurelien@aurel32.net>
+Signed-off-by: Alexander Graf <agraf@suse.de>
+---
+ target-ppc/translate_init.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+diff --git a/target-ppc/translate_init.c b/target-ppc/translate_init.c
+index 781170f..aea7d27 100644
+--- a/target-ppc/translate_init.c
++++ b/target-ppc/translate_init.c
+@@ -7004,7 +7004,7 @@ POWERPC_FAMILY(POWER7)(ObjectClass *oc, void *data)
+     dc->desc = "POWER7";
+     pcc->init_proc = init_proc_POWER7;
+     pcc->check_pow = check_pow_nocheck;
+-    pcc->insns_flags = PPC_INSNS_BASE | PPC_STRING | PPC_MFTB |
++    pcc->insns_flags = PPC_INSNS_BASE | PPC_ISEL | PPC_STRING | PPC_MFTB |
+                        PPC_FLOAT | PPC_FLOAT_FSEL | PPC_FLOAT_FRES |
+                        PPC_FLOAT_FSQRT | PPC_FLOAT_FRSQRTE |
+                        PPC_FLOAT_STFIWX |
+-- 
+1.6.0.2
+
+

@@ -1,0 +1,31 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Stefan Hajnoczi <stefanha@redhat.com>
+To: Stefan Hajnoczi <stefanha@redhat.com>, qemu-devel@nongnu.org
+Cc: Nick Thomas <nick@bytemark.co.uk>, Paolo Bonzini <pbonzini@redhat.com>,
+ Stefan Hajnoczi <stefanha@redhat.com>, Kevin Wolf <kwolf@redhat.com>,
+ qemu-devel@nongnu.org
+Date: Mon, 15 Apr 2013 16:14:45 +0200
+Message-id: 1366035288-15840-1-git-send-email-stefanha@redhat.com
+Subject: [PATCH 0/3] nbd: use TCP_NODELAY
+
+The nbd block driver should use TCP_NODELAY.  Nick Thomas <nick@bytemark.co.uk>
+measured a 40 millisecond latency added by the Naggle algorithm.
+
+This series turns on TCP_NODELAY.  This requires that we use TCP_CORK to
+efficiently send NBD requests that contain a payload after the header.
+
+Finally, fix a bug where we forget to unlock a mutex when sending fails.
+
+Stefan Hajnoczi (3):
+  nbd: unlock mutex in nbd_co_send_request() error path
+  nbd: use TCP_CORK in nbd_co_send_request()
+  nbd: set TCP_NODELAY
+
+ block/nbd.c | 25 +++++++++++++++++++------
+ 1 file changed, 19 insertions(+), 6 deletions(-)
+
+Tested-by: Nick Thomas <nick@bytemark.co.uk>
+-- 
+1.8.1.4
+
+

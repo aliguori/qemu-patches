@@ -1,0 +1,59 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Marcelo Tosatti <mtosatti@redhat.com>
+To: Anthony Liguori <aliguori@us.ibm.com>
+Cc: Jan Kiszka <jan.kiszka@siemens.com>, Gleb Natapov <gleb@redhat.com>,
+ qemu-devel@nongnu.org, kvm@vger.kernel.org
+Date: Wed, 17 Apr 2013 23:48:23 -0300
+Message-id: ea4ee28399f8ffee4eed2d724c28d2d9879b22fa.1366253306.git.mtosatti@redhat.com
+Subject: [PATCH 2/5] vmxcap: Augment reported information
+
+From: Jan Kiszka <jan.kiszka@siemens.com>
+
+Parse the Basic VMX Information MSR and add the bit for the new posted
+interrupts.
+
+Signed-off-by: Jan Kiszka <jan.kiszka@siemens.com>
+Signed-off-by: Gleb Natapov <gleb@redhat.com>
+---
+ scripts/kvm/vmxcap | 14 ++++++++++++++
+ 1 file changed, 14 insertions(+)
+
+diff --git a/scripts/kvm/vmxcap b/scripts/kvm/vmxcap
+index 6363e73..a1a44a0 100755
+--- a/scripts/kvm/vmxcap
++++ b/scripts/kvm/vmxcap
+@@ -96,6 +96,19 @@ class Misc(object):
+             print '  %-40s %s' % (self.bits[bits], fmt(v))
+ 
+ controls = [
++    Misc(
++        name = 'Basic VMX Information',
++        bits = {
++            (0, 31): 'Revision',
++            (32,44): 'VMCS size',
++            48: 'VMCS restricted to 32 bit addresses',
++            49: 'Dual-monitor support',
++            (50, 53): 'VMCS memory type',
++            54: 'INS/OUTS instruction information',
++            55: 'IA32_VMX_TRUE_*_CTLS support',
++            },
++        msr = MSR_IA32_VMX_BASIC,
++        ),
+     Control(
+         name = 'pin-based controls',
+         bits = {
+@@ -103,6 +116,7 @@ controls = [
+             3: 'NMI exiting',
+             5: 'Virtual NMIs',
+             6: 'Activate VMX-preemption timer',
++            7: 'Process posted interrupts',
+             },
+         cap_msr = MSR_IA32_VMX_PINBASED_CTLS,
+         true_cap_msr = MSR_IA32_VMX_TRUE_PINBASED_CTLS,
+-- 
+1.8.1.4
+
+--
+To unsubscribe from this list: send the line "unsubscribe kvm" in
+the body of a message to majordomo@vger.kernel.org
+More majordomo info at  http://vger.kernel.org/majordomo-info.html

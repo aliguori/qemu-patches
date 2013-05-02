@@ -1,0 +1,1 @@
+../qom-do-nothing-on-unparent-of-object-without-parent/v1.1364935800/0001-qom-do-nothing-on-unparent-of-object-without-parent.patch

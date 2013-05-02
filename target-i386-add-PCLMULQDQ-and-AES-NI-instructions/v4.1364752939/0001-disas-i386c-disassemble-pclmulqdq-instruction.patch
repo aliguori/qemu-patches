@@ -1,0 +1,62 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Aurelien Jarno <aurelien@aurel32.net>
+To: qemu-devel@nongnu.org
+Cc: Aurelien Jarno <aurelien@aurel32.net>
+Date: Sun, 31 Mar 2013 13:02:20 +0200
+Message-id: 1364727746-2686-2-git-send-email-aurelien@aurel32.net
+Subject: [PATCH 1/7] disas/i386.c: disassemble pclmulqdq instruction
+
+Signed-off-by: Aurelien Jarno <aurelien@aurel32.net>
+---
+ disas/i386.c |   13 +++++++++++--
+ 1 file changed, 11 insertions(+), 2 deletions(-)
+
+diff --git a/disas/i386.c b/disas/i386.c
+index 73cc06f..c52efbc 100644
+--- a/disas/i386.c
++++ b/disas/i386.c
+@@ -664,6 +664,7 @@ fetch_data(struct disassemble_info *info, bfd_byte *addr)
+ #define PREGRP95  NULL, { { NULL, USE_PREFIX_USER_TABLE }, { NULL, 95 } }
+ #define PREGRP96  NULL, { { NULL, USE_PREFIX_USER_TABLE }, { NULL, 96 } }
+ #define PREGRP97  NULL, { { NULL, USE_PREFIX_USER_TABLE }, { NULL, 97 } }
++#define PREGRP98  NULL, { { NULL, USE_PREFIX_USER_TABLE }, { NULL, 98 } }
+ 
+ 
+ #define X86_64_0  NULL, { { NULL, X86_64_SPECIAL }, { NULL, 0 } }
+@@ -1503,7 +1504,7 @@ static const unsigned char threebyte_0x3a_uses_DATA_prefix[256] = {
+   /* 10 */ 0,0,0,0,1,1,1,1,0,0,0,0,0,0,0,0, /* 1f */
+   /* 20 */ 1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0, /* 2f */
+   /* 30 */ 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, /* 3f */
+-  /* 40 */ 1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0, /* 4f */
++  /* 40 */ 1,1,1,0,1,0,0,0,0,0,0,0,0,0,0,0, /* 4f */
+   /* 50 */ 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, /* 5f */
+   /* 60 */ 1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0, /* 6f */
+   /* 70 */ 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, /* 7f */
+@@ -2710,6 +2711,14 @@ static const struct dis386 prefix_user_table[][4] = {
+     { "punpckldq",{ MX, EMq } },
+     { "(bad)",	{ XX } },
+   },
++
++  /* PREGRP98 */
++  {
++    { "(bad)",	{ XX } },
++    { "(bad)",	{ XX } },
++    { "pclmulqdq", { XM, EXx, Ib } },
++    { "(bad)",	{ XX } },
++  },
+ };
+ 
+ static const struct dis386 x86_64_table[][2] = {
+@@ -3102,7 +3111,7 @@ static const struct dis386 three_byte_table[][256] = {
+     { PREGRP84 },
+     { PREGRP85 },
+     { "(bad)", { XX } },
+-    { "(bad)", { XX } },
++    { PREGRP98 },
+     { "(bad)", { XX } },
+     { "(bad)", { XX } },
+     { "(bad)", { XX } },
+-- 
+1.7.10.4
+
+

@@ -1,0 +1,1 @@
+../target-i386-remove-cpu-reset-callback/v1.1365627748/0002-target-i386-fix-2-malformed-indents.patch

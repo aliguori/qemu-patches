@@ -1,0 +1,50 @@
+From patches Mon Sep 17 00:00:00 2001
+From: peter.crosthwaite@xilinx.com
+To: qemu-devel@nongnu.org
+Cc: peter.maydell@linaro.org
+Date: Fri, 19 Apr 2013 12:10:50 +1000
+Message-id: 40d0335e02104cd360a106dc843b668ba6dcad28.1366335998.git.peter.crosthwaite@xilinx.com
+Subject: [PATCH 12/15] xilinx_spips: Debug msgs for Snoop state
+
+From: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+
+This is worth keeping track of when debugging the device model.
+
+Signed-off-by: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+---
+
+ hw/ssi/xilinx_spips.c |    3 +++
+ 1 files changed, 3 insertions(+), 0 deletions(-)
+
+diff --git a/hw/ssi/xilinx_spips.c b/hw/ssi/xilinx_spips.c
+index 43e4df1..fec22ef 100644
+--- a/hw/ssi/xilinx_spips.c
++++ b/hw/ssi/xilinx_spips.c
+@@ -223,6 +223,7 @@ static void xilinx_spips_update_cs_lines(XilinxSPIPS *s)
+     }
+     if (!found) {
+         s->snoop_state = SNOOP_CHECKING;
++        DB_PRINT("moving to snoop check state\n");
+     }
+ }
+ 
+@@ -346,6 +347,7 @@ static void xilinx_spips_flush_txfifo(XilinxSPIPS *s)
+            fifo8_push(&s->rx_fifo, (uint8_t)tx_rx[0]);
+         }
+ 
++        DB_PRINT("initial snoop state: %x\n", (unsigned)s->snoop_state);
+         switch (s->snoop_state) {
+         case (SNOOP_CHECKING):
+             switch (tx) { /* new instruction code */
+@@ -374,6 +376,7 @@ static void xilinx_spips_flush_txfifo(XilinxSPIPS *s)
+         default:
+             s->snoop_state--;
+         }
++        DB_PRINT("final snoop state: %x\n", (unsigned)s->snoop_state);
+     }
+ }
+ 
+-- 
+1.7.0.4
+
+

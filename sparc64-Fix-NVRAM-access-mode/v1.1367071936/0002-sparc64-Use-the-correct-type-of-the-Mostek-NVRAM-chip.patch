@@ -1,0 +1,39 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Artyom Tarasenko <atar4qemu@gmail.com>
+To: qemu-devel@nongnu.org
+Cc: blauwirbel@gmail.com, Artyom Tarasenko <atar4qemu@gmail.com>
+Date: Sat, 27 Apr 2013 09:12:18 +0200
+Message-id: 863d361cf3bdf5540ef572938caac3c780328f68.1367046225.git.atar4qemu@gmail.com
+Subject: [PATCH 2/2] sparc64: Use the correct type of the Mostek NVRAM chip
+
+The sun4u machines use an ISA Mostek chip which has MMIO, uses 1968
+as a base year and no IRQ line. So, use the m48t08.
+
+Please note that this patch has its OpenBIOS counterpart.
+Together they fix recognising NVRAM in the sun4u machine.
+
+Signed-off-by: Artyom Tarasenko <atar4qemu@gmail.com>
+---
+ hw/sparc64/sun4u.c |    5 ++++-
+ 1 files changed, 4 insertions(+), 1 deletions(-)
+
+diff --git a/hw/sparc64/sun4u.c b/hw/sparc64/sun4u.c
+index 5c2bbd4..bfb19d4 100644
+--- a/hw/sparc64/sun4u.c
++++ b/hw/sparc64/sun4u.c
+@@ -866,7 +866,10 @@ static void sun4uv_init(MemoryRegion *address_space_mem,
+         fd[i] = drive_get(IF_FLOPPY, 0, i);
+     }
+     fdctrl_init_isa(isa_bus, fd);
+-    nvram = m48t59_init_isa(isa_bus, 0x0074, NVRAM_SIZE, 59);
++
++    /* XXX Ultra-5 has it at the beginning of the EBUS range, but we have
++     * serial port and other isa devices there */
++    nvram = m48t59_init_isa(isa_bus, 0x2000, NVRAM_SIZE, 8);
+ 
+     initrd_size = 0;
+     initrd_addr = 0;
+-- 
+1.7.1
+
+

@@ -1,0 +1,49 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Eduardo Habkost <ehabkost@redhat.com>
+To: qemu-devel@nongnu.org, =?UTF-8?q?Andreas=20F=C3=A4rber?= <afaerber@suse.de>
+Cc: libvir-list@redhat.com, Igor Mammedov <imammedo@redhat.com>,
+ Jiri Denemark <jdenemar@redhat.com>
+Date: Mon, 22 Apr 2013 16:00:16 -0300
+Message-id: 1366657220-776-6-git-send-email-ehabkost@redhat.com
+Subject: [PATCH 5/9] target-i386: Add ECX information to FeatureWordInfo
+
+FEAT_7_0_EBX uses ECX as input, so we have to take that into account
+when reporting feature word values.
+
+Signed-off-by: Eduardo Habkost <ehabkost@redhat.com>
+---
+ target-i386/cpu.c | 10 +++++++---
+ 1 file changed, 7 insertions(+), 3 deletions(-)
+
+diff --git a/target-i386/cpu.c b/target-i386/cpu.c
+index 110ef98..314931e 100644
+--- a/target-i386/cpu.c
++++ b/target-i386/cpu.c
+@@ -151,8 +151,10 @@ static const char *cpuid_7_0_ebx_feature_name[] = {
+ 
+ typedef struct FeatureWordInfo {
+     const char **feat_names;
+-    uint32_t cpuid_eax; /* Input EAX for CPUID */
+-    int cpuid_reg;      /* R_* register constant */
++    uint32_t cpuid_eax;   /* Input EAX for CPUID */
++    bool cpuid_needs_ecx; /* CPUID instruction uses ECX as input */
++    uint32_t cpuid_ecx;   /* Input ECX value for CPUID */
++    int cpuid_reg;        /* output register (R_* constant) */
+ } FeatureWordInfo;
+ 
+ static FeatureWordInfo feature_word_info[FEATURE_WORDS] = {
+@@ -186,7 +188,9 @@ static FeatureWordInfo feature_word_info[FEATURE_WORDS] = {
+     },
+     [FEAT_7_0_EBX] = {
+         .feat_names = cpuid_7_0_ebx_feature_name,
+-        .cpuid_eax = 7, .cpuid_reg = R_EBX,
++        .cpuid_eax = 7,
++        .cpuid_needs_ecx = true, .cpuid_ecx = 0,
++        .cpuid_reg = R_EBX,
+     },
+ };
+ 
+-- 
+1.8.1.4
+
+

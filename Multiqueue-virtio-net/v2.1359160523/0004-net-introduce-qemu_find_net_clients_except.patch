@@ -1,0 +1,74 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Jason Wang <jasowang@redhat.com>
+To: aliguori@us.ibm.com, shajnocz@redhat.com, qemu-devel@nongnu.org,
+ mst@redhat.com
+Cc: krkumar2@in.ibm.com, kvm@vger.kernel.org, mprivozn@redhat.com,
+ rusty@rustcorp.com.au, Jason Wang <jasowang@redhat.com>,
+ gaowanlong@cn.fujitsu.com, jwhan@filewood.snu.ac.kr, shiyer@redhat.com
+Date: Fri, 25 Jan 2013 18:35:27 +0800
+Message-id: 1359110143-42984-5-git-send-email-jasowang@redhat.com
+Subject: [PATCH 04/20] net: introduce qemu_find_net_clients_except()
+
+In multiqueue, all NetClientState that belongs to the same netdev or nic has the
+same id. So this patches introduces an helper qemu_find_net_clients_except()
+which finds all NetClientState with the same id. This will be used by multiqueue
+networking.
+
+Signed-off-by: Jason Wang <jasowang@redhat.com>
+---
+ include/net/net.h |    2 ++
+ net/net.c         |   21 +++++++++++++++++++++
+ 2 files changed, 23 insertions(+), 0 deletions(-)
+
+diff --git a/include/net/net.h b/include/net/net.h
+index f0d1aa2..995df5c 100644
+--- a/include/net/net.h
++++ b/include/net/net.h
+@@ -68,6 +68,8 @@ typedef struct NICState {
+ } NICState;
+ 
+ NetClientState *qemu_find_netdev(const char *id);
++int qemu_find_net_clients_except(const char *id, NetClientState **ncs,
++                                 NetClientOptionsKind type, int max);
+ NetClientState *qemu_new_net_client(NetClientInfo *info,
+                                     NetClientState *peer,
+                                     const char *model,
+diff --git a/net/net.c b/net/net.c
+index 8999f8d..6457fc0 100644
+--- a/net/net.c
++++ b/net/net.c
+@@ -508,6 +508,27 @@ NetClientState *qemu_find_netdev(const char *id)
+     return NULL;
+ }
+ 
++int qemu_find_net_clients_except(const char *id, NetClientState **ncs,
++                                 NetClientOptionsKind type, int max)
++{
++    NetClientState *nc;
++    int ret = 0;
++
++    QTAILQ_FOREACH(nc, &net_clients, next) {
++        if (nc->info->type == type) {
++            continue;
++        }
++        if (!strcmp(nc->name, id)) {
++            if (ret < max) {
++                ncs[ret] = nc;
++            }
++            ret++;
++        }
++    }
++
++    return ret;
++}
++
+ static int nic_get_free_idx(void)
+ {
+     int index;
+-- 
+1.7.1
+
+--
+To unsubscribe from this list: send the line "unsubscribe kvm" in
+the body of a message to majordomo@vger.kernel.org
+More majordomo info at  http://vger.kernel.org/majordomo-info.html

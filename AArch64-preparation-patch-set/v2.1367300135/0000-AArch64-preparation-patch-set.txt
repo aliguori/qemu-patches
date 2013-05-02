@@ -1,0 +1,76 @@
+From patches Mon Sep 17 00:00:00 2001
+From: John Rigby <john.rigby@linaro.org>
+To: Peter Maydell <peter.maydell@linaro.org>,
+ John Rigby <john.rigby@linaro.org>, qemu-devel <qemu-devel@nongnu.org>
+Cc: Riku Voipio <riku.voipio@iki.org>, Peter Maydell <peter.maydell@linaro.org>,
+ John Rigby <john.rigby@linaro.org>, Alexander Graf <agraf@suse.de>,
+ qemu-devel <qemu-devel@nongnu.org>
+Date: Tue, 30 Apr 2013 00:35:35 -0600
+Message-id: 1367303735-9489-1-git-send-email-john.rigby@linaro.org
+Subject: [PATCH 00/12] AArch64 preparation patch set
+
+Resubmission of patches submitted by Alexander Graf in March.
+Addressing feedback sent.
+
+Changes in v2:
+All: Use aarch64 instead of arm64 (in all case combinations).
+Patch 2/12 ARM: Prepare translation for AArch64 code
+- Remove uses of is_a64 that are not needed because arch choice happens at
+a higher level.
+- aarch64 register arrays now only have 31 entries with sp and xzr treated as
+special cases.
+Patch 3/12 ARM: Add AArch64 translation stub
+- Remove uses of is_a64 that are not needed because arch choice happens at
+a higher level.
+- aarch64 register arrays now only have 31 entries with sp and xzr treated as
+special cases.
+Patch 7/12 linux-user: AArch64 requires at least 3.8.0
+- Moved to 12/12 to appear after aarch64 is added to configure
+
+Alexander Graf (11):
+  ARM: Export cpu_env
+  ARM: Prepare translation for AArch64 code
+  ARM: Add AArch64 translation stub
+  AArch64: Add gdb stub
+  linux-user: Don't treat aarch64 cpu names specially
+  linux-user: AArch64 requires at least 3.8.0
+  linux-user: Add syscall handling for AArch64
+  linux-user: Fix up AArch64 syscall handlers
+  linux-user: Add AArch64 support
+  ARM: Add aarch64 target to configure
+  linux-user: AArch64 requires at least 3.8.0
+
+Andreas Schwab (1):
+  linux-user: Add signal handling for AArch64
+
+ configure                              |    9 +
+ default-configs/aarch64-linux-user.mak |    3 +
+ gdb-xml/aarch64-core.xml               |   46 +++++
+ gdb-xml/aarch64-fpu.xml                |   86 +++++++++
+ gdbstub.c                              |   53 ++++++
+ include/elf.h                          |    2 +
+ linux-user/Makefile.objs               |    1 +
+ linux-user/arm/syscall.h               |   46 ++++-
+ linux-user/arm/syscall_nr.h            |  326 ++++++++++++++++++++++++++++++++
+ linux-user/arm/target_signal.h         |    4 +
+ linux-user/cpu-uname.c                 |    3 +-
+ linux-user/elfload.c                   |   15 +-
+ linux-user/main.c                      |   24 +++
+ linux-user/signal.c                    |  263 ++++++++++++++++++++++++++
+ linux-user/syscall.c                   |   10 +-
+ linux-user/syscall_defs.h              |   28 ++-
+ target-arm/Makefile.objs               |    1 +
+ target-arm/cpu.h                       |  158 +++++++++++-----
+ target-arm/translate-a64.c             |  139 ++++++++++++++
+ target-arm/translate.c                 |   25 ++-
+ target-arm/translate.h                 |    8 +
+ 21 files changed, 1186 insertions(+), 64 deletions(-)
+ create mode 100644 default-configs/aarch64-linux-user.mak
+ create mode 100644 gdb-xml/aarch64-core.xml
+ create mode 100644 gdb-xml/aarch64-fpu.xml
+ create mode 100644 target-arm/translate-a64.c
+
+-- 
+1.7.9.5
+
+

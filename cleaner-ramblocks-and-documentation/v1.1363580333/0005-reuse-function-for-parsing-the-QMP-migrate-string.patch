@@ -1,0 +1,47 @@
+From patches Mon Sep 17 00:00:00 2001
+From: mrhines@linux.vnet.ibm.com
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, mst@redhat.com,
+ Michael R Hines <mrhines@us.ibm.com>, Bulent Abali <abali@us.ibm.com>,
+ owasserm@redhat.com, pbonzini@redhat.com, Gokul B Kandiraju <gokul@us.ibm.com>
+Date: Sun, 17 Mar 2013 23:18:58 -0400
+Message-id: 1363576743-6146-6-git-send-email-mrhines@linux.vnet.ibm.com
+Subject: [PATCH 05/10] reuse function for parsing the QMP 'migrate' string
+
+From: "Michael R. Hines" <mrhines@us.ibm.com>
+
+
+Signed-off-by: Michael R. Hines <mrhines@us.ibm.com>
+---
+ include/qemu/sockets.h |    1 +
+ util/qemu-sockets.c    |    2 +-
+ 2 files changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/include/qemu/sockets.h b/include/qemu/sockets.h
+index ae5c21c..5066fca 100644
+--- a/include/qemu/sockets.h
++++ b/include/qemu/sockets.h
+@@ -48,6 +48,7 @@ typedef void NonBlockingConnectHandler(int fd, void *opaque);
+ int inet_listen_opts(QemuOpts *opts, int port_offset, Error **errp);
+ int inet_listen(const char *str, char *ostr, int olen,
+                 int socktype, int port_offset, Error **errp);
++InetSocketAddress *inet_parse(const char *str, Error **errp);
+ int inet_connect_opts(QemuOpts *opts, Error **errp,
+                       NonBlockingConnectHandler *callback, void *opaque);
+ int inet_connect(const char *str, Error **errp);
+diff --git a/util/qemu-sockets.c b/util/qemu-sockets.c
+index 83e4e08..6b60b63 100644
+--- a/util/qemu-sockets.c
++++ b/util/qemu-sockets.c
+@@ -485,7 +485,7 @@ err:
+ }
+ 
+ /* compatibility wrapper */
+-static InetSocketAddress *inet_parse(const char *str, Error **errp)
++InetSocketAddress *inet_parse(const char *str, Error **errp)
+ {
+     InetSocketAddress *addr;
+     const char *optstr, *h;
+-- 
+1.7.10.4
+

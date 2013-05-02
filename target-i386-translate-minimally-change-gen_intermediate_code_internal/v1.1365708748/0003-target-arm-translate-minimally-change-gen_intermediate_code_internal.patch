@@ -1,0 +1,48 @@
+From patches Mon Sep 17 00:00:00 2001
+From: liguang <lig.fnst@cn.fujitsu.com>
+To: qemu-devel@nongnu.org
+Cc: liguang <lig.fnst@cn.fujitsu.com>
+Date: Thu, 11 Apr 2013 14:32:30 +0800
+Message-id: 1365661963-15396-3-git-send-email-lig.fnst@cn.fujitsu.com
+Subject: [PATCH 03/16] target-arm/translate: minimally change
+ gen_intermediate_code_internal
+
+Signed-off-by: liguang <lig.fnst@cn.fujitsu.com>
+---
+ target-arm/translate.c |   12 ++++++------
+ 1 files changed, 6 insertions(+), 6 deletions(-)
+
+diff --git a/target-arm/translate.c b/target-arm/translate.c
+index 35a21be..e61f661 100644
+--- a/target-arm/translate.c
++++ b/target-arm/translate.c
+@@ -9889,9 +9889,9 @@ static inline void gen_intermediate_code_internal(CPUARMState *env,
+         if (search_pc) {
+             j = tcg_ctx.gen_opc_ptr - tcg_ctx.gen_opc_buf;
+             if (lj < j) {
+-                lj++;
+-                while (lj < j)
+-                    tcg_ctx.gen_opc_instr_start[lj++] = 0;
++                while (++lj < j) {
++                    tcg_ctx.gen_opc_instr_start[lj] = 0;
++                }
+             }
+             tcg_ctx.gen_opc_pc[lj] = dc->pc;
+             gen_opc_condexec_bits[lj] = (dc->condexec_cond << 4) | (dc->condexec_mask >> 1);
+@@ -10028,9 +10028,9 @@ done_generating:
+ #endif
+     if (search_pc) {
+         j = tcg_ctx.gen_opc_ptr - tcg_ctx.gen_opc_buf;
+-        lj++;
+-        while (lj <= j)
+-            tcg_ctx.gen_opc_instr_start[lj++] = 0;
++        while (++lj <= j) {
++            tcg_ctx.gen_opc_instr_start[lj] = 0;
++        }
+     } else {
+         tb->size = dc->pc - pc_start;
+         tb->icount = num_insns;
+-- 
+1.7.2.5
+
+

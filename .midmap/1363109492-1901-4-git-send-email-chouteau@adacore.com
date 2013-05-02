@@ -1,0 +1,1 @@
+../Add-GDB-qAttached-support/v3.1363131089/0003-New-option--gdb-opts.patch

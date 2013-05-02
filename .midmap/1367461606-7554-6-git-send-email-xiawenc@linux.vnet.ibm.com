@@ -1,0 +1,1 @@
+../block-make-qmp_transaction-extendable/v4.1367508401/0005-block-make-all-steps-in-qmp_transaction-as-callback.patch

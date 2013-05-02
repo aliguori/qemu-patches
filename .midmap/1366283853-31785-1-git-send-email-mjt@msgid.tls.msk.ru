@@ -1,0 +1,1 @@
+../allow-usage-of-older-libusb-which-didnt-define-LIBUSB_LOG_LEVEL_WARNING/v1.1366316253/0001-allow-usage-of-older-libusb-which-didnt-define-LIBUSB_LOG_LEVEL_WARNING.patch

@@ -1,0 +1,46 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Gerd Hoffmann <kraxel@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Igor Mitsyanko <i.mitsyanko@gmail.com>, Gerd Hoffmann <kraxel@redhat.com>
+Date: Tue, 16 Apr 2013 11:39:16 +0200
+Message-id: 1366105178-26744-3-git-send-email-kraxel@redhat.com
+Subject: [PATCH 02/24] hw/vmware_vga.c: fix screen resize bug introduced after
+ console revamp
+
+From: Igor Mitsyanko <i.mitsyanko@gmail.com>
+
+In vmsvga display update function, a pointer to DisplaySurface must be acquired
+after a call to vmsvga_check_size since this function might replace current
+DisplaySurface with a new one.
+
+Signed-off-by: Igor Mitsyanko <i.mitsyanko@gmail.com>
+Signed-off-by: Gerd Hoffmann <kraxel@redhat.com>
+---
+ hw/display/vmware_vga.c |    3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/hw/display/vmware_vga.c b/hw/display/vmware_vga.c
+index bcad47a..2233a8b 100644
+--- a/hw/display/vmware_vga.c
++++ b/hw/display/vmware_vga.c
+@@ -995,7 +995,7 @@ static inline void vmsvga_check_size(struct vmsvga_state_s *s)
+ static void vmsvga_update_display(void *opaque)
+ {
+     struct vmsvga_state_s *s = opaque;
+-    DisplaySurface *surface = qemu_console_surface(s->vga.con);
++    DisplaySurface *surface;
+     bool dirty = false;
+ 
+     if (!s->enable) {
+@@ -1004,6 +1004,7 @@ static void vmsvga_update_display(void *opaque)
+     }
+ 
+     vmsvga_check_size(s);
++    surface = qemu_console_surface(s->vga.con);
+ 
+     vmsvga_fifo_run(s);
+     vmsvga_update_rect_flush(s);
+-- 
+1.7.9.7
+
+

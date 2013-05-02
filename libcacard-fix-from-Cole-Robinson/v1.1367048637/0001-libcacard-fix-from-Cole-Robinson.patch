@@ -1,0 +1,26 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Alon Levy <alevy@redhat.com>
+To: Alon Levy <alevy@redhat.com>, qemu-devel@nongnu.org
+Cc: Anthony Liguori <anthony@codemonkey.ws>
+Date: Sat, 27 Apr 2013 02:43:57 +0300
+Message-id: 20130426234357.GA12457@garlic.tami
+Subject: [PATCH 1/1] libcacard fix from Cole Robinson
+
+The following changes since commit 909eedb74f88d1d6d9e6bbdc34875772e7a8a5ab:
+
+  target-ppc: slightly optimize lfiwax (2013-04-27 00:37:46 +0200)
+
+are available in the git repository at:
+
+  git://people.freedesktop.org/~alon/qemu libcacard_ccid.2
+
+for you to fetch changes up to ae12e3a643c66575c77211e1226ada041e56b889:
+
+  ccid: Fix crash when backend isn't specified (2013-04-27 02:38:33 +0300)
+
+----------------------------------------------------------------
+Cole Robinson (1):
+      ccid: Fix crash when backend isn't specified
+
+ hw/usb/ccid-card-emulated.c | 10 ++++++++--
+ 1 file changed, 8 insertions(+), 2 deletions(-)

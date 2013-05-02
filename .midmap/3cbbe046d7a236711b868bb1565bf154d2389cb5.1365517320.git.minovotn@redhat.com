@@ -1,0 +1,1 @@
+../Revert-New-QMP-command-query-cpu-max-and-HMP-command-cpu_max/v1.1365542619/0001-Revert-New-QMP-command-query-cpu-max-and-HMP-command-cpu_max.patch

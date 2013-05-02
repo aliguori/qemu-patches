@@ -1,0 +1,356 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Liu Ping Fan <qemulist@gmail.com>
+To: qemu-devel@nongnu.org
+Cc: Paolo Bonzini <pbonzini@redhat.com>, gleb@redhat.com,
+ Anthony Liguori <anthony@codemonkey.ws>, Stefan Hajnoczi <stefanha@gmail.com>,
+ Marcelo Tosatti <mtosatti@redhat.com>,
+ Peter Maydell <peter.maydell@linaro.org>, Jan Kiszka <jan.kiszka@siemens.com>
+Date: Sun, 25 Nov 2012 10:03:02 +0800
+Message-id: 1353808984-22368-6-git-send-email-qemulist@gmail.com
+Subject: [PATCH 5/7] memory: make mmio dispatch able to be out of biglock
+
+From: Liu Ping Fan <pingfank@linux.vnet.ibm.com>
+
+Without biglock, we try to protect the mr by increase refcnt.
+If we cannot inc refcnt, go backward and resort to biglock.
+
+Another point is memory radix-tree can be flushed by another
+thread, so we should get the copy of terminal mr to survive
+from such issue.
+
+Signed-off-by: Liu Ping Fan <pingfank@linux.vnet.ibm.com>
+---
+ docs/memory.txt   |    4 ++
+ exec.c            |  154 +++++++++++++++++++++++++++++++++++++++++++++++-----
+ memory-internal.h |    1 +
+ memory.h          |    2 +
+ 4 files changed, 146 insertions(+), 15 deletions(-)
+
+diff --git a/docs/memory.txt b/docs/memory.txt
+index 5bbee8e..6b3d15a 100644
+--- a/docs/memory.txt
++++ b/docs/memory.txt
+@@ -170,3 +170,7 @@ various constraints can be supplied to control how these callbacks are called:
+  - .old_portio and .old_mmio can be used to ease porting from code using
+    cpu_register_io_memory() and register_ioport().  They should not be used
+    in new code.
++
++MMIO regions are provided with ->ref() and ->unref() callbacks; This pair callbacks
++are optional. When ref() return non-zero, Both MemoryRegion and its opaque are
++safe to use.
+diff --git a/exec.c b/exec.c
+index 750008c..fa34ef9 100644
+--- a/exec.c
++++ b/exec.c
+@@ -2280,7 +2280,7 @@ static void register_multipage(AddressSpaceDispatch *d, MemoryRegionSection *sec
+                   section_index);
+ }
+ 
+-static void mem_add(MemoryListener *listener, MemoryRegionSection *section)
++static void mem_nop(MemoryListener *listener, MemoryRegionSection *section)
+ {
+     AddressSpaceDispatch *d = container_of(listener, AddressSpaceDispatch, listener);
+     MemoryRegionSection now = *section, remain = *section;
+@@ -2314,6 +2314,26 @@ static void mem_add(MemoryListener *listener, MemoryRegionSection *section)
+     }
+ }
+ 
++static void mem_add(MemoryListener *listener, MemoryRegionSection *section)
++{
++    MemoryRegion *mr = section->mr;
++
++    if (mr->ops && mr->ops->ref) {
++        mr->ops->ref(mr);
++    }
++    mem_nop(listener, section);
++}
++
++static void mem_del(MemoryListener *listener,
++                            MemoryRegionSection *section)
++{
++    MemoryRegion *mr = section->mr;
++
++    if (mr->ops && mr->ops->unref) {
++        mr->ops->unref(mr);
++    }
++}
++
+ void qemu_flush_coalesced_mmio_buffer(void)
+ {
+     if (kvm_enabled())
+@@ -3165,11 +3185,23 @@ static void io_mem_init(void)
+ static void mem_begin(MemoryListener *listener)
+ {
+     AddressSpaceDispatch *d = container_of(listener, AddressSpaceDispatch, listener);
++    AddressSpace *as = d->as;
+ 
++    /* protect the updating process of mrs in memory core agaist readers */
++    qemu_mutex_lock(&as->lock);
+     destroy_all_mappings(d);
+     d->phys_map.ptr = PHYS_MAP_NODE_NIL;
+ }
+ 
++static void mem_commit(MemoryListener *listener)
++{
++    AddressSpaceDispatch *d = container_of(listener, AddressSpaceDispatch,
++                listener);
++    AddressSpace *as = d->as;
++
++    qemu_mutex_unlock(&as->lock);
++}
++
+ static void core_begin(MemoryListener *listener)
+ {
+     phys_sections_clear();
+@@ -3243,11 +3275,14 @@ void address_space_init_dispatch(AddressSpace *as)
+     d->phys_map  = (PhysPageEntry) { .ptr = PHYS_MAP_NODE_NIL, .is_leaf = 0 };
+     d->listener = (MemoryListener) {
+         .begin = mem_begin,
++        .commit = mem_commit,
+         .region_add = mem_add,
+-        .region_nop = mem_add,
++        .region_del = mem_del,
++        .region_nop = mem_nop,
+         .priority = 0,
+     };
+     as->dispatch = d;
++    as->dispatch->as = as;
+     memory_listener_register(&d->listener, as);
+ }
+ 
+@@ -3345,6 +3380,68 @@ static void invalidate_and_set_dirty(target_phys_addr_t addr,
+     xen_modified_memory(addr, length);
+ }
+ 
++static MemoryRegionSection *subpage_get_terminal(subpage_t *mmio,
++    target_phys_addr_t addr)
++{
++    MemoryRegionSection *section;
++    unsigned int idx = SUBPAGE_IDX(addr);
++
++    section = &phys_sections[mmio->sub_section[idx]];
++    return section;
++}
++
++static bool memory_region_section_ref(MemoryRegionSection *mrs)
++{
++    MemoryRegion *mr;
++    bool ret = false;
++
++    mr = mrs->mr;
++    if (mr->ops && mr->ops->ref) {
++        mr->ops->ref(mr);
++        ret = true;
++    }
++    return ret;
++}
++
++static void memory_region_section_unref(MemoryRegionSection *mrs)
++{
++    MemoryRegion *mr;
++
++    mr = mrs->mr;
++    if (mr->ops && mr->ops->unref) {
++        mr->ops->unref(mr);
++    }
++}
++
++static bool memory_region_section_lookup_ref(AddressSpaceDispatch *d,
++    target_phys_addr_t addr, MemoryRegionSection *mrs)
++{
++    MemoryRegionSection *section;
++    bool ret;
++
++    section = phys_page_find(d, addr >> TARGET_PAGE_BITS);
++    if (section->mr->subpage) {
++        section = subpage_get_terminal(section->mr->opaque, addr);
++    }
++    *mrs = *section;
++    ret = memory_region_section_ref(mrs);
++
++    return ret;
++}
++
++static bool address_space_section_lookup_ref(AddressSpace *as,
++    target_phys_addr_t page, MemoryRegionSection *mrs)
++{
++    bool safe_ref;
++    AddressSpaceDispatch *d = as->dispatch;
++
++    qemu_mutex_lock(&as->lock);
++    safe_ref = memory_region_section_lookup_ref(d, page, mrs);
++    qemu_mutex_unlock(&as->lock);
++
++    return safe_ref;
++}
++
+ void address_space_rw(AddressSpace *as, target_phys_addr_t addr, uint8_t *buf,
+                       int len, bool is_write)
+ {
+@@ -3353,14 +3450,29 @@ void address_space_rw(AddressSpace *as, target_phys_addr_t addr, uint8_t *buf,
+     uint8_t *ptr;
+     uint32_t val;
+     target_phys_addr_t page;
+-    MemoryRegionSection *section;
++    bool safe_ref;
++    MemoryRegionSection *section, obj_mrs;
+ 
+     while (len > 0) {
+         page = addr & TARGET_PAGE_MASK;
+         l = (page + TARGET_PAGE_SIZE) - addr;
+         if (l > len)
+             l = len;
+-        section = phys_page_find(d, page >> TARGET_PAGE_BITS);
++
++        qemu_mutex_lock(&as->lock);
++        safe_ref = memory_region_section_lookup_ref(d, page, &obj_mrs);
++        qemu_mutex_unlock(&as->lock);
++        if (!safe_ref) {
++            qemu_mutex_lock_iothread();
++            qemu_mutex_lock(&as->lock);
++            /* when 2nd try, mem map can change, need to judge it again */
++            safe_ref = memory_region_section_lookup_ref(d, page, &obj_mrs);
++            qemu_mutex_unlock(&as->lock);
++            if (safe_ref) {
++                qemu_mutex_unlock_iothread();
++            }
++        }
++        section = &obj_mrs;
+ 
+         if (is_write) {
+             if (!memory_region_is_ram(section->mr)) {
+@@ -3425,9 +3537,13 @@ void address_space_rw(AddressSpace *as, target_phys_addr_t addr, uint8_t *buf,
+                 qemu_put_ram_ptr(ptr);
+             }
+         }
++        memory_region_section_unref(&obj_mrs);
+         len -= l;
+         buf += l;
+         addr += l;
++        if (!safe_ref) {
++            qemu_mutex_unlock_iothread();
++        }
+     }
+ }
+ 
+@@ -3460,18 +3576,19 @@ void cpu_physical_memory_rw(target_phys_addr_t addr, uint8_t *buf,
+ void cpu_physical_memory_write_rom(target_phys_addr_t addr,
+                                    const uint8_t *buf, int len)
+ {
+-    AddressSpaceDispatch *d = address_space_memory.dispatch;
+     int l;
+     uint8_t *ptr;
+     target_phys_addr_t page;
+-    MemoryRegionSection *section;
++    MemoryRegionSection *section, mr_obj;
+ 
+     while (len > 0) {
+         page = addr & TARGET_PAGE_MASK;
+         l = (page + TARGET_PAGE_SIZE) - addr;
+         if (l > len)
+             l = len;
+-        section = phys_page_find(d, page >> TARGET_PAGE_BITS);
++        address_space_section_lookup_ref(&address_space_memory,
++                page >> TARGET_PAGE_BITS, &mr_obj);
++        section = &mr_obj;
+ 
+         if (!(memory_region_is_ram(section->mr) ||
+               memory_region_is_romd(section->mr))) {
+@@ -3489,6 +3606,7 @@ void cpu_physical_memory_write_rom(target_phys_addr_t addr,
+         len -= l;
+         buf += l;
+         addr += l;
++        memory_region_section_unref(&mr_obj);
+     }
+ }
+ 
+@@ -3550,12 +3668,11 @@ void *address_space_map(AddressSpace *as,
+                         target_phys_addr_t *plen,
+                         bool is_write)
+ {
+-    AddressSpaceDispatch *d = as->dispatch;
+     target_phys_addr_t len = *plen;
+     target_phys_addr_t todo = 0;
+     int l;
+     target_phys_addr_t page;
+-    MemoryRegionSection *section;
++    MemoryRegionSection *section, mr_obj;
+     ram_addr_t raddr = RAM_ADDR_MAX;
+     ram_addr_t rlen;
+     void *ret;
+@@ -3565,7 +3682,8 @@ void *address_space_map(AddressSpace *as,
+         l = (page + TARGET_PAGE_SIZE) - addr;
+         if (l > len)
+             l = len;
+-        section = phys_page_find(d, page >> TARGET_PAGE_BITS);
++        address_space_section_lookup_ref(as, page >> TARGET_PAGE_BITS, &mr_obj);
++        section = &mr_obj;
+ 
+         if (!(memory_region_is_ram(section->mr) && !section->readonly)) {
+             if (todo || bounce.buffer) {
+@@ -3579,6 +3697,7 @@ void *address_space_map(AddressSpace *as,
+             }
+ 
+             *plen = l;
++            memory_region_section_unref(&mr_obj);
+             return bounce.buffer;
+         }
+         if (!todo) {
+@@ -3589,6 +3708,7 @@ void *address_space_map(AddressSpace *as,
+         len -= l;
+         addr += l;
+         todo += l;
++        memory_region_section_unref(&mr_obj);
+     }
+     rlen = todo;
+     ret = qemu_ram_ptr_length(raddr, &rlen);
+@@ -4197,12 +4317,16 @@ bool virtio_is_big_endian(void)
+ #ifndef CONFIG_USER_ONLY
+ bool cpu_physical_memory_is_io(target_phys_addr_t phys_addr)
+ {
+-    MemoryRegionSection *section;
++    MemoryRegionSection *section, mr_obj;
++    bool ret;
+ 
+-    section = phys_page_find(address_space_memory.dispatch,
+-                             phys_addr >> TARGET_PAGE_BITS);
+-
+-    return !(memory_region_is_ram(section->mr) ||
++    address_space_section_lookup_ref(&address_space_memory,
++                             phys_addr >> TARGET_PAGE_BITS, &mr_obj);
++    section = &mr_obj;
++    ret = !(memory_region_is_ram(section->mr) ||
+              memory_region_is_romd(section->mr));
++    memory_region_section_unref(&mr_obj);
++
++    return ret;
+ }
+ #endif
+diff --git a/memory-internal.h b/memory-internal.h
+index b33a99d..ea06bfb 100644
+--- a/memory-internal.h
++++ b/memory-internal.h
+@@ -38,6 +38,7 @@ struct AddressSpaceDispatch {
+      */
+     PhysPageEntry phys_map;
+     MemoryListener listener;
++    AddressSpace *as;
+ };
+ 
+ void address_space_init_dispatch(AddressSpace *as);
+diff --git a/memory.h b/memory.h
+index 13a9e3e..704d014 100644
+--- a/memory.h
++++ b/memory.h
+@@ -67,6 +67,8 @@ struct MemoryRegionOps {
+                   target_phys_addr_t addr,
+                   uint64_t data,
+                   unsigned size);
++    void (*ref)(MemoryRegion *mr);
++    void (*unref)(MemoryRegion *mr);
+ 
+     enum device_endian endianness;
+     /* Guest-visible constraints: */
+-- 
+1.7.4.4
+

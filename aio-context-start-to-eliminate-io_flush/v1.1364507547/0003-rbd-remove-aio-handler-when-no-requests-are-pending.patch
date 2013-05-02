@@ -1,0 +1,91 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Anthony Liguori <aliguori@us.ibm.com>
+To: Anthony Liguori <aliguori@us.ibm.com>, qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, Paolo Bonzini <pbonzini@redhat.com>,
+ Mike Roth <mdroth@linux.vnet.ibm.com>, Kevin Wolf <kwolf@redhat.com>,
+ qemu-devel@nongnu.org
+Date: Thu, 28 Mar 2013 16:52:30 -0500
+Message-id: 1364507550-25093-4-git-send-email-aliguori@us.ibm.com
+Subject: [PATCH 3/3] rbd: remove aio handler when no requests are pending
+
+This allows us to pass NULL for io_flush by removing the aio
+event when no requests are pending.
+
+Signed-off-by: Anthony Liguori <aliguori@us.ibm.com>
+---
+ block/rbd.c | 25 ++++++++++++++++---------
+ 1 file changed, 16 insertions(+), 9 deletions(-)
+
+diff --git a/block/rbd.c b/block/rbd.c
+index 1a8ea6d..a7c3645 100644
+--- a/block/rbd.c
++++ b/block/rbd.c
+@@ -407,6 +407,18 @@ static void qemu_rbd_complete_aio(RADOSCB *rcb)
+     g_free(rcb);
+ }
+ 
++static void qemu_rbd_aio_event_reader(void *opaque);
++
++static void qemu_rbd_update_aio_handler(BDRVRBDState *s)
++{
++    if (s->qemu_aio_count > 0) {
++        qemu_aio_set_fd_handler(s->fds[RBD_FD_READ], qemu_rbd_aio_event_reader,
++                                NULL, NULL, s);
++    } else {
++        qemu_aio_set_fd_handler(s->fds[RBD_FD_READ], NULL, NULL, NULL, NULL);
++    }
++}
++
+ /*
+  * aio fd read handler. It runs in the qemu context and calls the
+  * completion handling of completed rados aio operations.
+@@ -429,18 +441,12 @@ static void qemu_rbd_aio_event_reader(void *opaque)
+                 s->event_reader_pos = 0;
+                 qemu_rbd_complete_aio(s->event_rcb);
+                 s->qemu_aio_count--;
++                qemu_rbd_update_aio_handler(s);
+             }
+         }
+     } while (ret < 0 && errno == EINTR);
+ }
+ 
+-static int qemu_rbd_aio_flush_cb(void *opaque)
+-{
+-    BDRVRBDState *s = opaque;
+-
+-    return (s->qemu_aio_count > 0);
+-}
+-
+ static int qemu_rbd_open(BlockDriverState *bs, const char *filename,
+                          QDict *options, int flags)
+ {
+@@ -525,9 +531,8 @@ static int qemu_rbd_open(BlockDriverState *bs, const char *filename,
+     }
+     fcntl(s->fds[0], F_SETFL, O_NONBLOCK);
+     fcntl(s->fds[1], F_SETFL, O_NONBLOCK);
+-    qemu_aio_set_fd_handler(s->fds[RBD_FD_READ], qemu_rbd_aio_event_reader,
+-                            NULL, qemu_rbd_aio_flush_cb, s);
+ 
++    qemu_rbd_update_aio_handler(s);
+ 
+     return 0;
+ 
+@@ -701,6 +706,7 @@ static BlockDriverAIOCB *rbd_start_aio(BlockDriverState *bs,
+     size = nb_sectors * BDRV_SECTOR_SIZE;
+ 
+     s->qemu_aio_count++; /* All the RADOSCB */
++    qemu_rbd_update_aio_handler(s);
+ 
+     rcb = g_malloc(sizeof(RADOSCB));
+     rcb->done = 0;
+@@ -736,6 +742,7 @@ static BlockDriverAIOCB *rbd_start_aio(BlockDriverState *bs,
+ failed:
+     g_free(rcb);
+     s->qemu_aio_count--;
++    qemu_rbd_update_aio_handler(s);
+     qemu_aio_release(acb);
+     return NULL;
+ }
+-- 
+1.8.0
+

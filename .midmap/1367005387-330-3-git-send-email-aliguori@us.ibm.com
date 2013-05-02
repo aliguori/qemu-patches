@@ -1,0 +1,1 @@
+../gtk-add-Devices-menu/v1.1367005384/0002-monitor-add-notifier-list-for-monitor-events.patch

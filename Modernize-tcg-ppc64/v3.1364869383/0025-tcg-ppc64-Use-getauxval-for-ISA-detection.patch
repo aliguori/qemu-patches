@@ -1,0 +1,93 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Richard Henderson <rth@twiddle.net>
+To: qemu-devel@nongnu.org, Richard Henderson <rth@twiddle.net>
+Cc: av1474@comtv.ru, agraf@suse.de, aurelien@aurel32.net, qemu-devel@nongnu.org
+Date: Mon,  1 Apr 2013 21:23:28 -0700
+Message-id: 1364876610-3933-26-git-send-email-rth@twiddle.net
+Subject: [PATCH 25/27] tcg-ppc64: Use getauxval for ISA detection
+
+Glibc 2.16 includes an easy way to get feature bits previously
+buried in /proc or the program startup auxiliary vector.  Use it.
+
+Signed-off-by: Richard Henderson <rth@twiddle.net>
+Reviewed-by: Aurelien Jarno <aurelien@aurel32.net>
+---
+ configure              | 18 ++++++++++++++++++
+ tcg/ppc64/tcg-target.c | 16 +++++++++++++++-
+ 2 files changed, 33 insertions(+), 1 deletion(-)
+
+diff --git a/configure b/configure
+index fbea75e..e675b9d 100755
+--- a/configure
++++ b/configure
+@@ -3252,6 +3252,20 @@ if compile_prog "" "" ; then
+     int128=yes
+ fi
+ 
++########################################
++# check if getauxval is available.
++
++getauxval=no
++cat > $TMPC << EOF
++#include <sys/auxv.h>
++int main(void) {
++  return getauxval(AT_HWCAP) == 0;
++}
++EOF
++if compile_prog "" "" ; then
++    getauxval=yes
++fi
++
+ ##########################################
+ # End of CC checks
+ # After here, no more $cc or $ld runs
+@@ -3809,6 +3823,10 @@ if test "$int128" = "yes" ; then
+   echo "CONFIG_INT128=y" >> $config_host_mak
+ fi
+ 
++if test "$getauxval" = "yes" ; then
++  echo "CONFIG_GETAUXVAL=y" >> $config_host_mak
++fi
++
+ if test "$glusterfs" = "yes" ; then
+   echo "CONFIG_GLUSTERFS=y" >> $config_host_mak
+ fi
+diff --git a/tcg/ppc64/tcg-target.c b/tcg/ppc64/tcg-target.c
+index 4ade501..cc1161a 100644
+--- a/tcg/ppc64/tcg-target.c
++++ b/tcg/ppc64/tcg-target.c
+@@ -44,8 +44,15 @@ static uint8_t *tb_ret_addr;
+ #define GUEST_BASE 0
+ #endif
+ 
++#ifdef CONFIG_GETAUXVAL
++#include <sys/auxv.h>
++static bool have_isa_2_06;
++#define HAVE_ISA_2_06  have_isa_2_06
++#define HAVE_ISEL      have_isa_2_06
++#else
+ #define HAVE_ISA_2_06  0
+-#define HAVE_ISEL      0
++#define HAVE_ISA_ISEL  0
++#endif
+ 
+ #ifdef CONFIG_USE_GUEST_BASE
+ #define TCG_GUEST_BASE_REG 30
+@@ -2084,6 +2091,13 @@ static const TCGTargetOpDef ppc_op_defs[] = {
+ 
+ static void tcg_target_init (TCGContext *s)
+ {
++#ifdef CONFIG_GETAUXVAL
++    unsigned long hwcap = getauxval(AT_HWCAP);
++    if (hwcap & PPC_FEATURE_ARCH_2_06) {
++        have_isa_2_06 = true;
++    }
++#endif
++
+     tcg_regset_set32 (tcg_target_available_regs[TCG_TYPE_I32], 0, 0xffffffff);
+     tcg_regset_set32 (tcg_target_available_regs[TCG_TYPE_I64], 0, 0xffffffff);
+     tcg_regset_set32 (tcg_target_call_clobber_regs, 0,
+-- 
+1.8.1.4
+
+

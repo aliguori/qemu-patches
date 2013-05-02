@@ -1,0 +1,1 @@
+../console-qom-ify-consoles/v1.1366821197/0001-console-qom-ify-QemuConsole.patch

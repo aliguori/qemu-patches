@@ -1,0 +1,35 @@
+From patches Mon Sep 17 00:00:00 2001
+From: liguang <lig.fnst@cn.fujitsu.com>
+To: qemu-devel@nongnu.org
+Cc: liguang <lig.fnst@cn.fujitsu.com>
+Date: Thu, 11 Apr 2013 11:41:53 +0800
+Message-id: 1365651722-11241-7-git-send-email-lig.fnst@cn.fujitsu.com
+Subject: [PATCH 07/16] target-m68k/translate: mininally change
+ gen_intermediate_code_internal
+
+Signed-off-by: liguang <lig.fnst@cn.fujitsu.com>
+---
+ target-m68k/translate.c |    6 +++---
+ 1 files changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/target-m68k/translate.c b/target-m68k/translate.c
+index 32b8132..9469a55 100644
+--- a/target-m68k/translate.c
++++ b/target-m68k/translate.c
+@@ -3023,9 +3023,9 @@ gen_intermediate_code_internal(CPUM68KState *env, TranslationBlock *tb,
+         if (search_pc) {
+             j = tcg_ctx.gen_opc_ptr - tcg_ctx.gen_opc_buf;
+             if (lj < j) {
+-                lj++;
+-                while (lj < j)
+-                    tcg_ctx.gen_opc_instr_start[lj++] = 0;
++                while (++lj < j) {
++                    tcg_ctx.gen_opc_instr_start[lj] = 0;
++                }
+             }
+             tcg_ctx.gen_opc_pc[lj] = dc->pc;
+             tcg_ctx.gen_opc_instr_start[lj] = 1;
+-- 
+1.7.2.5
+
+

@@ -1,0 +1,54 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Luiz Capitulino <lcapitulino@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: kwolf@redhat.com, phrdina@redhat.com, armbru@redhat.com
+Date: Fri, 19 Apr 2013 13:47:18 -0400
+Message-id: 1366393639-20651-2-git-send-email-lcapitulino@redhat.com
+Subject: [PATCH 1/2] block: make bdrv_dev_change_media_cb() public
+
+Next commit wants to use it.
+
+Signed-off-by: Luiz Capitulino <lcapitulino@redhat.com>
+Reviewed-by: Eric Blake <eblake@redhat.com>
+---
+ block.c               | 3 +--
+ include/block/block.h | 1 +
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/block.c b/block.c
+index 4ad663d..90d0ed1 100644
+--- a/block.c
++++ b/block.c
+@@ -56,7 +56,6 @@ typedef enum {
+     BDRV_REQ_ZERO_WRITE   = 0x2,
+ } BdrvRequestFlags;
+ 
+-static void bdrv_dev_change_media_cb(BlockDriverState *bs, bool load);
+ static BlockDriverAIOCB *bdrv_aio_readv_em(BlockDriverState *bs,
+         int64_t sector_num, QEMUIOVector *qiov, int nb_sectors,
+         BlockDriverCompletionFunc *cb, void *opaque);
+@@ -1634,7 +1633,7 @@ static void bdrv_emit_qmp_eject_event(BlockDriverState *bs, bool ejected)
+     qobject_decref(data);
+ }
+ 
+-static void bdrv_dev_change_media_cb(BlockDriverState *bs, bool load)
++void bdrv_dev_change_media_cb(BlockDriverState *bs, bool load)
+ {
+     if (bs->dev_ops && bs->dev_ops->change_media_cb) {
+         bool tray_was_closed = !bdrv_dev_is_tray_open(bs);
+diff --git a/include/block/block.h b/include/block/block.h
+index ebd9512..8a976b1 100644
+--- a/include/block/block.h
++++ b/include/block/block.h
+@@ -158,6 +158,7 @@ void bdrv_set_dev_ops(BlockDriverState *bs, const BlockDevOps *ops,
+                       void *opaque);
+ void bdrv_dev_eject_request(BlockDriverState *bs, bool force);
+ bool bdrv_dev_has_removable_media(BlockDriverState *bs);
++void bdrv_dev_change_media_cb(BlockDriverState *bs, bool load);
+ bool bdrv_dev_is_tray_open(BlockDriverState *bs);
+ bool bdrv_dev_is_medium_locked(BlockDriverState *bs);
+ int bdrv_read(BlockDriverState *bs, int64_t sector_num,
+-- 
+1.8.1.4
+
+

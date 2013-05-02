@@ -1,0 +1,1 @@
+../KVM-flash-memory-support/v2.1367384187/0005-pc_sysfw-allow-flash--pflash-memory-to-be-used-with-KVM.patch

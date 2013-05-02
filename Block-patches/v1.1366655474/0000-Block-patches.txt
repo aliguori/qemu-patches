@@ -1,0 +1,73 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Kevin Wolf <kwolf@redhat.com>
+To: anthony@codemonkey.ws
+Cc: kwolf@redhat.com, qemu-devel@nongnu.org
+Date: Mon, 22 Apr 2013 13:31:14 +0200
+Message-id: 1366630294-18984-1-git-send-email-kwolf@redhat.com
+Subject: [PATCH 00/20] Block patches
+
+The following changes since commit 68c0aa6e02f79f8825c0c5dc4c7ed25d524aaa8b:
+
+  ui/cocoa.m: Fix recent compile breakage (2013-04-21 16:44:26 +0000)
+
+are available in the git repository at:
+
+  git://repo.or.cz/qemu/kevin.git for-anthony
+
+for you to fetch changes up to 7da94ca741e01a80afd65e107cc2cee160d1b2d2:
+
+  qemu-iotests: add 053 unaligned compressed image size test (2013-04-22 11:37:12 +0200)
+
+----------------------------------------------------------------
+Kevin Wolf (16):
+      qemu-iotests: Fix _filter_qemu
+      block: Fail gracefully when using a format driver on protocol level
+      block: Add driver-specific options for backing files
+      block: Enable filename option
+      raw-posix: Use bdrv_open options instead of filename
+      raw-win32: Use bdrv_open options instead of filename
+      blkdebug: Use bdrv_open options instead of filename
+      blkverify: Use bdrv_open options instead of filename
+      curl: Use bdrv_open options instead of filename
+      gluster: Use bdrv_open options instead of filename
+      iscsi: Use bdrv_open options instead of filename
+      rbd: Use bdrv_open options instead of filename
+      sheepdog: Use bdrv_open options instead of filename
+      vvfat: Use bdrv_open options instead of filename
+      block: Remove filename parameter from .bdrv_file_open()
+      block: Allow overriding backing.file.filename
+
+Stefan Hajnoczi (4):
+      qcow2: allow sub-cluster compressed write to last cluster
+      qcow: allow sub-cluster compressed write to last cluster
+      qemu-img: do not zero-pad the compressed write buffer
+      qemu-iotests: add 053 unaligned compressed image size test
+
+ block.c                          |  65 +++++++++--
+ block/blkdebug.c                 | 113 +++++++++++++------
+ block/blkverify.c                | 113 ++++++++++++++-----
+ block/curl.c                     | 152 +++++++++++++++++---------
+ block/gluster.c                  |  34 +++++-
+ block/iscsi.c                    |  40 ++++++-
+ block/mirror.c                   |   2 +-
+ block/nbd.c                      |   3 +-
+ block/qcow.c                     |  17 ++-
+ block/qcow2.c                    |  17 ++-
+ block/raw-posix.c                |  70 ++++++++----
+ block/raw-win32.c                |  59 ++++++++--
+ block/rbd.c                      |  32 +++++-
+ block/sheepdog.c                 |  33 +++++-
+ block/ssh.c                      |   3 +-
+ block/vvfat.c                    | 229 ++++++++++++++++++++++++++++-----------
+ include/block/block.h            |   2 +-
+ include/block/block_int.h        |   3 +-
+ qemu-img.c                       |   8 +-
+ tests/qemu-iotests/051           |   7 ++
+ tests/qemu-iotests/051.out       |  10 ++
+ tests/qemu-iotests/053           |  73 +++++++++++++
+ tests/qemu-iotests/053.out       |  17 +++
+ tests/qemu-iotests/common.filter |   2 +-
+ tests/qemu-iotests/group         |   1 +
+ 25 files changed, 862 insertions(+), 243 deletions(-)
+ create mode 100755 tests/qemu-iotests/053
+ create mode 100644 tests/qemu-iotests/053.out

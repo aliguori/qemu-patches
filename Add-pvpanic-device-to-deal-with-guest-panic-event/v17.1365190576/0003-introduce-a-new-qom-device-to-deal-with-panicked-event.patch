@@ -1,0 +1,172 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Hu Tao <hutao@cn.fujitsu.com>
+To: Paolo Bonzini <pbonzini@redhat.com>, qemu-devel <qemu-devel@nongnu.org>,
+ Luiz Capitulino <lcapitulino@redhat.com>, Wen Congyang <wency@cn.fujitsu.com>,
+ Jan Kiszka <jan.kiszka@siemens.com>,
+ KAMEZAWA Hiroyuki <kamezawa.hiroyu@jp.fujitsu.com>,
+ Anthony Liguori <aliguori@us.ibm.com>, "Michael S. Tsirkin" <mst@redhat.com>,
+ Gleb Natapov <gleb@redhat.com>, Peter Maydell <peter.maydell@linaro.org>,
+ Blue Swirl <blauwirbel@gmail.com>, Alexander Graf <agraf@suse.de>,
+ Christian Borntraeger <borntraeger@de.ibm.com>,
+ Sasha Levin <levinsasha928@gmail.com>, Orit Wasserman <owasserm@redhat.com>,
+ Andrew Jones <drjones@redhat.com>, Markus Armbruster <armbru@redhat.com>,
+ Stefan Hajnoczi <stefanha@redhat.com>, Eric Blake <eblake@redhat.com>,
+ Juan Quintela <quintela@redhat.com>,
+ "Daniel P. Berrange" <berrange@redhat.com>,
+ Marcelo Tosatti <mtosatti@redhat.com>,
+ Alex Williamson <alex.williamson@redhat.com>
+Cc: 
+Date: Fri, 5 Apr 2013 14:36:19 +0800
+Message-id: f231a3d943ad6525811efafc18b0d0d6eb3ea6ca.1365143012.git.hutao@cn.fujitsu.com
+Subject: [PATCH 3/6] introduce a new qom device to deal with panicked event
+
+pvpanic device is used to send guest panic event from guest to qemu.
+
+When guest panic happens, pvpanic device driver will write a event
+number to IO port 0x505(which is the IO port occupied by pvpanic device,
+by default). On receiving the event, pvpanic device will pause guest
+cpu(s), and send a qmp event QEVENT_GUEST_PANICKED.
+
+Signed-off-by: Wen Congyang <wency@cn.fujitsu.com>
+Signed-off-by: Hu Tao <hutao@cn.fujitsu.com>
+---
+ hw/Makefile.objs |   1 +
+ hw/pvpanic.c     | 116 +++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 117 insertions(+)
+ create mode 100644 hw/pvpanic.c
+
+diff --git a/hw/Makefile.objs b/hw/Makefile.objs
+index d0b2ecb..12ac32a 100644
+--- a/hw/Makefile.objs
++++ b/hw/Makefile.objs
+@@ -216,4 +216,5 @@ obj-$(CONFIG_KVM) += ivshmem.o
+ obj-$(CONFIG_LINUX) += vfio_pci.o
+ endif
+ 
++common-obj-y += pvpanic.o
+ endif
+diff --git a/hw/pvpanic.c b/hw/pvpanic.c
+new file mode 100644
+index 0000000..ff0a116
+--- /dev/null
++++ b/hw/pvpanic.c
+@@ -0,0 +1,116 @@
++/*
++ * QEMU simulated pvpanic device.
++ *
++ * Copyright Fujitsu, Corp. 2013
++ *
++ * Authors:
++ *     Wen Congyang <wency@cn.fujitsu.com>
++ *     Hu Tao <hutao@cn.fujitsu.com>
++ *
++ * This work is licensed under the terms of the GNU GPL, version 2 or later.
++ * See the COPYING file in the top-level directory.
++ *
++ */
++
++#include <qapi/qmp/qobject.h>
++#include <qapi/qmp/qjson.h>
++#include <monitor/monitor.h>
++#include <sysemu/sysemu.h>
++#include <sysemu/kvm.h>
++
++/* The bit of supported pv event */
++#define PVPANIC_F_PANICKED      0
++
++/* The pv event value */
++#define PVPANIC_PANICKED        (1 << PVPANIC_F_PANICKED)
++
++#define TYPE_ISA_PVPANIC_DEVICE    "pvpanic"
++#define ISA_PVPANIC_DEVICE(obj)    \
++    OBJECT_CHECK(PVPanicState, (obj), TYPE_ISA_PVPANIC_DEVICE)
++
++static void panicked_mon_event(const char *action)
++{
++    QObject *data;
++
++    data = qobject_from_jsonf("{ 'action': %s }", action);
++    monitor_protocol_event(QEVENT_GUEST_PANICKED, data);
++    qobject_decref(data);
++}
++
++static void handle_event(int event)
++{
++    if (event == PVPANIC_PANICKED) {
++        panicked_mon_event("pause");
++        vm_stop(RUN_STATE_GUEST_PANICKED);
++        return;
++    }
++}
++
++#include "hw/isa.h"
++
++typedef struct PVPanicState {
++    ISADevice parent_obj;
++
++    MemoryRegion io;
++    uint16_t ioport;
++} PVPanicState;
++
++/* return supported events on read */
++static uint64_t pvpanic_ioport_read(void *opaque, hwaddr addr, unsigned size)
++{
++    return PVPANIC_PANICKED;
++}
++
++static void pvpanic_ioport_write(void *opaque, hwaddr addr, uint64_t val,
++                                 unsigned size)
++{
++    handle_event(val);
++}
++
++static const MemoryRegionOps pvpanic_ops = {
++    .read = pvpanic_ioport_read,
++    .write = pvpanic_ioport_write,
++    .impl = {
++        .min_access_size = 1,
++        .max_access_size = 1,
++    },
++};
++
++static int pvpanic_isa_initfn(ISADevice *dev)
++{
++    PVPanicState *s = ISA_PVPANIC_DEVICE(dev);
++
++    memory_region_init_io(&s->io, &pvpanic_ops, s, "pvpanic", 1);
++    isa_register_ioport(dev, &s->io, s->ioport);
++
++    return 0;
++}
++
++static Property pvpanic_isa_properties[] = {
++    DEFINE_PROP_UINT16("ioport", PVPanicState, ioport, 0x505),
++    DEFINE_PROP_END_OF_LIST(),
++};
++
++static void pvpanic_isa_class_init(ObjectClass *klass, void *data)
++{
++    DeviceClass *dc = DEVICE_CLASS(klass);
++    ISADeviceClass *ic = ISA_DEVICE_CLASS(klass);
++
++    ic->init = pvpanic_isa_initfn;
++    dc->no_user = 1;
++    dc->props = pvpanic_isa_properties;
++}
++
++static TypeInfo pvpanic_isa_info = {
++    .name          = TYPE_ISA_PVPANIC_DEVICE,
++    .parent        = TYPE_ISA_DEVICE,
++    .instance_size = sizeof(PVPanicState),
++    .class_init    = pvpanic_isa_class_init,
++};
++
++static void pvpanic_register_types(void)
++{
++    type_register_static(&pvpanic_isa_info);
++}
++
++type_init(pvpanic_register_types)
+-- 
+1.8.1.4
+

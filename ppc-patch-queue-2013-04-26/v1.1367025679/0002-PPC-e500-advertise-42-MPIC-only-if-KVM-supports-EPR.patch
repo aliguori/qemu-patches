@@ -1,0 +1,111 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Alexander Graf <agraf@suse.de>
+To: qemu-ppc@nongnu.org
+Cc: Blue Swirl <blauwirbel@gmail.com>, Aurelien Jarno <aurelien@aurel32.net>,
+ qemu-devel@nongnu.org, Stuart Yoder <stuart.yoder@freescale.com>
+Date: Fri, 26 Apr 2013 20:21:21 +0200
+Message-id: 1367000509-8833-3-git-send-email-agraf@suse.de
+Subject: [PATCH 02/30] PPC: e500: advertise 4.2 MPIC only if KVM supports EPR
+
+From: Stuart Yoder <stuart.yoder@freescale.com>
+
+Older KVM versions don't support EPR which breaks guests when we announce
+MPIC variants that support EPR.
+
+Catch that case and expose only MPIC version 2.0 which tells the guest that
+we don't support the EPR capability yet.
+
+Signed-off-by: Stuart Yoder <stuart.yoder@freescale.com>
+[agraf: Add comment, route cap check through kvm_ppc.c]
+Signed-off-by: Alexander Graf <agraf@suse.de>
+---
+ hw/ppc/e500plat.c    |    7 +++++++
+ target-ppc/kvm.c     |    7 +++++++
+ target-ppc/kvm_ppc.h |    6 ++++++
+ 3 files changed, 20 insertions(+), 0 deletions(-)
+
+diff --git a/hw/ppc/e500plat.c b/hw/ppc/e500plat.c
+index 7292ce1..c852995 100644
+--- a/hw/ppc/e500plat.c
++++ b/hw/ppc/e500plat.c
+@@ -16,6 +16,7 @@
+ #include "sysemu/device_tree.h"
+ #include "hw/pci/pci.h"
+ #include "hw/ppc/openpic.h"
++#include "kvm_ppc.h"
+ 
+ static void e500plat_fixup_devtree(PPCE500Params *params, void *fdt)
+ {
+@@ -48,6 +49,12 @@ static void e500plat_init(QEMUMachineInitArgs *args)
+         .mpic_version = OPENPIC_MODEL_FSL_MPIC_42,
+     };
+ 
++    /* Older KVM versions don't support EPR which breaks guests when we announce
++       MPIC variants that support EPR. Revert to an older one for those */
++    if (kvm_enabled() && !kvmppc_has_cap_epr()) {
++        params.mpic_version = OPENPIC_MODEL_FSL_MPIC_20;
++    }
++
+     ppce500_init(&params);
+ }
+ 
+diff --git a/target-ppc/kvm.c b/target-ppc/kvm.c
+index 5e9dddb..f2658bb 100644
+--- a/target-ppc/kvm.c
++++ b/target-ppc/kvm.c
+@@ -63,6 +63,7 @@ static int cap_ppc_rma;
+ static int cap_spapr_tce;
+ static int cap_hior;
+ static int cap_one_reg;
++static int cap_epr;
+ 
+ /* XXX We have a race condition where we actually have a level triggered
+  *     interrupt, but the infrastructure can't expose that yet, so the guest
+@@ -95,6 +96,7 @@ int kvm_arch_init(KVMState *s)
+     cap_spapr_tce = kvm_check_extension(s, KVM_CAP_SPAPR_TCE);
+     cap_one_reg = kvm_check_extension(s, KVM_CAP_ONE_REG);
+     cap_hior = kvm_check_extension(s, KVM_CAP_PPC_HIOR);
++    cap_epr = kvm_check_extension(s, KVM_CAP_PPC_EPR);
+ 
+     if (!cap_interrupt_level) {
+         fprintf(stderr, "KVM: Couldn't find level irq capability. Expect the "
+@@ -1530,6 +1532,11 @@ int kvmppc_fixup_cpu(PowerPCCPU *cpu)
+     return 0;
+ }
+ 
++bool kvmppc_has_cap_epr(void)
++{
++    return cap_epr;
++}
++
+ static int kvm_ppc_register_host_cpu_type(void)
+ {
+     TypeInfo type_info = {
+diff --git a/target-ppc/kvm_ppc.h b/target-ppc/kvm_ppc.h
+index 6bcc5cc..600d632 100644
+--- a/target-ppc/kvm_ppc.h
++++ b/target-ppc/kvm_ppc.h
+@@ -33,6 +33,7 @@ int kvmppc_reset_htab(int shift_hint);
+ uint64_t kvmppc_rma_size(uint64_t current_size, unsigned int hash_shift);
+ #endif /* !CONFIG_USER_ONLY */
+ int kvmppc_fixup_cpu(PowerPCCPU *cpu);
++bool kvmppc_has_cap_epr(void);
+ 
+ #else
+ 
+@@ -129,6 +130,11 @@ static inline int kvmppc_fixup_cpu(PowerPCCPU *cpu)
+ {
+     return -1;
+ }
++
++static inline bool kvmppc_has_cap_epr(void)
++{
++    return false;
++}
+ #endif
+ 
+ #ifndef CONFIG_KVM
+-- 
+1.6.0.2
+
+

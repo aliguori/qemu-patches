@@ -1,0 +1,101 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Bharat Bhushan <r65777@freescale.com>
+To: agraf@suse.de, Bharat Bhushan <r65777@freescale.com>,
+ Wood Scott-B07421 <B07421@freescale.com>, stuart.yoder@freescale.com,
+ qemu-devel@nongnu.org, qemu-ppc@nongnu.org, scottwood@freescale.com,
+ Bhushan Bharat-R65777 <R65777@freescale.com>, david@gibson.dropbear.id.au
+Cc: stuart.yoder@freescale.com, Wood Scott-B07421 <B07421@freescale.com>,
+ Bharat Bhushan <bharat.bhushan@freescale.com>, qemu-devel@nongnu.org,
+ Yoder Stuart-B08248 <B08248@freescale.com>, agraf@suse.de,
+ "qemu-ppc@nongnu.org" <qemu-ppc@nongnu.org>,
+ Bharat Bhushan <Bharat.Bhushan@freescale.com>, qemu-ppc@nongnu.org,
+ "agraf@suse.de" <agraf@suse.de>, scottwood@freescale.com,
+ "qemu-devel@nongnu.org" <qemu-devel@nongnu.org>,
+ "david@gibson.dropbear.id.au" <david@gibson.dropbear.id.au>,
+ david@gibson.dropbear.id.au
+Date: Mon, 29 Apr 2013 20:10:56 +0530
+Message-id: 1367246456-22382-1-git-send-email-Bharat.Bhushan@freescale.com
+Subject: [PATCH 1/1] ppc: initialize GPRs as per epapr
+
+ePAPR defines the initial values of cpu registers.
+This patch initialize the GPRs as per ePAPR specification.
+
+This resolves the issue of guest reboot/reset (guest hang on reboot).
+
+Signed-off-by: Bharat Bhushan <bharat.bhushan@freescale.com>
+---
+v1-->v2
+ - Dynemic seting of initial map size in gpr[7]
+ - For this the tlb size calculation is moved into a function.
+
+ hw/ppc/e500.c |   29 ++++++++++++++++++++++++++---
+ 1 files changed, 26 insertions(+), 3 deletions(-)
+
+diff --git a/hw/ppc/e500.c b/hw/ppc/e500.c
+index c1bdb6b..decd86c 100644
+--- a/hw/ppc/e500.c
++++ b/hw/ppc/e500.c
+@@ -37,6 +37,7 @@
+ #include "qemu/host-utils.h"
+ #include "hw/pci-host/ppce500.h"
+ 
++#define EPAPR_MAGIC                (0x45504150)
+ #define BINARY_DEVICE_TREE_FILE    "mpc8544ds.dtb"
+ #define UIMAGE_LOAD_BASE           0
+ #define DTC_LOAD_PAD               0x1800000
+@@ -393,11 +394,10 @@ static inline hwaddr booke206_page_size_to_tlb(uint64_t size)
+     return 63 - clz64(size >> 10);
+ }
+ 
+-static void mmubooke_create_initial_mapping(CPUPPCState *env)
++static int booke206_initial_map_tsize(CPUPPCState *env)
+ {
+     struct boot_info *bi = env->load_info;
+-    ppcmas_tlb_t *tlb = booke206_get_tlbm(env, 1, 0, 0);
+-    hwaddr size, dt_end;
++    hwaddr dt_end;
+     int ps;
+ 
+     /* Our initial TLB entry needs to cover everything from 0 to
+@@ -408,6 +408,23 @@ static void mmubooke_create_initial_mapping(CPUPPCState *env)
+         /* e500v2 can only do even TLB size bits */
+         ps++;
+     }
++    return ps;
++}
++static uint64_t mmubooke_initial_mapsize(CPUPPCState *env)
++{
++    int tsize;
++
++    tsize = booke206_initial_map_tsize(env);
++    return (1ULL << 10 << tsize);
++}
++
++static void mmubooke_create_initial_mapping(CPUPPCState *env)
++{
++    ppcmas_tlb_t *tlb = booke206_get_tlbm(env, 1, 0, 0);
++    hwaddr size;
++    int ps;
++
++    ps = booke206_initial_map_tsize(env);
+     size = (ps << MAS1_TSIZE_SHIFT);
+     tlb->mas1 = MAS1_VALID | size;
+     tlb->mas2 = 0;
+@@ -444,6 +461,12 @@ static void ppce500_cpu_reset(void *opaque)
+     cs->halted = 0;
+     env->gpr[1] = (16<<20) - 8;
+     env->gpr[3] = bi->dt_base;
++    env->gpr[4] = 0;
++    env->gpr[5] = 0;
++    env->gpr[6] = EPAPR_MAGIC;
++    env->gpr[7] = mmubooke_initial_mapsize(env);
++    env->gpr[8] = 0;
++    env->gpr[9] = 0;
+     env->nip = bi->entry;
+     mmubooke_create_initial_mapping(env);
+ }
+-- 
+1.7.0.4
+
+
+

@@ -1,0 +1,95 @@
+From patches Mon Sep 17 00:00:00 2001
+From: fred.konrad@greensocs.com
+To: Anthony Liguori <aliguori@us.ibm.com>, qemu-devel@nongnu.org
+Cc: peter.maydell@linaro.org, mark.burton@greensocs.com, agraf@suse.de,
+ amit.shah@redhat.com, cornelia.huck@de.ibm.com, pbonzini@redhat.com,
+ afaerber@suse.de, fred.konrad@greensocs.com
+Date: Tue, 30 Apr 2013 16:08:48 +0200
+Message-id: 1367330931-12994-3-git-send-email-fred.konrad@greensocs.com
+Subject: [PATCH 2/5] virtio: add virtio_device_set_child_bus_name.
+
+From: KONRAD Frederic <fred.konrad@greensocs.com>
+
+Add virtio_device_set_child_bus_name function.
+
+It will be used with virtio-serial-x and virtio-scsi-x to set the
+child bus name before calling virtio-x-device's init.
+
+Signed-off-by: KONRAD Frederic <fred.konrad@greensocs.com>
+---
+ hw/virtio/virtio.c         | 24 ++++++++++++++++++++++++
+ include/hw/virtio/virtio.h |  4 ++++
+ 2 files changed, 28 insertions(+)
+
+diff --git a/hw/virtio/virtio.c b/hw/virtio/virtio.c
+index 0f88c25..53a0d90 100644
+--- a/hw/virtio/virtio.c
++++ b/hw/virtio/virtio.c
+@@ -1087,6 +1087,18 @@ EventNotifier *virtio_queue_get_host_notifier(VirtQueue *vq)
+     return &vq->host_notifier;
+ }
+ 
++void virtio_device_set_child_bus_name(VirtIODevice *vdev, char *bus_name)
++{
++    if (vdev->bus_name) {
++        g_free(vdev->bus_name);
++        vdev->bus_name = NULL;
++    }
++
++    if (bus_name) {
++        vdev->bus_name = g_strdup(bus_name);
++    }
++}
++
+ static int virtio_device_init(DeviceState *qdev)
+ {
+     VirtIODevice *vdev = VIRTIO_DEVICE(qdev);
+@@ -1099,11 +1111,23 @@ static int virtio_device_init(DeviceState *qdev)
+     return 0;
+ }
+ 
++static int virtio_device_exit(DeviceState *qdev)
++{
++    VirtIODevice *vdev = VIRTIO_DEVICE(qdev);
++
++    if (vdev->bus_name) {
++        g_free(vdev->bus_name);
++        vdev->bus_name = NULL;
++    }
++    return 0;
++}
++
+ static void virtio_device_class_init(ObjectClass *klass, void *data)
+ {
+     /* Set the default value here. */
+     DeviceClass *dc = DEVICE_CLASS(klass);
+     dc->init = virtio_device_init;
++    dc->exit = virtio_device_exit;
+     dc->bus_type = TYPE_VIRTIO_BUS;
+ }
+ 
+diff --git a/include/hw/virtio/virtio.h b/include/hw/virtio/virtio.h
+index ae7a4c4..a6c5c53 100644
+--- a/include/hw/virtio/virtio.h
++++ b/include/hw/virtio/virtio.h
+@@ -118,6 +118,7 @@ struct VirtIODevice
+     uint16_t device_id;
+     bool vm_running;
+     VMChangeStateEntry *vmstate;
++    char *bus_name;
+ };
+ 
+ typedef struct VirtioDeviceClass {
+@@ -149,6 +150,9 @@ void virtio_init(VirtIODevice *vdev, const char *name,
+                          uint16_t device_id, size_t config_size);
+ void virtio_cleanup(VirtIODevice *vdev);
+ 
++/* Set the child bus name. */
++void virtio_device_set_child_bus_name(VirtIODevice *vdev, char *bus_name);
++
+ VirtQueue *virtio_add_queue(VirtIODevice *vdev, int queue_size,
+                             void (*handle_output)(VirtIODevice *,
+                                                   VirtQueue *));
+-- 
+1.8.1.4
+

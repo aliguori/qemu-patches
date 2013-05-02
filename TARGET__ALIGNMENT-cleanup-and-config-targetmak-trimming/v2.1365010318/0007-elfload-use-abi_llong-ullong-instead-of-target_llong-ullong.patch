@@ -1,0 +1,135 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: pmaydell@linaro.org, aurelien@aurel32.net
+Date: Wed,  3 Apr 2013 12:32:05 +0200
+Message-id: 1364985128-23772-8-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 07/10] elfload: use abi_llong/ullong instead of
+ target_llong/ullong
+
+The alignment is a characteristic of the ABI, not the CPU.
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ configure                    | 4 ----
+ include/exec/cpu-defs.h      | 2 --
+ include/exec/user/abitypes.h | 5 +++++
+ linux-user/elfload.c         | 4 ++--
+ target-arm/cpu.h             | 1 +
+ target-m68k/cpu.h            | 1 +
+ 6 files changed, 9 insertions(+), 8 deletions(-)
+
+diff --git a/configure b/configure
+index 0763047..10ea70e 100755
+--- a/configure
++++ b/configure
+@@ -4011,7 +4011,6 @@ bflt="no"
+ target_nptl="no"
+ interp_prefix1=`echo "$interp_prefix" | sed "s/%M/$target_arch2/g"`
+ gdb_xml_files=""
+-target_llong_alignment=8
+ target_libs_softmmu=
+ 
+ TARGET_ARCH="$target_arch2"
+@@ -4032,7 +4031,6 @@ case "$target_arch2" in
+     bflt="yes"
+     target_nptl="yes"
+     gdb_xml_files="arm-core.xml arm-vfp.xml arm-vfp3.xml arm-neon.xml"
+-    target_llong_alignment=4
+   ;;
+   cris)
+     target_nptl="yes"
+@@ -4043,7 +4041,6 @@ case "$target_arch2" in
+   m68k)
+     bflt="yes"
+     gdb_xml_files="cf-core.xml cf-fp.xml"
+-    target_llong_alignment=2
+   ;;
+   microblaze|microblazeel)
+     TARGET_ARCH=microblaze
+@@ -4143,7 +4140,6 @@ case "$cpu" in
+   ;;
+ esac
+ 
+-echo "TARGET_LLONG_ALIGNMENT=$target_llong_alignment" >> $config_target_mak
+ echo "TARGET_ARCH=$TARGET_ARCH" >> $config_target_mak
+ target_arch_name="`upper $TARGET_ARCH`"
+ echo "TARGET_$target_arch_name=y" >> $config_target_mak
+diff --git a/include/exec/cpu-defs.h b/include/exec/cpu-defs.h
+index 3cf1272..d8c64e9 100644
+--- a/include/exec/cpu-defs.h
++++ b/include/exec/cpu-defs.h
+@@ -36,8 +36,6 @@
+ 
+ #define TARGET_LONG_SIZE (TARGET_LONG_BITS / 8)
+ 
+-typedef int64_t target_llong __attribute__((aligned(TARGET_LLONG_ALIGNMENT)));
+-typedef uint64_t target_ullong __attribute__((aligned(TARGET_LLONG_ALIGNMENT)));
+ /* target_ulong is the type of a virtual address */
+ #if TARGET_LONG_SIZE == 4
+ typedef int32_t target_long;
+diff --git a/include/exec/user/abitypes.h b/include/exec/user/abitypes.h
+index 9bf916a..0cec7b0 100644
+--- a/include/exec/user/abitypes.h
++++ b/include/exec/user/abitypes.h
+@@ -17,11 +17,16 @@
+ #ifndef ABI_LONG_ALIGNMENT
+ #define ABI_LONG_ALIGNMENT (TARGET_ABI_BITS / 8)
+ #endif
++#ifndef ABI_LLONG_ALIGNMENT
++#define ABI_LLONG_ALIGNMENT 8
++#endif
+ 
+ typedef int16_t abi_short __attribute__ ((aligned(ABI_SHORT_ALIGNMENT)));
+ typedef uint16_t abi_ushort __attribute__((aligned(ABI_SHORT_ALIGNMENT)));
+ typedef int32_t abi_int __attribute__((aligned(ABI_INT_ALIGNMENT)));
+ typedef uint32_t abi_uint __attribute__((aligned(ABI_INT_ALIGNMENT)));
++typedef int64_t abi_llong __attribute__((aligned(ABI_LLONG_ALIGNMENT)));
++typedef uint64_t abi_ullong __attribute__((aligned(ABI_LLONG_ALIGNMENT)));
+ 
+ #ifdef TARGET_ABI32
+ typedef uint32_t abi_ulong __attribute__((aligned(ABI_LONG_ALIGNMENT)));
+diff --git a/linux-user/elfload.c b/linux-user/elfload.c
+index 14a8ecf..979b57c 100644
+--- a/linux-user/elfload.c
++++ b/linux-user/elfload.c
+@@ -102,8 +102,8 @@ enum {
+ #endif
+ 
+ #ifdef TARGET_ABI_MIPSN32
+-typedef target_ulong    target_elf_greg_t;
+-#define tswapreg(ptr)   tswapl(ptr)
++typedef abi_ullong      target_elf_greg_t;
++#define tswapreg(ptr)   tswap64(ptr)
+ #else
+ typedef abi_ulong       target_elf_greg_t;
+ #define tswapreg(ptr)   tswapal(ptr)
+diff --git a/target-arm/cpu.h b/target-arm/cpu.h
+index 2b97221..6418199 100644
+--- a/target-arm/cpu.h
++++ b/target-arm/cpu.h
+@@ -20,6 +20,7 @@
+ #define CPU_ARM_H
+ 
+ #define TARGET_LONG_BITS 32
++#define ABI_LLONG_ALIGNMENT 4
+ 
+ #define ELF_MACHINE	EM_ARM
+ 
+diff --git a/target-m68k/cpu.h b/target-m68k/cpu.h
+index 6825e7c..09ee998 100644
+--- a/target-m68k/cpu.h
++++ b/target-m68k/cpu.h
+@@ -23,6 +23,7 @@
+ #define TARGET_LONG_BITS 32
+ #define ABI_INT_ALIGNMENT 2
+ #define ABI_LONG_ALIGNMENT 2
++#define ABI_LLONG_ALIGNMENT 2
+ 
+ #define CPUArchState struct CPUM68KState
+ 
+-- 
+1.8.1.4
+
+
+

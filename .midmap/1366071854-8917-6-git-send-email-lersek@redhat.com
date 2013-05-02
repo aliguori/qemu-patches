@@ -1,0 +1,1 @@
+../publish-etc-acpi-APIC-in-fw_cfg/v3.1366097047/0005-hw-acpi-export-acpi_checksum.patch

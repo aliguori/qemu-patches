@@ -1,0 +1,1 @@
+../libqos-support/v1.1362491604/0008-libqos-add-malloc.patch

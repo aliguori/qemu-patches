@@ -1,0 +1,649 @@
+From patches Mon Sep 17 00:00:00 2001
+From: =?utf-8?q?Andreas_F=C3=A4rber_=3Cafaerber=40suse=2Ede=3E?=
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>,
+ =?utf-8?b?IkFuZHJlYXMgRsOkcmJlciI=?= <afaerber@suse.de>,
+ Michael Walle <michael@walle.cc>, Paul Brook <paul@codesourcery.com>,
+ Fabien Chouteau <chouteau@adacore.com>, Aurelien Jarno <aurelien@aurel32.net>,
+ Blue Swirl <blauwirbel@gmail.com>, Guan Xuetao <gxt@mprc.pku.edu.cn>
+Date: Mon, 25 Feb 2013 19:45:50 +0100
+Message-id: 1361817954-8984-4-git-send-email-afaerber@suse.de
+Subject: [PATCH 3/7] exec: Pass CPUState to cpu_reset_interrupt()
+
+Move it to qom/cpu.c to avoid build failures depending on include order
+of cpu-qom.h and exec/cpu-all.h.
+
+Change opaques of various ..._irq_handler() functions to the
+appropriate CPU type to facilitate using cpu_reset_interrupt().
+
+Fix Coding Style issues while at it (missing braces, indentation).
+
+Signed-off-by: Andreas Färber <afaerber@suse.de>
+---
+ exec.c                  |    7 -------
+ hw/alpha_typhoon.c      |    8 +++++---
+ hw/apic.c               |    4 ++--
+ hw/arm_pic.c            |   15 +++++++++------
+ hw/cris_pic_cpu.c       |   13 ++++++++-----
+ hw/leon3.c              |    4 +++-
+ hw/lm32_boards.c        |    8 +++++---
+ hw/microblaze_pic_cpu.c |   14 +++++++++-----
+ hw/milkymist.c          |    8 +++++---
+ hw/mips_int.c           |    8 +++++---
+ hw/openrisc_pic.c       |    3 ++-
+ hw/pc.c                 |    8 +++++---
+ hw/ppc.c                |    6 ++++--
+ hw/puv3.c               |    9 ++++++---
+ hw/pxa2xx_pic.c         |    4 ++--
+ hw/sh_intc.c            |    9 +++++----
+ hw/sun4m.c              |    5 ++++-
+ hw/sun4u.c              |    7 ++++---
+ hw/xtensa_pic.c         |    2 +-
+ include/exec/cpu-all.h  |    2 --
+ include/qom/cpu.h       |    9 +++++++++
+ qom/cpu.c               |    5 +++++
+ target-m68k/helper.c    |    8 +++++---
+ target-mips/op_helper.c |    5 ++---
+ 24 Dateien geändert, 105 Zeilen hinzugefügt(+), 66 Zeilen entfernt(-)
+
+diff --git a/exec.c b/exec.c
+index e180aec..9d1605f 100644
+--- a/exec.c
++++ b/exec.c
+@@ -492,13 +492,6 @@ void cpu_single_step(CPUArchState *env, int enabled)
+ #endif
+ }
+ 
+-void cpu_reset_interrupt(CPUArchState *env, int mask)
+-{
+-    CPUState *cpu = ENV_GET_CPU(env);
+-
+-    cpu->interrupt_request &= ~mask;
+-}
+-
+ void cpu_exit(CPUArchState *env)
+ {
+     CPUState *cpu = ENV_GET_CPU(env);
+diff --git a/hw/alpha_typhoon.c b/hw/alpha_typhoon.c
+index bf9aabf..dfb10c7 100644
+--- a/hw/alpha_typhoon.c
++++ b/hw/alpha_typhoon.c
+@@ -63,10 +63,11 @@ static void cpu_irq_change(AlphaCPU *cpu, uint64_t req)
+     /* If there are any non-masked interrupts, tell the cpu.  */
+     if (cpu != NULL) {
+         CPUAlphaState *env = &cpu->env;
++        CPUState *cs = CPU(cpu);
+         if (req) {
+             cpu_interrupt(env, CPU_INTERRUPT_HARD);
+         } else {
+-            cpu_reset_interrupt(env, CPU_INTERRUPT_HARD);
++            cpu_reset_interrupt(cs, CPU_INTERRUPT_HARD);
+         }
+     }
+ }
+@@ -359,16 +360,17 @@ static void cchip_write(void *opaque, hwaddr addr,
+                 AlphaCPU *cpu = s->cchip.cpu[i];
+                 if (cpu != NULL) {
+                     CPUAlphaState *env = &cpu->env;
++                    CPUState *cs = CPU(cpu);
+                     /* IPI can be either cleared or set by the write.  */
+                     if (newval & (1 << (i + 8))) {
+                         cpu_interrupt(env, CPU_INTERRUPT_SMP);
+                     } else {
+-                        cpu_reset_interrupt(env, CPU_INTERRUPT_SMP);
++                        cpu_reset_interrupt(cs, CPU_INTERRUPT_SMP);
+                     }
+ 
+                     /* ITI can only be cleared by the write.  */
+                     if ((newval & (1 << (i + 4))) == 0) {
+-                        cpu_reset_interrupt(env, CPU_INTERRUPT_TIMER);
++                        cpu_reset_interrupt(cs, CPU_INTERRUPT_TIMER);
+                     }
+                 }
+             }
+diff --git a/hw/apic.c b/hw/apic.c
+index fd14b73..e113c11 100644
+--- a/hw/apic.c
++++ b/hw/apic.c
+@@ -187,7 +187,7 @@ void apic_deliver_pic_intr(DeviceState *d, int level)
+             reset_bit(s->irr, lvt & 0xff);
+             /* fall through */
+         case APIC_DM_EXTINT:
+-            cpu_reset_interrupt(&s->cpu->env, CPU_INTERRUPT_HARD);
++            cpu_reset_interrupt(CPU(s->cpu), CPU_INTERRUPT_HARD);
+             break;
+         }
+     }
+@@ -485,7 +485,7 @@ void apic_sipi(DeviceState *d)
+ {
+     APICCommonState *s = DO_UPCAST(APICCommonState, busdev.qdev, d);
+ 
+-    cpu_reset_interrupt(&s->cpu->env, CPU_INTERRUPT_SIPI);
++    cpu_reset_interrupt(CPU(s->cpu), CPU_INTERRUPT_SIPI);
+ 
+     if (!s->wait_for_sipi)
+         return;
+diff --git a/hw/arm_pic.c b/hw/arm_pic.c
+index ffb4d41..ddf3f0b 100644
+--- a/hw/arm_pic.c
++++ b/hw/arm_pic.c
+@@ -15,19 +15,22 @@ static void arm_pic_cpu_handler(void *opaque, int irq, int level)
+ {
+     ARMCPU *cpu = opaque;
+     CPUARMState *env = &cpu->env;
++    CPUState *cs = CPU(cpu);
+ 
+     switch (irq) {
+     case ARM_PIC_CPU_IRQ:
+-        if (level)
++        if (level) {
+             cpu_interrupt(env, CPU_INTERRUPT_HARD);
+-        else
+-            cpu_reset_interrupt(env, CPU_INTERRUPT_HARD);
++        } else {
++            cpu_reset_interrupt(cs, CPU_INTERRUPT_HARD);
++        }
+         break;
+     case ARM_PIC_CPU_FIQ:
+-        if (level)
++        if (level) {
+             cpu_interrupt(env, CPU_INTERRUPT_FIQ);
+-        else
+-            cpu_reset_interrupt(env, CPU_INTERRUPT_FIQ);
++        } else {
++            cpu_reset_interrupt(cs, CPU_INTERRUPT_FIQ);
++        }
+         break;
+     default:
+         hw_error("arm_pic_cpu_handler: Bad interrupt line %d\n", irq);
+diff --git a/hw/cris_pic_cpu.c b/hw/cris_pic_cpu.c
+index 3da0e86..46630aa 100644
+--- a/hw/cris_pic_cpu.c
++++ b/hw/cris_pic_cpu.c
+@@ -30,16 +30,19 @@
+ 
+ static void cris_pic_cpu_handler(void *opaque, int irq, int level)
+ {
+-    CPUCRISState *env = (CPUCRISState *)opaque;
++    CRISCPU *cpu = opaque;
++    CPUCRISState *env = &cpu->env;
++    CPUState *cs = CPU(cpu);
+     int type = irq ? CPU_INTERRUPT_NMI : CPU_INTERRUPT_HARD;
+ 
+-    if (level)
++    if (level) {
+         cpu_interrupt(env, type);
+-    else
+-        cpu_reset_interrupt(env, type);
++    } else {
++        cpu_reset_interrupt(cs, type);
++    }
+ }
+ 
+ qemu_irq *cris_pic_init_cpu(CPUCRISState *env)
+ {
+-    return qemu_allocate_irqs(cris_pic_cpu_handler, env, 2);
++    return qemu_allocate_irqs(cris_pic_cpu_handler, cris_env_get_cpu(env), 2);
+ }
+diff --git a/hw/leon3.c b/hw/leon3.c
+index e971d5c..ba92994 100644
+--- a/hw/leon3.c
++++ b/hw/leon3.c
+@@ -67,6 +67,7 @@ void leon3_irq_ack(void *irq_manager, int intno)
+ static void leon3_set_pil_in(void *opaque, uint32_t pil_in)
+ {
+     CPUSPARCState *env = (CPUSPARCState *)opaque;
++    CPUState *cs;
+ 
+     assert(env != NULL);
+ 
+@@ -89,9 +90,10 @@ static void leon3_set_pil_in(void *opaque, uint32_t pil_in)
+             }
+         }
+     } else if (!env->pil_in && (env->interrupt_index & ~15) == TT_EXTINT) {
++        cs = CPU(sparc_env_get_cpu(env));
+         trace_leon3_reset_irq(env->interrupt_index & 15);
+         env->interrupt_index = 0;
+-        cpu_reset_interrupt(env, CPU_INTERRUPT_HARD);
++        cpu_reset_interrupt(cs, CPU_INTERRUPT_HARD);
+     }
+ }
+ 
+diff --git a/hw/lm32_boards.c b/hw/lm32_boards.c
+index 2bc06d7..388a0ae 100644
+--- a/hw/lm32_boards.c
++++ b/hw/lm32_boards.c
+@@ -41,12 +41,14 @@ typedef struct {
+ 
+ static void cpu_irq_handler(void *opaque, int irq, int level)
+ {
+-    CPULM32State *env = opaque;
++    LM32CPU *cpu = opaque;
++    CPULM32State *env = &cpu->env;
++    CPUState *cs = CPU(cpu);
+ 
+     if (level) {
+         cpu_interrupt(env, CPU_INTERRUPT_HARD);
+     } else {
+-        cpu_reset_interrupt(env, CPU_INTERRUPT_HARD);
++        cpu_reset_interrupt(cs, CPU_INTERRUPT_HARD);
+     }
+ }
+ 
+@@ -117,7 +119,7 @@ static void lm32_evr_init(QEMUMachineInitArgs *args)
+                           0x01, 0x7e, 0x43, 0x00, 0x555, 0x2aa, 1);
+ 
+     /* create irq lines */
+-    cpu_irq = qemu_allocate_irqs(cpu_irq_handler, env, 1);
++    cpu_irq = qemu_allocate_irqs(cpu_irq_handler, cpu, 1);
+     env->pic_state = lm32_pic_init(*cpu_irq);
+     for (i = 0; i < 32; i++) {
+         irq[i] = qdev_get_gpio_in(env->pic_state, i);
+diff --git a/hw/microblaze_pic_cpu.c b/hw/microblaze_pic_cpu.c
+index ff36a52..2234bfb 100644
+--- a/hw/microblaze_pic_cpu.c
++++ b/hw/microblaze_pic_cpu.c
+@@ -29,16 +29,20 @@
+ 
+ static void microblaze_pic_cpu_handler(void *opaque, int irq, int level)
+ {
+-    CPUMBState *env = (CPUMBState *)opaque;
++    MicroBlazeCPU *cpu = opaque;
++    CPUMBState *env = &cpu->env;
++    CPUState *cs = CPU(cpu);
+     int type = irq ? CPU_INTERRUPT_NMI : CPU_INTERRUPT_HARD;
+ 
+-    if (level)
++    if (level) {
+         cpu_interrupt(env, type);
+-    else
+-        cpu_reset_interrupt(env, type);
++    } else {
++        cpu_reset_interrupt(cs, type);
++    }
+ }
+ 
+ qemu_irq *microblaze_pic_init_cpu(CPUMBState *env)
+ {
+-    return qemu_allocate_irqs(microblaze_pic_cpu_handler, env, 2);
++    return qemu_allocate_irqs(microblaze_pic_cpu_handler, mb_env_get_cpu(env),
++                              2);
+ }
+diff --git a/hw/milkymist.c b/hw/milkymist.c
+index c04eb35..dcadc07 100644
+--- a/hw/milkymist.c
++++ b/hw/milkymist.c
+@@ -46,12 +46,14 @@ typedef struct {
+ 
+ static void cpu_irq_handler(void *opaque, int irq, int level)
+ {
+-    CPULM32State *env = opaque;
++    LM32CPU *cpu = opaque;
++    CPULM32State *env = &cpu->env;
++    CPUState *cs = CPU(cpu);
+ 
+     if (level) {
+         cpu_interrupt(env, CPU_INTERRUPT_HARD);
+     } else {
+-        cpu_reset_interrupt(env, CPU_INTERRUPT_HARD);
++        cpu_reset_interrupt(cs, CPU_INTERRUPT_HARD);
+     }
+ }
+ 
+@@ -123,7 +125,7 @@ milkymist_init(QEMUMachineInitArgs *args)
+                           0x00, 0x89, 0x00, 0x1d, 1);
+ 
+     /* create irq lines */
+-    cpu_irq = qemu_allocate_irqs(cpu_irq_handler, env, 1);
++    cpu_irq = qemu_allocate_irqs(cpu_irq_handler, cpu, 1);
+     env->pic_state = lm32_pic_init(*cpu_irq);
+     for (i = 0; i < 32; i++) {
+         irq[i] = qdev_get_gpio_in(env->pic_state, i);
+diff --git a/hw/mips_int.c b/hw/mips_int.c
+index 6423fd0..a6f0c52 100644
+--- a/hw/mips_int.c
++++ b/hw/mips_int.c
+@@ -26,7 +26,9 @@
+ 
+ static void cpu_mips_irq_request(void *opaque, int irq, int level)
+ {
+-    CPUMIPSState *env = (CPUMIPSState *)opaque;
++    MIPSCPU *cpu = opaque;
++    CPUMIPSState *env = &cpu->env;
++    CPUState *cs = CPU(cpu);
+ 
+     if (irq < 0 || irq > 7)
+         return;
+@@ -40,7 +42,7 @@ static void cpu_mips_irq_request(void *opaque, int irq, int level)
+     if (env->CP0_Cause & CP0Ca_IP_mask) {
+         cpu_interrupt(env, CPU_INTERRUPT_HARD);
+     } else {
+-        cpu_reset_interrupt(env, CPU_INTERRUPT_HARD);
++        cpu_reset_interrupt(cs, CPU_INTERRUPT_HARD);
+     }
+ }
+ 
+@@ -49,7 +51,7 @@ void cpu_mips_irq_init_cpu(CPUMIPSState *env)
+     qemu_irq *qi;
+     int i;
+ 
+-    qi = qemu_allocate_irqs(cpu_mips_irq_request, env, 8);
++    qi = qemu_allocate_irqs(cpu_mips_irq_request, mips_env_get_cpu(env), 8);
+     for (i = 0; i < 8; i++) {
+         env->irq[i] = qi[i];
+     }
+diff --git a/hw/openrisc_pic.c b/hw/openrisc_pic.c
+index aaeb9a9..935dce3 100644
+--- a/hw/openrisc_pic.c
++++ b/hw/openrisc_pic.c
+@@ -25,6 +25,7 @@
+ static void openrisc_pic_cpu_handler(void *opaque, int irq, int level)
+ {
+     OpenRISCCPU *cpu = (OpenRISCCPU *)opaque;
++    CPUState *cs = CPU(cpu);
+     int i;
+     uint32_t irq_bit = 1 << irq;
+ 
+@@ -42,7 +43,7 @@ static void openrisc_pic_cpu_handler(void *opaque, int irq, int level)
+         if ((cpu->env.picsr && (1 << i)) && (cpu->env.picmr && (1 << i))) {
+             cpu_interrupt(&cpu->env, CPU_INTERRUPT_HARD);
+         } else {
+-            cpu_reset_interrupt(&cpu->env, CPU_INTERRUPT_HARD);
++            cpu_reset_interrupt(cs, CPU_INTERRUPT_HARD);
+             cpu->env.picsr &= ~(1 << i);
+         }
+     }
+diff --git a/hw/pc.c b/hw/pc.c
+index 07caba7..1f64346 100644
+--- a/hw/pc.c
++++ b/hw/pc.c
+@@ -190,10 +190,12 @@ static void pic_irq_request(void *opaque, int irq, int level)
+             env = env->next_cpu;
+         }
+     } else {
+-        if (level)
++        CPUState *cs = CPU(x86_env_get_cpu(env));
++        if (level) {
+             cpu_interrupt(env, CPU_INTERRUPT_HARD);
+-        else
+-            cpu_reset_interrupt(env, CPU_INTERRUPT_HARD);
++        } else {
++            cpu_reset_interrupt(cs, CPU_INTERRUPT_HARD);
++        }
+     }
+ }
+ 
+diff --git a/hw/ppc.c b/hw/ppc.c
+index e11d2f8..ea3958f 100644
+--- a/hw/ppc.c
++++ b/hw/ppc.c
+@@ -52,6 +52,7 @@ static void cpu_ppc_tb_start (CPUPPCState *env);
+ 
+ void ppc_set_irq(PowerPCCPU *cpu, int n_IRQ, int level)
+ {
++    CPUState *cs = CPU(cpu);
+     CPUPPCState *env = &cpu->env;
+     unsigned int old_pending = env->pending_interrupts;
+ 
+@@ -60,8 +61,9 @@ void ppc_set_irq(PowerPCCPU *cpu, int n_IRQ, int level)
+         cpu_interrupt(env, CPU_INTERRUPT_HARD);
+     } else {
+         env->pending_interrupts &= ~(1 << n_IRQ);
+-        if (env->pending_interrupts == 0)
+-            cpu_reset_interrupt(env, CPU_INTERRUPT_HARD);
++        if (env->pending_interrupts == 0) {
++            cpu_reset_interrupt(cs, CPU_INTERRUPT_HARD);
++        }
+     }
+ 
+     if (old_pending != env->pending_interrupts) {
+diff --git a/hw/puv3.c b/hw/puv3.c
+index c722510..6a1e10e 100644
+--- a/hw/puv3.c
++++ b/hw/puv3.c
+@@ -26,13 +26,15 @@
+ 
+ static void puv3_intc_cpu_handler(void *opaque, int irq, int level)
+ {
+-    CPUUniCore32State *env = opaque;
++    UniCore32CPU *cpu = opaque;
++    CPUUniCore32State *env = &cpu->env;
++    CPUState *cs = CPU(cpu);
+ 
+     assert(irq == 0);
+     if (level) {
+         cpu_interrupt(env, CPU_INTERRUPT_HARD);
+     } else {
+-        cpu_reset_interrupt(env, CPU_INTERRUPT_HARD);
++        cpu_reset_interrupt(cs, CPU_INTERRUPT_HARD);
+     }
+ }
+ 
+@@ -44,7 +46,8 @@ static void puv3_soc_init(CPUUniCore32State *env)
+     int i;
+ 
+     /* Initialize interrupt controller */
+-    cpu_intc = qemu_allocate_irqs(puv3_intc_cpu_handler, env, 1);
++    cpu_intc = qemu_allocate_irqs(puv3_intc_cpu_handler,
++                                  uc32_env_get_cpu(env), 1);
+     dev = sysbus_create_simple("puv3_intc", PUV3_INTC_BASE, *cpu_intc);
+     for (i = 0; i < PUV3_IRQS_NR; i++) {
+         irqs[i] = qdev_get_gpio_in(dev, i);
+diff --git a/hw/pxa2xx_pic.c b/hw/pxa2xx_pic.c
+index c73e709..45ee7cb 100644
+--- a/hw/pxa2xx_pic.c
++++ b/hw/pxa2xx_pic.c
+@@ -62,13 +62,13 @@ static void pxa2xx_pic_update(void *opaque)
+     if ((mask[0] & s->is_fiq[0]) || (mask[1] & s->is_fiq[1])) {
+         cpu_interrupt(&s->cpu->env, CPU_INTERRUPT_FIQ);
+     } else {
+-        cpu_reset_interrupt(&s->cpu->env, CPU_INTERRUPT_FIQ);
++        cpu_reset_interrupt(cpu, CPU_INTERRUPT_FIQ);
+     }
+ 
+     if ((mask[0] & ~s->is_fiq[0]) || (mask[1] & ~s->is_fiq[1])) {
+         cpu_interrupt(&s->cpu->env, CPU_INTERRUPT_HARD);
+     } else {
+-        cpu_reset_interrupt(&s->cpu->env, CPU_INTERRUPT_HARD);
++        cpu_reset_interrupt(cpu, CPU_INTERRUPT_HARD);
+     }
+ }
+ 
+diff --git a/hw/sh_intc.c b/hw/sh_intc.c
+index c3f77d5..dded2a4 100644
+--- a/hw/sh_intc.c
++++ b/hw/sh_intc.c
+@@ -42,15 +42,16 @@ void sh_intc_toggle_source(struct intc_source *source,
+         pending_changed = 1;
+ 
+     if (pending_changed) {
++        CPUState *cpu = CPU(sh_env_get_cpu(first_cpu));
+         if (source->pending) {
+             source->parent->pending++;
+ 	    if (source->parent->pending == 1)
+                 cpu_interrupt(first_cpu, CPU_INTERRUPT_HARD);
+-	}
+-	else {
++        } else {
+             source->parent->pending--;
+-	    if (source->parent->pending == 0)
+-                cpu_reset_interrupt(first_cpu, CPU_INTERRUPT_HARD);
++            if (source->parent->pending == 0) {
++                cpu_reset_interrupt(cpu, CPU_INTERRUPT_HARD);
++            }
+ 	}
+     }
+ 
+diff --git a/hw/sun4m.c b/hw/sun4m.c
+index 45f9441..fe82bd6 100644
+--- a/hw/sun4m.c
++++ b/hw/sun4m.c
+@@ -230,6 +230,8 @@ void sun4m_irq_info(Monitor *mon, const QDict *qdict)
+ 
+ void cpu_check_irqs(CPUSPARCState *env)
+ {
++    CPUState *cs;
++
+     if (env->pil_in && (env->interrupt_index == 0 ||
+                         (env->interrupt_index & ~15) == TT_EXTINT)) {
+         unsigned int i;
+@@ -247,9 +249,10 @@ void cpu_check_irqs(CPUSPARCState *env)
+             }
+         }
+     } else if (!env->pil_in && (env->interrupt_index & ~15) == TT_EXTINT) {
++        cs = CPU(sparc_env_get_cpu(env));
+         trace_sun4m_cpu_reset_interrupt(env->interrupt_index & 15);
+         env->interrupt_index = 0;
+-        cpu_reset_interrupt(env, CPU_INTERRUPT_HARD);
++        cpu_reset_interrupt(cs, CPU_INTERRUPT_HARD);
+     }
+ }
+ 
+diff --git a/hw/sun4u.c b/hw/sun4u.c
+index 056bb4d..dde82cf 100644
+--- a/hw/sun4u.c
++++ b/hw/sun4u.c
+@@ -276,7 +276,7 @@ void cpu_check_irqs(CPUSPARCState *env)
+             CPUIRQ_DPRINTF("Reset CPU IRQ (current interrupt %x)\n",
+                            env->interrupt_index);
+             env->interrupt_index = 0;
+-            cpu_reset_interrupt(env, CPU_INTERRUPT_HARD);
++            cpu_reset_interrupt(cs, CPU_INTERRUPT_HARD);
+         }
+         return;
+     }
+@@ -309,7 +309,7 @@ void cpu_check_irqs(CPUSPARCState *env)
+                        "current interrupt %x\n",
+                        pil, env->pil_in, env->softint, env->interrupt_index);
+         env->interrupt_index = 0;
+-        cpu_reset_interrupt(env, CPU_INTERRUPT_HARD);
++        cpu_reset_interrupt(cs, CPU_INTERRUPT_HARD);
+     }
+ }
+ 
+@@ -344,8 +344,9 @@ static void cpu_set_ivec_irq(void *opaque, int irq, int level)
+     } else {
+         if (env->ivec_status & 0x20) {
+             CPUIRQ_DPRINTF("Lower IVEC IRQ %d\n", irq);
++            cs = CPU(cpu);
+             env->ivec_status &= ~0x20;
+-            cpu_reset_interrupt(env, CPU_INTERRUPT_HARD);
++            cpu_reset_interrupt(cs, CPU_INTERRUPT_HARD);
+         }
+     }
+ }
+diff --git a/hw/xtensa_pic.c b/hw/xtensa_pic.c
+index dca15b4..7c8c386 100644
+--- a/hw/xtensa_pic.c
++++ b/hw/xtensa_pic.c
+@@ -80,7 +80,7 @@ void check_interrupts(CPUXtensaState *env)
+         }
+     }
+     env->pending_irq_level = 0;
+-    cpu_reset_interrupt(env, CPU_INTERRUPT_HARD);
++    cpu_reset_interrupt(cs, CPU_INTERRUPT_HARD);
+ }
+ 
+ static void xtensa_set_irq(void *opaque, int irq, int active)
+diff --git a/include/exec/cpu-all.h b/include/exec/cpu-all.h
+index 249e046..5218a53 100644
+--- a/include/exec/cpu-all.h
++++ b/include/exec/cpu-all.h
+@@ -434,8 +434,6 @@ static inline void cpu_interrupt(CPUArchState *s, int mask)
+ void cpu_interrupt(CPUArchState *env, int mask);
+ #endif /* USER_ONLY */
+ 
+-void cpu_reset_interrupt(CPUArchState *env, int mask);
+-
+ void cpu_exit(CPUArchState *s);
+ 
+ /* Breakpoint/watchpoint flags */
+diff --git a/include/qom/cpu.h b/include/qom/cpu.h
+index 32581fa..bf82d72 100644
+--- a/include/qom/cpu.h
++++ b/include/qom/cpu.h
+@@ -214,5 +214,14 @@ void run_on_cpu(CPUState *cpu, void (*func)(void *data), void *data);
+  */
+ CPUState *qemu_get_cpu(int index);
+ 
++/**
++ * cpu_reset_interrupt:
++ * @cpu: The CPU to clear the interrupt on.
++ * @mask: The interrupt mask to clear.
++ *
++ * Resets interrupts on the vCPU @cpu.
++ */
++void cpu_reset_interrupt(CPUState *cpu, int mask);
++
+ 
+ #endif
+diff --git a/qom/cpu.c b/qom/cpu.c
+index 0aa9be7..e242dcb 100644
+--- a/qom/cpu.c
++++ b/qom/cpu.c
+@@ -21,6 +21,11 @@
+ #include "qom/cpu.h"
+ #include "qemu-common.h"
+ 
++void cpu_reset_interrupt(CPUState *cpu, int mask)
++{
++    cpu->interrupt_request &= ~mask;
++}
++
+ void cpu_reset(CPUState *cpu)
+ {
+     CPUClass *klass = CPU_GET_CLASS(cpu);
+diff --git a/target-m68k/helper.c b/target-m68k/helper.c
+index 1bae3ab..d9c8374 100644
+--- a/target-m68k/helper.c
++++ b/target-m68k/helper.c
+@@ -312,14 +312,16 @@ int cpu_m68k_handle_mmu_fault (CPUM68KState *env, target_ulong address, int rw,
+    simplicitly we calculate it when the interrupt is signalled.  */
+ void m68k_set_irq_level(M68kCPU *cpu, int level, uint8_t vector)
+ {
++    CPUState *cs = CPU(cpu);
+     CPUM68KState *env = &cpu->env;
+ 
+     env->pending_level = level;
+     env->pending_vector = vector;
+-    if (level)
++    if (level) {
+         cpu_interrupt(env, CPU_INTERRUPT_HARD);
+-    else
+-        cpu_reset_interrupt(env, CPU_INTERRUPT_HARD);
++    } else {
++        cpu_reset_interrupt(cs, CPU_INTERRUPT_HARD);
++    }
+ }
+ 
+ #endif
+diff --git a/target-mips/op_helper.c b/target-mips/op_helper.c
+index 3ab4356..d568188 100644
+--- a/target-mips/op_helper.c
++++ b/target-mips/op_helper.c
+@@ -534,12 +534,11 @@ static inline void mips_vpe_wake(CPUMIPSState *c)
+ static inline void mips_vpe_sleep(MIPSCPU *cpu)
+ {
+     CPUState *cs = CPU(cpu);
+-    CPUMIPSState *c = &cpu->env;
+ 
+     /* The VPE was shut off, really go to bed.
+        Reset any old _WAKE requests.  */
+     cs->halted = 1;
+-    cpu_reset_interrupt(c, CPU_INTERRUPT_WAKE);
++    cpu_reset_interrupt(cs, CPU_INTERRUPT_WAKE);
+ }
+ 
+ static inline void mips_tc_wake(MIPSCPU *cpu, int tc)
+@@ -2104,7 +2103,7 @@ void helper_wait(CPUMIPSState *env)
+     CPUState *cs = CPU(mips_env_get_cpu(env));
+ 
+     cs->halted = 1;
+-    cpu_reset_interrupt(env, CPU_INTERRUPT_WAKE);
++    cpu_reset_interrupt(cs, CPU_INTERRUPT_WAKE);
+     helper_raise_exception(env, EXCP_HLT);
+ }
+ 
+-- 
+1.7.10.4
+

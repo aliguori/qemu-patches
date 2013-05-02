@@ -1,0 +1,1 @@
+../replace-QEMUOptionParameter-with-QemuOpts-parser/v13.1365621905/0001-add-def_value_str-in-QemuOptDesc-struct-and-rewrite-qemu_opts_print.patch

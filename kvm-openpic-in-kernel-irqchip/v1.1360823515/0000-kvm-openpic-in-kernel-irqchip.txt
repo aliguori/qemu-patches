@@ -1,0 +1,38 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Scott Wood <scottwood@freescale.com>
+To: Alexander Graf <agraf@suse.de>
+Cc: qemu-ppc@nongnu.org, qemu-devel@nongnu.org
+Date: Thu, 14 Feb 2013 00:31:55 -0600
+Message-id: 1360823521-32306-1-git-send-email-scottwood@freescale.com
+Subject: [PATCH 0/6] kvm/openpic: in-kernel irqchip
+
+This allows QEMU to use the in-kernel KVM MPIC on some PPC platforms.
+
+Scott Wood (6):
+  kvm: update linux-headers
+  kvm: hw/kvm is not x86-specific
+  memory: add memory_region_to_address()
+  openpic: factor out some common defines into openpic.h
+  kvm: export result of irqchip config check
+  kvm/openpic: in-kernel mpic support
+
+ hw/Makefile.objs          |    1 +
+ hw/i386/Makefile.objs     |    1 -
+ hw/kvm/Makefile.objs      |    3 +-
+ hw/kvm/openpic.c          |  295 +++++++++++++++++++++++++++++++++++++++++++++
+ hw/openpic.c              |   40 +++---
+ hw/openpic.h              |   11 ++
+ hw/ppc/e500.c             |   28 +++--
+ include/exec/memory.h     |    9 ++
+ include/sysemu/kvm.h      |   10 ++
+ kvm-all.c                 |   11 +-
+ linux-headers/linux/kvm.h |   34 ++++++
+ memory.c                  |   38 +++++-
+ 12 files changed, 444 insertions(+), 37 deletions(-)
+ create mode 100644 hw/kvm/openpic.c
+
+-- 
+1.7.9.5
+
+
+

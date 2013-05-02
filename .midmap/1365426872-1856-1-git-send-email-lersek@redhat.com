@@ -1,0 +1,1 @@
+../install-the-MADT-from-the-etc-acpi-APIC-fw_cfg-file-if-its-available/v1.1365452072/0001-install-the-MADT-from-the-etc-acpi-APIC-fw_cfg-file-if-its-available.patch

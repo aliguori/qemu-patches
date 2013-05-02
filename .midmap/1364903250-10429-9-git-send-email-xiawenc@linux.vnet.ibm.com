@@ -1,0 +1,1 @@
+../qmp-hmp-interfaces-for-internal-snapshot-info/v11.1364950033/0008-block-move-qmp_query_block-and-bdrv_query_info-to-block-qapic.patch

@@ -1,0 +1,1 @@
+../trim-down-config-targetmak/v1.1364939055/0004-configure-move-common-libraries-to-config-hostmak.patch

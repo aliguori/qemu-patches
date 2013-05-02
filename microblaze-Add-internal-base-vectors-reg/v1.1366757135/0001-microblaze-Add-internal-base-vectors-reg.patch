@@ -1,0 +1,74 @@
+From patches Mon Sep 17 00:00:00 2001
+From: edgar.iglesias@gmail.com
+To: qemu-devel@nongnu.org
+Cc: 
+Date: Tue, 23 Apr 2013 17:45:35 +0200
+Message-id: 1366731935-32501-1-git-send-email-edgar.iglesias@gmail.com
+Subject: [PATCH 1/1] microblaze: Add internal base vectors reg
+
+From: "Edgar E. Iglesias" <edgar.iglesias@gmail.com>
+
+Configurable at CPU synthesis/instantiation.
+
+Signed-off-by: Edgar E. Iglesias <edgar.iglesias@gmail.com>
+---
+ target-microblaze/cpu.h    |    1 +
+ target-microblaze/helper.c |    8 ++++----
+ 2 files changed, 5 insertions(+), 4 deletions(-)
+
+diff --git a/target-microblaze/cpu.h b/target-microblaze/cpu.h
+index 1813939..dc07595 100644
+--- a/target-microblaze/cpu.h
++++ b/target-microblaze/cpu.h
+@@ -235,6 +235,7 @@ struct CPUMBState {
+     uint32_t btaken;
+     uint32_t btarget;
+     uint32_t bimm;
++    uint32_t base_vectors;
+ 
+     uint32_t imm;
+     uint32_t regs[33];
+diff --git a/target-microblaze/helper.c b/target-microblaze/helper.c
+index a0416d0..4246ce8 100644
+--- a/target-microblaze/helper.c
++++ b/target-microblaze/helper.c
+@@ -152,7 +152,7 @@ void mb_cpu_do_interrupt(CPUState *cs)
+                           env->sregs[SR_ESR], env->iflags);
+             log_cpu_state_mask(CPU_LOG_INT, env, 0);
+             env->iflags &= ~(IMM_FLAG | D_FLAG);
+-            env->sregs[SR_PC] = 0x20;
++            env->sregs[SR_PC] = env->base_vectors + 0x20;
+             break;
+ 
+         case EXCP_MMU:
+@@ -192,7 +192,7 @@ void mb_cpu_do_interrupt(CPUState *cs)
+                           env->sregs[SR_PC], env->sregs[SR_EAR], env->iflags);
+             log_cpu_state_mask(CPU_LOG_INT, env, 0);
+             env->iflags &= ~(IMM_FLAG | D_FLAG);
+-            env->sregs[SR_PC] = 0x20;
++            env->sregs[SR_PC] = env->base_vectors + 0x20;
+             break;
+ 
+         case EXCP_IRQ:
+@@ -233,7 +233,7 @@ void mb_cpu_do_interrupt(CPUState *cs)
+             env->sregs[SR_MSR] |= t;
+ 
+             env->regs[14] = env->sregs[SR_PC];
+-            env->sregs[SR_PC] = 0x10;
++            env->sregs[SR_PC] = env->base_vectors + 0x10;
+             //log_cpu_state_mask(CPU_LOG_INT, env, 0);
+             break;
+ 
+@@ -252,7 +252,7 @@ void mb_cpu_do_interrupt(CPUState *cs)
+             if (env->exception_index == EXCP_HW_BREAK) {
+                 env->regs[16] = env->sregs[SR_PC];
+                 env->sregs[SR_MSR] |= MSR_BIP;
+-                env->sregs[SR_PC] = 0x18;
++                env->sregs[SR_PC] = env->base_vectors + 0x18;
+             } else
+                 env->sregs[SR_PC] = env->btarget;
+             break;
+-- 
+1.7.10.4
+
+

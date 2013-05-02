@@ -1,0 +1,73 @@
+From patches Mon Sep 17 00:00:00 2001
+From: mrhines@linux.vnet.ibm.com
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, mst@redhat.com,
+ Michael R Hines <mrhines@us.ibm.com>, Bulent Abali <abali@us.ibm.com>,
+ owasserm@redhat.com, pbonzini@redhat.com, Gokul B Kandiraju <gokul@us.ibm.com>
+Date: Wed, 10 Apr 2013 18:28:13 -0400
+Message-id: 1365632901-15470-6-git-send-email-mrhines@linux.vnet.ibm.com
+Subject: [PATCH 05/13] accessor function prototypes for new QEMUFileOps hooks
+
+From: "Michael R. Hines" <mrhines@us.ibm.com>
+
+These are just the protytpes of the accessor methods used by
+arch_init.c which invoke functions inside savevm.c to call
+out to the hooks that may (or may not) have been overridden
+inside of QEMUFileOps.
+
+The actual definitions come later in the patch series.
+
+Signed-off-by: Michael R. Hines <mrhines@us.ibm.com>
+---
+ include/migration/migration.h |   23 +++++++++++++++++++++++
+ 1 file changed, 23 insertions(+)
+
+diff --git a/include/migration/migration.h b/include/migration/migration.h
+index e2acec6..a5222f5 100644
+--- a/include/migration/migration.h
++++ b/include/migration/migration.h
+@@ -21,6 +21,7 @@
+ #include "qapi/error.h"
+ #include "migration/vmstate.h"
+ #include "qapi-types.h"
++#include "exec/cpu-common.h"
+ 
+ struct MigrationParams {
+     bool blk;
+@@ -75,6 +76,10 @@ void fd_start_incoming_migration(const char *path, Error **errp);
+ 
+ void fd_start_outgoing_migration(MigrationState *s, const char *fdname, Error **errp);
+ 
++void rdma_start_outgoing_migration(void *opaque, const char *host_port, Error **errp);
++
++void rdma_start_incoming_migration(const char * host_port, Error **errp);
++
+ void migrate_fd_error(MigrationState *s);
+ 
+ void migrate_fd_connect(MigrationState *s);
+@@ -127,4 +132,22 @@ int migrate_use_xbzrle(void);
+ int64_t migrate_xbzrle_cache_size(void);
+ 
+ int64_t xbzrle_cache_resize(int64_t new_size);
++
++bool migrate_check_for_zero(void);
++bool migrate_chunk_register_destination(void);
++
++void ram_control_before_iterate(QEMUFile *f, uint32_t flags);
++void ram_control_after_iterate(QEMUFile *f, uint32_t flags);
++void ram_control_load_hook(QEMUFile *f, uint32_t flags);
++size_t ram_control_save_page(QEMUFile *f,
++                             ram_addr_t block_offset, 
++                             ram_addr_t offset, int cont, 
++                             size_t size, bool zero);
++
++/*
++ * Prototype used by both arch_init.c and migration_rdma.c
++ * because of RAM_SAVE_FLAG_HOOK
++ */
++int qemu_rdma_registration_start(QEMUFile *f, void *opaque, uint32_t flags);
++
+ #endif
+-- 
+1.7.10.4
+

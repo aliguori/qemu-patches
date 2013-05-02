@@ -1,0 +1,65 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Alex Bligh <alex@alex.org.uk>
+To: Paolo Bonzini <pbonzini@redhat.com>, Alex Bligh <alex@alex.org.uk>,
+ George Dunlap <george.dunlap@eu.citrix.com>,
+ Stefano Stabellini <Stefano.Stabellini@eu.citrix.com>,
+ Anthony Liguori <anthony@codemonkey.ws>, Stefan Hajnoczi <stefanha@gmail.com>,
+ qemu-devel@nongnu.org, Stefano Stabellini <stefano.stabellini@eu.citrix.com>,
+ George Dunlap <George.Dunlap@eu.citrix.com>
+Cc: Paolo Bonzini <pbonzini@redhat.com>, Alex Bligh <alex@alex.org.uk>,
+ George Dunlap <George.Dunlap@eu.citrix.com>,
+ Stefano Stabellini <stefano.stabellini@eu.citrix.com>,
+ Anthony Liguori <anthony@codemonkey.ws>,
+ Ian Campbell <Ian.Campbell@citrix.com>, qemu-devel@nongnu.org,
+ Stefano Stabellini <Stefano.Stabellini@eu.citrix.com>,
+ "qemu-devel@nongnu.org" <qemu-devel@nongnu.org>,
+ xen-devel <xen-devel@lists.xen.org>, Ian Jackson <Ian.Jackson@eu.citrix.com>,
+ George Dunlap <george.dunlap@eu.citrix.com>
+Date: Mon, 18 Mar 2013 12:18:43 +0000
+Message-id: 1363609123-20748-1-git-send-email-alex@alex.org.uk
+Subject: [PATCH 1/1] QEMU(upstream): Disable xen's use of O_DIRECT by default
+ as it results in crashes.
+
+Due to what is almost certainly a kernel bug, writes with
+O_DIRECT may continue to reference the page after the write
+has been marked as completed, particularly in the case of
+TCP retransmit. In other scenarios, this "merely" risks
+data corruption on the write, but with Xen pages from domU
+are only transiently mapped into dom0's memory, resulting
+in kernel panics when they are subsequently accessed.
+
+This brings PV devices in line with emulated devices. Removing
+O_DIRECT is safe as barrier operations are now correctly passed
+through.
+
+See:
+  http://lists.xen.org/archives/html/xen-devel/2012-12/msg01154.html
+for more details.
+
+This patch has already been applied to the xenbits.org
+qemu-upstream repository.
+  http://xenbits.xen.org/gitweb/?p=qemu-upstream-unstable.git;a=commit;h=f3903bbac78a81fcbce1350cdce860764a62783a
+Clearly it should go into qemu's own repository.
+
+Acked-by: Stefano Stabellini <stefano.stabellini@eu.citrix.com>
+Signed-off-by: Alex Bligh <alex@alex.org.uk>
+---
+ hw/xen_disk.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+diff --git a/hw/xen_disk.c b/hw/xen_disk.c
+index a402ac8..14f8723 100644
+--- a/hw/xen_disk.c
++++ b/hw/xen_disk.c
+@@ -603,7 +603,7 @@ static int blk_init(struct XenDevice *xendev)
+     }
+ 
+     /* read-only ? */
+-    qflags = BDRV_O_NOCACHE | BDRV_O_CACHE_WB | BDRV_O_NATIVE_AIO;
++    qflags = BDRV_O_CACHE_WB | BDRV_O_NATIVE_AIO;
+     if (strcmp(blkdev->mode, "w") == 0) {
+         qflags |= BDRV_O_RDWR;
+     } else {
+-- 
+1.7.4.1
+

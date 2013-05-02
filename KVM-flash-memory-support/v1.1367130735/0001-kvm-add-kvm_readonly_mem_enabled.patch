@@ -1,0 +1,90 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Jordan Justen <jordan.l.justen@intel.com>
+To: qemu-devel@nongnu.org, Jordan Justen <jordan.l.justen@intel.com>
+Cc: qemu-devel@nongnu.org, Jordan Justen <jordan.l.justen@intel.com>
+Date: Sun, 28 Apr 2013 01:32:16 -0700
+Message-id: 1367137941-4310-2-git-send-email-jordan.l.justen@intel.com
+Subject: [PATCH 1/6] kvm: add kvm_readonly_mem_enabled
+
+Signed-off-by: Jordan Justen <jordan.l.justen@intel.com>
+---
+ include/sysemu/kvm.h |   10 ++++++++++
+ kvm-all.c            |    6 ++++++
+ kvm-stub.c           |    1 +
+ 3 files changed, 17 insertions(+)
+
+diff --git a/include/sysemu/kvm.h b/include/sysemu/kvm.h
+index 75bd7d9..c83f51c 100644
+--- a/include/sysemu/kvm.h
++++ b/include/sysemu/kvm.h
+@@ -45,6 +45,7 @@ extern bool kvm_async_interrupts_allowed;
+ extern bool kvm_irqfds_allowed;
+ extern bool kvm_msi_via_irqfd_allowed;
+ extern bool kvm_gsi_routing_allowed;
++extern bool kvm_readonly_mem_allowed;
+ 
+ #if defined CONFIG_KVM || !defined NEED_CPU_H
+ #define kvm_enabled()           (kvm_allowed)
+@@ -97,6 +98,14 @@ extern bool kvm_gsi_routing_allowed;
+  */
+ #define kvm_gsi_routing_enabled() (kvm_gsi_routing_allowed)
+ 
++/**
++ * kvm_readonly_mem_enabled:
++ *
++ * Returns: true if KVM readonly memory is enabled (ie the kernel
++ * supports it and we're running in a configuration that permits it).
++ */
++#define kvm_readonly_mem_enabled() (kvm_readonly_mem_allowed)
++
+ #else
+ #define kvm_enabled()           (0)
+ #define kvm_irqchip_in_kernel() (false)
+@@ -104,6 +113,7 @@ extern bool kvm_gsi_routing_allowed;
+ #define kvm_irqfds_enabled() (false)
+ #define kvm_msi_via_irqfd_enabled() (false)
+ #define kvm_gsi_routing_allowed() (false)
++#define kvm_readonly_mem_enabled() (false)
+ #endif
+ 
+ struct kvm_run;
+diff --git a/kvm-all.c b/kvm-all.c
+index 2d92721..f634c41 100644
+--- a/kvm-all.c
++++ b/kvm-all.c
+@@ -109,6 +109,7 @@ bool kvm_async_interrupts_allowed;
+ bool kvm_irqfds_allowed;
+ bool kvm_msi_via_irqfd_allowed;
+ bool kvm_gsi_routing_allowed;
++bool kvm_readonly_mem_allowed;
+ 
+ static const KVMCapabilityInfo kvm_required_capabilites[] = {
+     KVM_CAP_INFO(USER_MEMORY),
+@@ -1423,6 +1424,11 @@ int kvm_init(void)
+         s->irq_set_ioctl = KVM_IRQ_LINE_STATUS;
+     }
+ 
++#ifdef KVM_CAP_READONLY_MEM
++    kvm_readonly_mem_allowed =
++        (kvm_check_extension(s, KVM_CAP_READONLY_MEM) > 0);
++#endif
++
+     ret = kvm_arch_init(s);
+     if (ret < 0) {
+         goto err;
+diff --git a/kvm-stub.c b/kvm-stub.c
+index 5f52186..40dc368 100644
+--- a/kvm-stub.c
++++ b/kvm-stub.c
+@@ -22,6 +22,7 @@ bool kvm_async_interrupts_allowed;
+ bool kvm_irqfds_allowed;
+ bool kvm_msi_via_irqfd_allowed;
+ bool kvm_gsi_routing_allowed;
++bool kvm_readonly_mem_allowed;
+ 
+ int kvm_init_vcpu(CPUState *cpu)
+ {
+-- 
+1.7.10.4
+
+

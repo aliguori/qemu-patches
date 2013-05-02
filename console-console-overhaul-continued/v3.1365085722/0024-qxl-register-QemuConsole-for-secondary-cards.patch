@@ -1,0 +1,43 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Gerd Hoffmann <kraxel@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Gerd Hoffmann <kraxel@redhat.com>
+Date: Thu,  4 Apr 2013 09:29:06 +0200
+Message-id: 1365060546-24638-25-git-send-email-kraxel@redhat.com
+Subject: [PATCH 24/24] qxl: register QemuConsole for secondary cards
+
+Hook secondary qxl cards properly into the qemu console subsystem.
+
+Signed-off-by: Gerd Hoffmann <kraxel@redhat.com>
+---
+ hw/qxl.c |    6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/hw/qxl.c b/hw/qxl.c
+index 320c017..e484610 100644
+--- a/hw/qxl.c
++++ b/hw/qxl.c
+@@ -1769,7 +1769,10 @@ static void qxl_hw_invalidate(void *opaque)
+     PCIQXLDevice *qxl = opaque;
+     VGACommonState *vga = &qxl->vga;
+ 
+-    vga->hw_ops->invalidate(vga);
++    if (qxl->mode == QXL_MODE_VGA) {
++        vga->hw_ops->invalidate(vga);
++        return;
++    }
+ }
+ 
+ static void qxl_hw_text_update(void *opaque, console_ch_t *chardata)
+@@ -2085,6 +2088,7 @@ static int qxl_init_secondary(PCIDevice *dev)
+     memory_region_init_ram(&qxl->vga.vram, "qxl.vgavram", qxl->vga.vram_size);
+     vmstate_register_ram(&qxl->vga.vram, &qxl->pci.qdev);
+     qxl->vga.vram_ptr = memory_region_get_ram_ptr(&qxl->vga.vram);
++    qxl->vga.con = graphic_console_init(&qxl_ops, qxl);
+ 
+     return qxl_init_common(qxl);
+ }
+-- 
+1.7.9.7
+
+

@@ -1,0 +1,1 @@
+../hw--reorganization-part-2/v2.1364939914/0002-hw-make-subdirectories-for-devices.patch

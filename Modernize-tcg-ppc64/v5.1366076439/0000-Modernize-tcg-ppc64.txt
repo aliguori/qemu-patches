@@ -1,0 +1,73 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Richard Henderson <rth@twiddle.net>
+To: qemu-devel@nongnu.org, Richard Henderson <rth@twiddle.net>
+Cc: av1474@comtv.ru, qemu-devel@nongnu.org, aurelien@aurel32.net
+Date: Mon, 15 Apr 2013 20:40:39 +0200
+Message-id: 1366051272-12979-1-git-send-email-rth@twiddle.net
+Subject: [PATCH 00/33] Modernize tcg/ppc64
+
+Changes v4-v5:
+  * Use TCG_REG_R0 in the bswap patch, feedback from Aurelien.
+  * Rebased to master.
+
+The following changes since commit 0ca5aa4f4c4a8bcc73988dd52a536241d35e5223:
+
+  qemu-char: another io_add_watch_poll fix (2013-04-15 10:22:05 -0500)
+
+are available in the git repository at:
+
+  git://github.com/rth7680/qemu.git tcg-ppc64
+
+for you to fetch changes up to 39dc85b98561ea3de2b029f43a3a2db95c57afa3:
+
+  tcg-ppc64: Handle deposit of zero (2013-04-15 20:09:55 +0200)
+
+
+r~
+
+
+Richard Henderson (33):
+  disas: Disassemble all ppc insns for the host
+  tcg-ppc64: Use TCGReg everywhere
+  tcg-ppc64: Introduce and use tcg_out_rlw
+  tcg-ppc64: Introduce and use tcg_out_ext32u
+  tcg-ppc64: Introduce and use tcg_out_shli64
+  tcg-ppc64: Introduce and use tcg_out_shri64
+  tcg-ppc64: Introduce and use TAI and SAI
+  tcg-ppc64: Fix setcond_i32
+  tcg-ppc64: Cleanup tcg_out_movi
+  tcg-ppc64: Rearrange integer constant constraints
+  tcg-ppc64: Improve constant add and sub ops.
+  tcg-ppc64: Allow constant first argument to sub
+  tcg-ppc64: Tidy or and xor patterns.
+  tcg-ppc64: Improve and_i32 with constant
+  tcg-ppc64: Improve and_i64 with constant
+  tcg-ppc64: Use automatic implementation of ext32u_i64
+  tcg-ppc64: Streamline qemu_ld/st insn selection
+  tcg-ppc64: Implement rotates
+  tcg-ppc64: Implement bswap16 and bswap32
+  tcg-ppc64: Implement bswap64
+  tcg-ppc64: Implement compound logicals
+  tcg-ppc64: Handle constant inputs for some compound logicals
+  tcg-ppc64: Implement deposit
+  tcg-ppc64: Use I constraint for mul
+  tcg-ppc64: Use TCGType throughout compares
+  tcg-ppc64: Cleanup i32 constants to tcg_out_cmp
+  tcg-ppc64: Use MFOCRF instead of MFCR
+  tcg-ppc64: Use ISEL for setcond
+  tcg-ppc64: Implement movcond
+  tcg-ppc64: Use getauxval for ISA detection
+  tcg-ppc64: Implement add2/sub2_i64
+  tcg-ppc64: Implement mulu2/muls2_i64
+  tcg-ppc64: Handle deposit of zero
+
+ configure              |   18 +
+ disas.c                |    1 +
+ tcg/ppc64/tcg-target.c | 1344 +++++++++++++++++++++++++++++++++---------------
+ tcg/ppc64/tcg-target.h |   62 +--
+ 4 files changed, 968 insertions(+), 457 deletions(-)
+
+-- 
+1.8.1.4
+
+

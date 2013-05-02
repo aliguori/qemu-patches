@@ -1,0 +1,1 @@
+../Initial-VHDX-support/v2.1366730659/0001-qemu-add-castagnoli-crc32c-checksum-algorithm.patch

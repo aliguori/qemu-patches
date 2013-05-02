@@ -1,0 +1,79 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Hu Tao <hutao@cn.fujitsu.com>
+To: Paolo Bonzini <pbonzini@redhat.com>, qemu-devel <qemu-devel@nongnu.org>,
+ Luiz Capitulino <lcapitulino@redhat.com>, Wen Congyang <wency@cn.fujitsu.com>,
+ Jan Kiszka <jan.kiszka@siemens.com>,
+ KAMEZAWA Hiroyuki <kamezawa.hiroyu@jp.fujitsu.com>,
+ Anthony Liguori <aliguori@us.ibm.com>, "Michael S. Tsirkin" <mst@redhat.com>,
+ Gleb Natapov <gleb@redhat.com>, Peter Maydell <peter.maydell@linaro.org>,
+ Blue Swirl <blauwirbel@gmail.com>, Alexander Graf <agraf@suse.de>,
+ Christian Borntraeger <borntraeger@de.ibm.com>,
+ Sasha Levin <levinsasha928@gmail.com>, Orit Wasserman <owasserm@redhat.com>,
+ Andrew Jones <drjones@redhat.com>, Markus Armbruster <armbru@redhat.com>,
+ Stefan Hajnoczi <stefanha@redhat.com>, Eric Blake <eblake@redhat.com>,
+ Juan Quintela <quintela@redhat.com>,
+ "Daniel P. Berrange" <berrange@redhat.com>,
+ Marcelo Tosatti <mtosatti@redhat.com>,
+ Alex Williamson <alex.williamson@redhat.com>
+Cc: 
+Date: Fri, 29 Mar 2013 16:16:47 +0800
+Message-id: 22dff554d59724df819010322df91d40196b595f.1364541739.git.hutao@cn.fujitsu.com
+Subject: [PATCH 6/6] pvpanic: pass configurable ioport to seabios
+
+This lets seabios patch the corresponding SSDT entry.
+
+Signed-off-by: Hu Tao <hutao@cn.fujitsu.com>
+---
+ hw/fw_cfg.h  |  2 ++
+ hw/pvpanic.c | 14 ++++++++++++++
+ 2 files changed, 16 insertions(+)
+
+diff --git a/hw/fw_cfg.h b/hw/fw_cfg.h
+index 05c8df1..07cc941 100644
+--- a/hw/fw_cfg.h
++++ b/hw/fw_cfg.h
+@@ -1,6 +1,8 @@
+ #ifndef FW_CFG_H
+ #define FW_CFG_H
+ 
++#include "exec/hwaddr.h"
++
+ #define FW_CFG_SIGNATURE        0x00
+ #define FW_CFG_ID               0x01
+ #define FW_CFG_UUID             0x02
+diff --git a/hw/pvpanic.c b/hw/pvpanic.c
+index ff0a116..94c3b25 100644
+--- a/hw/pvpanic.c
++++ b/hw/pvpanic.c
+@@ -17,6 +17,8 @@
+ #include <monitor/monitor.h>
+ #include <sysemu/sysemu.h>
+ #include <sysemu/kvm.h>
++#include "hw/fw_cfg.h"
++#include "hw/pc.h"
+ 
+ /* The bit of supported pv event */
+ #define PVPANIC_F_PANICKED      0
+@@ -83,6 +85,18 @@ static int pvpanic_isa_initfn(ISADevice *dev)
+     memory_region_init_io(&s->io, &pvpanic_ops, s, "pvpanic", 1);
+     isa_register_ioport(dev, &s->io, s->ioport);
+ 
++    if (fw_cfg_piix) {
++        fw_cfg_add_file(fw_cfg_piix, "etc/pvpanic-port",
++                        g_memdup(&s->ioport, sizeof(s->ioport)),
++                        sizeof(s->ioport));
++    }
++
++    if (fw_cfg_q35) {
++        fw_cfg_add_file(fw_cfg_q35, "etc/pvpanic-port",
++                        g_memdup(&s->ioport, sizeof(s->ioport)),
++                        sizeof(s->ioport));
++    }
++
+     return 0;
+ }
+ 
+-- 
+1.8.1.4
+
+

@@ -1,0 +1,1 @@
+../qdev-switch-reset-to-post-order/v1.1367512716/0001-pci-do-not-export-pci_bus_reset.patch

@@ -1,0 +1,58 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Bharat Bhushan <r65777@freescale.com>
+To: Bharat Bhushan <r65777@freescale.com>, Alexander Graf <agraf@suse.de>,
+ qemu-devel@nongnu.org, agraf@suse.de, qemu-ppc@nongnu.org,
+ scottwood@freescale.com, Bhushan Bharat-R65777 <R65777@freescale.com>
+Cc: Wood Scott-B07421 <B07421@freescale.com>,
+ Bharat Bhushan <bharat.bhushan@freescale.com>, qemu-devel@nongnu.org,
+ Stuart Yoder <stuart.yoder@freescale.com>,
+ "qemu-devel@nongnu.org" <qemu-devel@nongnu.org>,
+ "qemu-ppc@nongnu.org" <qemu-ppc@nongnu.org>, qemu-ppc@nongnu.org,
+ Yoder Stuart-B08248 <B08248@freescale.com>, scottwood@freescale.com,
+ Bhushan Bharat-R65777 <R65777@freescale.com>,
+ Bharat Bhushan <Bharat.Bhushan@freescale.com>
+Date: Fri, 26 Apr 2013 11:47:25 +0530
+Message-id: 1366957045-21133-1-git-send-email-Bharat.Bhushan@freescale.com
+Subject: [PATCH 1/1] ppc: initialize GPRs as per epapr
+
+ePAPR defines the initial values of cpu registers. This patch initialize
+the GPRs as per ePAPR specification.
+
+This resolves the issue of guest reboot/reset (guest hang on reboot).
+
+Signed-off-by: Bharat Bhushan <bharat.bhushan@freescale.com>
+Signed-off-by: Stuart Yoder <stuart.yoder@freescale.com>
+---
+ hw/ppc/e500.c |    7 +++++++
+ 1 files changed, 7 insertions(+), 0 deletions(-)
+
+diff --git a/hw/ppc/e500.c b/hw/ppc/e500.c
+index c1bdb6b..a47f976 100644
+--- a/hw/ppc/e500.c
++++ b/hw/ppc/e500.c
+@@ -37,6 +37,7 @@
+ #include "qemu/host-utils.h"
+ #include "hw/pci-host/ppce500.h"
+ 
++#define EPAPR_MAGIC                (0x45504150)
+ #define BINARY_DEVICE_TREE_FILE    "mpc8544ds.dtb"
+ #define UIMAGE_LOAD_BASE           0
+ #define DTC_LOAD_PAD               0x1800000
+@@ -444,6 +445,12 @@ static void ppce500_cpu_reset(void *opaque)
+     cs->halted = 0;
+     env->gpr[1] = (16<<20) - 8;
+     env->gpr[3] = bi->dt_base;
++    env->gpr[4] = 0;
++    env->gpr[5] = 0;
++    env->gpr[6] = EPAPR_MAGIC;
++    env->gpr[7] = (64 * 1024 * 1024);
++    env->gpr[8] = 0;
++    env->gpr[9] = 0;
+     env->nip = bi->entry;
+     mmubooke_create_initial_mapping(env);
+ }
+-- 
+1.7.0.4
+
+
+

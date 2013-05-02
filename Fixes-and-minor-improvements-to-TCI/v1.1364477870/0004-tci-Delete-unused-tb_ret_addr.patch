@@ -1,0 +1,40 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Richard Henderson <rth@twiddle.net>
+To: qemu-devel@nongnu.org
+Cc: Stefan Weil <sw@weilnetz.de>
+Date: Thu, 28 Mar 2013 08:37:54 -0700
+Message-id: 1364485075-17899-5-git-send-email-rth@twiddle.net
+Subject: [PATCH 4/5] tci: Delete unused tb_ret_addr
+
+Signed-off-by: Richard Henderson <rth@twiddle.net>
+---
+ tcg/tci/tcg-target.c | 6 +-----
+ 1 file changed, 1 insertion(+), 5 deletions(-)
+
+diff --git a/tcg/tci/tcg-target.c b/tcg/tci/tcg-target.c
+index a85095c..b096a84 100644
+--- a/tcg/tci/tcg-target.c
++++ b/tcg/tci/tcg-target.c
+@@ -45,9 +45,6 @@
+ #define TCG_TARGET_STACK_ALIGN          16
+ #define TCG_TARGET_CALL_STACK_OFFSET    0
+ 
+-/* TODO: documentation. */
+-static uint8_t *tb_ret_addr;
+-
+ /* Macros used in tcg_target_op_defs. */
+ #define R       "r"
+ #define RI      "ri"
+@@ -912,7 +909,6 @@ static void tcg_target_init(TCGContext *s)
+ }
+ 
+ /* Generate global QEMU prologue and epilogue code. */
+-static void tcg_target_qemu_prologue(TCGContext *s)
++static inline void tcg_target_qemu_prologue(TCGContext *s)
+ {
+-    tb_ret_addr = s->code_ptr;
+ }
+-- 
+1.8.1.4
+
+

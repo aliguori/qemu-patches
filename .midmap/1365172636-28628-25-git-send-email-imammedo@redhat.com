@@ -1,0 +1,1 @@
+../target-i386-CPU-hot-add-with-cpu-add-QMP-command/v2.1365197812/0022-add-cpu-add-qmp-command-and-implement-CPU-hot-add-for-target-i386.patch

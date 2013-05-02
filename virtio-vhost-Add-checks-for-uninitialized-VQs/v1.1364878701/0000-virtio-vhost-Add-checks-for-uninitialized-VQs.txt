@@ -1,0 +1,59 @@
+From patches Mon Sep 17 00:00:00 2001
+From: "Nicholas A. Bellinger" <nab@linux-iscsi.org>
+To: "Nicholas A. Bellinger" <nab@linux-iscsi.org>,
+ "Michael S. Tsirkin" <mst@redhat.com>,
+ target-devel <target-devel@vger.kernel.org>
+Cc: Paolo Bonzini <pbonzini@redhat.com>, qemu-devel <qemu-devel@nongnu.org>,
+ target-devel <target-devel@vger.kernel.org>,
+ lf-virt <virtualization@lists.linux-foundation.org>,
+ kvm-devel <kvm@vger.kernel.org>, "Michael S. Tsirkin" <mst@redhat.com>,
+ Nicholas Bellinger <nab@linux-iscsi.org>,
+ Anthony Liguori <aliguori@linux.vnet.ibm.com>,
+ Stefan Hajnoczi <stefanha@redhat.com>, Asias He <asias@redhat.com>
+Date: Mon,  1 Apr 2013 23:58:21 +0000
+Message-id: 1364860704-11896-1-git-send-email-nab@linux-iscsi.org
+Subject: [PATCH 0/3] virtio/vhost: Add checks for uninitialized VQs
+
+From: Nicholas Bellinger <nab@linux-iscsi.org>
+
+Hi folks,
+
+This series adds a virtio_queue_valid() for use by virtio-pci code in
+order to prevent opreations upon uninitialized VQs, which is currently
+expected to occur during seabios setup of virtio-scsi with in-flight
+vhost-scsi-pci device code.
+
+On the vhost side, it also adds virtio_queue_valid() sanity checks in
+vhost_virtqueue_[start,stop]() and vhost_verify_ring_mappings() in order
+to skip the same uninitialized VQs.
+
+Changes from v1:
+  - Remove now unnecessary virtio_queue_get_num() calls in virtio-pci.c
+  - Add virtio_queue_valid() calls in vhost_virtqueue_[start,stop]()
+
+Please review.
+
+--nab
+
+Michael S. Tsirkin (1):
+  virtio: add API to check that ring is setup
+
+Nicholas Bellinger (2):
+  virtio-pci: Add virtio_queue_valid checks ahead of
+    virtio_queue_get_num
+  vhost: Skip uninitialized VQs in vhost_virtqueue_[start,stop]
+
+ hw/vhost.c      |   12 ++++++++++++
+ hw/virtio-pci.c |   34 +++++++++++++++-------------------
+ hw/virtio.c     |    5 +++++
+ hw/virtio.h     |    1 +
+ 4 files changed, 33 insertions(+), 19 deletions(-)
+
+Acked-by: Michael S. Tsirkin <mst@redhat.com>
+-- 
+1.7.2.5
+
+--
+To unsubscribe from this list: send the line "unsubscribe kvm" in
+the body of a message to majordomo@vger.kernel.org
+More majordomo info at  http://vger.kernel.org/majordomo-info.html

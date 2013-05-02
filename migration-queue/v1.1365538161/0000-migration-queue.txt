@@ -1,0 +1,38 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Juan Quintela <quintela@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>
+Date: Tue, 9 Apr 2013 15:09:21 +0200
+Message-id: 1365512961-15623-1-git-send-email-quintela@redhat.com
+Subject: [PATCH 0/4] migration queue
+
+Hi
+
+Anthony,  this inculed the iovec patches that help savevm performance by paolo.  Please pull.
+
+Later,  Juan.
+
+
+The following changes since commit 47b5264eb3e1cd2825e48d28fd0d1b239ed53974:
+
+  Merge remote-tracking branch 'bonzini/hw-dirs' into staging (2013-04-08 13:12:33 -0500)
+
+are available in the git repository at:
+
+
+  git://github.com/juanquintela/qemu.git migration.next
+
+for you to fetch changes up to 4d1172472cdf28a444321ca8b165ce7326eb919e:
+
+  migration: simplify writev vs. non-writev logic (2013-04-09 15:00:13 +0200)
+
+----------------------------------------------------------------
+Paolo Bonzini (4):
+      migration: set f->is_write and flush in add_to_iovec
+      migration: use a single I/O operation when writev_buffer is not defined
+      migration: drop is_write complications
+      migration: simplify writev vs. non-writev logic
+
+ savevm.c | 104 ++++++++++++++++++++++++++-------------------------------------
+ 1 file changed, 42 insertions(+), 62 deletions(-)
+

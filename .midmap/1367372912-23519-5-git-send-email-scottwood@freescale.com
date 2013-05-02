@@ -1,0 +1,1 @@
+../KVM-Dont-assume-that-mpstate-exists-with-in-kernel-PIC-always/v3.1367372904/0005-KVM-MSI-Swap-payload-to-native-endianness.patch

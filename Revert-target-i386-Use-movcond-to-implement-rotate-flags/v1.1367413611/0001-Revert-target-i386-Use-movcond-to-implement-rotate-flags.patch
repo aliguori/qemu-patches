@@ -1,0 +1,160 @@
+From patches Mon Sep 17 00:00:00 2001
+From: =?utf-8?q?Herv=C3=A9_Poussineau_=3Chpoussin=40reactos=2Eorg=3E?=
+To: =?UTF-8?B?SGVydsOpIFBvdXNzaW5lYXU=?= <hpoussin@reactos.org>,
+ qemu-devel@nongnu.org, Richard Henderson <rth@twiddle.net>
+Cc: qemu-devel@nongnu.org, Richard Henderson <rth@twiddle.net>,
+ =?UTF-8?q?Herv=C3=A9=20Poussineau?= <hpoussin@reactos.org>
+Date: Wed,  1 May 2013 08:06:51 +0200
+Message-id: 1367388411-13193-1-git-send-email-hpoussin@reactos.org
+Subject: [PATCH 1/1] Revert "target-i386: Use movcond to implement rotate
+ flags."
+
+This commit breaks boot of MS-DOS 6.22, which stops at:
+MODE CON CODEPAGE PREPARE=((850) C:\DOS\EGA.CPI)
+
+This reverts part of commit 34d80a55ff8517fd37bcfea5063b9797e2bd9132.
+
+Signed-off-by: Hervé Poussineau <hpoussin@reactos.org>
+---
+
+checkpatch.pl complains about this patch, but I preferred to do a simple
+revert than to fix code style.
+
+ target-i386/translate.c |   98 ++++++++++++++++++++++-------------------------
+ 1 file changed, 45 insertions(+), 53 deletions(-)
+
+diff --git a/target-i386/translate.c b/target-i386/translate.c
+index 40f891d..465b75f 100644
+--- a/target-i386/translate.c
++++ b/target-i386/translate.c
+@@ -1804,81 +1804,73 @@ static void gen_rot_rm_T1(DisasContext *s, int ot, int op1, int is_right)
+ static void gen_rot_rm_im(DisasContext *s, int ot, int op1, int op2,
+                           int is_right)
+ {
+-    int mask = (ot == OT_QUAD ? 0x3f : 0x1f);
+-    int shift;
++    int mask;
++    int data_bits;
++    TCGv t0, t1, a0;
++
++    /* XXX: inefficient, but we must use local temps */
++    t0 = tcg_temp_local_new();
++    t1 = tcg_temp_local_new();
++    a0 = tcg_temp_local_new();
++
++    if (ot == OT_QUAD)
++        mask = 0x3f;
++    else
++        mask = 0x1f;
+ 
+     /* load */
+     if (op1 == OR_TMP0) {
+-        gen_op_ld_T0_A0(ot + s->mem_index);
++        tcg_gen_mov_tl(a0, cpu_A0);
++        gen_op_ld_v(ot + s->mem_index, t0, a0);
+     } else {
+-        gen_op_mov_TN_reg(ot, 0, op1);
++        gen_op_mov_v_reg(ot, t0, op1);
+     }
+ 
++    gen_extu(ot, t0);
++    tcg_gen_mov_tl(t1, t0);
++
+     op2 &= mask;
++    data_bits = 8 << ot;
+     if (op2 != 0) {
+-        switch (ot) {
+-#ifdef TARGET_X86_64
+-        case OT_LONG:
+-            tcg_gen_trunc_tl_i32(cpu_tmp2_i32, cpu_T[0]);
+-            if (is_right) {
+-                tcg_gen_rotri_i32(cpu_tmp2_i32, cpu_tmp2_i32, op2);
+-            } else {
+-                tcg_gen_rotli_i32(cpu_tmp2_i32, cpu_tmp2_i32, op2);
+-            }
+-            tcg_gen_extu_i32_tl(cpu_T[0], cpu_tmp2_i32);
+-            break;
+-#endif
+-        default:
+-            if (is_right) {
+-                tcg_gen_rotri_tl(cpu_T[0], cpu_T[0], op2);
+-            } else {
+-                tcg_gen_rotli_tl(cpu_T[0], cpu_T[0], op2);
+-            }
+-            break;
+-        case OT_BYTE:
+-            mask = 7;
+-            goto do_shifts;
+-        case OT_WORD:
+-            mask = 15;
+-        do_shifts:
+-            shift = op2 & mask;
+-            if (is_right) {
+-                shift = mask + 1 - shift;
+-            }
+-            gen_extu(ot, cpu_T[0]);
+-            tcg_gen_shli_tl(cpu_tmp0, cpu_T[0], shift);
+-            tcg_gen_shri_tl(cpu_T[0], cpu_T[0], mask + 1 - shift);
+-            tcg_gen_or_tl(cpu_T[0], cpu_T[0], cpu_tmp0);
+-            break;
++        int shift = op2 & ((1 << (3 + ot)) - 1);
++        if (is_right) {
++            tcg_gen_shri_tl(cpu_tmp4, t0, shift);
++            tcg_gen_shli_tl(t0, t0, data_bits - shift);
++        }
++        else {
++            tcg_gen_shli_tl(cpu_tmp4, t0, shift);
++            tcg_gen_shri_tl(t0, t0, data_bits - shift);
+         }
++        tcg_gen_or_tl(t0, t0, cpu_tmp4);
+     }
+ 
+     /* store */
+     if (op1 == OR_TMP0) {
+-        gen_op_st_T0_A0(ot + s->mem_index);
++        gen_op_st_v(ot + s->mem_index, t0, a0);
+     } else {
+-        gen_op_mov_reg_T0(ot, op1);
++        gen_op_mov_reg_v(ot, op1, t0);
+     }
+ 
+     if (op2 != 0) {
+-        /* Compute the flags into CC_SRC.  */
++        /* update eflags */
+         gen_compute_eflags(s);
++        assert(s->cc_op == CC_OP_EFLAGS);
+ 
+-        /* The value that was "rotated out" is now present at the other end
+-           of the word.  Compute C into CC_DST and O into CC_SRC2.  Note that
+-           since we've computed the flags into CC_SRC, these variables are
+-           currently dead.  */
++        tcg_gen_andi_tl(cpu_cc_src, cpu_cc_src, ~(CC_O | CC_C));
++        tcg_gen_xor_tl(cpu_tmp0, t1, t0);
++        tcg_gen_lshift(cpu_tmp0, cpu_tmp0, 11 - (data_bits - 1));
++        tcg_gen_andi_tl(cpu_tmp0, cpu_tmp0, CC_O);
++        tcg_gen_or_tl(cpu_cc_src, cpu_cc_src, cpu_tmp0);
+         if (is_right) {
+-            tcg_gen_shri_tl(cpu_cc_src2, cpu_T[0], mask - 1);
+-            tcg_gen_shri_tl(cpu_cc_dst, cpu_T[0], mask);
+-        } else {
+-            tcg_gen_shri_tl(cpu_cc_src2, cpu_T[0], mask);
+-            tcg_gen_andi_tl(cpu_cc_dst, cpu_T[0], 1);
++            tcg_gen_shri_tl(t0, t0, data_bits - 1);
+         }
+-        tcg_gen_andi_tl(cpu_cc_src2, cpu_cc_src2, 1);
+-        tcg_gen_xor_tl(cpu_cc_src2, cpu_cc_src2, cpu_cc_dst);
+-        set_cc_op(s, CC_OP_ADCOX);
++        tcg_gen_andi_tl(t0, t0, CC_C);
++        tcg_gen_or_tl(cpu_cc_src, cpu_cc_src, t0);
+     }
++
++    tcg_temp_free(t0);
++    tcg_temp_free(t1);
++    tcg_temp_free(a0);
+ }
+ 
+ /* XXX: add faster immediate = 1 case */
+-- 
+1.7.10.4
+
+

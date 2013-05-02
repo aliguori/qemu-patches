@@ -1,0 +1,1 @@
+../monitor-do-not-rely-on-O_NONBLOCK-for-passed-file-descriptors/v1.1365100811/0003-qemu-socket-set-passed-fd-non-blocking-in-socket_connect.patch

@@ -1,0 +1,197 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: kwolf@redhat.com, stefanha@redhat.com
+Date: Thu, 18 Apr 2013 17:17:29 +0200
+Message-id: 1366298249-11739-6-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 5/5] qcow2.py: add dump-map command
+
+The dump-map command visits the L1 and L2 tables, and uses them
+to dump the guest->host cluster allocation for an entire chain
+of qcow2 files.  Currently, it assumes that all files in the
+chain are qcow2.  The output presents lines in two formats:
+
+    <start> <length>                 for unallocated (zero) areas
+    <start> <length> <depth> <pos>   for allocated areas
+
+Depth identifies the file that holds the data (the top file in
+the chain is 0, its backing file is 1, and so on), and pos is
+the offset inside that file in bytes.  Start and length are in
+bytes too.
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ tests/qemu-iotests/qcow2.py | 116 ++++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 116 insertions(+)
+
+diff --git a/tests/qemu-iotests/qcow2.py b/tests/qemu-iotests/qcow2.py
+index 77a9d52..1609389 100755
+--- a/tests/qemu-iotests/qcow2.py
++++ b/tests/qemu-iotests/qcow2.py
+@@ -43,11 +43,47 @@ class ImageFile:
+         self.fd.seek(offset)
+         return self.fd.write(data)
+ 
++    def get_map(self, first, last):
++        if first > self.size:
++           yield (first, last - first)
++           return
++
++        for result in self.get_map_impl(first, min(last, self.size)):
++            yield result
++        if last > self.size:
++            yield (self.size, last - self.size)
++
++    def get_map_coalesced(self, first, last):
++        # Modify the list "cur" and return True if "next" represents an
++        # immediately following part of the same file.  Otherwise return
++        # False.
++        def coalesce(cur, next):
++            if len(cur) == len(next) and \
++                    cur[0] + cur[1] == next[0] and \
++                    (len(cur) == 2 or
++                     (cur[2] == next[2] and cur[3] + cur[1] == next[3])):
++                cur[1] = cur[1] + next[1]
++                return True
++            else:
++                return False
++
++        cur = None
++        for result in self.get_map(first, last):
++            if cur is None:
++                cur = list(result)
++            elif not coalesce(cur, result):
++                yield tuple(cur)
++                cur = list(result)
++        yield tuple(cur)
++
+ class Raw(ImageFile):
+     def __init__(self, fd):
+         size = os.fstat(fd.fileno()).st_size
+         ImageFile.__init__(self, fd, dict(size=size))
+ 
++    def get_map_impl(self, first, last):
++        yield (first, last - first, self, first)
++
+ class Qcow(ImageFile):
+ 
+     uint32_t = 'I'
+@@ -81,6 +117,7 @@ class Qcow(ImageFile):
+     QCOW_MAGIC = 0x514649fb
+     EXT_BACKING_FORMAT = 0xE2792ACA
+     EXT_FEATURE_NAMES = 0x6803f857
++    L2_BIT_ZERO = 1
+ 
+     def __init__(self, fd):
+ 
+@@ -102,6 +139,7 @@ class Qcow(ImageFile):
+ 
+         fd.seek(self.header_length)
+         self.load_extensions()
++        self.load_l1_table()
+ 
+         if self.backing_file_offset:
+             self.backing_file = self.raw_pread(self.backing_file_offset,
+@@ -189,6 +227,69 @@ class Qcow(ImageFile):
+             print "%-25s %s" % ("data", data)
+             print ""
+ 
++    def read_table(self, host_offset, size):
++        s = self.raw_pread(host_offset, size)
++        table = [struct.unpack('>Q', s[i:i + 8])[0] for i in xrange(0, size, 8)]
++        return table
++
++    def load_l1_table(self):
++        self.l1_table = self.read_table(self.l1_table_offset,
++                                        self.l1_size * 8)
++
++    def read_l2_table(self, l1_entry):
++        if l1_entry == 0:
++            return None
++        return self.read_table(l1_entry & 0x7FFFFFFFFFFFFFFF,
++                               self.cluster_size)
++
++    def get_map_impl(self, first, last):
++        def get_host_offset(l2_entry):
++            if (l2_entry & 0x4000000000000000):
++                raise Error('compressed clusters not supported yet')
++            if (l2_entry == 0):
++                return None
++            if (l2_entry & Qcow.L2_BIT_ZERO) != 0:
++                return 0
++            return l2_entry & 0x00FFFFFFFFFFFE00
++
++        l1_entries = len(self.l1_table)
++        l2_entries = self.cluster_size / 8
++        last_l1_ofs = None
++        last_l2_table = None
++        offset = first % self.cluster_size
++        for pos in xrange(first - offset, last, self.cluster_size):
++            if pos <= self.size:
++                cluster = pos / self.cluster_size
++                left = min(last, pos + self.cluster_size) - pos
++                l2_ofs = cluster % l2_entries
++                l1_ofs = cluster / l2_entries
++
++                if l1_ofs != last_l1_ofs:
++                    last_l1_ofs = l1_ofs
++                    last_l2_table = self.read_l2_table(self.l1_table[l1_ofs])
++
++                if last_l2_table is None:
++                    l2_entry = 0
++                else:
++                    l2_entry = last_l2_table[l2_ofs]
++            else:
++                l2_entry = Qcow.L2_BIT_ZERO
++
++            host_offset = get_host_offset(l2_entry)
++            if host_offset is None:
++                self.open_backing_image()
++                if self.backing_image is not None:
++                    for result in self.backing_image.get_map(pos + offset, pos + left):
++                        yield result
++                    continue
++                else:
++                    host_offset = 0
++            if host_offset != 0:
++                yield (pos, left, self, host_offset + offset)
++            else:
++                yield (pos, left)
++            offset = 0
++
+ def load_image(filename, mode='rb', format=None):
+     fd = open(filename, mode)
+     if format is None:
+@@ -207,6 +308,20 @@ def load_image(filename, mode='rb', format=None):
+ 
+     raise Error('unknown format %s' % format)
+ 
++def cmd_dump_map(q):
++    def do_load_chain(q):
++        q.open_backing_image()
++        if q.backing_image:
++            q.backing_image.depth = q.depth + 1
++            do_load_chain(q.backing_image)
++
++    q.depth = 0
++    do_load_chain(q)
++    for result in q.get_map_coalesced(0, q.size):
++        if len(result) == 2:
++            print "%d %d" % (result[0], result[1])
++        else:
++            print "%d %d %d %d" % (result[0], result[1], result[2].depth, result[3])
+ 
+ def cmd_dump_header(h):
+     h.dump()
+@@ -265,6 +380,7 @@ def cmd_set_feature_bit(h, group, bit):
+ 
+ cmds = [
+     [ 'dump-header',    cmd_dump_header,    0, 'Dump image header and header extensions' ],
++    [ 'dump-map',       cmd_dump_map,       0, 'Dump cluster map' ],
+     [ 'add-header-ext', cmd_add_header_ext, 2, 'Add a header extension' ],
+     [ 'del-header-ext', cmd_del_header_ext, 1, 'Delete a header extension' ],
+     [ 'set-feature-bit', cmd_set_feature_bit, 2, 'Set a feature bit'],
+-- 
+1.8.2
+
+

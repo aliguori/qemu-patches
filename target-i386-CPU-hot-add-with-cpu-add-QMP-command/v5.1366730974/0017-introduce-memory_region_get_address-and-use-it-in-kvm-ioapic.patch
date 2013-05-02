@@ -1,0 +1,117 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Igor Mammedov <imammedo@redhat.com>
+To: Blue Swirl <blauwirbel@gmail.com>, peter.maydell@linaro.org,
+ Paolo Bonzini <pbonzini@redhat.com>, jan.kiszka@siemens.com,
+ qemu-devel@nongnu.org, Igor Mammedov <imammedo@redhat.com>,
+ pbonzini@redhat.com, Peter Maydell <peter.maydell@linaro.org>,
+ Jan Kiszka <jan.kiszka@siemens.com>
+Cc: Paolo Bonzini <pbonzini@redhat.com>, peter.maydell@linaro.org,
+ gleb@redhat.com, mst@redhat.com, jan.kiszka@siemens.com, qemu-devel@nongnu.org,
+ lcapitulino@redhat.com, blauwirbel@gmail.com,
+ Igor Mammedov <imammedo@redhat.com>,
+ "blauwirbel@gmail.com" <blauwirbel@gmail.com>, kraxel@redhat.com,
+ "afaerber@suse.de" <afaerber@suse.de>, Jan Kiszka <jan.kiszka@siemens.com>,
+ "claudio.fontana@huawei.com" <claudio.fontana@huawei.com>, eblake@redhat.com,
+ "gleb@redhat.com" <gleb@redhat.com>, Anthony Liguori <aliguori@us.ibm.com>,
+ quintela@redhat.com, armbru@redhat.com,
+ "alex.williamson@redhat.com" <alex.williamson@redhat.com>,
+ yang.z.zhang@intel.com,
+ "anthony.perard@citrix.com" <anthony.perard@citrix.com>,
+ "kraxel@redhat.com" <kraxel@redhat.com>, Blue Swirl <blauwirbel@gmail.com>,
+ ehabkost@redhat.com, stefano.stabellini@eu.citrix.com,
+ "lcapitulino@redhat.com" <lcapitulino@redhat.com>, aderumier@odiso.com,
+ anthony.perard@citrix.com, alex.williamson@redhat.com,
+ "kwolf@redhat.com" <kwolf@redhat.com>,
+ "ehabkost@redhat.com" <ehabkost@redhat.com>,
+ "armbru@redhat.com" <armbru@redhat.com>,
+ "qemu-devel@nongnu.org" <qemu-devel@nongnu.org>, rth@twiddle.net,
+ kwolf@redhat.com, "eblake@redhat.com" <eblake@redhat.com>,
+ "stefano.stabellini@eu.citrix.com" <stefano.stabellini@eu.citrix.com>,
+ "rth@twiddle.net" <rth@twiddle.net>,
+ "quintela@redhat.com" <quintela@redhat.com>, claudio.fontana@huawei.com,
+ "mst@redhat.com" <mst@redhat.com>, "aderumier@odiso.com" <aderumier@odiso.com>,
+ "yang.z.zhang@intel.com" <yang.z.zhang@intel.com>, pbonzini@redhat.com,
+ afaerber@suse.de
+Date: Tue, 23 Apr 2013 10:29:51 +0200
+Message-id: 1366705795-24732-18-git-send-email-imammedo@redhat.com
+Subject: [PATCH 17/21] introduce memory_region_get_address() and use it in
+ kvm/ioapic
+
+kvm/ioapic is relying on the fact that SysBus device
+maps mmio regions with offset counted from start of system memory.
+But if ioapic's region is moved to another sub-region which doesn't
+start at the beginning of system memory then using offset isn't correct.
+
+Fix kvm/ioapic by providing and using helper function that returns
+absolute region address in respective address space.
+
+Signed-off-by: Igor Mammedov <imammedo@redhat.com>
+---
+Note:
+  next patch "move IOAPIC to ICC bus" converts IOAPICs to ICCDevice
+  and breaks SysBus device assumption used by kvm/ioapic.
+---
+ hw/i386/kvm/ioapic.c  |    2 +-
+ include/exec/memory.h |   10 ++++++++++
+ memory.c              |   11 +++++++++++
+ 3 files changed, 22 insertions(+), 1 deletions(-)
+
+diff --git a/hw/i386/kvm/ioapic.c b/hw/i386/kvm/ioapic.c
+index a3bd519..b80d41a 100644
+--- a/hw/i386/kvm/ioapic.c
++++ b/hw/i386/kvm/ioapic.c
+@@ -96,7 +96,7 @@ static void kvm_ioapic_put(IOAPICCommonState *s)
+ 
+     kioapic->id = s->id;
+     kioapic->ioregsel = s->ioregsel;
+-    kioapic->base_address = s->busdev.mmio[0].addr;
++    kioapic->base_address = memory_region_get_address(&s->io_memory);
+     kioapic->irr = s->irr;
+     for (i = 0; i < IOAPIC_NUM_PINS; i++) {
+         kioapic->redirtbl[i].bits = s->ioredtbl[i];
+diff --git a/include/exec/memory.h b/include/exec/memory.h
+index 9e88320..954f353 100644
+--- a/include/exec/memory.h
++++ b/include/exec/memory.h
+@@ -706,6 +706,16 @@ void memory_region_set_enabled(MemoryRegion *mr, bool enabled);
+ void memory_region_set_address(MemoryRegion *mr, hwaddr addr);
+ 
+ /*
++ * memory_region_get_address: get current the address of a region
++ *
++ * Returns the absolute address of a region.
++ * May be used on regions that are currently part of a memory hierarchy.
++ *
++ * @mr: the region being queried
++ */
++hwaddr memory_region_get_address(MemoryRegion *mr);
++
++/*
+  * memory_region_set_alias_offset: dynamically update a memory alias's offset
+  *
+  * Dynamically updates the offset into the target region that an alias points
+diff --git a/memory.c b/memory.c
+index 75ca281..0651050 100644
+--- a/memory.c
++++ b/memory.c
+@@ -1413,6 +1413,17 @@ void memory_region_set_address(MemoryRegion *mr, hwaddr addr)
+     memory_region_transaction_commit();
+ }
+ 
++hwaddr memory_region_get_address(MemoryRegion *mr)
++{
++    hwaddr addr = mr->addr;
++
++    while (mr->parent) {
++        mr = mr->parent;
++        addr += mr->addr;
++    }
++    return addr;
++}
++
+ void memory_region_set_alias_offset(MemoryRegion *mr, hwaddr offset)
+ {
+     assert(mr->alias);
+-- 
+1.7.1
+

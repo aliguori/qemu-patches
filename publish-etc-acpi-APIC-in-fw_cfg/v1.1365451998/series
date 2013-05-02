@@ -1,0 +1,6 @@
+0000-publish-etc-acpi-APIC-in-fw_cfg.txt
+0001-refer-to-FWCfgState-explicitly.patch
+0002-hw-acpi-extract-standard-table-headers-as-a-standalone-structure.patch
+0003-hw-acpi-export-default-ACPI-headers-using-the-type-just-introduced.patch
+0004-hw-acpi-export-acpi_checksum.patch
+0005-i386-pc-build-ACPI-MADT-APIC-for-fw_cfg-clients.patch

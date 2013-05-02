@@ -1,0 +1,111 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Igor Mammedov <imammedo@redhat.com>
+To: Igor Mammedov <imammedo@redhat.com>, qemu-devel@nongnu.org
+Cc: peter.maydell@linaro.org, gleb@redhat.com, mst@redhat.com,
+ jan.kiszka@siemens.com, qemu-devel@nongnu.org, lcapitulino@redhat.com,
+ blauwirbel@gmail.com, kraxel@redhat.com, eblake@redhat.com,
+ Anthony Liguori <aliguori@us.ibm.com>, quintela@redhat.com, armbru@redhat.com,
+ yang.z.zhang@intel.com, ehabkost@redhat.com, stefano.stabellini@eu.citrix.com,
+ aderumier@odiso.com, anthony.perard@citrix.com, alex.williamson@redhat.com,
+ rth@twiddle.net, kwolf@redhat.com, claudio.fontana@huawei.com,
+ pbonzini@redhat.com, afaerber@suse.de
+Date: Tue, 23 Apr 2013 10:29:41 +0200
+Message-id: 1366705795-24732-8-git-send-email-imammedo@redhat.com
+Subject: [PATCH 07/21] cpu: introduce get_arch_id() method and override it for
+ target-i386
+
+get_arch_id() adds possibility for generic code to get guest visible
+CPU ID without accessing CPUArchState. If target doesn't override it,
+it will return cpu_index.
+
+Override it on target-i386 to return APIC ID.
+
+Signed-off-by: Igor Mammedov <imammedo@redhat.com>
+Reviewed-by: Eduardo Habkost <ehabkost@redhat.com>
+Reviewed-by: liguang <lig.fnst@cn.fujitsu.com>
+Acked-by: Michael S. Tsirkin <mst@redhat.com>
+---
+ * it will be used later by new cpu_exists() generic function and
+   acpi_piix.
+ * s/cpu_firmware_id/cpu_arch_id/
+---
+ include/qom/cpu.h |    2 ++
+ qom/cpu.c         |    6 ++++++
+ target-i386/cpu.c |   10 ++++++++++
+ 3 files changed, 18 insertions(+), 0 deletions(-)
+
+diff --git a/include/qom/cpu.h b/include/qom/cpu.h
+index d6a0e80..639b436 100644
+--- a/include/qom/cpu.h
++++ b/include/qom/cpu.h
+@@ -45,6 +45,7 @@ typedef struct CPUState CPUState;
+  * instantiatable CPU type.
+  * @reset: Callback to reset the #CPUState to its initial state.
+  * @do_interrupt: Callback for interrupt handling.
++ * @get_arch_id: Callback for getting architecture depended CPU ID
+  * @vmsd: State description for migration.
+  *
+  * Represents a CPU family or model.
+@@ -58,6 +59,7 @@ typedef struct CPUClass {
+ 
+     void (*reset)(CPUState *cpu);
+     void (*do_interrupt)(CPUState *cpu);
++    int64_t (*get_arch_id)(CPUState *cpu);
+ 
+     const struct VMStateDescription *vmsd;
+ } CPUClass;
+diff --git a/qom/cpu.c b/qom/cpu.c
+index 9f78114..d44f987 100644
+--- a/qom/cpu.c
++++ b/qom/cpu.c
+@@ -76,6 +76,11 @@ static void cpu_common_realizefn(DeviceState *dev, Error **errp)
+     }
+ }
+ 
++static int64_t cpu_common_get_arch_id(CPUState *cpu)
++{
++    return cpu->cpu_index;
++}
++
+ static void cpu_class_init(ObjectClass *klass, void *data)
+ {
+     DeviceClass *dc = DEVICE_CLASS(klass);
+@@ -83,6 +88,7 @@ static void cpu_class_init(ObjectClass *klass, void *data)
+ 
+     k->class_by_name = cpu_common_class_by_name;
+     k->reset = cpu_common_reset;
++    k->get_arch_id = cpu_common_get_arch_id;
+     dc->realize = cpu_common_realizefn;
+     dc->no_user = 1;
+ }
+diff --git a/target-i386/cpu.c b/target-i386/cpu.c
+index e2302d8..a415fa3 100644
+--- a/target-i386/cpu.c
++++ b/target-i386/cpu.c
+@@ -2272,6 +2272,14 @@ static void x86_cpu_initfn(Object *obj)
+     }
+ }
+ 
++static int64_t x86_cpu_get_arch_id(CPUState *cpu)
++{
++    X86CPU *x86cpu = X86_CPU(cpu);
++    CPUX86State *env = &x86cpu->env;
++
++    return env->cpuid_apic_id;
++}
++
+ static void x86_cpu_common_class_init(ObjectClass *oc, void *data)
+ {
+     X86CPUClass *xcc = X86_CPU_CLASS(oc);
+@@ -2286,6 +2294,8 @@ static void x86_cpu_common_class_init(ObjectClass *oc, void *data)
+ 
+     cc->do_interrupt = x86_cpu_do_interrupt;
+     cpu_class_set_vmsd(cc, &vmstate_x86_cpu);
++
++    cc->get_arch_id = x86_cpu_get_arch_id;
+ }
+ 
+ static const TypeInfo x86_cpu_type_info = {
+-- 
+1.7.1
+

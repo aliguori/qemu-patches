@@ -1,0 +1,1 @@
+../target-i386-CPU-hot-add-with-cpu-add-QMP-command/v5.1366730974/0014-target-i386-replace-MSI_SPACE_SIZE-with-APIC_SPACE_SIZE.patch

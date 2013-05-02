@@ -1,0 +1,34 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: 
+Date: Fri, 27 Jul 2012 17:02:58 +0200
+Message-id: 1343401379-19495-32-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 31/32] virtio-scsi: add ioeventfd support
+
+Probably due to bad merge months ago, virtio-scsi-pci did not have
+ioeventfd support.  Fix this and enable it by default, as is the
+case for other virtio-pci devices.
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ hw/virtio-pci.c |    1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/hw/virtio-pci.c b/hw/virtio-pci.c
+index 4e03f0b..82859a5 100644
+--- a/hw/virtio-pci.c
++++ b/hw/virtio-pci.c
+@@ -1040,6 +1040,7 @@ static int virtio_scsi_exit_pci(PCIDevice *pci_dev)
+ }
+ 
+ static Property virtio_scsi_properties[] = {
++    DEFINE_PROP_BIT("ioeventfd", VirtIOPCIProxy, flags, VIRTIO_PCI_FLAG_USE_IOEVENTFD_BIT, true),
+     DEFINE_PROP_UINT32("vectors", VirtIOPCIProxy, nvectors, 2),
+     DEFINE_VIRTIO_SCSI_PROPERTIES(VirtIOPCIProxy, host_features, scsi),
+     DEFINE_PROP_END_OF_LIST(),
+-- 
+1.7.10.4
+
+
+

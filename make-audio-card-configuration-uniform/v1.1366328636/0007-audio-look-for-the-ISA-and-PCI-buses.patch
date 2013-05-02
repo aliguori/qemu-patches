@@ -1,0 +1,145 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: Anthony Liguori <anthony@codemonkey.ws>,
+ Paolo Bonzini <pbonzini@redhat.com>,
+ Andreas =?utf-8?Q?F=C3=A4rber?= <afaerber@suse.de>, qemu-devel@nongnu.org,
+ =?ISO-8859-15?Q?Andreas_F=E4rber?= <afaerber@suse.de>
+Cc: Anthony Liguori <aliguori@us.ibm.com>,
+ Anthony Liguori <anthony@codemonkey.ws>,
+ Christian Borntraeger <borntraeger@de.ibm.com>, qemu-devel@nongnu.org,
+ Igor Mammedov <imammedo@redhat.com>, av1474@comtv.ru,
+ Dominik Dingel <dingel@linux.vnet.ibm.com>
+Date: Thu, 18 Apr 2013 18:44:03 +0200
+Message-id: 1366303444-24620-8-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 7/8] audio: look for the ISA and PCI buses
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ arch_init.c                | 16 +++++++++++-----
+ hw/i386/pc_piix.c          |  2 +-
+ hw/i386/pc_q35.c           |  2 +-
+ hw/mips/mips_jazz.c        |  2 +-
+ hw/mips/mips_malta.c       |  2 +-
+ hw/ppc/prep.c              |  2 +-
+ include/sysemu/arch_init.h |  2 +-
+ 7 files changed, 17 insertions(+), 11 deletions(-)
+
+diff --git a/arch_init.c b/arch_init.c
+index 88b74c0..cbcb3ed 100644
+--- a/arch_init.c
++++ b/arch_init.c
+@@ -992,20 +992,26 @@ void select_soundhw(const char *optarg)
+     }
+ }
+ 
+-void audio_init(ISABus *isa_bus, PCIBus *pci_bus)
++void audio_init(void)
+ {
+     struct soundhw *c;
++    ISABus *isa_bus = (ISABus *) object_resolve_path_type("", TYPE_ISA_BUS, NULL);
++    PCIBus *pci_bus = (PCIBus *) object_resolve_path_type("", TYPE_PCI_BUS, NULL);
+ 
+     for (c = soundhw; c->name; ++c) {
+         if (c->enabled) {
+             if (c->isa) {
+-                if (isa_bus) {
+-                    c->init.init_isa(isa_bus);
++                if (!isa_bus) {
++                    fprintf(stderr, "ISA bus not available for %s\n", c->name);
++                    exit(1);
+                 }
++                c->init.init_isa(isa_bus);
+             } else {
+-                if (pci_bus) {
+-                    c->init.init_pci(pci_bus);
++                if (!pci_bus) {
++                    fprintf(stderr, "PCI bus not available for %s\n", c->name);
++                    exit(1);
+                 }
++                c->init.init_pci(pci_bus);
+             }
+         }
+     }
+diff --git a/hw/i386/pc_piix.c b/hw/i386/pc_piix.c
+index 943758a..1953d8c 100644
+--- a/hw/i386/pc_piix.c
++++ b/hw/i386/pc_piix.c
+@@ -194,7 +194,7 @@ static void pc_init1(MemoryRegion *system_memory,
+         }
+     }
+ 
+-    audio_init(isa_bus, pci_enabled ? pci_bus : NULL);
++    audio_init();
+ 
+     pc_cmos_init(below_4g_mem_size, above_4g_mem_size, boot_device,
+                  floppy, idebus[0], idebus[1], rtc_state);
+diff --git a/hw/i386/pc_q35.c b/hw/i386/pc_q35.c
+index 6ac1a89..76c378b 100644
+--- a/hw/i386/pc_q35.c
++++ b/hw/i386/pc_q35.c
+@@ -202,7 +202,7 @@ static void pc_q35_init(QEMUMachineInitArgs *args)
+ 
+     /* the rest devices to which pci devfn is automatically assigned */
+     pc_vga_init(isa_bus, host_bus);
+-    audio_init(isa_bus, host_bus);
++    audio_init();
+     pc_nic_init(isa_bus, host_bus);
+     if (pci_enabled) {
+         pc_pci_device_init(host_bus);
+diff --git a/hw/mips/mips_jazz.c b/hw/mips/mips_jazz.c
+index fd3a5f9..822d300 100644
+--- a/hw/mips/mips_jazz.c
++++ b/hw/mips/mips_jazz.c
+@@ -290,7 +290,7 @@ static void mips_jazz_init(MemoryRegion *address_space,
+ 
+     /* Sound card */
+     /* FIXME: missing Jazz sound at 0x8000c000, rc4030[2] */
+-    audio_init(isa_bus, NULL);
++    audio_init();
+ 
+     /* NVRAM */
+     dev = qdev_create(NULL, "ds1225y");
+diff --git a/hw/mips/mips_malta.c b/hw/mips/mips_malta.c
+index 86f42b2..a2d01e1 100644
+--- a/hw/mips/mips_malta.c
++++ b/hw/mips/mips_malta.c
+@@ -986,7 +986,7 @@ void mips_malta_init(QEMUMachineInitArgs *args)
+     fdctrl_init_isa(isa_bus, fd);
+ 
+     /* Sound card */
+-    audio_init(isa_bus, pci_bus);
++    audio_init();
+ 
+     /* Network card */
+     network_init();
+diff --git a/hw/ppc/prep.c b/hw/ppc/prep.c
+index cceab3e..82bd27e 100644
+--- a/hw/ppc/prep.c
++++ b/hw/ppc/prep.c
+@@ -660,7 +660,7 @@ static void ppc_prep_init(QEMUMachineInitArgs *args)
+     register_ioport_write(0x0F00, 4, 1, &PPC_debug_write, NULL);
+ 
+     /* Initialize audio subsystem */
+-    audio_init(isa_bus, pci_bus);
++    audio_init();
+ }
+ 
+ static QEMUMachine prep_machine = {
+diff --git a/include/sysemu/arch_init.h b/include/sysemu/arch_init.h
+index f18de33..dece913 100644
+--- a/include/sysemu/arch_init.h
++++ b/include/sysemu/arch_init.h
+@@ -30,7 +30,7 @@ void select_soundhw(const char *optarg);
+ void do_acpitable_option(const QemuOpts *opts);
+ void do_smbios_option(const char *optarg);
+ void cpudef_init(void);
+-void audio_init(ISABus *isa_bus, PCIBus *pci_bus);
++void audio_init(void);
+ int tcg_available(void);
+ int kvm_available(void);
+ int xen_available(void);
+-- 
+1.8.1.4
+
+
+

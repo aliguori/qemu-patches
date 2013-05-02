@@ -1,0 +1,114 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Pavel Hrdina <phrdina@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: kwolf@redhat.com, xiawenc@linux.vnet.ibm.com, phrdina@redhat.com,
+ armbru@redhat.com, lcapitulino@redhat.com
+Date: Wed, 24 Apr 2013 17:32:10 +0200
+Message-id: 4005dc5b85b72baf5eda7258f65d2c5f2ad33cad.1366817130.git.phrdina@redhat.com
+Subject: [PATCH 12/12] savevm: remove backward compatibility from
+ bdrv_snapshot_find()
+
+Signed-off-by: Pavel Hrdina <phrdina@redhat.com>
+---
+ savevm.c | 35 ++++++++++++-----------------------
+ 1 file changed, 12 insertions(+), 23 deletions(-)
+
+diff --git a/savevm.c b/savevm.c
+index 2e849b8..45d46c6 100644
+--- a/savevm.c
++++ b/savevm.c
+@@ -2263,8 +2263,7 @@ out:
+ }
+ 
+ static bool bdrv_snapshot_find(BlockDriverState *bs, QEMUSnapshotInfo *sn_info,
+-                               const char *name, const char *id, Error **errp,
+-                               bool old_match)
++                               const char *name, const char *id, Error **errp)
+ {
+     QEMUSnapshotInfo *sn_tab, *sn;
+     Error *local_err = NULL;
+@@ -2293,20 +2292,10 @@ static bool bdrv_snapshot_find(BlockDriverState *bs, QEMUSnapshotInfo *sn_info,
+                 break;
+             }
+         } else if (name) {
+-            /* for compatibility for old bdrv_snapshot_find call
+-             * will be removed */
+-            if (old_match) {
+-                if (!strcmp(sn->id_str, name) || !strcmp(sn->name, name)) {
+-                    *sn_info = *sn;
+-                    found = true;
+-                    break;
+-                }
+-            } else {
+-                if (!strcmp(sn->name, name)) {
+-                    *sn_info = *sn;
+-                    found = true;
+-                    break;
+-                }
++            if (!strcmp(sn->name, name)) {
++                *sn_info = *sn;
++                found = true;
++                break;
+             }
+         } else if (id) {
+             if (!strcmp(sn->id_str, id)) {
+@@ -2369,7 +2358,7 @@ SnapshotInfo *qmp_vm_snapshot_save(const char *name, Error **errp)
+     sn->date_nsec = tv.tv_usec * 1000;
+     sn->vm_clock_nsec = qemu_get_clock_ns(vm_clock);
+ 
+-    if (bdrv_snapshot_find(bs, old_sn, name, NULL, NULL, false)) {
++    if (bdrv_snapshot_find(bs, old_sn, name, NULL, NULL)) {
+         error_setg(errp, "Snapshot '%s' exists", name);
+         goto the_end;
+     } else {
+@@ -2478,7 +2467,7 @@ SnapshotInfo *qmp_vm_snapshot_load(bool has_name, const char *name,
+     }
+ 
+     /* Don't even try to load empty VM states */
+-    if (!bdrv_snapshot_find(bs_vm_state, &sn, name, id, &local_err, false)) {
++    if (!bdrv_snapshot_find(bs_vm_state, &sn, name, id, &local_err)) {
+         error_setg(errp, "Snapshot doesn't exist: %s",
+                    error_get_pretty(local_err));
+         error_free(local_err);
+@@ -2506,7 +2495,7 @@ SnapshotInfo *qmp_vm_snapshot_load(bool has_name, const char *name,
+             return NULL;
+         }
+ 
+-        if (!bdrv_snapshot_find(bs, &sn, name, id, &local_err, false)) {
++        if (!bdrv_snapshot_find(bs, &sn, name, id, &local_err)) {
+             error_setg(errp, "Snapshot doesn't exist for device '%s': %s",
+                        bdrv_get_device_name(bs), error_get_pretty(local_err));
+             error_free(local_err);
+@@ -2599,7 +2588,7 @@ SnapshotInfo *qmp_vm_snapshot_delete(const bool has_name, const char *name,
+         return NULL;
+     }
+ 
+-    if (!bdrv_snapshot_find(bs, &sn, name, id, &local_err, false)) {
++    if (!bdrv_snapshot_find(bs, &sn, name, id, &local_err)) {
+         error_propagate(errp, local_err);
+         return NULL;
+     }
+@@ -2616,7 +2605,7 @@ SnapshotInfo *qmp_vm_snapshot_delete(const bool has_name, const char *name,
+     bs = NULL;
+     while ((bs = bdrv_next(bs))) {
+         if (bdrv_can_snapshot(bs) &&
+-            bdrv_snapshot_find(bs, &sn, name, id, NULL, false)) {
++            bdrv_snapshot_find(bs, &sn, name, id, NULL)) {
+             /* Small hack to ensure that proper snapshot is deleted for every
+              * block driver. This will be fixed soon. */
+             if (!strcmp(bs->drv->format_name, "rbd")) {
+@@ -2678,8 +2667,8 @@ void do_info_snapshots(Monitor *mon, const QDict *qdict)
+ 
+         while ((bs1 = bdrv_next(bs1))) {
+             if (bdrv_can_snapshot(bs1) && bs1 != bs) {
+-                if (!bdrv_snapshot_find(bs1, sn_info, sn->id_str, NULL, NULL,
+-                                        true)) {
++                if (!bdrv_snapshot_find(bs1, sn_info, sn->name, sn->id_str,
++                                        NULL)) {
+                     available = 0;
+                     break;
+                 }
+-- 
+1.8.1.4
+
+

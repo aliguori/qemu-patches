@@ -1,0 +1,41 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Laszlo Ersek <lersek@redhat.com>
+To: Anthony Liguori <aliguori@us.ibm.com>, kraxel@redhat.com,
+ qemu-devel@nongnu.org, mst@redhat.com
+Cc: 
+Date: Thu, 21 Mar 2013 00:23:21 +0100
+Message-id: 1363821803-3380-10-git-send-email-lersek@redhat.com
+Subject: [PATCH 09/11] Introduce IO_APIC_DEFAULT_ADDRESS for 0xfec00000
+
+
+Signed-off-by: Laszlo Ersek <lersek@redhat.com>
+---
+ hw/i386/pc.c |    4 +++-
+ 1 files changed, 3 insertions(+), 1 deletions(-)
+
+diff --git a/hw/i386/pc.c b/hw/i386/pc.c
+index c0a1bff..23f9800 100644
+--- a/hw/i386/pc.c
++++ b/hw/i386/pc.c
+@@ -72,6 +72,8 @@
+ #define FW_CFG_E820_TABLE (FW_CFG_ARCH_LOCAL + 3)
+ #define FW_CFG_HPET (FW_CFG_ARCH_LOCAL + 4)
+ 
++#define IO_APIC_DEFAULT_ADDRESS 0xfec00000
++
+ #define E820_NR_ENTRIES		16
+ 
+ struct e820_entry {
+@@ -1166,7 +1168,7 @@ void ioapic_init_gsi(GSIState *gsi_state, const char *parent_name)
+     }
+     qdev_init_nofail(dev);
+     d = SYS_BUS_DEVICE(dev);
+-    sysbus_mmio_map(d, 0, 0xfec00000);
++    sysbus_mmio_map(d, 0, IO_APIC_DEFAULT_ADDRESS);
+ 
+     for (i = 0; i < IOAPIC_NUM_PINS; i++) {
+         gsi_state->ioapic_irq[i] = qdev_get_gpio_in(dev, i);
+-- 
+1.7.1
+
+

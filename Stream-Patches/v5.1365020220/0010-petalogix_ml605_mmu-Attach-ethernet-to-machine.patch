@@ -1,0 +1,37 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+To: edgar.iglesias@gmail.com, qemu-devel@nongnu.org
+Cc: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+Date: Wed,  3 Apr 2013 15:17:10 +1000
+Message-id: af03d41dfe158c1a17d9b521538241ee9f41f1a4.1364965814.git.peter.crosthwaite@xilinx.com
+Subject: [PATCH 10/16] petalogix_ml605_mmu: Attach ethernet to machine
+
+Explicitly make the ethernet a child of the machine. This is needed to set
+and use links pre-realize. Also makes the ethernet initialization consistent
+with its peer DMA.
+
+Signed-off-by: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+Reviewed-by: Andreas Färber <afaerber@suse.de>
+Acked-by: Edgar E. Iglesias <edgar.iglesias@xilinx.com>
+---
+
+ hw/microblaze/petalogix_ml605_mmu.c |    2 ++
+ 1 files changed, 2 insertions(+), 0 deletions(-)
+
+diff --git a/hw/microblaze/petalogix_ml605_mmu.c b/hw/microblaze/petalogix_ml605_mmu.c
+index ca918b9..482c21f 100644
+--- a/hw/microblaze/petalogix_ml605_mmu.c
++++ b/hw/microblaze/petalogix_ml605_mmu.c
+@@ -134,6 +134,8 @@ petalogix_ml605_init(QEMUMachineInitArgs *args)
+     dma = qdev_create(NULL, "xlnx.axi-dma");
+ 
+     /* FIXME: attach to the sysbus instead */
++    object_property_add_child(qdev_get_machine(), "xilinx-eth", OBJECT(eth0),
++                              NULL);
+     object_property_add_child(qdev_get_machine(), "xilinx-dma", OBJECT(dma),
+                               NULL);
+ 
+-- 
+1.7.0.4
+
+

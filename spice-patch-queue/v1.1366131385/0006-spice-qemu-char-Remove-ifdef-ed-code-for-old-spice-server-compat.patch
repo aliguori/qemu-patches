@@ -1,0 +1,75 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Gerd Hoffmann <kraxel@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Hans de Goede <hdegoede@redhat.com>, Gerd Hoffmann <kraxel@redhat.com>
+Date: Tue, 16 Apr 2013 11:56:31 +0200
+Message-id: 1366106194-28826-7-git-send-email-kraxel@redhat.com
+Subject: [PATCH 6/9] spice-qemu-char: Remove #ifdef-ed code for old
+ spice-server compat
+
+From: Hans de Goede <hdegoede@redhat.com>
+
+We now require spice-server to be >= 0.12.0 so this is no longer needed.
+
+Signed-off-by: Hans de Goede <hdegoede@redhat.com>
+Signed-off-by: Gerd Hoffmann <kraxel@redhat.com>
+---
+ spice-qemu-char.c |   27 +--------------------------
+ 1 file changed, 1 insertion(+), 26 deletions(-)
+
+diff --git a/spice-qemu-char.c b/spice-qemu-char.c
+index c9403de..be19917 100644
+--- a/spice-qemu-char.c
++++ b/spice-qemu-char.c
+@@ -85,21 +85,6 @@ static void vmc_state(SpiceCharDeviceInstance *sin, int connected)
+ {
+     SpiceCharDriver *scd = container_of(sin, SpiceCharDriver, sin);
+ 
+-#if SPICE_SERVER_VERSION < 0x000901
+-    /*
+-     * spice-server calls the state callback for the agent channel when the
+-     * spice client connects / disconnects. Given that not the client but
+-     * the server is doing the parsing of the messages this is wrong as the
+-     * server is still listening. Worse, this causes the parser in the server
+-     * to go out of sync, so we ignore state calls for subtype vdagent
+-     * spicevmc chardevs. For the full story see:
+-     * http://lists.freedesktop.org/archives/spice-devel/2011-July/004837.html
+-     */
+-    if (strcmp(sin->subtype, "vdagent") == 0) {
+-        return;
+-    }
+-#endif
+-
+     if ((scd->chr->be_open && connected) ||
+         (!scd->chr->be_open && !connected)) {
+         return;
+@@ -224,7 +209,6 @@ static CharDriverState *chr_open(const char *subtype)
+ 
+ CharDriverState *qemu_chr_open_spice_vmc(const char *type)
+ {
+-    CharDriverState *chr;
+     const char **psubtype = spice_server_char_device_recognized_subtypes();
+ 
+     if (type == NULL) {
+@@ -243,16 +227,7 @@ CharDriverState *qemu_chr_open_spice_vmc(const char *type)
+         return NULL;
+     }
+ 
+-    chr = chr_open(type);
+-
+-#if SPICE_SERVER_VERSION < 0x000901
+-    /* See comment in vmc_state() */
+-    if (strcmp(type, "vdagent") == 0) {
+-        qemu_chr_generic_open(chr);
+-    }
+-#endif
+-
+-    return chr;
++    return chr_open(type);
+ }
+ 
+ #if SPICE_SERVER_VERSION >= 0x000c02
+-- 
+1.7.9.7
+
+

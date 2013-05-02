@@ -1,0 +1,1 @@
+../qapi-and-snapshot-code-clean-up-in-block-layer/v1.1367015468/0006-block-move-qmp-and-info-dump-related-code-to-block-qapic.patch

@@ -1,0 +1,158 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Markus Armbruster <armbru@redhat.com>
+To: Laszlo Ersek <lersek@redhat.com>, Markus Armbruster <armbru@redhat.com>,
+ qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, blauwirbel@gmail.com,
+ qemu-devel@nongnu.org
+Date: Thu, 14 Mar 2013 18:49:19 +0100
+Message-id: 1363283360-26220-4-git-send-email-armbru@redhat.com
+Subject: [PATCH 3/4] check-qjson: Test noncharacters other than U+FFFE,
+ U+FFFF in strings
+
+These are all broken, too.
+
+A few test cases use noncharacters U+FFFF and U+10FFFF.  Risks testing
+noncharacters some more instead of what they're supposed to test.  Use
+U+FFFD and U+10FFFD instead.
+
+Signed-off-by: Markus Armbruster <armbru@redhat.com>
+Reviewed-by: Laszlo Ersek <lersek@redhat.com>
+---
+ tests/check-qjson.c | 85 +++++++++++++++++++++++++++++++++++++++++++++--------
+ 1 file changed, 72 insertions(+), 13 deletions(-)
+
+diff --git a/tests/check-qjson.c b/tests/check-qjson.c
+index 852124a..efec1b2 100644
+--- a/tests/check-qjson.c
++++ b/tests/check-qjson.c
+@@ -158,7 +158,7 @@ static void utf8_string(void)
+      * consider using overlong encoding \xC0\x80 for U+0000 ("modified
+      * UTF-8").
+      *
+-     * Test cases are scraped from Markus Kuhn's UTF-8 decoder
++     * Most test cases are scraped from Markus Kuhn's UTF-8 decoder
+      * capability and stress test at
+      * http://www.cl.cam.ac.uk/~mgk25/ucs/examples/UTF-8-test.txt
+      */
+@@ -256,11 +256,11 @@ static void utf8_string(void)
+             "\xDF\xBF",
+             "\"\\u07FF\"",
+         },
+-        /* 2.2.3  3 bytes U+FFFF */
++        /* 2.2.3  3 bytes U+FFFD */
+         {
+-            "\"\xEF\xBF\xBF\"",
+-            "\xEF\xBF\xBF",
+-            "\"\\uFFFF\"",
++            "\"\xEF\xBF\xBD\"",
++            "\xEF\xBF\xBD",
++            "\"\\uFFFD\"",
+         },
+         /* 2.2.4  4 bytes U+1FFFFF */
+         {
+@@ -303,10 +303,10 @@ static void utf8_string(void)
+             "\"\\uFFFD\"",
+         },
+         {
+-            /* U+10FFFF */
+-            "\"\xF4\x8F\xBF\xBF\"",
+-            "\xF4\x8F\xBF\xBF",
+-            "\"\\u43FF\\uFFFF\"", /* bug: want "\"\\uDBFF\\uDFFF\"" */
++            /* U+10FFFD */
++            "\"\xF4\x8F\xBF\xBD\"",
++            "\xF4\x8F\xBF\xBD",
++            "\"\\u43FF\\uFFFF\"", /* bug: want "\"\\uDBFF\\uDFFD\"" */
+         },
+         {
+             /* U+110000 */
+@@ -584,9 +584,9 @@ static void utf8_string(void)
+             "\"\\u07FF\"",
+         },
+         {
+-            /* \U+FFFF */
+-            "\"\xF0\x8F\xBF\xBF\"",
+-            "\xF0\x8F\xBF\xBF",   /* bug: not corrected */
++            /* \U+FFFD */
++            "\"\xF0\x8F\xBF\xBD\"",
++            "\xF0\x8F\xBF\xBD",   /* bug: not corrected */
+             "\"\\u03FF\\uFFFF\"", /* bug: want "\"\\uFFFF\"" */
+         },
+         {
+@@ -731,6 +731,7 @@ static void utf8_string(void)
+             "\"\\uDBFF\\uDFFF\"", /* bug: want "\"\\uFFFF\\uFFFF\"" */
+         },
+         /* 5.3  Other illegal code positions */
++        /* BMP noncharacters */
+         {
+             /* \U+FFFE */
+             "\"\xEF\xBF\xBE\"",
+@@ -741,7 +742,65 @@ static void utf8_string(void)
+             /* \U+FFFF */
+             "\"\xEF\xBF\xBF\"",
+             "\xEF\xBF\xBF",     /* bug: not corrected */
+-            "\"\\uFFFF\"",      /* bug: not corrected */
++            "\"\\uFFFF\"",
++        },
++        {
++            /* U+FDD0 */
++            "\"\xEF\xB7\x90\"",
++            "\xEF\xB7\x90",     /* bug: not corrected */
++            "\"\\uFDD0\"",      /* bug: not corrected */
++        },
++        {
++            /* U+FDEF */
++            "\"\xEF\xB7\xAF\"",
++            "\xEF\xB7\xAF",     /* bug: not corrected */
++            "\"\\uFDEF\"",      /* bug: not corrected */
++        },
++        /* Plane 1 .. 16 noncharacters */
++        {
++            /* U+1FFFE U+1FFFF U+2FFFE U+2FFFF ... U+10FFFE U+10FFFF */
++            "\"\xF0\x9F\xBF\xBE\xF0\x9F\xBF\xBF"
++            "\xF0\xAF\xBF\xBE\xF0\xAF\xBF\xBF"
++            "\xF0\xBF\xBF\xBE\xF0\xBF\xBF\xBF"
++            "\xF1\x8F\xBF\xBE\xF1\x8F\xBF\xBF"
++            "\xF1\x9F\xBF\xBE\xF1\x9F\xBF\xBF"
++            "\xF1\xAF\xBF\xBE\xF1\xAF\xBF\xBF"
++            "\xF1\xBF\xBF\xBE\xF1\xBF\xBF\xBF"
++            "\xF2\x8F\xBF\xBE\xF2\x8F\xBF\xBF"
++            "\xF2\x9F\xBF\xBE\xF2\x9F\xBF\xBF"
++            "\xF2\xAF\xBF\xBE\xF2\xAF\xBF\xBF"
++            "\xF2\xBF\xBF\xBE\xF2\xBF\xBF\xBF"
++            "\xF3\x8F\xBF\xBE\xF3\x8F\xBF\xBF"
++            "\xF3\x9F\xBF\xBE\xF3\x9F\xBF\xBF"
++            "\xF3\xAF\xBF\xBE\xF3\xAF\xBF\xBF"
++            "\xF3\xBF\xBF\xBE\xF3\xBF\xBF\xBF"
++            "\xF4\x8F\xBF\xBE\xF4\x8F\xBF\xBF\"",
++            /* bug: not corrected */
++            "\xF0\x9F\xBF\xBE\xF0\x9F\xBF\xBF"
++            "\xF0\xAF\xBF\xBE\xF0\xAF\xBF\xBF"
++            "\xF0\xBF\xBF\xBE\xF0\xBF\xBF\xBF"
++            "\xF1\x8F\xBF\xBE\xF1\x8F\xBF\xBF"
++            "\xF1\x9F\xBF\xBE\xF1\x9F\xBF\xBF"
++            "\xF1\xAF\xBF\xBE\xF1\xAF\xBF\xBF"
++            "\xF1\xBF\xBF\xBE\xF1\xBF\xBF\xBF"
++            "\xF2\x8F\xBF\xBE\xF2\x8F\xBF\xBF"
++            "\xF2\x9F\xBF\xBE\xF2\x9F\xBF\xBF"
++            "\xF2\xAF\xBF\xBE\xF2\xAF\xBF\xBF"
++            "\xF2\xBF\xBF\xBE\xF2\xBF\xBF\xBF"
++            "\xF3\x8F\xBF\xBE\xF3\x8F\xBF\xBF"
++            "\xF3\x9F\xBF\xBE\xF3\x9F\xBF\xBF"
++            "\xF3\xAF\xBF\xBE\xF3\xAF\xBF\xBF"
++            "\xF3\xBF\xBF\xBE\xF3\xBF\xBF\xBF"
++            "\xF4\x8F\xBF\xBE\xF4\x8F\xBF\xBF",
++            /* bug: not corrected */
++            "\"\\u07FF\\uFFFF\\u07FF\\uFFFF\\u0BFF\\uFFFF\\u0BFF\\uFFFF"
++            "\\u0FFF\\uFFFF\\u0FFF\\uFFFF\\u13FF\\uFFFF\\u13FF\\uFFFF"
++            "\\u17FF\\uFFFF\\u17FF\\uFFFF\\u1BFF\\uFFFF\\u1BFF\\uFFFF"
++            "\\u1FFF\\uFFFF\\u1FFF\\uFFFF\\u23FF\\uFFFF\\u23FF\\uFFFF"
++            "\\u27FF\\uFFFF\\u27FF\\uFFFF\\u2BFF\\uFFFF\\u2BFF\\uFFFF"
++            "\\u2FFF\\uFFFF\\u2FFF\\uFFFF\\u33FF\\uFFFF\\u33FF\\uFFFF"
++            "\\u37FF\\uFFFF\\u37FF\\uFFFF\\u3BFF\\uFFFF\\u3BFF\\uFFFF"
++            "\\u3FFF\\uFFFF\\u3FFF\\uFFFF\\u43FF\\uFFFF\\u43FF\\uFFFF\"",
+         },
+         {}
+     };
+-- 
+1.7.11.7
+

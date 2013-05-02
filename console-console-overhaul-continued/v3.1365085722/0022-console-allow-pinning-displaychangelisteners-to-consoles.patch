@@ -1,0 +1,424 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Gerd Hoffmann <kraxel@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, Gerd Hoffmann <kraxel@redhat.com>
+Date: Thu, 4 Apr 2013 09:29:04 +0200
+Message-id: 1365060546-24638-23-git-send-email-kraxel@redhat.com
+Subject: [PATCH 22/24] console: allow pinning displaychangelisteners to
+ consoles
+
+DisplayChangeListener gets a new QemuConsole field, which can be set to
+non-NULL before registering.  This will pin the QemuConsole, so that
+particular DisplayChangeListener will not follow console switches.
+
+spice+gtk (which don't support text console input anyway) are switched
+over to be pinned to console 0, which usually is the graphical display.
+
+Signed-off-by: Gerd Hoffmann <kraxel@redhat.com>
+---
+ hw/qxl.c                   |    2 +-
+ include/ui/console.h       |    2 +
+ include/ui/spice-display.h |    1 -
+ ui/console.c               |  103 +++++++++++++++++++++++++++++++-------------
+ ui/gtk.c                   |    3 +-
+ ui/spice-display.c         |   11 ++---
+ 6 files changed, 84 insertions(+), 38 deletions(-)
+
+diff --git a/hw/qxl.c b/hw/qxl.c
+index 36f18fd..320c017 100644
+--- a/hw/qxl.c
++++ b/hw/qxl.c
+@@ -2061,7 +2061,6 @@ static int qxl_init_primary(PCIDevice *dev)
+     portio_list_add(qxl_vga_port_list, pci_address_space_io(dev), 0x3b0);
+ 
+     vga->con = graphic_console_init(&qxl_ops, qxl);
+-    qxl->ssd.con = vga->con,
+     qemu_spice_display_init_common(&qxl->ssd);
+ 
+     rc = qxl_init_common(qxl);
+@@ -2070,6 +2069,7 @@ static int qxl_init_primary(PCIDevice *dev)
+     }
+ 
+     qxl->ssd.dcl.ops = &display_listener_ops;
++    qxl->ssd.dcl.con = vga->con;
+     ds = qemu_console_displaystate(vga->con);
+     register_displaychangelistener(ds, &qxl->ssd.dcl);
+     return rc;
+diff --git a/include/ui/console.h b/include/ui/console.h
+index bcd0139..e591d74 100644
+--- a/include/ui/console.h
++++ b/include/ui/console.h
+@@ -178,6 +178,7 @@ struct DisplayChangeListener {
+     uint64_t update_interval;
+     const DisplayChangeListenerOps *ops;
+     DisplayState *ds;
++    QemuConsole *con;
+ 
+     QLIST_ENTRY(DisplayChangeListener) next;
+ };
+@@ -282,6 +283,7 @@ void graphic_hw_update(QemuConsole *con);
+ void graphic_hw_invalidate(QemuConsole *con);
+ void graphic_hw_text_update(QemuConsole *con, console_ch_t *chardata);
+ 
++QemuConsole *qemu_console_lookup_by_index(unsigned int index);
+ bool qemu_console_is_visible(QemuConsole *con);
+ bool qemu_console_is_graphic(QemuConsole *con);
+ bool qemu_console_is_fixedsize(QemuConsole *con);
+diff --git a/include/ui/spice-display.h b/include/ui/spice-display.h
+index 7a20fc4..a46bc80 100644
+--- a/include/ui/spice-display.h
++++ b/include/ui/spice-display.h
+@@ -71,7 +71,6 @@ typedef struct SimpleSpiceDisplay SimpleSpiceDisplay;
+ typedef struct SimpleSpiceUpdate SimpleSpiceUpdate;
+ 
+ struct SimpleSpiceDisplay {
+-    QemuConsole *con;
+     DisplaySurface *ds;
+     DisplayChangeListener dcl;
+     void *buf;
+diff --git a/ui/console.c b/ui/console.c
+index df9a9b4..cf7c0eb 100644
+--- a/ui/console.c
++++ b/ui/console.c
+@@ -117,6 +117,7 @@ struct QemuConsole {
+     console_type_t console_type;
+     DisplayState *ds;
+     DisplaySurface *surface;
++    int dcls;
+ 
+     /* Graphic console state.  */
+     const GraphicHwOps *hw_ops;
+@@ -172,8 +173,6 @@ static QemuConsole *consoles[MAX_CONSOLES];
+ static int nb_consoles = 0;
+ 
+ static void text_console_do_init(CharDriverState *chr, DisplayState *ds);
+-static void dpy_gfx_switch_surface(DisplayState *ds,
+-                                   DisplaySurface *surface);
+ static void dpy_refresh(DisplayState *s);
+ 
+ static void gui_update(void *opaque)
+@@ -309,7 +308,7 @@ write_err:
+ 
+ void qmp_screendump(const char *filename, Error **errp)
+ {
+-    QemuConsole *con = consoles[0];
++    QemuConsole *con = qemu_console_lookup_by_index(0);
+     DisplaySurface *surface;
+ 
+     if (con == NULL) {
+@@ -1022,13 +1021,14 @@ static void console_putchar(QemuConsole *s, int ch)
+ 
+ void console_select(unsigned int index)
+ {
++    DisplayChangeListener *dcl;
+     QemuConsole *s;
+ 
+     if (index >= MAX_CONSOLES)
+         return;
+ 
+     trace_console_select(index);
+-    s = consoles[index];
++    s = qemu_console_lookup_by_index(index);
+     if (s) {
+         DisplayState *ds = s->ds;
+ 
+@@ -1037,7 +1037,14 @@ void console_select(unsigned int index)
+         }
+         active_console = s;
+         if (ds->have_gfx) {
+-            dpy_gfx_switch_surface(ds, s->surface);
++            QLIST_FOREACH(dcl, &ds->listeners, next) {
++                if (dcl->con != NULL) {
++                    continue;
++                }
++                if (dcl->ops->dpy_gfx_switch) {
++                    dcl->ops->dpy_gfx_switch(dcl, s->surface);
++                }
++            }
+             dpy_gfx_update(s, 0, 0, surface_width(s->surface),
+                            surface_height(s->surface));
+         }
+@@ -1292,12 +1299,20 @@ void qemu_free_displaysurface(DisplaySurface *surface)
+ void register_displaychangelistener(DisplayState *ds,
+                                     DisplayChangeListener *dcl)
+ {
++    QemuConsole *con;
++
+     trace_displaychangelistener_register(dcl, dcl->ops->dpy_name);
+     dcl->ds = ds;
+     QLIST_INSERT_HEAD(&ds->listeners, dcl, next);
+     gui_setup_refresh(ds);
+-    if (dcl->ops->dpy_gfx_switch && active_console) {
+-        dcl->ops->dpy_gfx_switch(dcl, active_console->surface);
++    if (dcl->con) {
++        dcl->con->dcls++;
++        con = dcl->con;
++    } else {
++        con = active_console;
++    }
++    if (dcl->ops->dpy_gfx_switch && con) {
++        dcl->ops->dpy_gfx_switch(dcl, con->surface);
+     }
+ }
+ 
+@@ -1316,6 +1331,9 @@ void unregister_displaychangelistener(DisplayChangeListener *dcl)
+ {
+     DisplayState *ds = dcl->ds;
+     trace_displaychangelistener_unregister(dcl, dcl->ops->dpy_name);
++    if (dcl->con) {
++        dcl->con->dcls--;
++    }
+     QLIST_REMOVE(dcl, next);
+     gui_setup_refresh(ds);
+ }
+@@ -1323,7 +1341,7 @@ void unregister_displaychangelistener(DisplayChangeListener *dcl)
+ void dpy_gfx_update(QemuConsole *con, int x, int y, int w, int h)
+ {
+     DisplayState *s = con->ds;
+-    struct DisplayChangeListener *dcl;
++    DisplayChangeListener *dcl;
+     int width = surface_width(con->surface);
+     int height = surface_height(con->surface);
+ 
+@@ -1338,40 +1356,38 @@ void dpy_gfx_update(QemuConsole *con, int x, int y, int w, int h)
+         return;
+     }
+     QLIST_FOREACH(dcl, &s->listeners, next) {
++        if (con != (dcl->con ? dcl->con : active_console)) {
++            continue;
++        }
+         if (dcl->ops->dpy_gfx_update) {
+             dcl->ops->dpy_gfx_update(dcl, x, y, w, h);
+         }
+     }
+ }
+ 
+-static void dpy_gfx_switch_surface(DisplayState *ds,
+-                                   DisplaySurface *surface)
+-{
+-    struct DisplayChangeListener *dcl;
+-
+-    QLIST_FOREACH(dcl, &ds->listeners, next) {
+-        if (dcl->ops->dpy_gfx_switch) {
+-            dcl->ops->dpy_gfx_switch(dcl, surface);
+-        }
+-    }
+-}
+-
+ void dpy_gfx_replace_surface(QemuConsole *con,
+                              DisplaySurface *surface)
+ {
+     DisplayState *s = con->ds;
+     DisplaySurface *old_surface = con->surface;
++    DisplayChangeListener *dcl;
+ 
+     con->surface = surface;
+-    if (qemu_console_is_visible(con)) {
+-        dpy_gfx_switch_surface(s, surface);
++    QLIST_FOREACH(dcl, &s->listeners, next) {
++        if (con != (dcl->con ? dcl->con : active_console)) {
++            continue;
++        }
++        if (dcl->ops->dpy_gfx_switch) {
++            dcl->ops->dpy_gfx_switch(dcl, surface);
++        }
+     }
+     qemu_free_displaysurface(old_surface);
+ }
+ 
+ void dpy_refresh(DisplayState *s)
+ {
+-    struct DisplayChangeListener *dcl;
++    DisplayChangeListener *dcl;
++
+     QLIST_FOREACH(dcl, &s->listeners, next) {
+         if (dcl->ops->dpy_refresh) {
+             dcl->ops->dpy_refresh(dcl);
+@@ -1383,12 +1399,15 @@ void dpy_gfx_copy(QemuConsole *con, int src_x, int src_y,
+                   int dst_x, int dst_y, int w, int h)
+ {
+     DisplayState *s = con->ds;
+-    struct DisplayChangeListener *dcl;
++    DisplayChangeListener *dcl;
+ 
+     if (!qemu_console_is_visible(con)) {
+         return;
+     }
+     QLIST_FOREACH(dcl, &s->listeners, next) {
++        if (con != (dcl->con ? dcl->con : active_console)) {
++            continue;
++        }
+         if (dcl->ops->dpy_gfx_copy) {
+             dcl->ops->dpy_gfx_copy(dcl, src_x, src_y, dst_x, dst_y, w, h);
+         } else { /* TODO */
+@@ -1400,12 +1419,15 @@ void dpy_gfx_copy(QemuConsole *con, int src_x, int src_y,
+ void dpy_text_cursor(QemuConsole *con, int x, int y)
+ {
+     DisplayState *s = con->ds;
+-    struct DisplayChangeListener *dcl;
++    DisplayChangeListener *dcl;
+ 
+     if (!qemu_console_is_visible(con)) {
+         return;
+     }
+     QLIST_FOREACH(dcl, &s->listeners, next) {
++        if (con != (dcl->con ? dcl->con : active_console)) {
++            continue;
++        }
+         if (dcl->ops->dpy_text_cursor) {
+             dcl->ops->dpy_text_cursor(dcl, x, y);
+         }
+@@ -1415,12 +1437,15 @@ void dpy_text_cursor(QemuConsole *con, int x, int y)
+ void dpy_text_update(QemuConsole *con, int x, int y, int w, int h)
+ {
+     DisplayState *s = con->ds;
+-    struct DisplayChangeListener *dcl;
++    DisplayChangeListener *dcl;
+ 
+     if (!qemu_console_is_visible(con)) {
+         return;
+     }
+     QLIST_FOREACH(dcl, &s->listeners, next) {
++        if (con != (dcl->con ? dcl->con : active_console)) {
++            continue;
++        }
+         if (dcl->ops->dpy_text_update) {
+             dcl->ops->dpy_text_update(dcl, x, y, w, h);
+         }
+@@ -1436,6 +1461,9 @@ void dpy_text_resize(QemuConsole *con, int w, int h)
+         return;
+     }
+     QLIST_FOREACH(dcl, &s->listeners, next) {
++        if (con != (dcl->con ? dcl->con : active_console)) {
++            continue;
++        }
+         if (dcl->ops->dpy_text_resize) {
+             dcl->ops->dpy_text_resize(dcl, w, h);
+         }
+@@ -1445,12 +1473,15 @@ void dpy_text_resize(QemuConsole *con, int w, int h)
+ void dpy_mouse_set(QemuConsole *con, int x, int y, int on)
+ {
+     DisplayState *s = con->ds;
+-    struct DisplayChangeListener *dcl;
++    DisplayChangeListener *dcl;
+ 
+     if (!qemu_console_is_visible(con)) {
+         return;
+     }
+     QLIST_FOREACH(dcl, &s->listeners, next) {
++        if (con != (dcl->con ? dcl->con : active_console)) {
++            continue;
++        }
+         if (dcl->ops->dpy_mouse_set) {
+             dcl->ops->dpy_mouse_set(dcl, x, y, on);
+         }
+@@ -1460,12 +1491,15 @@ void dpy_mouse_set(QemuConsole *con, int x, int y, int on)
+ void dpy_cursor_define(QemuConsole *con, QEMUCursor *cursor)
+ {
+     DisplayState *s = con->ds;
+-    struct DisplayChangeListener *dcl;
++    DisplayChangeListener *dcl;
+ 
+     if (!qemu_console_is_visible(con)) {
+         return;
+     }
+     QLIST_FOREACH(dcl, &s->listeners, next) {
++        if (con != (dcl->con ? dcl->con : active_console)) {
++            continue;
++        }
+         if (dcl->ops->dpy_cursor_define) {
+             dcl->ops->dpy_cursor_define(dcl, cursor);
+         }
+@@ -1475,7 +1509,8 @@ void dpy_cursor_define(QemuConsole *con, QEMUCursor *cursor)
+ bool dpy_cursor_define_supported(QemuConsole *con)
+ {
+     DisplayState *s = con->ds;
+-    struct DisplayChangeListener *dcl;
++    DisplayChangeListener *dcl;
++
+     QLIST_FOREACH(dcl, &s->listeners, next) {
+         if (dcl->ops->dpy_cursor_define) {
+             return true;
+@@ -1536,9 +1571,17 @@ QemuConsole *graphic_console_init(const GraphicHwOps *hw_ops,
+     return s;
+ }
+ 
++QemuConsole *qemu_console_lookup_by_index(unsigned int index)
++{
++    if (index >= MAX_CONSOLES) {
++        return NULL;
++    }
++    return consoles[index];
++}
++
+ bool qemu_console_is_visible(QemuConsole *con)
+ {
+-    return con == active_console;
++    return (con == active_console) || (con->dcls > 0);
+ }
+ 
+ bool qemu_console_is_graphic(QemuConsole *con)
+diff --git a/ui/gtk.c b/ui/gtk.c
+index ef2665a..3c23ce7 100644
+--- a/ui/gtk.c
++++ b/ui/gtk.c
+@@ -327,7 +327,7 @@ static void gd_update(DisplayChangeListener *dcl,
+ 
+ static void gd_refresh(DisplayChangeListener *dcl)
+ {
+-    graphic_hw_update(NULL);
++    graphic_hw_update(dcl->con);
+ }
+ 
+ static void gd_switch(DisplayChangeListener *dcl,
+@@ -1368,6 +1368,7 @@ void gtk_display_init(DisplayState *ds)
+     gtk_init(NULL, NULL);
+ 
+     s->dcl.ops = &dcl_ops;
++    s->dcl.con = qemu_console_lookup_by_index(0);
+ 
+     s->window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
+ #if GTK_CHECK_VERSION(3, 2, 0)
+diff --git a/ui/spice-display.c b/ui/spice-display.c
+index 2c01674..53c19be 100644
+--- a/ui/spice-display.c
++++ b/ui/spice-display.c
+@@ -398,14 +398,14 @@ void qemu_spice_display_switch(SimpleSpiceDisplay *ssd,
+ void qemu_spice_cursor_refresh_unlocked(SimpleSpiceDisplay *ssd)
+ {
+     if (ssd->cursor) {
+-        assert(ssd->con);
+-        dpy_cursor_define(ssd->con, ssd->cursor);
++        assert(ssd->dcl.con);
++        dpy_cursor_define(ssd->dcl.con, ssd->cursor);
+         cursor_put(ssd->cursor);
+         ssd->cursor = NULL;
+     }
+     if (ssd->mouse_x != -1 && ssd->mouse_y != -1) {
+-        assert(ssd->con);
+-        dpy_mouse_set(ssd->con, ssd->mouse_x, ssd->mouse_y, 1);
++        assert(ssd->dcl.con);
++        dpy_mouse_set(ssd->dcl.con, ssd->mouse_x, ssd->mouse_y, 1);
+         ssd->mouse_x = -1;
+         ssd->mouse_y = -1;
+     }
+@@ -414,7 +414,7 @@ void qemu_spice_cursor_refresh_unlocked(SimpleSpiceDisplay *ssd)
+ void qemu_spice_display_refresh(SimpleSpiceDisplay *ssd)
+ {
+     dprint(3, "%s:\n", __func__);
+-    graphic_hw_update(ssd->con);
++    graphic_hw_update(ssd->dcl.con);
+ 
+     qemu_mutex_lock(&ssd->lock);
+     if (QTAILQ_EMPTY(&ssd->updates) && ssd->ds) {
+@@ -624,6 +624,7 @@ void qemu_spice_display_init(DisplayState *ds)
+     qemu_spice_create_host_memslot(ssd);
+ 
+     ssd->dcl.ops = &display_listener_ops;
++    ssd->dcl.con = qemu_console_lookup_by_index(0);
+     register_displaychangelistener(ds, &ssd->dcl);
+ 
+     qemu_spice_create_host_primary(ssd);
+-- 
+1.7.9.7
+

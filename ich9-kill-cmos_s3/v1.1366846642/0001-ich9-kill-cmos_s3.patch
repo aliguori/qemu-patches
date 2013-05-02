@@ -1,0 +1,123 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Hu Tao <hutao@cn.fujitsu.com>
+To: Paolo Bonzini <pbonzini@redhat.com>, Hu Tao <hutao@cn.fujitsu.com>,
+ qemu-devel@nongnu.org, =?ISO-8859-1?Q?Andreas_F=E4rber?= <afaerber@suse.de>
+Cc: Hu Tao <hutao@cn.fujitsu.com>, qemu-devel@nongnu.org
+Date: Wed, 24 Apr 2013 18:37:22 +0800
+Message-id: 1366799842-18550-1-git-send-email-hutao@cn.fujitsu.com
+Subject: [PATCH 1/1] ich9: kill cmos_s3
+
+
+Signed-off-by: Hu Tao <hutao@cn.fujitsu.com>
+Reviewed-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ hw/acpi/ich9.c         |  2 +-
+ hw/i386/pc_q35.c       | 15 +--------------
+ hw/isa/lpc_ich9.c      |  4 ++--
+ include/hw/acpi/ich9.h |  2 +-
+ include/hw/i386/ich9.h |  2 +-
+ 5 files changed, 6 insertions(+), 19 deletions(-)
+
+diff --git a/hw/acpi/ich9.c b/hw/acpi/ich9.c
+index e663d29..4a17f32 100644
+--- a/hw/acpi/ich9.c
++++ b/hw/acpi/ich9.c
+@@ -203,7 +203,7 @@ static void pm_powerdown_req(Notifier *n, void *opaque)
+ }
+ 
+ void ich9_pm_init(PCIDevice *lpc_pci, ICH9LPCPMRegs *pm,
+-                  qemu_irq sci_irq, qemu_irq cmos_s3)
++                  qemu_irq sci_irq)
+ {
+     memory_region_init(&pm->io, "ich9-pm", ICH9_PMIO_SIZE);
+     memory_region_set_enabled(&pm->io, false);
+diff --git a/hw/i386/pc_q35.c b/hw/i386/pc_q35.c
+index 6ac1a89..e5f417e 100644
+--- a/hw/i386/pc_q35.c
++++ b/hw/i386/pc_q35.c
+@@ -45,17 +45,6 @@
+ /* ICH9 AHCI has 6 ports */
+ #define MAX_SATA_PORTS     6
+ 
+-/* set CMOS shutdown status register (index 0xF) as S3_resume(0xFE)
+- *    BIOS will read it and start S3 resume at POST Entry */
+-static void pc_cmos_set_s3_resume(void *opaque, int irq, int level)
+-{
+-    ISADevice *s = opaque;
+-
+-    if (level) {
+-        rtc_set_memory(s, 0xF, 0xFE);
+-    }
+-}
+-
+ /* PC hardware initialisation */
+ static void pc_q35_init(QEMUMachineInitArgs *args)
+ {
+@@ -84,7 +73,6 @@ static void pc_q35_init(QEMUMachineInitArgs *args)
+     int i;
+     ICH9LPCState *ich9_lpc;
+     PCIDevice *ahci;
+-    qemu_irq *cmos_s3;
+ 
+     pc_cpus_init(cpu_model);
+     pc_acpi_init("q35-acpi-dsdt.aml");
+@@ -175,8 +163,7 @@ static void pc_q35_init(QEMUMachineInitArgs *args)
+     pc_basic_device_init(isa_bus, gsi, &rtc_state, &floppy, false);
+ 
+     /* connect pm stuff to lpc */
+-    cmos_s3 = qemu_allocate_irqs(pc_cmos_set_s3_resume, rtc_state, 1);
+-    ich9_lpc_pm_init(lpc, *cmos_s3);
++    ich9_lpc_pm_init(lpc);
+ 
+     /* ahci and SATA device, for q35 1 ahci controller is built-in */
+     ahci = pci_create_simple_multifunction(host_bus,
+diff --git a/hw/isa/lpc_ich9.c b/hw/isa/lpc_ich9.c
+index d116075..667e882 100644
+--- a/hw/isa/lpc_ich9.c
++++ b/hw/isa/lpc_ich9.c
+@@ -356,13 +356,13 @@ static void ich9_set_sci(void *opaque, int irq_num, int level)
+     }
+ }
+ 
+-void ich9_lpc_pm_init(PCIDevice *lpc_pci, qemu_irq cmos_s3)
++void ich9_lpc_pm_init(PCIDevice *lpc_pci)
+ {
+     ICH9LPCState *lpc = ICH9_LPC_DEVICE(lpc_pci);
+     qemu_irq *sci_irq;
+ 
+     sci_irq = qemu_allocate_irqs(ich9_set_sci, lpc, 1);
+-    ich9_pm_init(lpc_pci, &lpc->pm, sci_irq[0], cmos_s3);
++    ich9_pm_init(lpc_pci, &lpc->pm, sci_irq[0]);
+ 
+     ich9_lpc_reset(&lpc->d.qdev);
+ }
+diff --git a/include/hw/acpi/ich9.h b/include/hw/acpi/ich9.h
+index 85b82ee..b1fe71f 100644
+--- a/include/hw/acpi/ich9.h
++++ b/include/hw/acpi/ich9.h
+@@ -45,7 +45,7 @@ typedef struct ICH9LPCPMRegs {
+ } ICH9LPCPMRegs;
+ 
+ void ich9_pm_init(PCIDevice *lpc_pci, ICH9LPCPMRegs *pm,
+-                  qemu_irq sci_irq, qemu_irq cmos_s3_resume);
++                  qemu_irq sci_irq);
+ void ich9_pm_iospace_update(ICH9LPCPMRegs *pm, uint32_t pm_io_base);
+ extern const VMStateDescription vmstate_ich9_pm;
+ 
+diff --git a/include/hw/i386/ich9.h b/include/hw/i386/ich9.h
+index 51d5981..c5f637b 100644
+--- a/include/hw/i386/ich9.h
++++ b/include/hw/i386/ich9.h
+@@ -18,7 +18,7 @@
+ void ich9_lpc_set_irq(void *opaque, int irq_num, int level);
+ int ich9_lpc_map_irq(PCIDevice *pci_dev, int intx);
+ PCIINTxRoute ich9_route_intx_pin_to_irq(void *opaque, int pirq_pin);
+-void ich9_lpc_pm_init(PCIDevice *pci_lpc, qemu_irq cmos_s3);
++void ich9_lpc_pm_init(PCIDevice *pci_lpc);
+ PCIBus *ich9_d2pbr_init(PCIBus *bus, int devfn, int sec_bus);
+ i2c_bus *ich9_smb_init(PCIBus *bus, int devfn, uint32_t smb_io_base);
+ 
+-- 
+1.8.1.4
+
+

@@ -1,0 +1,1 @@
+../Xilinx-SPIPS-fixes-round-2/v3.1366661479/0015-xilinx_spips-lqspi-Fix-byte-misaligned-access.patch

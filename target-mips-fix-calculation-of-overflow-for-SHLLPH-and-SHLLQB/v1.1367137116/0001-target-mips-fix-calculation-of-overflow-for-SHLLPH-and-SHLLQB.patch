@@ -1,0 +1,184 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Petar Jovanovic <petar.jovanovic@rt-rk.com>
+To: qemu-devel@nongnu.org
+Cc: petar.jovanovic@imgtec.com, aurelien@aurel32.net
+Date: Sun, 28 Apr 2013 03:18:36 +0200
+Message-id: 1367111916-53731-1-git-send-email-petar.jovanovic@rt-rk.com
+Subject: [PATCH 1/1] target-mips: fix calculation of overflow for SHLL.PH and
+ SHLL.QB
+
+From: Petar Jovanovic <petar.jovanovic@imgtec.com>
+
+This change corrects and simplifies how discard is calculated for shift
+left logical vector instructions. It is used to detect overflow and set bit
+22 in the DSPControl register.
+
+The existing tests (shll_ph.c, shll_qb.c) are extended with the corner cases
+that expose incorrectness in the previous implementation.
+
+Signed-off-by: Petar Jovanovic <petar.jovanovic@imgtec.com>
+---
+ target-mips/dsp_helper.c            |   30 ++++++------------------------
+ tests/tcg/mips/mips32-dsp/shll_ph.c |   33 ++++++++++++++++++++++++++++++++-
+ tests/tcg/mips/mips32-dsp/shll_qb.c |   23 +++++++++++++++++++++--
+ 3 files changed, 59 insertions(+), 27 deletions(-)
+
+diff --git a/target-mips/dsp_helper.c b/target-mips/dsp_helper.c
+index f975da0..805247d 100644
+--- a/target-mips/dsp_helper.c
++++ b/target-mips/dsp_helper.c
+@@ -682,49 +682,31 @@ static inline uint8_t mipsdsp_sat8_reduce_precision(uint16_t a,
+ 
+ static inline uint8_t mipsdsp_lshift8(uint8_t a, uint8_t s, CPUMIPSState *env)
+ {
+-    uint8_t sign;
+     uint8_t discard;
+ 
+-    if (s == 0) {
+-        return a;
+-    } else {
+-        sign = (a >> 7) & 0x01;
+-        if (sign != 0) {
+-            discard = (((0x01 << (8 - s)) - 1) << s) |
+-                      ((a >> (6 - (s - 1))) & ((0x01 << s) - 1));
+-        } else {
+-            discard = a >> (6 - (s - 1));
+-        }
++    if (s != 0) {
++        discard = a >> (8 - s);
+ 
+         if (discard != 0x00) {
+             set_DSPControl_overflow_flag(1, 22, env);
+         }
+-        return a << s;
+     }
++    return a << s;
+ }
+ 
+ static inline uint16_t mipsdsp_lshift16(uint16_t a, uint8_t s,
+                                         CPUMIPSState *env)
+ {
+-    uint8_t  sign;
+     uint16_t discard;
+ 
+-    if (s == 0) {
+-        return a;
+-    } else {
+-        sign = (a >> 15) & 0x01;
+-        if (sign != 0) {
+-            discard = (((0x01 << (16 - s)) - 1) << s) |
+-                      ((a >> (14 - (s - 1))) & ((0x01 << s) - 1));
+-        } else {
+-            discard = a >> (14 - (s - 1));
+-        }
++    if (s != 0) {
++        discard = (int16_t)a >> (15 - s);
+ 
+         if ((discard != 0x0000) && (discard != 0xFFFF)) {
+             set_DSPControl_overflow_flag(1, 22, env);
+         }
+-        return a << s;
+     }
++    return a << s;
+ }
+ 
+ 
+diff --git a/tests/tcg/mips/mips32-dsp/shll_ph.c b/tests/tcg/mips/mips32-dsp/shll_ph.c
+index b8f1ff5..5fa58cc 100644
+--- a/tests/tcg/mips/mips32-dsp/shll_ph.c
++++ b/tests/tcg/mips/mips32-dsp/shll_ph.c
+@@ -11,7 +11,38 @@ int main()
+     resultdsp = 1;
+ 
+     __asm
+-        ("shll.ph %0, %2, 0x0B\n\t"
++        ("wrdsp $0\n\t"
++         "shll.ph %0, %2, 0x0B\n\t"
++         "rddsp %1\n\t"
++         : "=r"(rd), "=r"(dsp)
++         : "r"(rt)
++        );
++    dsp = (dsp >> 22) & 0x01;
++    assert(dsp == resultdsp);
++    assert(rd  == result);
++
++    rt        = 0x7fff8000;
++    result    = 0xfffe0000;
++    resultdsp = 1;
++
++    __asm
++        ("wrdsp $0\n\t"
++         "shll.ph %0, %2, 0x01\n\t"
++         "rddsp %1\n\t"
++         : "=r"(rd), "=r"(dsp)
++         : "r"(rt)
++        );
++    dsp = (dsp >> 22) & 0x01;
++    assert(dsp == resultdsp);
++    assert(rd  == result);
++
++    rt        = 0x00000001;
++    result    = 0x00008000;
++    resultdsp = 1;
++
++    __asm
++        ("wrdsp $0\n\t"
++         "shll.ph %0, %2, 0x0F\n\t"
+          "rddsp %1\n\t"
+          : "=r"(rd), "=r"(dsp)
+          : "r"(rt)
+diff --git a/tests/tcg/mips/mips32-dsp/shll_qb.c b/tests/tcg/mips/mips32-dsp/shll_qb.c
+index 8c1b91c..729716d 100644
+--- a/tests/tcg/mips/mips32-dsp/shll_qb.c
++++ b/tests/tcg/mips/mips32-dsp/shll_qb.c
+@@ -11,12 +11,14 @@ int main()
+     resultdsp = 0x00;
+ 
+     __asm
+-        ("shll.qb %0, %2, 0x00\n\t"
++        ("wrdsp $0\n\t"
++         "shll.qb %0, %2, 0x00\n\t"
+          "rddsp   %1\n\t"
+          : "=r"(rd), "=r"(dsp)
+          : "r"(rt)
+         );
+     dsp = (dsp >> 22) & 0x01;
++    assert(dsp == resultdsp);
+     assert(rd == result);
+ 
+     rt     = 0x87654321;
+@@ -24,12 +26,29 @@ int main()
+     resultdsp = 0x01;
+ 
+     __asm
+-        ("shll.qb %0, %2, 0x03\n\t"
++        ("wrdsp $0\n\t"
++         "shll.qb %0, %2, 0x03\n\t"
+          "rddsp   %1\n\t"
+          : "=r"(rd), "=r"(dsp)
+          : "r"(rt)
+         );
+     dsp = (dsp >> 22) & 0x01;
++    assert(dsp == resultdsp);
++    assert(rd == result);
++
++    rt     = 0x00000001;
++    result = 0x00000080;
++    resultdsp = 0x00;
++
++    __asm
++        ("wrdsp $0\n\t"
++         "shll.qb %0, %2, 0x07\n\t"
++         "rddsp   %1\n\t"
++         : "=r"(rd), "=r"(dsp)
++         : "r"(rt)
++        );
++    dsp = (dsp >> 22) & 0x01;
++    assert(dsp == resultdsp);
+     assert(rd == result);
+ 
+     return 0;
+-- 
+1.7.9.5
+
+

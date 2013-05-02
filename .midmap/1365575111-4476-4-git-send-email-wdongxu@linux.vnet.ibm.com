@@ -1,0 +1,1 @@
+../replace-QEMUOptionParameter-with-QemuOpts-parser/v13.1365621905/0003-Create-four-QemuOptsList-related-functions.patch

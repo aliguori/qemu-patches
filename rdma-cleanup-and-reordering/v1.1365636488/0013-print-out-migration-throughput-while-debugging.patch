@@ -1,0 +1,50 @@
+From patches Mon Sep 17 00:00:00 2001
+From: mrhines@linux.vnet.ibm.com
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, mst@redhat.com,
+ Michael R Hines <mrhines@us.ibm.com>, Bulent Abali <abali@us.ibm.com>,
+ owasserm@redhat.com, pbonzini@redhat.com, Gokul B Kandiraju <gokul@us.ibm.com>
+Date: Wed, 10 Apr 2013 18:28:21 -0400
+Message-id: 1365632901-15470-14-git-send-email-mrhines@linux.vnet.ibm.com
+Subject: [PATCH 13/13] print out migration throughput while debugging
+
+From: "Michael R. Hines" <mrhines@us.ibm.com>
+
+It's very helpful when debugging to print out migration throughput
+after each iteration round to compare the different migration
+technologies.
+
+Signed-off-by: Michael R. Hines <mrhines@us.ibm.com>
+---
+ migration.c |    8 ++++++--
+ 1 file changed, 6 insertions(+), 2 deletions(-)
+
+diff --git a/migration.c b/migration.c
+index 3b4b467..3439629 100644
+--- a/migration.c
++++ b/migration.c
+@@ -35,6 +35,9 @@
+     do { } while (0)
+ #endif
+ 
++#define MBPS(bytes, time) time ? ((((double) bytes * 8)         \
++        / ((double) time / 1000.0)) / 1000.0 / 1000.0) : -1.0
++
+ enum {
+     MIG_STATE_ERROR,
+     MIG_STATE_SETUP,
+@@ -546,8 +549,9 @@ static void *migration_thread(void *opaque)
+             max_size = bandwidth * migrate_max_downtime() / 1000000;
+ 
+             DPRINTF("transferred %" PRIu64 " time_spent %" PRIu64
+-                    " bandwidth %g max_size %" PRId64 "\n",
+-                    transferred_bytes, time_spent, bandwidth, max_size);
++                    " bandwidth %g throughput %f max_size %" PRId64 "\n",
++                    transferred_bytes, time_spent, bandwidth, 
++                    MBPS(transferred_bytes, time_spent), max_size);
+             /* if we haven't sent anything, we don't want to recalculate
+                10000 is a small enough number for our purposes */
+             if (s->dirty_bytes_rate && transferred_bytes > 10000) {
+-- 
+1.7.10.4
+

@@ -1,0 +1,12 @@
+0000-qemu-ga-fsfreeze-on-Windows-using-VSS.txt
+0001-configure-Support-configuring-c-compiler.patch
+0002-Fix-errors-and-warnings-while-compiling-with-c-compilier.patch
+0003-Add-a-script-to-extract-VSS-SDK-headers-on-POSIX-system.patch
+0004-qemu-ga-Add-an-configure-option-to-specify-path-to-Windows-VSS-SDK.patch
+0005-qemu-ga-Add-Windows-VSS-provider-to-quiesce-applications-on-fsfreeze.patch
+0006-qemu-ga-Add-Windows-VSS-requester-to-quisce-applications-and-filesystems.patch
+0007-qemu-ga-call-Windows-VSS-requester-in-fsfreeze-command-handler.patch
+0008-qemu-ga-install-Windows-VSS-provider-on-qemu-ga--s-install.patch
+0009-qemu-ga-Add-VSS-provider-tlb-file-in-the-repository.patch
+0010-QMP-qemu-ga-client-make-timeout-longer-for-guest-fsfreeze-freeze-command.patch
+0011-QMP-qmppy-set-locale-for-exceptions-to-display-non-ascii-messages-correctly.patch

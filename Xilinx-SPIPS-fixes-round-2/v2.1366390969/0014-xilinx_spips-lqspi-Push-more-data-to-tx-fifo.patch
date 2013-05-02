@@ -1,0 +1,47 @@
+From patches Mon Sep 17 00:00:00 2001
+From: peter.crosthwaite@xilinx.com
+To: qemu-devel@nongnu.org
+Cc: peter.maydell@linaro.org
+Date: Fri, 19 Apr 2013 12:12:09 +1000
+Message-id: 1a58a563c151ad944a140eb751adac335041ec45.1366335998.git.peter.crosthwaite@xilinx.com
+Subject: [PATCH 14/15] xilinx_spips: lqspi: Push more data to tx-fifo
+
+From: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+
+Do 16 words per fifo flush. Increases performance and decreases
+debug verbosity. This data depth has no real hardware analogue,
+so just go with something that has reasonable performance.
+
+Signed-off-by: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+---
+
+ hw/ssi/xilinx_spips.c |   11 +++++++----
+ 1 files changed, 7 insertions(+), 4 deletions(-)
+
+diff --git a/hw/ssi/xilinx_spips.c b/hw/ssi/xilinx_spips.c
+index df55ca6..68434f0 100644
+--- a/hw/ssi/xilinx_spips.c
++++ b/hw/ssi/xilinx_spips.c
+@@ -609,11 +609,14 @@ lqspi_read(void *opaque, hwaddr addr, unsigned int size)
+ 
+         DB_PRINT_L(0, "starting QSPI data read\n");
+ 
+-        for (i = 0; i < LQSPI_CACHE_SIZE / 4; ++i) {
+-            tx_data_bytes(s, 0, 4);
++        while (cache_entry < LQSPI_CACHE_SIZE / 4) {
++            for (i = 0; i < 16; ++i) {
++                tx_data_bytes(s, 0, 4);
++            }
+             xilinx_spips_flush_txfifo(s);
+-            rx_data_bytes(s, &q->lqspi_buf[cache_entry], 4);
+-            cache_entry++;
++            for (i = 0; i < 16; ++i) {
++                rx_data_bytes(s, &q->lqspi_buf[cache_entry++], 4);
++            }
+         }
+ 
+         s->regs[R_LQSPI_STS] &= ~LQSPI_CFG_U_PAGE;
+-- 
+1.7.0.4
+
+

@@ -1,0 +1,149 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Tomoki Sekiyama <tsekiyam@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: mdroth@linux.vnet.ibm.com, pbonzini@redhat.com, vrozenfe@redhat.com,
+ Tomoki Sekiyama <tomoki.sekiyama@hds.com>, lcapitulino@redhat.com
+Date: Fri, 12 Apr 2013 16:01:52 -0400
+Message-id: 20130412200152.20814.55151.stgit@corona
+Subject: [PATCH 04/11] qemu-ga: Add an configure option to specify path to
+ Windows VSS SDK
+
+To enable VSS support in qemu-ga for Windows, header files included in
+VSS SDK is required.
+The VSS support is enabled when the option like below:
+  ./configure --with-vss-sdk="/pass/to/VSS SDK"
+
+VSS SDK is available from:
+  http://www.microsoft.com/en-us/download/details.aspx?id=23490
+
+To cross-compilie using mingw32 for Linux, you need to setup the SDK on
+Windows environments to extract headers. You can also extract the SDK
+headers using scripts/extract-vss-headers, written by Paolo Bonzini.
+
+Signed-off-by: Tomoki Sekiyama <tomoki.sekiyama@hds.com>
+---
+ .gitignore |    1 +
+ Makefile   |    1 +
+ configure  |   48 ++++++++++++++++++++++++++++++++++++++++++++++++
+ 3 files changed, 50 insertions(+)
+
+diff --git a/.gitignore b/.gitignore
+index 487813a..b98e851 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -79,6 +79,7 @@ fsdev/virtfs-proxy-helper.pod
+ *.la
+ *.pc
+ .libs
++.sdk
+ *.swp
+ *.orig
+ .pc
+diff --git a/Makefile b/Makefile
+index 0b6e6a1..8d4506f 100644
+--- a/Makefile
++++ b/Makefile
+@@ -261,6 +261,7 @@ distclean: clean
+ 	for d in $(TARGET_DIRS); do \
+ 	rm -rf $$d || exit 1 ; \
+         done
++	rm -Rf .sdk
+ 	if test -f pixman/config.log; then make -C pixman distclean; fi
+ 
+ KEYMAPS=da     en-gb  et  fr     fr-ch  is  lt  modifiers  no  pt-br  sv \
+diff --git a/configure b/configure
+index b74572f..310bf9f 100755
+--- a/configure
++++ b/configure
+@@ -230,6 +230,8 @@ usb_redir=""
+ glx=""
+ zlib="yes"
+ guest_agent="yes"
++guest_agent_with_vss="no"
++vss_win32_sdk=""
+ want_tools="yes"
+ libiscsi=""
+ coroutine=""
+@@ -901,6 +903,12 @@ for opt do
+   ;;
+   --disable-guest-agent) guest_agent="no"
+   ;;
++  --with-vss-sdk) vss_win32_sdk=""
++  ;;
++  --with-vss-sdk=*) vss_win32_sdk="$optarg"
++  ;;
++  --without-vss-sdk) vss_win32_sdk="no"
++  ;;
+   --enable-tools) want_tools="yes"
+   ;;
+   --disable-tools) want_tools="no"
+@@ -1177,6 +1185,7 @@ echo "  --disable-usb-redir      disable usb network redirection support"
+ echo "  --enable-usb-redir       enable usb network redirection support"
+ echo "  --disable-guest-agent    disable building of the QEMU Guest Agent"
+ echo "  --enable-guest-agent     enable building of the QEMU Guest Agent"
++echo "  --with-vss-sdk=SDK-path  enable Windows VSS support in QEMU Guest Agent"
+ echo "  --disable-seccomp        disable seccomp support"
+ echo "  --enable-seccomp         enables seccomp support"
+ echo "  --with-coroutine=BACKEND coroutine backend. Supported options:"
+@@ -2948,6 +2957,41 @@ if test "$usb_redir" != "no" ; then
+ fi
+ 
+ ##########################################
++# check if we have VSS SDK headers for win
++
++if test "$mingw32" = "yes" -a "$guest_agent" = "yes" -a "$vss_win32_sdk" != "no" ; then
++  case "$vss_win32_sdk" in
++    "")   vss_win32_include="-I$source_path" ;;
++    *\ *) # The SDK is installed in "Program Files" by default, but we cannot
++          # handle path with spaces. So we symlink the headers into ".sdk/vss".
++          vss_win32_include="-I$source_path/.sdk/vss"
++	  symlink "$vss_win32_sdk/inc" "$source_path/.sdk/vss/inc"
++	  ;;
++    *)    vss_win32_include="-I$vss_win32_sdk"
++  esac
++  cat > $TMPC << EOF
++#define __MIDL_user_allocate_free_DEFINED__
++#include <inc/win2003/vss.h>
++int main(void) { return VSS_CTX_BACKUP; }
++EOF
++  if compile_prog "$vss_win32_include" "" ; then
++    guest_agent_with_vss="yes"
++    QEMU_CFLAGS="$QEMU_CFLAGS $vss_win32_include"
++    libs_qga="-lole32 -loleaut32 -lshlwapi -luuid -lstdc++ -Wl,--enable-stdcall-fixup $libs_qga"
++  else
++    if test "$vss_win32_sdk" != "" ; then
++      echo "ERROR: Please download and install Microsoft VSS SDK:"
++      echo "ERROR:   http://www.microsoft.com/en-us/download/details.aspx?id=23490"
++      echo "ERROR: On POSIX-systems, you can extract the SDK headers by:"
++      echo "ERROR:   scripts/extract-vsssdk-headers setup.exe"
++      echo "ERROR: The headers are extracted in the directory \`inc'."
++      feature_not_found "VSS support"
++    fi
++    guest_agent_with_vss="no"
++  fi
++fi
++
++##########################################
+ 
+ ##########################################
+ # check if we have fdatasync
+@@ -3433,6 +3477,7 @@ echo "usb net redir     $usb_redir"
+ echo "GLX support       $glx"
+ echo "libiscsi support  $libiscsi"
+ echo "build guest agent $guest_agent"
++echo "QGA VSS support   $guest_agent_with_vss"
+ echo "seccomp support   $seccomp"
+ echo "coroutine backend $coroutine"
+ echo "GlusterFS support $glusterfs"
+@@ -3496,6 +3541,9 @@ if test "$mingw32" = "yes" ; then
+   version_micro=0
+   echo "CONFIG_FILEVERSION=$version_major,$version_minor,$version_subminor,$version_micro" >> $config_host_mak
+   echo "CONFIG_PRODUCTVERSION=$version_major,$version_minor,$version_subminor,$version_micro" >> $config_host_mak
++  if test "$guest_agent_with_vss" = "yes" ; then
++    echo "CONFIG_QGA_VSS=y" >> $config_host_mak
++  fi
+ else
+   echo "CONFIG_POSIX=y" >> $config_host_mak
+ fi
+
+

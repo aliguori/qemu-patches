@@ -1,0 +1,831 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Gerd Hoffmann <kraxel@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, Gerd Hoffmann <kraxel@redhat.com>,
+ Dmitry Solodkiy <d.solodkiy@samsung.com>,
+ Stefano Stabellini <stefano.stabellini@eu.citrix.com>,
+ Maksim Kozlov <m.kozlov@samsung.com>, Guan Xuetao <gxt@mprc.pku.edu.cn>,
+ Igor Mitsyanko <i.mitsyanko@samsung.com>,
+ Peter Maydell <peter.maydell@linaro.org>,
+ "open list:X86" <xen-devel@lists.xensource.com>,
+ Evgeny Voevodin <e.voevodin@samsung.com>
+Date: Thu, 4 Apr 2013 09:29:00 +0200
+Message-id: 1365060546-24638-19-git-send-email-kraxel@redhat.com
+Subject: [PATCH 18/24] console: add GraphicHwOps
+
+Pass a single GraphicHwOps struct pointer to graphic_console_init,
+instead of a bunch of function pointers.
+
+Signed-off-by: Gerd Hoffmann <kraxel@redhat.com>
+---
+ hw/arm/musicpal.c    |    8 ++++++--
+ hw/blizzard.c        |    9 ++++++---
+ hw/cirrus_vga.c      |    8 ++------
+ hw/exynos4210_fimd.c |    8 ++++++--
+ hw/g364fb.c          |    9 ++++++---
+ hw/jazz_led.c        |   10 +++++++---
+ hw/milkymist-vgafb.c |    9 ++++++---
+ hw/omap_lcdc.c       |    9 ++++++---
+ hw/pl110.c           |    9 ++++++---
+ hw/pxa2xx_lcd.c      |    9 ++++++---
+ hw/qxl.c             |   16 ++++++++++------
+ hw/sm501.c           |    7 +++++--
+ hw/ssd0303.c         |    9 ++++++---
+ hw/ssd0323.c         |    9 ++++++---
+ hw/tc6393xb.c        |    9 +++++----
+ hw/tcx.c             |   18 ++++++++++++------
+ hw/unicore32/puv3.c  |    4 +++-
+ hw/vga-isa-mm.c      |    4 +---
+ hw/vga-isa.c         |    3 +--
+ hw/vga-pci.c         |    3 +--
+ hw/vga.c             |   10 +++++++---
+ hw/vga_int.h         |    4 +---
+ hw/vmware_vga.c      |   20 ++++++++++++--------
+ hw/xenfb.c           |   10 ++++++----
+ include/ui/console.h |   12 ++++++------
+ ui/console.c         |   33 ++++++++++++++++-----------------
+ 26 files changed, 155 insertions(+), 104 deletions(-)
+
+diff --git a/hw/arm/musicpal.c b/hw/arm/musicpal.c
+index 0258373..61cbb5c 100644
+--- a/hw/arm/musicpal.c
++++ b/hw/arm/musicpal.c
+@@ -601,6 +601,11 @@ static const MemoryRegionOps musicpal_lcd_ops = {
+     .endianness = DEVICE_NATIVE_ENDIAN,
+ };
+ 
++static const GraphicHwOps musicpal_gfx_ops = {
++    .invalidate  = lcd_invalidate,
++    .gfx_update  = lcd_refresh,
++};
++
+ static int musicpal_lcd_init(SysBusDevice *dev)
+ {
+     musicpal_lcd_state *s = FROM_SYSBUS(musicpal_lcd_state, dev);
+@@ -611,8 +616,7 @@ static int musicpal_lcd_init(SysBusDevice *dev)
+                           "musicpal-lcd", MP_LCD_SIZE);
+     sysbus_init_mmio(dev, &s->iomem);
+ 
+-    s->con = graphic_console_init(lcd_refresh, lcd_invalidate,
+-                                  NULL, s);
++    s->con = graphic_console_init(&musicpal_gfx_ops, s);
+     qemu_console_resize(s->con, 128*3, 64*3);
+ 
+     qdev_init_gpio_in(&dev->qdev, musicpal_lcd_gpio_brigthness_in, 3);
+diff --git a/hw/blizzard.c b/hw/blizzard.c
+index 891bff8..794b276 100644
+--- a/hw/blizzard.c
++++ b/hw/blizzard.c
+@@ -944,6 +944,11 @@ static void blizzard_update_display(void *opaque)
+ #define DEPTH 32
+ #include "hw/blizzard_template.h"
+ 
++static const GraphicHwOps blizzard_ops = {
++    .invalidate  = blizzard_invalidate_display,
++    .gfx_update  = blizzard_update_display,
++};
++
+ void *s1d13745_init(qemu_irq gpio_int)
+ {
+     BlizzardState *s = (BlizzardState *) g_malloc0(sizeof(*s));
+@@ -951,9 +956,7 @@ void *s1d13745_init(qemu_irq gpio_int)
+ 
+     s->fb = g_malloc(0x180000);
+ 
+-    s->con = graphic_console_init(blizzard_update_display,
+-                                  blizzard_invalidate_display,
+-                                  NULL, s);
++    s->con = graphic_console_init(&blizzard_ops, s);
+     surface = qemu_console_surface(s->con);
+ 
+     switch (surface_bits_per_pixel(surface)) {
+diff --git a/hw/cirrus_vga.c b/hw/cirrus_vga.c
+index 03b3245..ed7962f 100644
+--- a/hw/cirrus_vga.c
++++ b/hw/cirrus_vga.c
+@@ -2910,9 +2910,7 @@ static int vga_initfn(ISADevice *dev)
+     vga_common_init(s);
+     cirrus_init_common(&d->cirrus_vga, CIRRUS_ID_CLGD5430, 0,
+                        isa_address_space(dev), isa_address_space_io(dev));
+-    s->con = graphic_console_init(s->update, s->invalidate,
+-                                  s->text_update,
+-                                  s);
++    s->con = graphic_console_init(s->hw_ops, s);
+     rom_add_vga(VGABIOS_CIRRUS_FILENAME);
+     /* XXX ISA-LFB support */
+     /* FIXME not qdev yet */
+@@ -2959,9 +2957,7 @@ static int pci_cirrus_vga_initfn(PCIDevice *dev)
+      vga_common_init(&s->vga);
+      cirrus_init_common(s, device_id, 1, pci_address_space(dev),
+                         pci_address_space_io(dev));
+-     s->vga.con = graphic_console_init(s->vga.update, s->vga.invalidate,
+-                                       s->vga.text_update,
+-                                       &s->vga);
++     s->vga.con = graphic_console_init(s->vga.hw_ops, &s->vga);
+ 
+      /* setup PCI */
+ 
+diff --git a/hw/exynos4210_fimd.c b/hw/exynos4210_fimd.c
+index 8178917..b92922a 100644
+--- a/hw/exynos4210_fimd.c
++++ b/hw/exynos4210_fimd.c
+@@ -1888,6 +1888,11 @@ static const VMStateDescription exynos4210_fimd_vmstate = {
+     }
+ };
+ 
++static const GraphicHwOps exynos4210_fimd_ops = {
++    .invalidate  = exynos4210_fimd_invalidate,
++    .gfx_update  = exynos4210_fimd_update,
++};
++
+ static int exynos4210_fimd_init(SysBusDevice *dev)
+ {
+     Exynos4210fimdState *s = FROM_SYSBUS(Exynos4210fimdState, dev);
+@@ -1901,8 +1906,7 @@ static int exynos4210_fimd_init(SysBusDevice *dev)
+     memory_region_init_io(&s->iomem, &exynos4210_fimd_mmio_ops, s,
+             "exynos4210.fimd", FIMD_REGS_SIZE);
+     sysbus_init_mmio(dev, &s->iomem);
+-    s->console = graphic_console_init(exynos4210_fimd_update,
+-                                      exynos4210_fimd_invalidate, NULL, s);
++    s->console = graphic_console_init(&exynos4210_fimd_ops, s);
+ 
+     return 0;
+ }
+diff --git a/hw/g364fb.c b/hw/g364fb.c
+index b70fe8a..03810e9 100644
+--- a/hw/g364fb.c
++++ b/hw/g364fb.c
+@@ -475,13 +475,16 @@ static const VMStateDescription vmstate_g364fb = {
+     }
+ };
+ 
++static const GraphicHwOps g364fb_ops = {
++    .invalidate  = g364fb_invalidate_display,
++    .gfx_update  = g364fb_update_display,
++};
++
+ static void g364fb_init(DeviceState *dev, G364State *s)
+ {
+     s->vram = g_malloc0(s->vram_size);
+ 
+-    s->con = graphic_console_init(g364fb_update_display,
+-                                  g364fb_invalidate_display,
+-                                  NULL, s);
++    s->con = graphic_console_init(&g364fb_ops, s);
+ 
+     memory_region_init_io(&s->mem_ctrl, &g364fb_ctrl_ops, s, "ctrl", 0x180000);
+     memory_region_init_ram_ptr(&s->mem_vram, "vram",
+diff --git a/hw/jazz_led.c b/hw/jazz_led.c
+index c027f76..6306d8c 100644
+--- a/hw/jazz_led.c
++++ b/hw/jazz_led.c
+@@ -254,6 +254,12 @@ static const VMStateDescription vmstate_jazz_led = {
+     }
+ };
+ 
++static const GraphicHwOps jazz_led_ops = {
++    .invalidate  = jazz_led_invalidate_display,
++    .gfx_update  = jazz_led_update_display,
++    .text_update = jazz_led_text_update,
++};
++
+ static int jazz_led_init(SysBusDevice *dev)
+ {
+     LedState *s = FROM_SYSBUS(LedState, dev);
+@@ -261,9 +267,7 @@ static int jazz_led_init(SysBusDevice *dev)
+     memory_region_init_io(&s->iomem, &led_ops, s, "led", 1);
+     sysbus_init_mmio(dev, &s->iomem);
+ 
+-    s->con = graphic_console_init(jazz_led_update_display,
+-                                  jazz_led_invalidate_display,
+-                                  jazz_led_text_update, s);
++    s->con = graphic_console_init(&jazz_led_ops, s);
+ 
+     return 0;
+ }
+diff --git a/hw/milkymist-vgafb.c b/hw/milkymist-vgafb.c
+index 80486e8..91c80c5 100644
+--- a/hw/milkymist-vgafb.c
++++ b/hw/milkymist-vgafb.c
+@@ -270,6 +270,11 @@ static void milkymist_vgafb_reset(DeviceState *d)
+     s->regs[R_BASEADDRESS] = 0;
+ }
+ 
++static const GraphicHwOps vgafb_ops = {
++    .invalidate  = vgafb_invalidate_display,
++    .gfx_update  = vgafb_update_display,
++};
++
+ static int milkymist_vgafb_init(SysBusDevice *dev)
+ {
+     MilkymistVgafbState *s = FROM_SYSBUS(typeof(*s), dev);
+@@ -278,9 +283,7 @@ static int milkymist_vgafb_init(SysBusDevice *dev)
+             "milkymist-vgafb", R_MAX * 4);
+     sysbus_init_mmio(dev, &s->regs_region);
+ 
+-    s->con = graphic_console_init(vgafb_update_display,
+-                                  vgafb_invalidate_display,
+-                                  NULL, s);
++    s->con = graphic_console_init(&vgafb_ops, s);
+ 
+     return 0;
+ }
+diff --git a/hw/omap_lcdc.c b/hw/omap_lcdc.c
+index 1cb49d5..eb4073b 100644
+--- a/hw/omap_lcdc.c
++++ b/hw/omap_lcdc.c
+@@ -384,6 +384,11 @@ void omap_lcdc_reset(struct omap_lcd_panel_s *s)
+     s->ctrl = 0;
+ }
+ 
++static const GraphicHwOps omap_ops = {
++    .invalidate  = omap_invalidate_display,
++    .gfx_update  = omap_update_display,
++};
++
+ struct omap_lcd_panel_s *omap_lcdc_init(MemoryRegion *sysmem,
+                                         hwaddr base,
+                                         qemu_irq irq,
+@@ -401,9 +406,7 @@ struct omap_lcd_panel_s *omap_lcdc_init(MemoryRegion *sysmem,
+     memory_region_init_io(&s->iomem, &omap_lcdc_ops, s, "omap.lcdc", 0x100);
+     memory_region_add_subregion(sysmem, base, &s->iomem);
+ 
+-    s->con = graphic_console_init(omap_update_display,
+-                                  omap_invalidate_display,
+-                                  NULL, s);
++    s->con = graphic_console_init(&omap_ops, s);
+ 
+     return s;
+ }
+diff --git a/hw/pl110.c b/hw/pl110.c
+index 6f24957..f80f297 100644
+--- a/hw/pl110.c
++++ b/hw/pl110.c
+@@ -444,6 +444,11 @@ static int vmstate_pl110_post_load(void *opaque, int version_id)
+     return 0;
+ }
+ 
++static const GraphicHwOps pl110_gfx_ops = {
++    .invalidate  = pl110_invalidate_display,
++    .gfx_update  = pl110_update_display,
++};
++
+ static int pl110_init(SysBusDevice *dev)
+ {
+     pl110_state *s = FROM_SYSBUS(pl110_state, dev);
+@@ -452,9 +457,7 @@ static int pl110_init(SysBusDevice *dev)
+     sysbus_init_mmio(dev, &s->iomem);
+     sysbus_init_irq(dev, &s->irq);
+     qdev_init_gpio_in(&s->busdev.qdev, pl110_mux_ctrl_set, 1);
+-    s->con = graphic_console_init(pl110_update_display,
+-                                  pl110_invalidate_display,
+-                                  NULL, s);
++    s->con = graphic_console_init(&pl110_gfx_ops, s);
+     return 0;
+ }
+ 
+diff --git a/hw/pxa2xx_lcd.c b/hw/pxa2xx_lcd.c
+index 602e3dc..7d09e5e 100644
+--- a/hw/pxa2xx_lcd.c
++++ b/hw/pxa2xx_lcd.c
+@@ -991,6 +991,11 @@ static const VMStateDescription vmstate_pxa2xx_lcdc = {
+ #define BITS 32
+ #include "hw/pxa2xx_template.h"
+ 
++static const GraphicHwOps pxa2xx_ops = {
++    .invalidate  = pxa2xx_invalidate_display,
++    .gfx_update  = pxa2xx_update_display,
++};
++
+ PXA2xxLCDState *pxa2xx_lcdc_init(MemoryRegion *sysmem,
+                                  hwaddr base, qemu_irq irq)
+ {
+@@ -1008,9 +1013,7 @@ PXA2xxLCDState *pxa2xx_lcdc_init(MemoryRegion *sysmem,
+                           "pxa2xx-lcd-controller", 0x00100000);
+     memory_region_add_subregion(sysmem, base, &s->iomem);
+ 
+-    s->con = graphic_console_init(pxa2xx_update_display,
+-                                  pxa2xx_invalidate_display,
+-                                  NULL, s);
++    s->con = graphic_console_init(&pxa2xx_ops, s);
+     surface = qemu_console_surface(s->con);
+ 
+     switch (surface_bits_per_pixel(surface)) {
+diff --git a/hw/qxl.c b/hw/qxl.c
+index 0f09bae..36f18fd 100644
+--- a/hw/qxl.c
++++ b/hw/qxl.c
+@@ -1753,7 +1753,7 @@ static void qxl_hw_update(void *opaque)
+ 
+     switch (qxl->mode) {
+     case QXL_MODE_VGA:
+-        vga->update(vga);
++        vga->hw_ops->gfx_update(vga);
+         break;
+     case QXL_MODE_COMPAT:
+     case QXL_MODE_NATIVE:
+@@ -1769,7 +1769,7 @@ static void qxl_hw_invalidate(void *opaque)
+     PCIQXLDevice *qxl = opaque;
+     VGACommonState *vga = &qxl->vga;
+ 
+-    vga->invalidate(vga);
++    vga->hw_ops->invalidate(vga);
+ }
+ 
+ static void qxl_hw_text_update(void *opaque, console_ch_t *chardata)
+@@ -1778,7 +1778,7 @@ static void qxl_hw_text_update(void *opaque, console_ch_t *chardata)
+     VGACommonState *vga = &qxl->vga;
+ 
+     if (qxl->mode == QXL_MODE_VGA) {
+-        vga->text_update(vga, chardata);
++        vga->hw_ops->text_update(vga, chardata);
+         return;
+     }
+ }
+@@ -2038,6 +2038,12 @@ static int qxl_init_common(PCIQXLDevice *qxl)
+     return 0;
+ }
+ 
++static const GraphicHwOps qxl_ops = {
++    .invalidate  = qxl_hw_invalidate,
++    .gfx_update  = qxl_hw_update,
++    .text_update = qxl_hw_text_update,
++};
++
+ static int qxl_init_primary(PCIDevice *dev)
+ {
+     PCIQXLDevice *qxl = DO_UPCAST(PCIQXLDevice, pci, dev);
+@@ -2054,9 +2060,7 @@ static int qxl_init_primary(PCIDevice *dev)
+     portio_list_init(qxl_vga_port_list, qxl_vga_portio_list, vga, "vga");
+     portio_list_add(qxl_vga_port_list, pci_address_space_io(dev), 0x3b0);
+ 
+-    vga->con = graphic_console_init(qxl_hw_update, qxl_hw_invalidate,
+-                                    qxl_hw_text_update,
+-                                    qxl);
++    vga->con = graphic_console_init(&qxl_ops, qxl);
+     qxl->ssd.con = vga->con,
+     qemu_spice_display_init_common(&qxl->ssd);
+ 
+diff --git a/hw/sm501.c b/hw/sm501.c
+index 1f428cd..cf3bb11 100644
+--- a/hw/sm501.c
++++ b/hw/sm501.c
+@@ -1383,6 +1383,10 @@ static void sm501_update_display(void *opaque)
+ 	sm501_draw_crt(s);
+ }
+ 
++static const GraphicHwOps sm501_ops = {
++    .gfx_update  = sm501_update_display,
++};
++
+ void sm501_init(MemoryRegion *address_space_mem, uint32_t base,
+                 uint32_t local_mem_bytes, qemu_irq irq, CharDriverState *chr)
+ {
+@@ -1445,6 +1449,5 @@ void sm501_init(MemoryRegion *address_space_mem, uint32_t base,
+     }
+ 
+     /* create qemu graphic console */
+-    s->con = graphic_console_init(sm501_update_display, NULL,
+-                                  NULL, s);
++    s->con = graphic_console_init(&sm501_ops, s);
+ }
+diff --git a/hw/ssd0303.c b/hw/ssd0303.c
+index 02feaff..9af8f75 100644
+--- a/hw/ssd0303.c
++++ b/hw/ssd0303.c
+@@ -284,13 +284,16 @@ static const VMStateDescription vmstate_ssd0303 = {
+     }
+ };
+ 
++static const GraphicHwOps ssd0303_ops = {
++    .invalidate  = ssd0303_invalidate_display,
++    .gfx_update  = ssd0303_update_display,
++};
++
+ static int ssd0303_init(I2CSlave *i2c)
+ {
+     ssd0303_state *s = FROM_I2C_SLAVE(ssd0303_state, i2c);
+ 
+-    s->con = graphic_console_init(ssd0303_update_display,
+-                                  ssd0303_invalidate_display,
+-                                  NULL, s);
++    s->con = graphic_console_init(&ssd0303_ops, s);
+     qemu_console_resize(s->con, 96 * MAGNIFY, 16 * MAGNIFY);
+     return 0;
+ }
+diff --git a/hw/ssd0323.c b/hw/ssd0323.c
+index 301cb20..45e8dc1 100644
+--- a/hw/ssd0323.c
++++ b/hw/ssd0323.c
+@@ -331,15 +331,18 @@ static int ssd0323_load(QEMUFile *f, void *opaque, int version_id)
+     return 0;
+ }
+ 
++static const GraphicHwOps ssd0323_ops = {
++    .invalidate  = ssd0323_invalidate_display,
++    .gfx_update  = ssd0323_update_display,
++};
++
+ static int ssd0323_init(SSISlave *dev)
+ {
+     ssd0323_state *s = FROM_SSI_SLAVE(ssd0323_state, dev);
+ 
+     s->col_end = 63;
+     s->row_end = 79;
+-    s->con = graphic_console_init(ssd0323_update_display,
+-                                  ssd0323_invalidate_display,
+-                                  NULL, s);
++    s->con = graphic_console_init(&ssd0323_ops, s);
+     qemu_console_resize(s->con, 128 * MAGNIFY, 64 * MAGNIFY);
+ 
+     qdev_init_gpio_in(&dev->qdev, ssd0323_cd, 1);
+diff --git a/hw/tc6393xb.c b/hw/tc6393xb.c
+index 30b624e..8eaccdb 100644
+--- a/hw/tc6393xb.c
++++ b/hw/tc6393xb.c
+@@ -548,6 +548,10 @@ static void tc6393xb_writeb(void *opaque, hwaddr addr,
+                 (uint32_t) addr, (int)value & 0xff);
+ }
+ 
++static const GraphicHwOps tc6393xb_gfx_ops = {
++    .gfx_update  = tc6393xb_update_display,
++};
++
+ TC6393xbState *tc6393xb_init(MemoryRegion *sysmem, uint32_t base, qemu_irq irq)
+ {
+     TC6393xbState *s;
+@@ -583,10 +587,7 @@ TC6393xbState *tc6393xb_init(MemoryRegion *sysmem, uint32_t base, qemu_irq irq)
+     memory_region_add_subregion(sysmem, base + 0x100000, &s->vram);
+     s->scr_width = 480;
+     s->scr_height = 640;
+-    s->con = graphic_console_init(tc6393xb_update_display,
+-            NULL, /* invalidate */
+-            NULL, /* text_update */
+-            s);
++    s->con = graphic_console_init(&tc6393xb_gfx_ops, s);
+ 
+     return s;
+ }
+diff --git a/hw/tcx.c b/hw/tcx.c
+index ba3857a..77c7191 100644
+--- a/hw/tcx.c
++++ b/hw/tcx.c
+@@ -510,6 +510,16 @@ static const MemoryRegionOps dummy_ops = {
+     },
+ };
+ 
++static const GraphicHwOps tcx_ops = {
++    .invalidate = tcx_invalidate_display,
++    .gfx_update = tcx_update_display,
++};
++
++static const GraphicHwOps tcx24_ops = {
++    .invalidate = tcx24_invalidate_display,
++    .gfx_update = tcx24_update_display,
++};
++
+ static int tcx_init1(SysBusDevice *dev)
+ {
+     TCXState *s = FROM_SYSBUS(TCXState, dev);
+@@ -562,18 +572,14 @@ static int tcx_init1(SysBusDevice *dev)
+                                  &s->vram_mem, vram_offset, size);
+         sysbus_init_mmio(dev, &s->vram_cplane);
+ 
+-        s->con = graphic_console_init(tcx24_update_display,
+-                                      tcx24_invalidate_display,
+-                                      NULL, s);
++        s->con = graphic_console_init(&tcx24_ops, s);
+     } else {
+         /* THC 8 bit (dummy) */
+         memory_region_init_io(&s->thc8, &dummy_ops, s, "tcx.thc8",
+                               TCX_THC_NREGS_8);
+         sysbus_init_mmio(dev, &s->thc8);
+ 
+-        s->con = graphic_console_init(tcx_update_display,
+-                                      tcx_invalidate_display,
+-                                      NULL, s);
++        s->con = graphic_console_init(&tcx_ops, s);
+     }
+ 
+     qemu_console_resize(s->con, s->width, s->height);
+diff --git a/hw/unicore32/puv3.c b/hw/unicore32/puv3.c
+index d110363..20356b5 100644
+--- a/hw/unicore32/puv3.c
++++ b/hw/unicore32/puv3.c
+@@ -78,6 +78,8 @@ static void puv3_board_init(CPUUniCore32State *env, ram_addr_t ram_size)
+     memory_region_add_subregion(get_system_memory(), 0, ram_memory);
+ }
+ 
++static const GraphicHwOps no_ops;
++
+ static void puv3_load_kernel(const char *kernel_filename)
+ {
+     int size;
+@@ -92,7 +94,7 @@ static void puv3_load_kernel(const char *kernel_filename)
+     }
+ 
+     /* cheat curses that we have a graphic console, only under ocd console */
+-    graphic_console_init(NULL, NULL, NULL, NULL);
++    graphic_console_init(&no_ops, NULL);
+ }
+ 
+ static void puv3_init(QEMUMachineInitArgs *args)
+diff --git a/hw/vga-isa-mm.c b/hw/vga-isa-mm.c
+index 5fb04fb..3f3af9a 100644
+--- a/hw/vga-isa-mm.c
++++ b/hw/vga-isa-mm.c
+@@ -135,9 +135,7 @@ int isa_vga_mm_init(hwaddr vram_base,
+     vga_common_init(&s->vga);
+     vga_mm_init(s, vram_base, ctrl_base, it_shift, address_space);
+ 
+-    s->vga.con = graphic_console_init(s->vga.update, s->vga.invalidate,
+-                                      s->vga.text_update,
+-                                      s);
++    s->vga.con = graphic_console_init(s->vga.hw_ops, s);
+ 
+     vga_init_vbe(&s->vga, address_space);
+     return 0;
+diff --git a/hw/vga-isa.c b/hw/vga-isa.c
+index 0a1aded..a76cef2 100644
+--- a/hw/vga-isa.c
++++ b/hw/vga-isa.c
+@@ -62,8 +62,7 @@ static int vga_initfn(ISADevice *dev)
+                                         isa_mem_base + 0x000a0000,
+                                         vga_io_memory, 1);
+     memory_region_set_coalescing(vga_io_memory);
+-    s->con = graphic_console_init(s->update, s->invalidate,
+-                                  s->text_update, s);
++    s->con = graphic_console_init(s->hw_ops, s);
+ 
+     vga_init_vbe(s, isa_address_space(dev));
+     /* ROM BIOS */
+diff --git a/hw/vga-pci.c b/hw/vga-pci.c
+index a982f2a..5ffc37b 100644
+--- a/hw/vga-pci.c
++++ b/hw/vga-pci.c
+@@ -150,8 +150,7 @@ static int pci_std_vga_initfn(PCIDevice *dev)
+     vga_common_init(s);
+     vga_init(s, pci_address_space(dev), pci_address_space_io(dev), true);
+ 
+-    s->con = graphic_console_init(s->update, s->invalidate,
+-                                  s->text_update, s);
++    s->con = graphic_console_init(s->hw_ops, s);
+ 
+     /* XXX: VGA_RAM_SIZE must be a power of two */
+     pci_register_bar(&d->dev, 0, PCI_BASE_ADDRESS_MEM_PREFETCH, &s->vram);
+diff --git a/hw/vga.c b/hw/vga.c
+index a875faa..5c87754 100644
+--- a/hw/vga.c
++++ b/hw/vga.c
+@@ -2250,6 +2250,12 @@ const VMStateDescription vmstate_vga_common = {
+     }
+ };
+ 
++static const GraphicHwOps vga_ops = {
++    .invalidate  = vga_invalidate_display,
++    .gfx_update  = vga_update_display,
++    .text_update = vga_update_text,
++};
++
+ void vga_common_init(VGACommonState *s)
+ {
+     int i, j, v, b;
+@@ -2293,9 +2299,7 @@ void vga_common_init(VGACommonState *s)
+     s->get_bpp = vga_get_bpp;
+     s->get_offsets = vga_get_offsets;
+     s->get_resolution = vga_get_resolution;
+-    s->update = vga_update_display;
+-    s->invalidate = vga_invalidate_display;
+-    s->text_update = vga_update_text;
++    s->hw_ops = &vga_ops;
+     switch (vga_retrace_method) {
+     case VGA_RETRACE_DUMB:
+         s->retrace = vga_dumb_retrace;
+diff --git a/hw/vga_int.h b/hw/vga_int.h
+index e4bb4a0..66f9f3c 100644
+--- a/hw/vga_int.h
++++ b/hw/vga_int.h
+@@ -152,9 +152,7 @@ typedef struct VGACommonState {
+     uint32_t cursor_offset;
+     unsigned int (*rgb_to_pixel)(unsigned int r,
+                                  unsigned int g, unsigned b);
+-    graphic_hw_update_ptr update;
+-    graphic_hw_invalidate_ptr invalidate;
+-    graphic_hw_text_update_ptr text_update;
++    const GraphicHwOps *hw_ops;
+     bool full_update_text;
+     bool full_update_gfx;
+     /* hardware mouse cursor support */
+diff --git a/hw/vmware_vga.c b/hw/vmware_vga.c
+index 1ecee8f..c330e96 100644
+--- a/hw/vmware_vga.c
++++ b/hw/vmware_vga.c
+@@ -913,7 +913,7 @@ static void vmsvga_value_write(void *opaque, uint32_t address, uint32_t value)
+     case SVGA_REG_ENABLE:
+         s->enable = !!value;
+         s->invalidated = 1;
+-        s->vga.invalidate(&s->vga);
++        s->vga.hw_ops->invalidate(&s->vga);
+         if (s->enable && s->config) {
+             vga_dirty_log_stop(&s->vga);
+         } else {
+@@ -1058,7 +1058,7 @@ static void vmsvga_update_display(void *opaque)
+     bool dirty = false;
+ 
+     if (!s->enable) {
+-        s->vga.update(&s->vga);
++        s->vga.hw_ops->gfx_update(&s->vga);
+         return;
+     }
+ 
+@@ -1112,7 +1112,7 @@ static void vmsvga_invalidate_display(void *opaque)
+ {
+     struct vmsvga_state_s *s = opaque;
+     if (!s->enable) {
+-        s->vga.invalidate(&s->vga);
++        s->vga.hw_ops->invalidate(&s->vga);
+         return;
+     }
+ 
+@@ -1123,8 +1123,8 @@ static void vmsvga_text_update(void *opaque, console_ch_t *chardata)
+ {
+     struct vmsvga_state_s *s = opaque;
+ 
+-    if (s->vga.text_update) {
+-        s->vga.text_update(&s->vga, chardata);
++    if (s->vga.hw_ops->text_update) {
++        s->vga.hw_ops->text_update(&s->vga, chardata);
+     }
+ }
+ 
+@@ -1179,15 +1179,19 @@ static const VMStateDescription vmstate_vmware_vga = {
+     }
+ };
+ 
++static const GraphicHwOps vmsvga_ops = {
++    .invalidate  = vmsvga_invalidate_display,
++    .gfx_update  = vmsvga_update_display,
++    .text_update = vmsvga_text_update,
++};
++
+ static void vmsvga_init(struct vmsvga_state_s *s,
+                         MemoryRegion *address_space, MemoryRegion *io)
+ {
+     s->scratch_size = SVGA_SCRATCH_SIZE;
+     s->scratch = g_malloc(s->scratch_size * 4);
+ 
+-    s->vga.con = graphic_console_init(vmsvga_update_display,
+-                                      vmsvga_invalidate_display,
+-                                      vmsvga_text_update, s);
++    s->vga.con = graphic_console_init(&vmsvga_ops, s);
+ 
+     s->fifo_size = SVGA_FIFO_SIZE;
+     memory_region_init_ram(&s->fifo_ram, "vmsvga.fifo", s->fifo_size);
+diff --git a/hw/xenfb.c b/hw/xenfb.c
+index 0db2f84..f2af7eb 100644
+--- a/hw/xenfb.c
++++ b/hw/xenfb.c
+@@ -977,6 +977,11 @@ struct XenDevOps xen_framebuffer_ops = {
+     .frontend_changed = fb_frontend_changed,
+ };
+ 
++static const GraphicHwOps xenfb_ops = {
++    .invalidate  = xenfb_invalidate,
++    .gfx_update  = xenfb_update,
++};
++
+ /*
+  * FIXME/TODO: Kill this.
+  * Temporary needed while DisplayState reorganization is in flight.
+@@ -1004,10 +1009,7 @@ wait_more:
+ 
+     /* vfb */
+     fb = container_of(xfb, struct XenFB, c.xendev);
+-    fb->c.con = graphic_console_init(xenfb_update,
+-                                     xenfb_invalidate,
+-                                     NULL,
+-                                     fb);
++    fb->c.con = graphic_console_init(&xenfb_ops, fb);
+     fb->have_console = 1;
+ 
+     /* vkbd */
+diff --git a/include/ui/console.h b/include/ui/console.h
+index 50cd7b0..f3e7791 100644
+--- a/include/ui/console.h
++++ b/include/ui/console.h
+@@ -267,13 +267,13 @@ static inline void console_write_ch(console_ch_t *dest, uint32_t ch)
+     *dest = ch;
+ }
+ 
+-typedef void (*graphic_hw_update_ptr)(void *);
+-typedef void (*graphic_hw_invalidate_ptr)(void *);
+-typedef void (*graphic_hw_text_update_ptr)(void *, console_ch_t *);
++typedef struct GraphicHwOps {
++    void (*invalidate)(void *opaque);
++    void (*gfx_update)(void *opaque);
++    void (*text_update)(void *opaque, console_ch_t *text);
++} GraphicHwOps;
+ 
+-QemuConsole *graphic_console_init(graphic_hw_update_ptr update,
+-                                  graphic_hw_invalidate_ptr invalidate,
+-                                  graphic_hw_text_update_ptr text_update,
++QemuConsole *graphic_console_init(const GraphicHwOps *ops,
+                                   void *opaque);
+ 
+ void graphic_hw_update(QemuConsole *con);
+diff --git a/ui/console.c b/ui/console.c
+index ea8c218..49ed6ef 100644
+--- a/ui/console.c
++++ b/ui/console.c
+@@ -119,9 +119,7 @@ struct QemuConsole {
+     DisplaySurface *surface;
+ 
+     /* Graphic console state.  */
+-    graphic_hw_update_ptr hw_update;
+-    graphic_hw_invalidate_ptr hw_invalidate;
+-    graphic_hw_text_update_ptr hw_text_update;
++    const GraphicHwOps *hw_ops;
+     void *hw;
+ 
+     /* Text console state */
+@@ -229,8 +227,8 @@ void graphic_hw_update(QemuConsole *con)
+     if (!con) {
+         con = active_console;
+     }
+-    if (con && con->hw_update) {
+-        con->hw_update(con->hw);
++    if (con && con->hw_ops->gfx_update) {
++        con->hw_ops->gfx_update(con->hw);
+     }
+ }
+ 
+@@ -239,8 +237,8 @@ void graphic_hw_invalidate(QemuConsole *con)
+     if (!con) {
+         con = active_console;
+     }
+-    if (con && con->hw_invalidate) {
+-        con->hw_invalidate(con->hw);
++    if (con && con->hw_ops->invalidate) {
++        con->hw_ops->invalidate(con->hw);
+     }
+ }
+ 
+@@ -310,8 +308,9 @@ void graphic_hw_text_update(QemuConsole *con, console_ch_t *chardata)
+     if (!con) {
+         con = active_console;
+     }
+-    if (con && con->hw_text_update)
+-        con->hw_text_update(con->hw, chardata);
++    if (con && con->hw_ops->text_update) {
++        con->hw_ops->text_update(con->hw, chardata);
++    }
+ }
+ 
+ static void vga_fill_rect(QemuConsole *con,
+@@ -1493,9 +1492,7 @@ DisplayState *init_displaystate(void)
+     return display_state;
+ }
+ 
+-QemuConsole *graphic_console_init(graphic_hw_update_ptr update,
+-                                  graphic_hw_invalidate_ptr invalidate,
+-                                  graphic_hw_text_update_ptr text_update,
++QemuConsole *graphic_console_init(const GraphicHwOps *hw_ops,
+                                   void *opaque)
+ {
+     int width = 640;
+@@ -1506,9 +1503,7 @@ QemuConsole *graphic_console_init(graphic_hw_update_ptr update,
+     ds = get_alloc_displaystate();
+     trace_console_gfx_new();
+     s = new_console(ds, GRAPHIC_CONSOLE);
+-    s->hw_update = update;
+-    s->hw_invalidate = invalidate;
+-    s->hw_text_update = text_update;
++    s->hw_ops = hw_ops;
+     s->hw = opaque;
+ 
+     s->surface = qemu_create_displaysurface(width, height);
+@@ -1542,6 +1537,11 @@ static void text_console_update_cursor(void *opaque)
+                    qemu_get_clock_ms(rt_clock) + CONSOLE_CURSOR_PERIOD / 2);
+ }
+ 
++static const GraphicHwOps text_console_ops = {
++    .invalidate  = text_console_invalidate,
++    .text_update = text_console_update,
++};
++
+ static void text_console_do_init(CharDriverState *chr, DisplayState *ds)
+ {
+     QemuConsole *s;
+@@ -1573,8 +1573,7 @@ static void text_console_do_init(CharDriverState *chr, DisplayState *ds)
+     s->cursor_timer =
+         qemu_new_timer_ms(rt_clock, text_console_update_cursor, s);
+ 
+-    s->hw_invalidate = text_console_invalidate;
+-    s->hw_text_update = text_console_update;
++    s->hw_ops = &text_console_ops;
+     s->hw = s;
+ 
+     /* Set text attribute defaults */
+-- 
+1.7.9.7
+

@@ -1,0 +1,74 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Richard Henderson <rth@twiddle.net>
+To: qemu-devel@nongnu.org
+Cc: av1474@comtv.ru, agraf@suse.de, aurelien@aurel32.net
+Date: Mon,  1 Apr 2013 21:23:10 -0700
+Message-id: 1364876610-3933-8-git-send-email-rth@twiddle.net
+Subject: [PATCH 07/27] tcg-ppc64: Cleanup tcg_out_movi
+
+The test for using movi32 was sub-optimal for TCG_TYPE_I32, comparing
+a signed 32-bit quantity against an unsigned 32-bit quantity.
+
+When possible, use addi+oris for 32-bit unsigned constants.  Otherwise,
+standardize on addi+oris+ori instead of addis+ori+rldicl.
+
+Reviewed-by: Aurelien Jarno <aurelien@aurel32.net>
+Signed-off-by: Richard Henderson <rth@twiddle.net>
+---
+ tcg/ppc64/tcg-target.c | 36 ++++++++++++++++--------------------
+ 1 file changed, 16 insertions(+), 20 deletions(-)
+
+diff --git a/tcg/ppc64/tcg-target.c b/tcg/ppc64/tcg-target.c
+index 82e1da7..a4951c5 100644
+--- a/tcg/ppc64/tcg-target.c
++++ b/tcg/ppc64/tcg-target.c
+@@ -477,29 +477,25 @@ static void tcg_out_movi32(TCGContext *s, TCGReg ret, int32_t arg)
+     }
+ }
+ 
+-static void tcg_out_movi (TCGContext *s, TCGType type,
+-                          TCGReg ret, tcg_target_long arg)
++static void tcg_out_movi(TCGContext *s, TCGType type, TCGReg ret,
++                         tcg_target_long arg)
+ {
+-    int32_t arg32 = arg;
+-    arg = type == TCG_TYPE_I32 ? arg & 0xffffffff : arg;
+-
+-    if (arg == arg32) {
+-        tcg_out_movi32 (s, ret, arg32);
+-    }
+-    else {
+-        if ((uint64_t) arg >> 32) {
+-            uint16_t h16 = arg >> 16;
+-            uint16_t l16 = arg;
+-
+-            tcg_out_movi32 (s, ret, arg >> 32);
++    if (type == TCG_TYPE_I32 || arg == (int32_t)arg) {
++        tcg_out_movi32(s, ret, arg);
++    } else if (arg == (uint32_t)arg && !(arg & 0x8000)) {
++        tcg_out32(s, ADDI | RT(ret) | RA(0) | (arg & 0xffff));
++        tcg_out32(s, ORIS | RT(ret) | RA(ret) | ((arg >> 16) & 0xffff));
++    } else {
++        int32_t high = arg >> 32;
++        tcg_out_movi32(s, ret, high);
++        if (high) {
+             tcg_out_shli64(s, ret, ret, 32);
+-            if (h16) tcg_out32 (s, ORIS | RS (ret) | RA (ret) | h16);
+-            if (l16) tcg_out32 (s, ORI | RS (ret) | RA (ret) | l16);
+         }
+-        else {
+-            tcg_out_movi32 (s, ret, arg32);
+-            if (arg32 < 0)
+-                tcg_out_ext32u(s, ret, ret);
++        if (arg & 0xffff0000) {
++            tcg_out32(s, ORIS | RS(ret) | RA(ret) | ((arg >> 16) & 0xffff));
++        }
++        if (arg & 0xffff) {
++            tcg_out32(s, ORI | RS(ret) | RA(ret) | (arg & 0xffff));
+         }
+     }
+ }
+-- 
+1.8.1.4
+
+

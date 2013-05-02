@@ -1,0 +1,289 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: av1474@comtv.ru
+Date: Thu, 18 Apr 2013 18:44:01 +0200
+Message-id: 1366303444-24620-6-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 5/8] audio: replace audio card configuration with
+ default-configs
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ configure                            |  7 -------
+ default-configs/i386-softmmu.mak     |  2 +-
+ default-configs/mips-softmmu.mak     |  2 +-
+ default-configs/mips64-softmmu.mak   |  2 +-
+ default-configs/mips64el-softmmu.mak |  2 +-
+ default-configs/mipsel-softmmu.mak   |  2 +-
+ default-configs/ppc-softmmu.mak      |  2 +-
+ default-configs/ppc64-softmmu.mak    |  2 +-
+ default-configs/ppcemb-softmmu.mak   |  2 +-
+ default-configs/sound.mak            |  7 +++++++
+ default-configs/x86_64-softmmu.mak   |  2 +-
+ hw/audio/Makefile.objs               | 16 +++++++---------
+ 12 files changed, 23 insertions(+), 25 deletions(-)
+ create mode 100644 default-configs/sound.mak
+
+diff --git a/configure b/configure
+index 62b5758..f3bfa00 100755
+--- a/configure
++++ b/configure
+@@ -123,8 +123,6 @@ interp_prefix="/usr/gnemul/qemu-%M"
+ static="no"
+ cross_prefix=""
+ audio_drv_list=""
+-audio_card_list="ac97 es1370 sb16 hda"
+-audio_possible_cards="ac97 es1370 sb16 cs4231a adlib gus hda"
+ block_drv_whitelist=""
+ host_cc="cc"
+ libs_softmmu=""
+@@ -702,8 +700,6 @@ for opt do
+   ;;
+   --oss-lib=*) oss_lib="$optarg"
+   ;;
+-  --audio-card-list=*) audio_card_list=`echo "$optarg" | sed -e 's/,/ /g'`
+-  ;;
+   --audio-drv-list=*) audio_drv_list="$optarg"
+   ;;
+   --block-drv-whitelist=*) block_drv_whitelist=`echo "$optarg" | sed -e 's/,/ /g'`
+@@ -1099,8 +1095,6 @@ echo "  --disable-cocoa          disable Cocoa (Mac OS X only)"
+ echo "  --enable-cocoa           enable Cocoa (default on Mac OS X)"
+ echo "  --audio-drv-list=LIST    set audio drivers list:"
+ echo "                           Available drivers: $audio_possible_drivers"
+-echo "  --audio-card-list=LIST   set list of emulated audio cards [$audio_card_list]"
+-echo "                           Available cards: $audio_possible_cards"
+ echo "  --block-drv-whitelist=L  set block driver whitelist"
+ echo "                           (affects only QEMU, not qemu-img)"
+ echo "  --enable-mixemu          enable mixer emulation"
+@@ -3514,7 +3508,6 @@ echo "curses support    $curses"
+ echo "curl support      $curl"
+ echo "mingw32 support   $mingw32"
+ echo "Audio drivers     $audio_drv_list"
+-echo "Extra audio cards $audio_card_list"
+ echo "Block whitelist   $block_drv_whitelist"
+ echo "Mixer emulation   $mixemu"
+ echo "VirtFS support    $virtfs"
+diff --git a/default-configs/i386-softmmu.mak b/default-configs/i386-softmmu.mak
+index 368a776..bc716a0 100644
+--- a/default-configs/i386-softmmu.mak
++++ b/default-configs/i386-softmmu.mak
+@@ -1,6 +1,7 @@
+ # Default configuration for i386-softmmu
+ 
+ include pci.mak
++include sound.mak
+ include usb.mak
+ CONFIG_VGA=y
+ CONFIG_QXL=$(CONFIG_SPICE)
+@@ -22,7 +23,6 @@ CONFIG_IDE_ISA=y
+ CONFIG_IDE_PIIX=y
+ CONFIG_NE2000_ISA=y
+ CONFIG_PIIX_PCI=y
+-CONFIG_SOUND=y
+ CONFIG_HPET=y
+ CONFIG_APPLESMC=y
+ CONFIG_I8259=y
+diff --git a/default-configs/mips-softmmu.mak b/default-configs/mips-softmmu.mak
+index b764360..b443702 100644
+--- a/default-configs/mips-softmmu.mak
++++ b/default-configs/mips-softmmu.mak
+@@ -1,6 +1,7 @@
+ # Default configuration for mips-softmmu
+ 
+ include pci.mak
++include sound.mak
+ include usb.mak
+ CONFIG_ISA_MMIO=y
+ CONFIG_ESP=y
+@@ -23,7 +24,6 @@ CONFIG_PIIX4=y
+ CONFIG_IDE_ISA=y
+ CONFIG_IDE_PIIX=y
+ CONFIG_NE2000_ISA=y
+-CONFIG_SOUND=y
+ CONFIG_RC4030=y
+ CONFIG_DP8393X=y
+ CONFIG_DS1225Y=y
+diff --git a/default-configs/mips64-softmmu.mak b/default-configs/mips64-softmmu.mak
+index 0e4e65d..d638957 100644
+--- a/default-configs/mips64-softmmu.mak
++++ b/default-configs/mips64-softmmu.mak
+@@ -1,6 +1,7 @@
+ # Default configuration for mips64-softmmu
+ 
+ include pci.mak
++include sound.mak
+ include usb.mak
+ CONFIG_ISA_MMIO=y
+ CONFIG_ESP=y
+@@ -23,7 +24,6 @@ CONFIG_PIIX4=y
+ CONFIG_IDE_ISA=y
+ CONFIG_IDE_PIIX=y
+ CONFIG_NE2000_ISA=y
+-CONFIG_SOUND=y
+ CONFIG_RC4030=y
+ CONFIG_DP8393X=y
+ CONFIG_DS1225Y=y
+diff --git a/default-configs/mips64el-softmmu.mak b/default-configs/mips64el-softmmu.mak
+index 0a6c4f7..c9be3f4 100644
+--- a/default-configs/mips64el-softmmu.mak
++++ b/default-configs/mips64el-softmmu.mak
+@@ -1,6 +1,7 @@
+ # Default configuration for mips64el-softmmu
+ 
+ include pci.mak
++include sound.mak
+ include usb.mak
+ CONFIG_ISA_MMIO=y
+ CONFIG_ESP=y
+@@ -24,7 +25,6 @@ CONFIG_IDE_ISA=y
+ CONFIG_IDE_PIIX=y
+ CONFIG_IDE_VIA=y
+ CONFIG_NE2000_ISA=y
+-CONFIG_SOUND=y
+ CONFIG_RC4030=y
+ CONFIG_DP8393X=y
+ CONFIG_DS1225Y=y
+diff --git a/default-configs/mipsel-softmmu.mak b/default-configs/mipsel-softmmu.mak
+index 9f9c6da..4f4a449 100644
+--- a/default-configs/mipsel-softmmu.mak
++++ b/default-configs/mipsel-softmmu.mak
+@@ -1,6 +1,7 @@
+ # Default configuration for mipsel-softmmu
+ 
+ include pci.mak
++include sound.mak
+ include usb.mak
+ CONFIG_ISA_MMIO=y
+ CONFIG_ESP=y
+@@ -23,7 +24,6 @@ CONFIG_PIIX4=y
+ CONFIG_IDE_ISA=y
+ CONFIG_IDE_PIIX=y
+ CONFIG_NE2000_ISA=y
+-CONFIG_SOUND=y
+ CONFIG_RC4030=y
+ CONFIG_DP8393X=y
+ CONFIG_DS1225Y=y
+diff --git a/default-configs/ppc-softmmu.mak b/default-configs/ppc-softmmu.mak
+index 50034fc..cc3587f 100644
+--- a/default-configs/ppc-softmmu.mak
++++ b/default-configs/ppc-softmmu.mak
+@@ -1,6 +1,7 @@
+ # Default configuration for ppc-softmmu
+ 
+ include pci.mak
++include sound.mak
+ include usb.mak
+ CONFIG_GDBSTUB_XML=y
+ CONFIG_ISA_MMIO=y
+@@ -34,7 +35,6 @@ CONFIG_IDE_ISA=y
+ CONFIG_IDE_CMD646=y
+ CONFIG_IDE_MACIO=y
+ CONFIG_NE2000_ISA=y
+-CONFIG_SOUND=y
+ CONFIG_PFLASH_CFI01=y
+ CONFIG_PFLASH_CFI02=y
+ CONFIG_PTIMER=y
+diff --git a/default-configs/ppc64-softmmu.mak b/default-configs/ppc64-softmmu.mak
+index 6398d60..884ea8a 100644
+--- a/default-configs/ppc64-softmmu.mak
++++ b/default-configs/ppc64-softmmu.mak
+@@ -1,6 +1,7 @@
+ # Default configuration for ppc64-softmmu
+ 
+ include pci.mak
++include sound.mak
+ include usb.mak
+ CONFIG_GDBSTUB_XML=y
+ CONFIG_ISA_MMIO=y
+@@ -34,7 +35,6 @@ CONFIG_IDE_ISA=y
+ CONFIG_IDE_CMD646=y
+ CONFIG_IDE_MACIO=y
+ CONFIG_NE2000_ISA=y
+-CONFIG_SOUND=y
+ CONFIG_PFLASH_CFI01=y
+ CONFIG_PFLASH_CFI02=y
+ CONFIG_PTIMER=y
+diff --git a/default-configs/ppcemb-softmmu.mak b/default-configs/ppcemb-softmmu.mak
+index 05b50d6..be93e03 100644
+--- a/default-configs/ppcemb-softmmu.mak
++++ b/default-configs/ppcemb-softmmu.mak
+@@ -1,6 +1,7 @@
+ # Default configuration for ppcemb-softmmu
+ 
+ include pci.mak
++include sound.mak
+ include usb.mak
+ CONFIG_GDBSTUB_XML=y
+ CONFIG_ISA_MMIO=y
+@@ -29,7 +30,6 @@ CONFIG_IDE_ISA=y
+ CONFIG_IDE_CMD646=y
+ CONFIG_IDE_MACIO=y
+ CONFIG_NE2000_ISA=y
+-CONFIG_SOUND=y
+ CONFIG_PFLASH_CFI01=y
+ CONFIG_PFLASH_CFI02=y
+ CONFIG_PTIMER=y
+diff --git a/default-configs/sound.mak b/default-configs/sound.mak
+new file mode 100644
+index 0000000..ed20388
+--- /dev/null
++++ b/default-configs/sound.mak
+@@ -0,0 +1,7 @@
++CONFIG_SB16=y
++CONFIG_AC97=y
++CONFIG_HDA=y
++CONFIG_ES1370=y
++#CONFIG_ADLIB=y
++#CONFIG_GUS=y
++#CONFIG_CS4231A=y
+diff --git a/default-configs/x86_64-softmmu.mak b/default-configs/x86_64-softmmu.mak
+index 2711b83..e53f627 100644
+--- a/default-configs/x86_64-softmmu.mak
++++ b/default-configs/x86_64-softmmu.mak
+@@ -1,6 +1,7 @@
+ # Default configuration for x86_64-softmmu
+ 
+ include pci.mak
++include sound.mak
+ include usb.mak
+ CONFIG_VGA=y
+ CONFIG_QXL=$(CONFIG_SPICE)
+@@ -22,7 +23,6 @@ CONFIG_IDE_ISA=y
+ CONFIG_IDE_PIIX=y
+ CONFIG_NE2000_ISA=y
+ CONFIG_PIIX_PCI=y
+-CONFIG_SOUND=y
+ CONFIG_HPET=y
+ CONFIG_APPLESMC=y
+ CONFIG_I8259=y
+diff --git a/hw/audio/Makefile.objs b/hw/audio/Makefile.objs
+index 2375102..7ce85a2 100644
+--- a/hw/audio/Makefile.objs
++++ b/hw/audio/Makefile.objs
+@@ -1,14 +1,12 @@
+ # Sound
+-sound-obj-y =
+-sound-obj-$(CONFIG_SB16) += sb16.o
+-sound-obj-$(CONFIG_ES1370) += es1370.o
+-sound-obj-$(CONFIG_AC97) += ac97.o
+-sound-obj-$(CONFIG_ADLIB) += fmopl.o adlib.o
+-sound-obj-$(CONFIG_GUS) += gus.o gusemu_hal.o gusemu_mixer.o
+-sound-obj-$(CONFIG_CS4231A) += cs4231a.o
+-sound-obj-$(CONFIG_HDA) += intel-hda.o hda-codec.o
++common-obj-$(CONFIG_SB16) += sb16.o
++common-obj-$(CONFIG_ES1370) += es1370.o
++common-obj-$(CONFIG_AC97) += ac97.o
++common-obj-$(CONFIG_ADLIB) += fmopl.o adlib.o
++common-obj-$(CONFIG_GUS) += gus.o gusemu_hal.o gusemu_mixer.o
++common-obj-$(CONFIG_CS4231A) += cs4231a.o
++common-obj-$(CONFIG_HDA) += intel-hda.o hda-codec.o
+ 
+-common-obj-$(CONFIG_SOUND) += $(sound-obj-y)
+ common-obj-$(CONFIG_PCSPK) += pcspk.o
+ common-obj-$(CONFIG_WM8750) += wm8750.o
+ common-obj-$(CONFIG_PL041) += pl041.o lm4549.o
+-- 
+1.8.1.4
+
+
+

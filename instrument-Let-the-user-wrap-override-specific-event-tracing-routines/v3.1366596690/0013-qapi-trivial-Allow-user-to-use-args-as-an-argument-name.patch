@@ -1,0 +1,51 @@
+From patches Mon Sep 17 00:00:00 2001
+From: =?utf-8?q?Llu=C3=ADs_Vilanova_=3Cvilanova=40ac=2Eupc=2Eedu=3E?=
+To: qemu-devel@nongnu.org
+Cc: 
+Date: Sun, 21 Apr 2013 21:12:43 +0200
+Message-id: 20130421191242.8947.38759.stgit@fimbulvetr.bsc.es
+Subject: [PATCH 13/24] qapi: [trivial] Allow user to use 'args' as an argument
+ name
+
+Signed-off-by: Lluís Vilanova <vilanova@ac.upc.edu>
+---
+ scripts/qapi-commands.py |    8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/scripts/qapi-commands.py b/scripts/qapi-commands.py
+index fa16651..236a6ae 100644
+--- a/scripts/qapi-commands.py
++++ b/scripts/qapi-commands.py
+@@ -207,7 +207,7 @@ def gen_marshal_input_decl(name, args, ret_type, middle_mode):
+     if middle_mode:
+         return 'int qmp_marshal_input_%s(Monitor *mon, const QDict *qdict, QObject **ret)' % c_fun(name)
+     else:
+-        return 'static void qmp_marshal_input_%s(QDict *args, QObject **ret, Error **errp)' % c_fun(name)
++        return 'static void qmp_marshal_input_%s(QDict *args_, QObject **ret, Error **errp)' % c_fun(name)
+ 
+ 
+ 
+@@ -224,7 +224,7 @@ def gen_marshal_input(name, args, ret_type, middle_mode):
+         ret += mcgen('''
+     Error *local_err = NULL;
+     Error **errp = &local_err;
+-    QDict *args = (QDict *)qdict;
++    QDict *args_ = (QDict *)qdict;
+ ''')
+ 
+     if ret_type:
+@@ -247,10 +247,10 @@ def gen_marshal_input(name, args, ret_type, middle_mode):
+ ''',
+                      visitor_input_containers_decl=gen_visitor_input_containers_decl(args),
+                      visitor_input_vars_decl=gen_visitor_input_vars_decl(args),
+-                     visitor_input_block=gen_visitor_input_block(args, "QOBJECT(args)"))
++                     visitor_input_block=gen_visitor_input_block(args, "QOBJECT(args_)"))
+     else:
+         ret += mcgen('''
+-    (void)args;
++    (void)args_;
+ ''')
+ 
+     ret += mcgen('''
+
+

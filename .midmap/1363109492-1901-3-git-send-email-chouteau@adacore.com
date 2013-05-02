@@ -1,0 +1,1 @@
+../Add-GDB-qAttached-support/v3.1363131089/0002-Revert-gdbstub-Do-not-kill-target-in-system-emulation-mode.patch

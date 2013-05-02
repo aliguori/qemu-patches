@@ -1,0 +1,163 @@
+From patches Mon Sep 17 00:00:00 2001
+From: mrhines@linux.vnet.ibm.com
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, quintela@redhat.com,
+ Michael R Hines <mrhines@us.ibm.com>, Bulent Abali <abali@us.ibm.com>,
+ owasserm@redhat.com, pbonzini@redhat.com, Gokul B Kandiraju <gokul@us.ibm.com>
+Date: Sun, 21 Apr 2013 17:18:00 -0400
+Message-id: 1366579081-6857-12-git-send-email-mrhines@linux.vnet.ibm.com
+Subject: [PATCH 11/12] rdma: core logic
+
+From: "Michael R. Hines" <mrhines@us.ibm.com>
+
+Code that does need to be visible is kept
+well contained inside this file and this is the only
+new additional file to the entire patch - good progress.
+
+This file includes the entire protocol and interfaces
+required to perform RDMA migration.
+
+Also, the configure and Makefile modifications to link
+this file are included.
+
+Full documentation is in docs/rdma.txt
+
+Signed-off-by: Michael R. Hines <mrhines@us.ibm.com>
+---
+ Makefile.objs                 |    1 +
+ configure                     |   29 +++++++++++++++++++++++++++++
+ include/migration/migration.h |    4 ++++
+ migration.c                   |    8 ++++++++
+ 4 files changed, 42 insertions(+)
+
+diff --git a/Makefile.objs b/Makefile.objs
+index a473348..d744827 100644
+--- a/Makefile.objs
++++ b/Makefile.objs
+@@ -49,6 +49,7 @@ common-obj-$(CONFIG_POSIX) += os-posix.o
+ common-obj-$(CONFIG_LINUX) += fsdev/
+ 
+ common-obj-y += migration.o migration-tcp.o
++common-obj-$(CONFIG_RDMA) += migration-rdma.o
+ common-obj-y += qemu-char.o #aio.o
+ common-obj-y += block-migration.o
+ common-obj-y += page_cache.o xbzrle.o
+diff --git a/configure b/configure
+index ed49f91..53472e4 100755
+--- a/configure
++++ b/configure
+@@ -180,6 +180,7 @@ xfs=""
+ 
+ vhost_net="no"
+ kvm="no"
++rdma="yes"
+ gprof="no"
+ debug_tcg="no"
+ debug="no"
+@@ -920,6 +921,10 @@ for opt do
+   ;;
+   --enable-gtk) gtk="yes"
+   ;;
++  --enable-rdma) rdma="yes"
++  ;;
++  --disable-rdma) rdma="no"
++  ;;
+   --with-gtkabi=*) gtkabi="$optarg"
+   ;;
+   --enable-tpm) tpm="yes"
+@@ -1131,6 +1136,8 @@ echo "  --enable-bluez           enable bluez stack connectivity"
+ echo "  --disable-slirp          disable SLIRP userspace network connectivity"
+ echo "  --disable-kvm            disable KVM acceleration support"
+ echo "  --enable-kvm             enable KVM acceleration support"
++echo "  --disable-rdma           disable RDMA-based migration support"
++echo "  --enable-rdma            enable RDMA-based migration support"
+ echo "  --enable-tcg-interpreter enable TCG with bytecode interpreter (TCI)"
+ echo "  --disable-nptl           disable usermode NPTL support"
+ echo "  --enable-nptl            enable usermode NPTL support"
+@@ -1805,6 +1812,23 @@ EOF
+   libs_softmmu="$sdl_libs $libs_softmmu"
+ fi
+ 
++if test "$rdma" != "no" ; then
++  cat > $TMPC <<EOF
++#include <rdma/rdma_cma.h>
++int main(void) { return 0; }
++EOF
++  rdma_libs="-lrdmacm -libverbs"
++  if compile_prog "-Werror" "$rdma_libs" ; then
++    rdma="yes"
++    libs_softmmu="$libs_softmmu $rdma_libs"
++  else
++    if test "$rdma" = "yes" ; then
++      feature_not_found "rdma"
++    fi
++    rdma="no"
++  fi
++fi
++
+ ##########################################
+ # VNC TLS/WS detection
+ if test "$vnc" = "yes" -a \( "$vnc_tls" != "no" -o "$vnc_ws" != "no" \) ; then
+@@ -3543,6 +3567,7 @@ echo "Linux AIO support $linux_aio"
+ echo "ATTR/XATTR support $attr"
+ echo "Install blobs     $blobs"
+ echo "KVM support       $kvm"
++echo "RDMA support      $rdma"
+ echo "TCG interpreter   $tcg_interpreter"
+ echo "fdt support       $fdt"
+ echo "preadv support    $preadv"
+@@ -4505,6 +4530,10 @@ if [ "$pixman" = "internal" ]; then
+   echo "config-host.h: subdir-pixman" >> $config_host_mak
+ fi
+ 
++if test "$rdma" = "yes" ; then
++echo "CONFIG_RDMA=y" >> $config_host_mak
++fi
++
+ if [ "$dtc_internal" = "yes" ]; then
+   echo "config-host.h: subdir-dtc" >> $config_host_mak
+ fi
+diff --git a/include/migration/migration.h b/include/migration/migration.h
+index 3b4d5e9..f1c1999 100644
+--- a/include/migration/migration.h
++++ b/include/migration/migration.h
+@@ -76,6 +76,10 @@ void fd_start_incoming_migration(const char *path, Error **errp);
+ 
+ void fd_start_outgoing_migration(MigrationState *s, const char *fdname, Error **errp);
+ 
++void rdma_start_outgoing_migration(void *opaque, const char *host_port, Error **errp);
++
++void rdma_start_incoming_migration(const char *host_port, Error **errp);
++
+ void migrate_fd_error(MigrationState *s);
+ 
+ void migrate_fd_connect(MigrationState *s);
+diff --git a/migration.c b/migration.c
+index b13fa66..f9e3244 100644
+--- a/migration.c
++++ b/migration.c
+@@ -77,6 +77,10 @@ void qemu_start_incoming_migration(const char *uri, Error **errp)
+ 
+     if (strstart(uri, "tcp:", &p))
+         tcp_start_incoming_migration(p, errp);
++#ifdef CONFIG_RDMA
++    else if (strstart(uri, "x-rdma:", &p))
++        rdma_start_incoming_migration(p, errp);
++#endif
+ #if !defined(WIN32)
+     else if (strstart(uri, "exec:", &p))
+         exec_start_incoming_migration(p, errp);
+@@ -407,6 +411,10 @@ void qmp_migrate(const char *uri, bool has_blk, bool blk,
+ 
+     if (strstart(uri, "tcp:", &p)) {
+         tcp_start_outgoing_migration(s, p, &local_err);
++#ifdef CONFIG_RDMA
++    } else if (strstart(uri, "x-rdma:", &p)) {
++        rdma_start_outgoing_migration(s, p, &local_err);
++#endif
+ #if !defined(WIN32)
+     } else if (strstart(uri, "exec:", &p)) {
+         exec_start_outgoing_migration(s, p, &local_err);
+-- 
+1.7.10.4
+

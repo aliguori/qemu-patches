@@ -1,0 +1,41 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: 
+Date: Thu,  4 Apr 2013 21:23:13 +0200
+Message-id: 1365103395-11547-34-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 33/35] hw: move last file to hw/arm/
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ hw/arm/Makefile.objs     | 6 +-----
+ hw/{ => arm}/strongarm.c | 0
+ 2 files changed, 1 insertion(+), 5 deletions(-)
+ rename hw/{ => arm}/strongarm.c (100%)
+
+diff --git a/hw/arm/Makefile.objs b/hw/arm/Makefile.objs
+index 35c5f11..9e3a06f 100644
+--- a/hw/arm/Makefile.objs
++++ b/hw/arm/Makefile.objs
+@@ -1,11 +1,7 @@
+-obj-y += strongarm.o
+-
+-obj-y := $(addprefix ../,$(obj-y))
+-
+ obj-y += boot.o collie.o exynos4_boards.o gumstix.o highbank.o
+ obj-y += integratorcp.o kzm.o mainstone.o musicpal.o nseries.o
+ obj-y += omap_sx1.o palm.o pic_cpu.o realview.o spitz.o stellaris.o
+ obj-y += tosa.o versatilepb.o vexpress.o xilinx_zynq.o z2.o
+ 
+ obj-y += armv7m.o exynos4210.o pxa2xx.o pxa2xx_gpio.o pxa2xx_pic.o
+-obj-y += omap1.o omap2.o
++obj-y += omap1.o omap2.o strongarm.o
+diff --git a/hw/strongarm.c b/hw/arm/strongarm.c
+similarity index 100%
+rename from hw/strongarm.c
+rename to hw/arm/strongarm.c
+-- 
+1.8.1.4
+
+
+

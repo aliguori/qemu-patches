@@ -1,0 +1,225 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: 
+Date: Thu,  4 Apr 2013 21:22:51 +0200
+Message-id: 1365103395-11547-12-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 11/35] hw: move MC146818RTC to hw/timer/,
+ configure via default-configs/
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ default-configs/alpha-softmmu.mak    | 1 +
+ default-configs/i386-softmmu.mak     | 1 +
+ default-configs/mips-softmmu.mak     | 1 +
+ default-configs/mips64-softmmu.mak   | 1 +
+ default-configs/mips64el-softmmu.mak | 1 +
+ default-configs/mipsel-softmmu.mak   | 1 +
+ default-configs/moxie-softmmu.mak    | 1 +
+ default-configs/ppc-softmmu.mak      | 2 ++
+ default-configs/ppc64-softmmu.mak    | 2 ++
+ default-configs/ppcemb-softmmu.mak   | 2 ++
+ default-configs/sparc64-softmmu.mak  | 1 +
+ default-configs/x86_64-softmmu.mak   | 1 +
+ hw/alpha/Makefile.objs               | 1 -
+ hw/i386/Makefile.objs                | 1 -
+ hw/mips/Makefile.objs                | 2 +-
+ hw/moxie/Makefile.objs               | 3 ---
+ hw/ppc/Makefile.objs                 | 2 --
+ hw/sparc64/Makefile.objs             | 1 -
+ hw/timer/Makefile.objs               | 2 ++
+ hw/{ => timer}/mc146818rtc.c         | 0
+ 20 files changed, 18 insertions(+), 9 deletions(-)
+ rename hw/{ => timer}/mc146818rtc.c (100%)
+
+diff --git a/default-configs/alpha-softmmu.mak b/default-configs/alpha-softmmu.mak
+index 2dbee94..18e5337 100644
+--- a/default-configs/alpha-softmmu.mak
++++ b/default-configs/alpha-softmmu.mak
+@@ -13,3 +13,4 @@ CONFIG_IDE_QDEV=y
+ CONFIG_VMWARE_VGA=y
+ CONFIG_IDE_CMD646=y
+ CONFIG_I8259=y
++CONFIG_MC146818RTC=y
+diff --git a/default-configs/i386-softmmu.mak b/default-configs/i386-softmmu.mak
+index 7dd0669..2ddf670 100644
+--- a/default-configs/i386-softmmu.mak
++++ b/default-configs/i386-softmmu.mak
+@@ -29,4 +29,5 @@ CONFIG_PFLASH_CFI01=y
+ CONFIG_TPM_TIS=y
+ CONFIG_TPM_PASSTHROUGH=y
+ CONFIG_PCI_HOTPLUG=y
++CONFIG_MC146818RTC=y
+ CONFIG_WDT_IB700=y
+diff --git a/default-configs/mips-softmmu.mak b/default-configs/mips-softmmu.mak
+index dff6fef..2b48452 100644
+--- a/default-configs/mips-softmmu.mak
++++ b/default-configs/mips-softmmu.mak
+@@ -32,3 +32,4 @@ CONFIG_PFLASH_CFI01=y
+ CONFIG_G364FB=y
+ CONFIG_I8259=y
+ CONFIG_JAZZ_LED=y
++CONFIG_MC146818RTC=y
+diff --git a/default-configs/mips64-softmmu.mak b/default-configs/mips64-softmmu.mak
+index 0968e5f..5713320 100644
+--- a/default-configs/mips64-softmmu.mak
++++ b/default-configs/mips64-softmmu.mak
+@@ -32,3 +32,4 @@ CONFIG_PFLASH_CFI01=y
+ CONFIG_G364FB=y
+ CONFIG_I8259=y
+ CONFIG_JAZZ_LED=y
++CONFIG_MC146818RTC=y
+diff --git a/default-configs/mips64el-softmmu.mak b/default-configs/mips64el-softmmu.mak
+index 6f115d4..096dc80 100644
+--- a/default-configs/mips64el-softmmu.mak
++++ b/default-configs/mips64el-softmmu.mak
+@@ -34,3 +34,4 @@ CONFIG_FULONG=y
+ CONFIG_G364FB=y
+ CONFIG_I8259=y
+ CONFIG_JAZZ_LED=y
++CONFIG_MC146818RTC=y
+diff --git a/default-configs/mipsel-softmmu.mak b/default-configs/mipsel-softmmu.mak
+index e391cf7..5509f0e 100644
+--- a/default-configs/mipsel-softmmu.mak
++++ b/default-configs/mipsel-softmmu.mak
+@@ -32,3 +32,4 @@ CONFIG_PFLASH_CFI01=y
+ CONFIG_G364FB=y
+ CONFIG_I8259=y
+ CONFIG_JAZZ_LED=y
++CONFIG_MC146818RTC=y
+diff --git a/default-configs/moxie-softmmu.mak b/default-configs/moxie-softmmu.mak
+index 0a8194a..1a95476 100644
+--- a/default-configs/moxie-softmmu.mak
++++ b/default-configs/moxie-softmmu.mak
+@@ -1,4 +1,5 @@
+ # Default configuration for moxie-softmmu
+ 
++CONFIG_MC146818RTC=y
+ CONFIG_SERIAL=y
+ CONFIG_VGA=y
+diff --git a/default-configs/ppc-softmmu.mak b/default-configs/ppc-softmmu.mak
+index cdf82b1..d9ced3a 100644
+--- a/default-configs/ppc-softmmu.mak
++++ b/default-configs/ppc-softmmu.mak
+@@ -41,3 +41,5 @@ CONFIG_PTIMER=y
+ CONFIG_I8259=y
+ CONFIG_XILINX=y
+ CONFIG_E500=$(CONFIG_FDT)
++# For PReP
++CONFIG_MC146818RTC=y
+diff --git a/default-configs/ppc64-softmmu.mak b/default-configs/ppc64-softmmu.mak
+index 26f74b0..7d62e14 100644
+--- a/default-configs/ppc64-softmmu.mak
++++ b/default-configs/ppc64-softmmu.mak
+@@ -44,3 +44,5 @@ CONFIG_PSERIES=$(CONFIG_FDT)
+ CONFIG_E500=$(CONFIG_FDT)
+ # For pSeries
+ CONFIG_PCI_HOTPLUG=y
++# For PReP
++CONFIG_MC146818RTC=y
+diff --git a/default-configs/ppcemb-softmmu.mak b/default-configs/ppcemb-softmmu.mak
+index 806adfd..9d8c5c7 100644
+--- a/default-configs/ppcemb-softmmu.mak
++++ b/default-configs/ppcemb-softmmu.mak
+@@ -36,3 +36,5 @@ CONFIG_PTIMER=y
+ CONFIG_I8259=y
+ CONFIG_XILINX=y
+ CONFIG_E500=$(CONFIG_FDT)
++# For PReP
++CONFIG_MC146818RTC=y
+diff --git a/default-configs/sparc64-softmmu.mak b/default-configs/sparc64-softmmu.mak
+index 2145b6b..3b3dc55 100644
+--- a/default-configs/sparc64-softmmu.mak
++++ b/default-configs/sparc64-softmmu.mak
+@@ -13,3 +13,4 @@ CONFIG_PCKBD=y
+ CONFIG_FDC=y
+ CONFIG_IDE_ISA=y
+ CONFIG_IDE_CMD646=y
++CONFIG_MC146818RTC=y
+diff --git a/default-configs/x86_64-softmmu.mak b/default-configs/x86_64-softmmu.mak
+index 0e5ab55..72f9bc7 100644
+--- a/default-configs/x86_64-softmmu.mak
++++ b/default-configs/x86_64-softmmu.mak
+@@ -29,4 +29,5 @@ CONFIG_PFLASH_CFI01=y
+ CONFIG_TPM_TIS=y
+ CONFIG_TPM_PASSTHROUGH=y
+ CONFIG_PCI_HOTPLUG=y
++CONFIG_MC146818RTC=y
+ CONFIG_WDT_IB700=y
+diff --git a/hw/alpha/Makefile.objs b/hw/alpha/Makefile.objs
+index db868d2..5dfea7a 100644
+--- a/hw/alpha/Makefile.objs
++++ b/hw/alpha/Makefile.objs
+@@ -1,4 +1,3 @@
+-obj-y = mc146818rtc.o
+ obj-y += alpha_typhoon.o
+ 
+ obj-y := $(addprefix ../,$(obj-y))
+diff --git a/hw/i386/Makefile.objs b/hw/i386/Makefile.objs
+index 5559a8b..80132d8 100644
+--- a/hw/i386/Makefile.objs
++++ b/hw/i386/Makefile.objs
+@@ -1,4 +1,3 @@
+-obj-y += mc146818rtc.o
+ obj-y += apic_common.o apic.o
+ obj-y += sga.o ioapic_common.o ioapic.o piix_pci.o
+ obj-y += vmport.o
+diff --git a/hw/mips/Makefile.objs b/hw/mips/Makefile.objs
+index 1e3bca1..e173a2d 100644
+--- a/hw/mips/Makefile.objs
++++ b/hw/mips/Makefile.objs
+@@ -1,4 +1,4 @@
+-obj-y += gt64xxx.o mc146818rtc.o
++obj-y += gt64xxx.o
+ obj-$(CONFIG_FULONG) += bonito.o vt82c686.o
+ 
+ obj-y := $(addprefix ../,$(obj-y))
+diff --git a/hw/moxie/Makefile.objs b/hw/moxie/Makefile.objs
+index f5e04e8..bfc9001 100644
+--- a/hw/moxie/Makefile.objs
++++ b/hw/moxie/Makefile.objs
+@@ -1,5 +1,2 @@
+ # moxie boards
+-obj-y = mc146818rtc.o
+-
+-obj-y := $(addprefix ../,$(obj-y))
+ obj-y += moxiesim.o
+diff --git a/hw/ppc/Makefile.objs b/hw/ppc/Makefile.objs
+index ef1d9ed..b22a6f1 100644
+--- a/hw/ppc/Makefile.objs
++++ b/hw/ppc/Makefile.objs
+@@ -1,5 +1,3 @@
+-# PREP target
+-obj-y += mc146818rtc.o
+ # IBM pSeries (sPAPR)
+ obj-$(CONFIG_PSERIES) += spapr_vty.o spapr_llan.o spapr_vscsi.o
+ obj-$(CONFIG_PSERIES) += spapr_pci.o
+diff --git a/hw/sparc64/Makefile.objs b/hw/sparc64/Makefile.objs
+index 4df0d90..178464b 100644
+--- a/hw/sparc64/Makefile.objs
++++ b/hw/sparc64/Makefile.objs
+@@ -1,5 +1,4 @@
+ obj-y = apb_pci.o
+-obj-y += mc146818rtc.o
+ 
+ obj-y := $(addprefix ../,$(obj-y))
+ 
+diff --git a/hw/timer/Makefile.objs b/hw/timer/Makefile.objs
+index 12781dd..a1ef26c 100644
+--- a/hw/timer/Makefile.objs
++++ b/hw/timer/Makefile.objs
+@@ -8,3 +8,5 @@ common-obj-$(CONFIG_PL031) += pl031.o
+ common-obj-$(CONFIG_PUV3) += puv3_ost.o
+ common-obj-$(CONFIG_TWL92230) += twl92230.o
+ common-obj-$(CONFIG_XILINX) += xilinx_timer.o
++
++obj-$(CONFIG_MC146818RTC) += mc146818rtc.o
+diff --git a/hw/mc146818rtc.c b/hw/timer/mc146818rtc.c
+similarity index 100%
+rename from hw/mc146818rtc.c
+rename to hw/timer/mc146818rtc.c
+-- 
+1.8.1.4
+
+
+

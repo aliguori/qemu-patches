@@ -1,0 +1,52 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Kevin Wolf <kwolf@redhat.com>
+To: anthony@codemonkey.ws
+Cc: kwolf@redhat.com, qemu-devel@nongnu.org
+Date: Fri,  5 Apr 2013 15:28:10 +0200
+Message-id: 1365168490-29616-9-git-send-email-kwolf@redhat.com
+Subject: [PATCH 8/8] qcow2: Fix L1 write error handling in
+ qcow2_update_snapshot_refcount
+
+It ignored the error code, and at least the 'goto fail' is obvious
+nonsense as it creates an endless loop (if the next attempt doesn't
+magically succeed) and leaves the in-memory L1 table in big-endian
+instead of converting it back.
+
+In error cases, there's no point in writing an updated L1 table, so
+skip this part for them.
+
+Signed-off-by: Kevin Wolf <kwolf@redhat.com>
+---
+ block/qcow2-refcount.c | 14 ++++++++------
+ 1 file changed, 8 insertions(+), 6 deletions(-)
+
+diff --git a/block/qcow2-refcount.c b/block/qcow2-refcount.c
+index 4799681..b32738f 100644
+--- a/block/qcow2-refcount.c
++++ b/block/qcow2-refcount.c
+@@ -851,14 +851,16 @@ fail:
+     }
+ 
+     /* Update L1 only if it isn't deleted anyway (addend = -1) */
+-    if (addend >= 0 && l1_modified) {
+-        for(i = 0; i < l1_size; i++)
++    if (ret == 0 && addend >= 0 && l1_modified) {
++        for (i = 0; i < l1_size; i++) {
+             cpu_to_be64s(&l1_table[i]);
+-        if (bdrv_pwrite_sync(bs->file, l1_table_offset, l1_table,
+-                        l1_size2) < 0)
+-            goto fail;
+-        for(i = 0; i < l1_size; i++)
++        }
++
++        ret = bdrv_pwrite_sync(bs->file, l1_table_offset, l1_table, l1_size2);
++
++        for (i = 0; i < l1_size; i++) {
+             be64_to_cpus(&l1_table[i]);
++        }
+     }
+     if (l1_allocated)
+         g_free(l1_table);
+-- 
+1.8.1.4
+

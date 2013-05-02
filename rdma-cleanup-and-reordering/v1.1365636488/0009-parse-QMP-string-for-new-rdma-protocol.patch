@@ -1,0 +1,58 @@
+From patches Mon Sep 17 00:00:00 2001
+From: mrhines@linux.vnet.ibm.com
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, mst@redhat.com,
+ Michael R Hines <mrhines@us.ibm.com>, Bulent Abali <abali@us.ibm.com>,
+ owasserm@redhat.com, pbonzini@redhat.com, Gokul B Kandiraju <gokul@us.ibm.com>
+Date: Wed, 10 Apr 2013 18:28:17 -0400
+Message-id: 1365632901-15470-10-git-send-email-mrhines@linux.vnet.ibm.com
+Subject: [PATCH 09/13] parse QMP string for new 'rdma' protocol
+
+From: "Michael R. Hines" <mrhines@us.ibm.com>
+
+This parse the QMP string for the new 'rdma' protocol
+and calls out to the appropriate funtions to initiate
+the connection before the migration starts.
+
+Signed-off-by: Michael R. Hines <mrhines@us.ibm.com>
+---
+ migration.c |    9 ++++++++-
+ 1 file changed, 8 insertions(+), 1 deletion(-)
+
+diff --git a/migration.c b/migration.c
+index 41cf5ba..a2fcacf 100644
+--- a/migration.c
++++ b/migration.c
+@@ -81,6 +81,10 @@ void qemu_start_incoming_migration(const char *uri, Error **errp)
+ 
+     if (strstart(uri, "tcp:", &p))
+         tcp_start_incoming_migration(p, errp);
++#ifdef CONFIG_RDMA
++    else if (strstart(uri, "rdma:", &p))
++        rdma_start_incoming_migration(p, errp);
++#endif
+ #if !defined(WIN32)
+     else if (strstart(uri, "exec:", &p))
+         exec_start_incoming_migration(p, errp);
+@@ -124,7 +128,6 @@ void process_incoming_migration(QEMUFile *f)
+     Coroutine *co = qemu_coroutine_create(process_incoming_migration_co);
+     int fd = qemu_get_fd(f);
+ 
+-    assert(fd != -1);
+     qemu_set_nonblock(fd);
+     qemu_coroutine_enter(co, f);
+ }
+@@ -409,6 +412,10 @@ void qmp_migrate(const char *uri, bool has_blk, bool blk,
+ 
+     if (strstart(uri, "tcp:", &p)) {
+         tcp_start_outgoing_migration(s, p, &local_err);
++#ifdef CONFIG_RDMA
++    } else if (strstart(uri, "rdma:", &p)) {
++        rdma_start_outgoing_migration(s, p, &local_err);
++#endif
+ #if !defined(WIN32)
+     } else if (strstart(uri, "exec:", &p)) {
+         exec_start_outgoing_migration(s, p, &local_err);
+-- 
+1.7.10.4
+

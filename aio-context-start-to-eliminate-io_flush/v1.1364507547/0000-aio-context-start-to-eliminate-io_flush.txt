@@ -1,0 +1,29 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Anthony Liguori <aliguori@us.ibm.com>
+To: qemu-devel@nongnu.org
+Cc: Paolo Bonzini <pbonzini@redhat.com>, Mike Roth <mdroth@linux.vnet.ibm.com>,
+ Kevin Wolf <kwolf@redhat.com>
+Date: Thu, 28 Mar 2013 16:52:27 -0500
+Message-id: 1364507550-25093-1-git-send-email-aliguori@us.ibm.com
+Subject: [PATCH 0/3] aio-context start to eliminate io_flush
+
+Mike and I spent some time talking about how to move forward with
+AioContext vs. glib.  I think the best proposal so far is to add
+a common API on top of the *aio* interfaces and the existing
+qemu_set_fd_handler main loop functions.
+
+Then we get code sharing while still having multiple main loop
+implementations until we can converge on a single one since the users
+will consume the same interface at least.
+
+The only thing standing in the way is the inability to map the semantics
+of io_flush.  I think an easy way to do this is to keep track of the
+events registered through *aio* and let aio_flush() block as long as
+any event is registered.
+
+That's precisely what this series starts to do.  It's untested and
+extremely incomplete but I wanted to get some feedback first before we
+put any serious effort into this and make sure it's an agreeable
+approach.
+
+

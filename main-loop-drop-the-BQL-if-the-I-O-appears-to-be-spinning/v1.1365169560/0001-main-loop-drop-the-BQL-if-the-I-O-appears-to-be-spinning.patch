@@ -1,0 +1,78 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Anthony Liguori <aliguori@us.ibm.com>
+To: Anthony Liguori <aliguori@us.ibm.com>, Eric Blake <eblake@redhat.com>,
+ Andreas =?utf-8?Q?F=C3=A4rber?= <afaerber@suse.de>, qemu-devel@nongnu.org,
+ qemu-devel <qemu-devel@nongnu.org>
+Cc: Anthony Liguori <aliguori@us.ibm.com>, Paolo Bonzini <pbonzini@redhat.com>,
+ qemu-devel@nongnu.org, Peter Maydell <peter.maydell@linaro.org>
+Date: Fri, 5 Apr 2013 08:46:00 -0500
+Message-id: 1365169560-11012-1-git-send-email-aliguori@us.ibm.com
+Subject: [PATCH 1/1] main-loop: drop the BQL if the I/O appears to be spinning
+
+The char-flow refactoring introduced a busy-wait that depended on
+an action from the VCPU thread.  However, the VCPU thread could
+never take that action because the busy-wait starved the VCPU thread
+of the BQL because it never dropped the mutex while running select.
+
+Paolo doesn't want to drop this optimization for fear that we will
+stop detecting these busy waits.  I'm afraid to keep this optimization
+even with the busy-wait fixed because I think a similar problem can
+occur just with heavy I/O thread load manifesting itself as VCPU pauses.
+
+As a compromise, introduce an artificial timeout after a thousand
+iterations but print a rate limited warning when this happens.  This
+let's us still detect when this condition occurs without it being
+a fatal error.
+
+Signed-off-by: Anthony Liguori <aliguori@us.ibm.com>
+---
+ main-loop.c | 25 +++++++++++++++++++++++++
+ 1 file changed, 25 insertions(+)
+
+diff --git a/main-loop.c b/main-loop.c
+index eb80ff3..34a3983 100644
+--- a/main-loop.c
++++ b/main-loop.c
+@@ -188,14 +188,39 @@ static void glib_pollfds_poll(void)
+     }
+ }
+ 
++#define MAX_MAIN_LOOP_SPIN (1000)
++
+ static int os_host_main_loop_wait(uint32_t timeout)
+ {
+     int ret;
++    static int spin_counter;
+ 
+     glib_pollfds_fill(&timeout);
+ 
++    /* If the I/O thread is very busy or we are incorrectly busy waiting in
++     * the I/O thread, this can lead to starvation of the BQL such that the
++     * VCPU threads never run.  To make sure we can detect the later case,
++     * print a message to the screen.  If we run into this condition, create
++     * an fake timeout in order to give the VCPU threads a chance to run.
++     */
++    if (spin_counter > MAX_MAIN_LOOP_SPIN) {
++        static bool notified;
++
++        if (!notified) {
++            fprintf(stderr,
++                    "main-loop: WARNING: I/O thread spun for %d iterations\n",
++                    MAX_MAIN_LOOP_SPIN);
++            notified = true;
++        }
++
++        timeout = 1;
++    }
++
+     if (timeout > 0) {
++        spin_counter = 0;
+         qemu_mutex_unlock_iothread();
++    } else {
++        spin_counter++;
+     }
+ 
+     ret = g_poll((GPollFD *)gpollfds->data, gpollfds->len, timeout);
+-- 
+1.8.0
+

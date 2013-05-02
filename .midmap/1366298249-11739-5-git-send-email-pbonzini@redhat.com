@@ -1,0 +1,1 @@
+../qcow2py-dump-metadata/v1.1366323444/0004-qcow2py-add-method-to-load-backing-image.patch

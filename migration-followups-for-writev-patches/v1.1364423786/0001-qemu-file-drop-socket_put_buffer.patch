@@ -1,0 +1,53 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: Paolo Bonzini <pbonzini@redhat.com>, qemu-devel@nongnu.org
+Cc: owasserm@redhat.com, qemu-devel@nongnu.org, quintela@redhat.com
+Date: Wed, 27 Mar 2013 17:36:27 +0100
+Message-id: 1364402192-18169-2-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 1/6] qemu-file: drop socket_put_buffer
+
+It is enough to implement one of socket_writev_buffer and
+socket_put_buffer.
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+Reviewed-by: Juan Quintela <quintela@redhat.com>
+---
+ savevm.c | 13 -------------
+ 1 file changed, 13 deletions(-)
+
+diff --git a/savevm.c b/savevm.c
+index 406caa9..0415830 100644
+--- a/savevm.c
++++ b/savevm.c
+@@ -219,18 +219,6 @@ static int socket_get_buffer(void *opaque, uint8_t *buf, int64_t pos, int size)
+     return len;
+ }
+ 
+-static int socket_put_buffer(void *opaque, const uint8_t *buf, int64_t pos, int size)
+-{
+-    QEMUFileSocket *s = opaque;
+-    ssize_t len;
+-
+-    len = qemu_send_full(s->fd, buf, size, 0);
+-    if (len < size) {
+-        len = -socket_error();
+-    }
+-    return len;
+-}
+-
+ static int socket_close(void *opaque)
+ {
+     QEMUFileSocket *s = opaque;
+@@ -404,7 +392,6 @@ static const QEMUFileOps socket_read_ops = {
+ 
+ static const QEMUFileOps socket_write_ops = {
+     .get_fd =     socket_get_fd,
+-    .put_buffer = socket_put_buffer,
+     .writev_buffer = socket_writev_buffer,
+     .close =      socket_close
+ };
+-- 
+1.8.1.4
+
+
+

@@ -1,0 +1,241 @@
+From patches Mon Sep 17 00:00:00 2001
+From: minyard@acm.org
+To: qemu-devel@nongnu.org
+Cc: Corey Minyard <cminyard@mvista.com>
+Date: Tue, 18 Sep 2012 15:00:36 -0500
+Message-id: 1347998443-20599-10-git-send-email-minyard@acm.org
+Subject: [PATCH 09/16] IPMI: Add a PC ISA type structure
+
+From: Corey Minyard <cminyard@mvista.com>
+
+This provides the base infrastructure to tie IPMI low-level
+interfaces into a PC ISA bus.
+
+Signed-off-by: Corey Minyard <cminyard@mvista.com>
+---
+ default-configs/i386-softmmu.mak   |    1 +
+ default-configs/x86_64-softmmu.mak |    1 +
+ hw/Makefile.objs                   |    1 +
+ hw/fw_cfg.h                        |   11 +++-
+ hw/isa_ipmi.c                      |  150 ++++++++++++++++++++++++++++++++++++
+ 5 files changed, 163 insertions(+), 1 deletions(-)
+ create mode 100644 hw/isa_ipmi.c
+
+diff --git a/default-configs/i386-softmmu.mak b/default-configs/i386-softmmu.mak
+index eb17afc..c0aff0d 100644
+--- a/default-configs/i386-softmmu.mak
++++ b/default-configs/i386-softmmu.mak
+@@ -8,6 +8,7 @@ CONFIG_VGA_CIRRUS=y
+ CONFIG_VMWARE_VGA=y
+ CONFIG_VMMOUSE=y
+ CONFIG_IPMI=y
++CONFIG_ISA_IPMI=y
+ CONFIG_SERIAL=y
+ CONFIG_PARALLEL=y
+ CONFIG_I8254=y
+diff --git a/default-configs/x86_64-softmmu.mak b/default-configs/x86_64-softmmu.mak
+index e4e3e4f..615e4f2 100644
+--- a/default-configs/x86_64-softmmu.mak
++++ b/default-configs/x86_64-softmmu.mak
+@@ -8,6 +8,7 @@ CONFIG_VGA_CIRRUS=y
+ CONFIG_VMWARE_VGA=y
+ CONFIG_VMMOUSE=y
+ CONFIG_IPMI=y
++CONFIG_ISA_IPMI=y
+ CONFIG_SERIAL=y
+ CONFIG_PARALLEL=y
+ CONFIG_I8254=y
+diff --git a/hw/Makefile.objs b/hw/Makefile.objs
+index 4df7119..4a24b92 100644
+--- a/hw/Makefile.objs
++++ b/hw/Makefile.objs
+@@ -21,6 +21,7 @@ hw-obj-$(CONFIG_ESCC) += escc.o
+ hw-obj-$(CONFIG_EMPTY_SLOT) += empty_slot.o
+ 
+ hw-obj-$(CONFIG_IPMI) += ipmi.o
++hw-obj-$(CONFIG_ISA_IPMI) += isa_ipmi.o
+ 
+ hw-obj-$(CONFIG_SERIAL) += serial.o
+ hw-obj-$(CONFIG_PARALLEL) += parallel.o
+diff --git a/hw/fw_cfg.h b/hw/fw_cfg.h
+index 856bf91..05d7ccb 100644
+--- a/hw/fw_cfg.h
++++ b/hw/fw_cfg.h
+@@ -30,7 +30,16 @@
+ 
+ #define FW_CFG_FILE_FIRST       0x20
+ #define FW_CFG_FILE_SLOTS       0x10
+-#define FW_CFG_MAX_ENTRY        (FW_CFG_FILE_FIRST+FW_CFG_FILE_SLOTS)
++
++#define FW_CFG_IPMI_INTERFACE   0x30
++#define FW_CFG_IPMI_BASE_ADDR   0x31
++#define FW_CFG_IPMI_REG_SPACE   0x32
++#define FW_CFG_IPMI_REG_SPACING 0x33
++#define FW_CFG_IPMI_SLAVE_ADDR  0x34
++#define FW_CFG_IPMI_IRQ         0x35
++#define FW_CFG_IPMI_VERSION     0x36
++
++#define FW_CFG_MAX_ENTRY        (FW_CFG_IPMI_VERSION + 1)
+ 
+ #define FW_CFG_WRITE_CHANNEL    0x4000
+ #define FW_CFG_ARCH_LOCAL       0x8000
+diff --git a/hw/isa_ipmi.c b/hw/isa_ipmi.c
+new file mode 100644
+index 0000000..f8afbb9
+--- /dev/null
++++ b/hw/isa_ipmi.c
+@@ -0,0 +1,150 @@
++/*
++ * QEMU ISA IPMI emulation
++ *
++ * Copyright (c) 2012 Corey Minyard, MontaVista Software, LLC
++ *
++ * Permission is hereby granted, free of charge, to any person obtaining a copy
++ * of this software and associated documentation files (the "Software"), to deal
++ * in the Software without restriction, including without limitation the rights
++ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
++ * copies of the Software, and to permit persons to whom the Software is
++ * furnished to do so, subject to the following conditions:
++ *
++ * The above copyright notice and this permission notice shall be included in
++ * all copies or substantial portions of the Software.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
++ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
++ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
++ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
++ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
++ * THE SOFTWARE.
++ */
++#include "hw.h"
++#include "isa.h"
++#include "pc.h"
++#include "qemu-timer.h"
++#include "qemu-char.h"
++#include "sysemu.h"
++#include "ipmi.h"
++
++/* This is the type the user specifies on the -device command line */
++#define TYPE_ISA_IPMI           "isa-ipmi"
++#define ISA_IPMI(obj) OBJECT_CHECK(ISAIPMIDevice, (obj), \
++                                TYPE_ISA_IPMI)
++typedef struct ISAIPMIDevice {
++    ISADevice dev;
++    char *interface;
++    uint32_t iobase;
++    uint32_t isairq;
++    uint8_t slave_addr;
++    CharDriverState *chr;
++    IPMIInterface *intf;
++} ISAIPMIDevice;
++
++static int ipmi_isa_initfn(ISADevice *dev)
++{
++    ISAIPMIDevice *isa = ISA_IPMI(dev);
++    char typename[20];
++    Object *intfobj;
++    IPMIInterface *intf;
++    Object *bmcobj;
++    IPMIBmc *bmc;
++    int rc;
++    Error *errp = NULL;
++
++    if (!isa->interface) {
++        isa->interface = g_strdup("kcs");
++    }
++
++    if (isa->chr) {
++        bmcobj = object_new(TYPE_IPMI_BMC_EXTERN);
++    } else {
++        bmcobj = object_new(TYPE_IPMI_BMC_SIMULATOR);
++    }
++    bmc = IPMI_BMC(bmcobj);
++    bmc->chr = isa->chr;
++    snprintf(typename, sizeof(typename),
++             TYPE_IPMI_INTERFACE_PREFIX "%s", isa->interface);
++    intfobj = object_new(typename);
++    intf = IPMI_INTERFACE(intfobj);
++    bmc->intf = intf;
++    intf->bmc = bmc;
++    intf->io_base = isa->iobase;
++    intf->slave_addr = isa->slave_addr;
++    rc = ipmi_interface_init(intf);
++    if (rc) {
++        return rc;
++    }
++    rc = ipmi_bmc_init(bmc);
++    if (rc) {
++        return rc;
++    }
++
++    /* These may be set by the interface. */
++    isa->iobase = intf->io_base;
++    isa->slave_addr = intf->slave_addr;
++
++    if (isa->isairq != 0) {
++        isa_init_irq(dev, &intf->irq, isa->isairq);
++        intf->use_irq = 1;
++    }
++
++    isa->intf = intf;
++    object_property_add_child(OBJECT(isa), "intf", OBJECT(intf), &errp);
++    if (error_is_set(&errp)) {
++        fprintf(stderr, "%s\n", error_get_pretty(errp));
++        return 1;
++    }
++    object_property_add_child(OBJECT(isa), "bmc", OBJECT(bmc), &errp);
++    if (error_is_set(&errp)) {
++        fprintf(stderr, "%s\n", error_get_pretty(errp));
++        return 1;
++    }
++
++    qdev_set_legacy_instance_id(&dev->qdev, intf->io_base, intf->io_length);
++
++    isa_register_ioport(dev, &intf->io, intf->io_base);
++
++    return 0;
++}
++
++static void ipmi_isa_reset(DeviceState *qdev)
++{
++    ISAIPMIDevice *isa = ISA_IPMI(qdev);
++
++    ipmi_interface_reset(isa->intf);
++}
++
++static Property ipmi_isa_properties[] = {
++    DEFINE_PROP_STRING("interface", ISAIPMIDevice, interface),
++    DEFINE_PROP_HEX32("iobase", ISAIPMIDevice, iobase,  0),
++    DEFINE_PROP_UINT32("irq",   ISAIPMIDevice, isairq,  5),
++    DEFINE_PROP_UINT8("slave_addr", ISAIPMIDevice, slave_addr,  0),
++    DEFINE_PROP_CHR("chardev",  ISAIPMIDevice, chr),
++    DEFINE_PROP_END_OF_LIST(),
++};
++
++static void ipmi_isa_class_initfn(ObjectClass *klass, void *data)
++{
++    DeviceClass *dc = DEVICE_CLASS(klass);
++    ISADeviceClass *ic = ISA_DEVICE_CLASS(klass);
++    ic->init = ipmi_isa_initfn;
++    dc->reset = ipmi_isa_reset;
++    dc->props = ipmi_isa_properties;
++}
++
++static const TypeInfo ipmi_isa_info = {
++    .name          = TYPE_ISA_IPMI,
++    .parent        = TYPE_ISA_DEVICE,
++    .instance_size = sizeof(ISAIPMIDevice),
++    .class_init    = ipmi_isa_class_initfn,
++};
++
++static void ipmi_register_types(void)
++{
++    type_register_static(&ipmi_isa_info);
++}
++
++type_init(ipmi_register_types)
+-- 
+1.7.4.1
+
+

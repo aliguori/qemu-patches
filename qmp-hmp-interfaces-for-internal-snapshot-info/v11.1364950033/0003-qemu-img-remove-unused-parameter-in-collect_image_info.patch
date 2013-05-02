@@ -1,0 +1,48 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Wenchao Xia <xiawenc@linux.vnet.ibm.com>
+To: qemu-devel@nongnu.org
+Cc: kwolf@redhat.com, Wenchao Xia <xiawenc@linux.vnet.ibm.com>,
+ stefanha@gmail.com, armbru@redhat.com, lcapitulino@redhat.com,
+ pbonzini@redhat.com
+Date: Tue,  2 Apr 2013 19:47:16 +0800
+Message-id: 1364903250-10429-4-git-send-email-xiawenc@linux.vnet.ibm.com
+Subject: [PATCH 03/17] qemu-img: remove unused parameter in
+ collect_image_info()
+
+  Parameter *fmt was not used, so remove it.
+
+Signed-off-by: Wenchao Xia <xiawenc@linux.vnet.ibm.com>
+Reviewed-by: Eric Blake <eblake@redhat.com>
+Reviewed-by: Kevin Wolf <kwolf@redhat.com>
+---
+ qemu-img.c |    5 ++---
+ 1 files changed, 2 insertions(+), 3 deletions(-)
+
+diff --git a/qemu-img.c b/qemu-img.c
+index 31627b0..937ec01 100644
+--- a/qemu-img.c
++++ b/qemu-img.c
+@@ -1640,8 +1640,7 @@ static void dump_json_image_info(ImageInfo *info)
+ 
+ static void collect_image_info(BlockDriverState *bs,
+                    ImageInfo *info,
+-                   const char *filename,
+-                   const char *fmt)
++                   const char *filename)
+ {
+     uint64_t total_sectors;
+     char backing_filename[1024];
+@@ -1815,7 +1814,7 @@ static ImageInfoList *collect_image_info_list(const char *filename,
+         }
+ 
+         info = g_new0(ImageInfo, 1);
+-        collect_image_info(bs, info, filename, fmt);
++        collect_image_info(bs, info, filename);
+         collect_snapshots(bs, info);
+ 
+         elem = g_new0(ImageInfoList, 1);
+-- 
+1.7.1
+
+
+

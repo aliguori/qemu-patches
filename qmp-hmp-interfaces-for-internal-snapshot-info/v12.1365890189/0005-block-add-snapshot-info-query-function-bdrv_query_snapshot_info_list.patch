@@ -1,0 +1,144 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Wenchao Xia <xiawenc@linux.vnet.ibm.com>
+To: qemu-devel@nongnu.org
+Cc: kwolf@redhat.com, phrdina@redhat.com,
+ Wenchao Xia <xiawenc@linux.vnet.ibm.com>, stefanha@gmail.com,
+ armbru@redhat.com, lcapitulino@redhat.com, pbonzini@redhat.com
+Date: Sat, 13 Apr 2013 16:56:34 +0800
+Message-id: 1365843407-16504-6-git-send-email-xiawenc@linux.vnet.ibm.com
+Subject: [PATCH 05/18] block: add snapshot info query function
+ bdrv_query_snapshot_info_list()
+
+  This patch adds function bdrv_query_snapshot_info_list(), which will
+retrieve snapshot info of an image in qmp object format. The implementation
+is based on the code moved from qemu-img.c with modification to fit more
+for qmp based block layer API.
+
+Signed-off-by: Wenchao Xia <xiawenc@linux.vnet.ibm.com>
+Reviewed-by: Eric Blake <eblake@redhat.com>
+---
+ block/qapi.c         |   56 ++++++++++++++++++++++++++++++++++++++-----------
+ include/block/qapi.h |    4 ++-
+ qemu-img.c           |    5 +++-
+ 3 files changed, 50 insertions(+), 15 deletions(-)
+
+diff --git a/block/qapi.c b/block/qapi.c
+index e2b1b6b..9bfa547 100644
+--- a/block/qapi.c
++++ b/block/qapi.c
+@@ -25,29 +25,57 @@
+ #include "block/qapi.h"
+ #include "block/block_int.h"
+ 
+-void bdrv_collect_snapshots(BlockDriverState *bs , ImageInfo *info)
++/*
++ * Returns 0 on success, with *p_list either set to describe snapshot
++ * information, or NULL because there are no snapshots.  Returns -errno on
++ * error, with *p_list untouched.
++ */
++int bdrv_query_snapshot_info_list(BlockDriverState *bs,
++                                  SnapshotInfoList **p_list,
++                                  Error **errp)
+ {
+     int i, sn_count;
+     QEMUSnapshotInfo *sn_tab = NULL;
+-    SnapshotInfoList *info_list, *cur_item = NULL;
++    SnapshotInfoList *info_list, *cur_item = NULL, *head = NULL;
++    SnapshotInfo *info;
++
+     sn_count = bdrv_snapshot_list(bs, &sn_tab);
++    if (sn_count < 0) {
++        const char *dev = bdrv_get_device_name(bs);
++        switch (sn_count) {
++        case -ENOMEDIUM:
++            error_setg(errp, "Device '%s' is not inserted", dev);
++            break;
++        case -ENOTSUP:
++            error_setg(errp,
++                       "Device '%s' does not support internal snapshots",
++                       dev);
++            break;
++        default:
++            error_setg_errno(errp, -sn_count,
++                             "Can't list snapshots of device '%s'", dev);
++            break;
++        }
++        return sn_count;
++    }
+ 
+     for (i = 0; i < sn_count; i++) {
+-        info->has_snapshots = true;
+-        info_list = g_new0(SnapshotInfoList, 1);
+ 
+-        info_list->value                = g_new0(SnapshotInfo, 1);
+-        info_list->value->id            = g_strdup(sn_tab[i].id_str);
+-        info_list->value->name          = g_strdup(sn_tab[i].name);
+-        info_list->value->vm_state_size = sn_tab[i].vm_state_size;
+-        info_list->value->date_sec      = sn_tab[i].date_sec;
+-        info_list->value->date_nsec     = sn_tab[i].date_nsec;
+-        info_list->value->vm_clock_sec  = sn_tab[i].vm_clock_nsec / 1000000000;
+-        info_list->value->vm_clock_nsec = sn_tab[i].vm_clock_nsec % 1000000000;
++        info = g_new0(SnapshotInfo, 1);
++        info->id            = g_strdup(sn_tab[i].id_str);
++        info->name          = g_strdup(sn_tab[i].name);
++        info->vm_state_size = sn_tab[i].vm_state_size;
++        info->date_sec      = sn_tab[i].date_sec;
++        info->date_nsec     = sn_tab[i].date_nsec;
++        info->vm_clock_sec  = sn_tab[i].vm_clock_nsec / 1000000000;
++        info->vm_clock_nsec = sn_tab[i].vm_clock_nsec % 1000000000;
++
++        info_list = g_new0(SnapshotInfoList, 1);
++        info_list->value = info;
+ 
+         /* XXX: waiting for the qapi to support qemu-queue.h types */
+         if (!cur_item) {
+-            info->snapshots = cur_item = info_list;
++            head = cur_item = info_list;
+         } else {
+             cur_item->next = info_list;
+             cur_item = info_list;
+@@ -56,6 +84,8 @@ void bdrv_collect_snapshots(BlockDriverState *bs , ImageInfo *info)
+     }
+ 
+     g_free(sn_tab);
++    *p_list = head;
++    return 0;
+ }
+ 
+ void bdrv_collect_image_info(BlockDriverState *bs,
+diff --git a/include/block/qapi.h b/include/block/qapi.h
+index 4586578..91dc41b 100644
+--- a/include/block/qapi.h
++++ b/include/block/qapi.h
+@@ -28,7 +28,9 @@
+ #include "qapi-types.h"
+ #include "block/block.h"
+ 
+-void bdrv_collect_snapshots(BlockDriverState *bs , ImageInfo *info);
++int bdrv_query_snapshot_info_list(BlockDriverState *bs,
++                                  SnapshotInfoList **p_list,
++                                  Error **errp);
+ void bdrv_collect_image_info(BlockDriverState *bs,
+                              ImageInfo *info,
+                              const char *filename);
+diff --git a/qemu-img.c b/qemu-img.c
+index a020ccc..472b264 100644
+--- a/qemu-img.c
++++ b/qemu-img.c
+@@ -1735,7 +1735,10 @@ static ImageInfoList *collect_image_info_list(const char *filename,
+ 
+         info = g_new0(ImageInfo, 1);
+         bdrv_collect_image_info(bs, info, filename);
+-        bdrv_collect_snapshots(bs, info);
++        bdrv_query_snapshot_info_list(bs, &info->snapshots, NULL);
++        if (info->snapshots) {
++            info->has_snapshots = true;
++        }
+ 
+         elem = g_new0(ImageInfoList, 1);
+         elem->value = info;
+-- 
+1.7.1
+
+
+

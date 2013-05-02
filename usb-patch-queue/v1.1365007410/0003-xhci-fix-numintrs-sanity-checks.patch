@@ -1,0 +1,35 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Gerd Hoffmann <kraxel@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Gerd Hoffmann <kraxel@redhat.com>
+Date: Wed,  3 Apr 2013 11:43:33 +0200
+Message-id: 1364982220-4755-4-git-send-email-kraxel@redhat.com
+Subject: [PATCH 03/10] xhci: fix numintrs sanity checks
+
+Make sure numintrs is a power of two, msi requires this.
+
+https://bugzilla.redhat.com/show_bug.cgi?id=918035
+
+Signed-off-by: Gerd Hoffmann <kraxel@redhat.com>
+---
+ hw/usb/hcd-xhci.c |    3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/hw/usb/hcd-xhci.c b/hw/usb/hcd-xhci.c
+index 5aa342b..9d06c51 100644
+--- a/hw/usb/hcd-xhci.c
++++ b/hw/usb/hcd-xhci.c
+@@ -3290,6 +3290,9 @@ static int usb_xhci_initfn(struct PCIDevice *dev)
+     if (xhci->numintrs > MAXINTRS) {
+         xhci->numintrs = MAXINTRS;
+     }
++    while (xhci->numintrs & (xhci->numintrs - 1)) {   /* ! power of 2 */
++        xhci->numintrs++;
++    }
+     if (xhci->numintrs < 1) {
+         xhci->numintrs = 1;
+     }
+-- 
+1.7.9.7
+
+

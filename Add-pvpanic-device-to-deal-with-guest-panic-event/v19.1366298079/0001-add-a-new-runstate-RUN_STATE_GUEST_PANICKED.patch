@@ -1,0 +1,127 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Hu Tao <hutao@cn.fujitsu.com>
+To: Paolo Bonzini <pbonzini@redhat.com>, qemu-devel <qemu-devel@nongnu.org>,
+ Luiz Capitulino <lcapitulino@redhat.com>, Wen Congyang <wency@cn.fujitsu.com>,
+ Jan Kiszka <jan.kiszka@siemens.com>,
+ KAMEZAWA Hiroyuki <kamezawa.hiroyu@jp.fujitsu.com>,
+ Anthony Liguori <aliguori@us.ibm.com>, "Michael S. Tsirkin" <mst@redhat.com>,
+ Gleb Natapov <gleb@redhat.com>, Peter Maydell <peter.maydell@linaro.org>,
+ Blue Swirl <blauwirbel@gmail.com>, Alexander Graf <agraf@suse.de>,
+ Christian Borntraeger <borntraeger@de.ibm.com>,
+ Sasha Levin <levinsasha928@gmail.com>, Orit Wasserman <owasserm@redhat.com>,
+ Andrew Jones <drjones@redhat.com>, Markus Armbruster <armbru@redhat.com>,
+ Stefan Hajnoczi <stefanha@redhat.com>, Eric Blake <eblake@redhat.com>,
+ Juan Quintela <quintela@redhat.com>,
+ "Daniel P. Berrange" <berrange@redhat.com>,
+ Marcelo Tosatti <mtosatti@redhat.com>,
+ Alex Williamson <alex.williamson@redhat.com>
+Cc: 
+Date: Thu, 18 Apr 2013 10:14:40 +0800
+Message-id: dda9887d2ae20df0cbecac0c97c7000d4090fd99.1366250561.git.hutao@cn.fujitsu.com
+Subject: [PATCH 1/7] add a new runstate: RUN_STATE_GUEST_PANICKED
+
+The guest will be in this state when it is panicked.
+
+Signed-off-by: Wen Congyang <wency@cn.fujitsu.com>
+Signed-off-by: Hu Tao <hutao@cn.fujitsu.com>
+---
+ include/sysemu/sysemu.h |  1 +
+ qapi-schema.json        |  5 ++++-
+ qmp.c                   |  3 +--
+ vl.c                    | 13 +++++++++++--
+ 4 files changed, 17 insertions(+), 5 deletions(-)
+
+diff --git a/include/sysemu/sysemu.h b/include/sysemu/sysemu.h
+index 6578782..b6fffc8 100644
+--- a/include/sysemu/sysemu.h
++++ b/include/sysemu/sysemu.h
+@@ -22,6 +22,7 @@ int qemu_uuid_parse(const char *str, uint8_t *uuid);
+ bool runstate_check(RunState state);
+ void runstate_set(RunState new_state);
+ int runstate_is_running(void);
++bool runstate_needs_reset(void);
+ typedef struct vm_change_state_entry VMChangeStateEntry;
+ typedef void VMChangeStateHandler(void *opaque, int running, RunState state);
+ 
+diff --git a/qapi-schema.json b/qapi-schema.json
+index 751d3c2..899d4f5 100644
+--- a/qapi-schema.json
++++ b/qapi-schema.json
+@@ -174,11 +174,14 @@
+ # @suspended: guest is suspended (ACPI S3)
+ #
+ # @watchdog: the watchdog action is configured to pause and has been triggered
++#
++# @guest-panicked: guest has been panicked as a result of guest OS panic
+ ##
+ { 'enum': 'RunState',
+   'data': [ 'debug', 'inmigrate', 'internal-error', 'io-error', 'paused',
+             'postmigrate', 'prelaunch', 'finish-migrate', 'restore-vm',
+-            'running', 'save-vm', 'shutdown', 'suspended', 'watchdog' ] }
++            'running', 'save-vm', 'shutdown', 'suspended', 'watchdog',
++            'guest-panicked' ] }
+ 
+ ##
+ # @SnapshotInfo
+diff --git a/qmp.c b/qmp.c
+index ed6c7ef..4676993 100644
+--- a/qmp.c
++++ b/qmp.c
+@@ -149,8 +149,7 @@ void qmp_cont(Error **errp)
+ {
+     Error *local_err = NULL;
+ 
+-    if (runstate_check(RUN_STATE_INTERNAL_ERROR) ||
+-               runstate_check(RUN_STATE_SHUTDOWN)) {
++    if (runstate_needs_reset()) {
+         error_set(errp, QERR_RESET_REQUIRED);
+         return;
+     } else if (runstate_check(RUN_STATE_SUSPENDED)) {
+diff --git a/vl.c b/vl.c
+index 2ef00d8..966164e 100644
+--- a/vl.c
++++ b/vl.c
+@@ -596,6 +596,7 @@ static const RunStateTransition runstate_transitions_def[] = {
+     { RUN_STATE_RUNNING, RUN_STATE_SAVE_VM },
+     { RUN_STATE_RUNNING, RUN_STATE_SHUTDOWN },
+     { RUN_STATE_RUNNING, RUN_STATE_WATCHDOG },
++    { RUN_STATE_RUNNING, RUN_STATE_GUEST_PANICKED },
+ 
+     { RUN_STATE_SAVE_VM, RUN_STATE_RUNNING },
+ 
+@@ -610,6 +611,8 @@ static const RunStateTransition runstate_transitions_def[] = {
+     { RUN_STATE_WATCHDOG, RUN_STATE_RUNNING },
+     { RUN_STATE_WATCHDOG, RUN_STATE_FINISH_MIGRATE },
+ 
++    { RUN_STATE_GUEST_PANICKED, RUN_STATE_PAUSED },
++
+     { RUN_STATE_MAX, RUN_STATE_MAX },
+ };
+ 
+@@ -651,6 +654,13 @@ int runstate_is_running(void)
+     return runstate_check(RUN_STATE_RUNNING);
+ }
+ 
++bool runstate_needs_reset(void)
++{
++    return runstate_check(RUN_STATE_INTERNAL_ERROR) ||
++        runstate_check(RUN_STATE_SHUTDOWN) ||
++        runstate_check(RUN_STATE_GUEST_PANICKED);
++}
++
+ StatusInfo *qmp_query_status(Error **errp)
+ {
+     StatusInfo *info = g_malloc0(sizeof(*info));
+@@ -1954,8 +1964,7 @@ static bool main_loop_should_exit(void)
+         cpu_synchronize_all_states();
+         qemu_system_reset(VMRESET_REPORT);
+         resume_all_vcpus();
+-        if (runstate_check(RUN_STATE_INTERNAL_ERROR) ||
+-            runstate_check(RUN_STATE_SHUTDOWN)) {
++        if (runstate_needs_reset()) {
+             runstate_set(RUN_STATE_PAUSED);
+         }
+     }
+-- 
+1.8.1.4
+

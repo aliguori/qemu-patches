@@ -1,0 +1,1 @@
+../directory-reorganization-final-part/v1.1365721821/0006-tpm-reorganize-headers-and-split-hardware-part.patch

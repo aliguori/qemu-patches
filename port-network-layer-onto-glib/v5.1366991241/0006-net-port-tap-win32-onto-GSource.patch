@@ -1,0 +1,89 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Liu Ping Fan <qemulist@gmail.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <anthony@codemonkey.ws>,
+ Paolo Bonzini <pbonzini@redhat.com>, Jan Kiszka <jan.kiszka@siemens.com>,
+ Stefan Hajnoczi <stefanha@redhat.com>, mdroth <mdroth@linux.vnet.ibm.com>
+Date: Fri, 26 Apr 2013 10:47:27 +0800
+Message-id: 1366944455-14239-7-git-send-email-qemulist@gmail.com
+Subject: [PATCH 06/14] net: port tap-win32 onto GSource
+
+From: Liu Ping Fan <pingfank@linux.vnet.ibm.com>
+
+Signed-off-by: Liu Ping Fan <pingfank@linux.vnet.ibm.com>
+---
+ net/tap-win32.c |   31 +++++++++++++++++++++++++++++--
+ 1 files changed, 29 insertions(+), 2 deletions(-)
+
+diff --git a/net/tap-win32.c b/net/tap-win32.c
+index 91e9e84..7a84195 100644
+--- a/net/tap-win32.c
++++ b/net/tap-win32.c
+@@ -635,13 +635,14 @@ static int tap_win32_open(tap_win32_overlapped_t **phandle,
+  typedef struct TAPState {
+      NetClientState nc;
+      tap_win32_overlapped_t *handle;
++     EventGSource *nsrc;
+  } TAPState;
+ 
+ static void tap_cleanup(NetClientState *nc)
+ {
+     TAPState *s = DO_UPCAST(TAPState, nc, nc);
+ 
+-    qemu_del_wait_object(s->handle->tap_semaphore, NULL, NULL);
++    event_source_release(s->nsrc);
+ 
+     /* FIXME: need to kill thread and close file handle:
+        tap_win32_close(s);
+@@ -669,13 +670,37 @@ static void tap_win32_send(void *opaque)
+     }
+ }
+ 
++static void tap_bind_ctx(NetClientState *nc, GMainContext *ctx)
++{
++    TAPState *s = DO_UPCAST(TAPState, nc, nc);
++
++    g_source_attach(&s->nsrc->source, ctx);
++}
++
+ static NetClientInfo net_tap_win32_info = {
+     .type = NET_CLIENT_OPTIONS_KIND_TAP,
+     .size = sizeof(TAPState),
+     .receive = tap_receive,
+     .cleanup = tap_cleanup,
++    .bind_ctx = tap_bind_ctx,
+ };
+ 
++static gboolean tap_win32_handler(gpointer data)
++{
++    EventGSource *nsrc = data;
++    TAPState *s = nsrc->opaque;
++
++    if (nsrc->gfd.revents & G_IO_IN) {
++        tap_win32_send(s);
++    }
++    return true;
++}
++
++static gushort readable(void *opaque)
++{
++    return G_IO_IN;
++}
++
+ static int tap_win32_init(NetClientState *peer, const char *model,
+                           const char *name, const char *ifname)
+ {
+@@ -697,7 +722,9 @@ static int tap_win32_init(NetClientState *peer, const char *model,
+ 
+     s->handle = handle;
+ 
+-    qemu_add_wait_object(s->handle->tap_semaphore, tap_win32_send, s);
++    s->nsrc = event_source_new(s->handle->tap_semaphore, tap_win32_handler, s);
++    s->nsrc->readable = readable;
++    nc->info->bind_ctx(&s->nc, NULL);
+ 
+     return 0;
+ }
+-- 
+1.7.4.4
+

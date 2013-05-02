@@ -1,0 +1,1 @@
+../kvm-openpic-in-kernel-irqchip/v1.1360823515/0002-kvm-hw-kvm-is-not-x86-specific.patch

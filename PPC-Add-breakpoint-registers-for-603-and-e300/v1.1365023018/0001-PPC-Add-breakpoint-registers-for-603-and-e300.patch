@@ -1,0 +1,71 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Fabien Chouteau <chouteau@adacore.com>
+To: Alexander Graf <agraf@suse.de>, qemu-devel@nongnu.org,
+ Fabien Chouteau <chouteau@adacore.com>
+Cc: qemu-ppc@nongnu.org, agraf@suse.de, qemu-devel@nongnu.org
+Date: Wed,  3 Apr 2013 16:03:38 +0200
+Message-id: 1364997818-20687-1-git-send-email-chouteau@adacore.com
+Subject: [PATCH 1/1] PPC: Add breakpoint registers for 603 and e300
+
+
+Signed-off-by: Fabien Chouteau <chouteau@adacore.com>
+---
+ target-ppc/translate_init.c |   34 ++++++++++++++++++++++++++++++++++
+ 1 file changed, 34 insertions(+)
+
+diff --git a/target-ppc/translate_init.c b/target-ppc/translate_init.c
+index 781170f..9e73a23 100644
+--- a/target-ppc/translate_init.c
++++ b/target-ppc/translate_init.c
+@@ -1149,6 +1149,13 @@ static void gen_spr_603 (CPUPPCState *env)
+                  SPR_NOACCESS, SPR_NOACCESS,
+                  &spr_read_generic, &spr_write_generic,
+                  0x00000000);
++    /* Breakpoints */
++    /* XXX : not implemented */
++    spr_register(env, SPR_IABR, "IABR",
++                 SPR_NOACCESS, SPR_NOACCESS,
++                 &spr_read_generic, &spr_write_generic,
++                 0x00000000);
++
+ }
+ 
+ /* SPR specific to PowerPC G2 implementation */
+@@ -4157,6 +4164,33 @@ static void init_proc_G2LE (CPUPPCState *env)
+                  SPR_NOACCESS, SPR_NOACCESS,
+                  &spr_read_generic, &spr_write_generic,
+                  0x00000000);
++    /* Breakpoints */
++    /* XXX : not implemented */
++    spr_register(env, SPR_DABR, "DABR",
++                 SPR_NOACCESS, SPR_NOACCESS,
++                 &spr_read_generic, &spr_write_generic,
++                 0x00000000);
++    /* XXX : not implemented */
++    spr_register(env, SPR_DABR2, "DABR2",
++                 SPR_NOACCESS, SPR_NOACCESS,
++                 &spr_read_generic, &spr_write_generic,
++                 0x00000000);
++    /* XXX : not implemented */
++    spr_register(env, SPR_IABR2, "IABR2",
++                 SPR_NOACCESS, SPR_NOACCESS,
++                 &spr_read_generic, &spr_write_generic,
++                 0x00000000);
++    /* XXX : not implemented */
++    spr_register(env, SPR_IBCR, "IBCR",
++                 SPR_NOACCESS, SPR_NOACCESS,
++                 &spr_read_generic, &spr_write_generic,
++                 0x00000000);
++    /* XXX : not implemented */
++    spr_register(env, SPR_DBCR, "DBCR",
++                 SPR_NOACCESS, SPR_NOACCESS,
++                 &spr_read_generic, &spr_write_generic,
++                 0x00000000);
++
+     /* Memory management */
+     gen_low_BATs(env);
+     gen_high_BATs(env);
+-- 
+1.7.9.5
+
+

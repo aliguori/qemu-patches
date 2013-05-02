@@ -1,0 +1,33 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Christian Borntraeger <borntraeger@de.ibm.com>
+To: Christian Borntraeger <borntraeger@de.ibm.com>,
+ Alexander Graf <agraf@suse.de>
+Cc: cornelia.huck@de.ibm.com, Christian Borntraeger <borntraeger@de.ibm.com>,
+ qemu-devel@nongnu.org, Dominik Dingel <dingel@linux.vnet.ibm.com>
+Date: Tue, 23 Apr 2013 13:23:01 +0200
+Message-id: 1366716185-36913-1-git-send-email-borntraeger@de.ibm.com
+Subject: [PATCH 0/4] updates for s390-ccw.img
+
+Alex,
+
+here are the quick things that I needed to make the s390-ccw.img working.
+Please have a look and feel free to apply.
+
+Christian Borntraeger (4):
+  s390-ccw.img: replace while loop with a disabled wait on s390 bios
+  s390-ccw.img: build s390-ccw rom on s3900 system by default
+  s390-ccw.img: Fix compile warning in s390 ccw virtio code
+  s390-ccw.img: Take care of the elf->img transition
+
+ configure                   |  7 ++++++-
+ pc-bios/s390-ccw/Makefile   |  4 ++--
+ pc-bios/s390-ccw/main.c     |  2 ++
+ pc-bios/s390-ccw/s390-ccw.h |  3 +++
+ pc-bios/s390-ccw/start.S    | 15 +++++++++++++++
+ pc-bios/s390-ccw/virtio.c   |  4 +++-
+ 6 files changed, 31 insertions(+), 4 deletions(-)
+
+-- 
+1.8.1.4
+
+

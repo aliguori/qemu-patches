@@ -1,0 +1,249 @@
+From patches Mon Sep 17 00:00:00 2001
+From: liguang <lig.fnst@cn.fujitsu.com>
+To: Peter Maydell <peter.maydell@linaro.org>, qemu-devel@nongnu.org,
+ liguang <lig.fnst@cn.fujitsu.com>
+Cc: blauwirbel@gmail.com, pbonzini@redhat.com, afaerber@suse.de,
+ lig.fnst@cn.fujitsu.com, qemu-devel@nongnu.org
+Date: Mon, 22 Apr 2013 11:44:12 +0800
+Message-id: 1366602253-15974-1-git-send-email-lig.fnst@cn.fujitsu.com
+Subject: [PATCH 1/2] target-i386/seg_helper: refactor 4 helper functions
+
+for helper_{lsl, lar, verr, verw}, there are
+common parts, so move them outside, and then
+call this new helper-helper function.
+
+Signed-off-by: liguang <lig.fnst@cn.fujitsu.com>
+---
+ target-i386/seg_helper.c |  179 ++++++++++++++-------------------------------
+ 1 files changed, 56 insertions(+), 123 deletions(-)
+
+diff --git a/target-i386/seg_helper.c b/target-i386/seg_helper.c
+index 906e4f3..419efd8 100644
+--- a/target-i386/seg_helper.c
++++ b/target-i386/seg_helper.c
+@@ -2292,9 +2292,10 @@ void helper_sysexit(CPUX86State *env, int dflag)
+     EIP = EDX;
+ }
+ 
+-target_ulong helper_lsl(CPUX86State *env, target_ulong selector1)
++
++static target_ulong misc_check_helper(CPUX86State *env, target_ulong selector1,
++                                      int inst)
+ {
+-    unsigned int limit;
+     uint32_t e1, e2, eflags, selector;
+     int rpl, dpl, cpl, type;
+ 
+@@ -2306,14 +2307,30 @@ target_ulong helper_lsl(CPUX86State *env, target_ulong selector1)
+     if (load_segment(env, &e1, &e2, selector) != 0) {
+         goto fail;
+     }
++
++    CC_SRC = eflags & ~CC_Z;
++
+     rpl = selector & 3;
+     dpl = (e2 >> DESC_DPL_SHIFT) & 3;
+     cpl = env->hflags & HF_CPL_MASK;
++
+     if (e2 & DESC_S_MASK) {
+-        if ((e2 & DESC_CS_MASK) && (e2 & DESC_C_MASK)) {
+-            /* conforming */
+-        } else {
+-            if (dpl < cpl || dpl < rpl) {
++        if (e2 & DESC_CS_MASK) {
++            switch (inst) {
++            case 1:
++                goto fail;
++            case 2:
++                if (!(e2 & (DESC_R_MASK | DESC_C_MASK))) {
++                    goto fail;
++                }
++                break;
++            case 3:
++            case 4:
++                if (!(e2 & DESC_C_MASK)) {
++                    goto check_pl;
++                }
++                break;
++            default:
+                 goto fail;
+             }
+         }
+@@ -2325,140 +2342,56 @@ target_ulong helper_lsl(CPUX86State *env, target_ulong selector1)
+         case 3:
+         case 9:
+         case 11:
+-            break;
++            if (inst == 3) {
++                break;
++            }
++        case 5:
++        case 12:
++            if (inst == 4) {
++                break;
++            }
+         default:
+             goto fail;
+         }
+-        if (dpl < cpl || dpl < rpl) {
+-        fail:
+-            CC_SRC = eflags & ~CC_Z;
+-            return 0;
+-        }
++        goto check_pl;
++    }
++
++    if (inst == 3) {
++        e2 &= 0x00f0ff00;
+     }
+-    limit = get_seg_limit(e1, e2);
++    if (inst == 4) {
++        e2 = get_seg_limit(e1, e2);
++    }
++
+     CC_SRC = eflags | CC_Z;
+-    return limit;
++
++check_pl:
++    if (dpl < cpl || dpl < rpl) {
++        goto fail;
++    }
++
++fail:
++    return e2;
+ }
+ 
+-target_ulong helper_lar(CPUX86State *env, target_ulong selector1)
++target_ulong helper_lsl(CPUX86State *env, target_ulong selector1)
+ {
+-    uint32_t e1, e2, eflags, selector;
+-    int rpl, dpl, cpl, type;
++    return misc_check_helper(env, selector1, 4);
++}
+ 
+-    selector = selector1 & 0xffff;
+-    eflags = cpu_cc_compute_all(env, CC_OP);
+-    if ((selector & 0xfffc) == 0) {
+-        goto fail;
+-    }
+-    if (load_segment(env, &e1, &e2, selector) != 0) {
+-        goto fail;
+-    }
+-    rpl = selector & 3;
+-    dpl = (e2 >> DESC_DPL_SHIFT) & 3;
+-    cpl = env->hflags & HF_CPL_MASK;
+-    if (e2 & DESC_S_MASK) {
+-        if ((e2 & DESC_CS_MASK) && (e2 & DESC_C_MASK)) {
+-            /* conforming */
+-        } else {
+-            if (dpl < cpl || dpl < rpl) {
+-                goto fail;
+-            }
+-        }
+-    } else {
+-        type = (e2 >> DESC_TYPE_SHIFT) & 0xf;
+-        switch (type) {
+-        case 1:
+-        case 2:
+-        case 3:
+-        case 4:
+-        case 5:
+-        case 9:
+-        case 11:
+-        case 12:
+-            break;
+-        default:
+-            goto fail;
+-        }
+-        if (dpl < cpl || dpl < rpl) {
+-        fail:
+-            CC_SRC = eflags & ~CC_Z;
+-            return 0;
+-        }
+-    }
+-    CC_SRC = eflags | CC_Z;
+-    return e2 & 0x00f0ff00;
++target_ulong helper_lar(CPUX86State *env, target_ulong selector1)
++{
++    return misc_check_helper(env, selector1, 3);
+ }
+ 
+ void helper_verr(CPUX86State *env, target_ulong selector1)
+ {
+-    uint32_t e1, e2, eflags, selector;
+-    int rpl, dpl, cpl;
+-
+-    selector = selector1 & 0xffff;
+-    eflags = cpu_cc_compute_all(env, CC_OP);
+-    if ((selector & 0xfffc) == 0) {
+-        goto fail;
+-    }
+-    if (load_segment(env, &e1, &e2, selector) != 0) {
+-        goto fail;
+-    }
+-    if (!(e2 & DESC_S_MASK)) {
+-        goto fail;
+-    }
+-    rpl = selector & 3;
+-    dpl = (e2 >> DESC_DPL_SHIFT) & 3;
+-    cpl = env->hflags & HF_CPL_MASK;
+-    if (e2 & DESC_CS_MASK) {
+-        if (!(e2 & DESC_R_MASK)) {
+-            goto fail;
+-        }
+-        if (!(e2 & DESC_C_MASK)) {
+-            if (dpl < cpl || dpl < rpl) {
+-                goto fail;
+-            }
+-        }
+-    } else {
+-        if (dpl < cpl || dpl < rpl) {
+-        fail:
+-            CC_SRC = eflags & ~CC_Z;
+-            return;
+-        }
+-    }
+-    CC_SRC = eflags | CC_Z;
++    misc_check_helper(env, selector1, 2);
+ }
+ 
+ void helper_verw(CPUX86State *env, target_ulong selector1)
+ {
+-    uint32_t e1, e2, eflags, selector;
+-    int rpl, dpl, cpl;
+-
+-    selector = selector1 & 0xffff;
+-    eflags = cpu_cc_compute_all(env, CC_OP);
+-    if ((selector & 0xfffc) == 0) {
+-        goto fail;
+-    }
+-    if (load_segment(env, &e1, &e2, selector) != 0) {
+-        goto fail;
+-    }
+-    if (!(e2 & DESC_S_MASK)) {
+-        goto fail;
+-    }
+-    rpl = selector & 3;
+-    dpl = (e2 >> DESC_DPL_SHIFT) & 3;
+-    cpl = env->hflags & HF_CPL_MASK;
+-    if (e2 & DESC_CS_MASK) {
+-        goto fail;
+-    } else {
+-        if (dpl < cpl || dpl < rpl) {
+-            goto fail;
+-        }
+-        if (!(e2 & DESC_W_MASK)) {
+-        fail:
+-            CC_SRC = eflags & ~CC_Z;
+-            return;
+-        }
+-    }
+-    CC_SRC = eflags | CC_Z;
++    misc_check_helper(env, selector1, 1);
+ }
+ 
+ #if defined(CONFIG_USER_ONLY)
+-- 
+1.7.2.5
+
+

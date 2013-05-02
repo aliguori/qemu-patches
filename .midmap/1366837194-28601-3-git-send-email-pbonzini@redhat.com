@@ -1,0 +1,1 @@
+../fix-win32-compilation/v2.1366862391/0002-win32-add-readv-writev-emulation.patch

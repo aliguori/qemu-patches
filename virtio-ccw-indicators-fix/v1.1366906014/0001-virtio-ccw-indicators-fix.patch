@@ -1,0 +1,36 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Cornelia Huck <cornelia.huck@de.ibm.com>
+To: qemu-devel <qemu-devel@nongnu.org>
+Cc: Blue Swirl <blauwirbel@gmail.com>, Anthony Liguori <aliguori@us.ibm.com>,
+ =?utf-8?b?IkF1csOpbGllbiBKYXJubyI=?= <aurelien@aurel32.net>,
+ Cornelia Huck <cornelia.huck@de.ibm.com>
+Date: Thu, 25 Apr 2013 11:06:54 +0200
+Message-id: 1366880815-26431-1-git-send-email-cornelia.huck@de.ibm.com
+Subject: [PATCH 1/1] virtio-ccw: indicators fix.
+
+One bugfix to make sure guests that didn't set up indicators are
+handled correctly.
+
+Please pull.
+
+The following changes since commit 9953f8822cc316eec9962f0a2858c3439a80adec:
+
+  pc: Kill the "use flash device for BIOS unless KVM" misfeature (2013-04-24 13:23:51 -0500)
+
+are available in the git repository at:
+
+  git://github.com/cohuck/qemu virtio-ccw-upstr
+
+for you to fetch changes up to 7c4869761d7f2e0a3f806a5359eea5d2473ec5d5:
+
+  virtio-ccw: Check indicators location. (2013-04-25 10:43:30 +0200)
+
+Cornelia Huck (1):
+      virtio-ccw: Check indicators location.
+
+ hw/s390x/virtio-ccw.c |    6 ++++++
+ 1 file changed, 6 insertions(+)
+
+-- 
+1.7.9.5
+

@@ -1,0 +1,1 @@
+../sheepdog-implement-bdrv_co_is_allocated/v3.1366679979/0002-sheepdog-use-BDRV_SECTOR_SIZE.patch

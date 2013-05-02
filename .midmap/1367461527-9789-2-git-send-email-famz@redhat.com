@@ -1,0 +1,1 @@
+../vmdk-zeroed-grain-GTE-support/v5.1367508321/0001-vmdk-named-return-code.patch

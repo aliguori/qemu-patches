@@ -1,0 +1,134 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Stefan Berger <stefanb@linux.vnet.ibm.com>
+To: Stefan Berger <stefanb@linux.vnet.ibm.com>, qemu-devel@nongnu.org,
+ anthony@codemonkey.ws, stefanb@linux.vnet.ibm.com
+Cc: coreyb@linux.vnet.ibm.com
+Date: Mon, 22 Apr 2013 10:41:39 -0400
+Message-id: 1366641699-21420-1-git-send-email-stefanb@linux.vnet.ibm.com
+Subject: [PATCH 1/1] Move TPM passthrough specific command line options to
+ backend structure
+
+Move the TPM passthrough specific command line options to the passthrough
+backend implementation and attach them to the backend's interface structure.
+
+Add code to tpm.c for validating the TPM command line options.
+
+Signed-off-by: Stefan Berger <stefanb@linux.vnet.ibm.com>
+Reviewed-by: Corey Bryan <coreyb@linux.vnet.ibm.com>
+---
+ hw/tpm/tpm_int.h             |  7 +++++++
+ hw/tpm/tpm_passthrough.c     | 16 ++++++++++++++++
+ include/sysemu/tpm_backend.h |  1 +
+ tpm.c                        |  8 ++++++++
+ vl.c                         | 16 +---------------
+ 5 files changed, 33 insertions(+), 15 deletions(-)
+
+diff --git a/hw/tpm/tpm_int.h b/hw/tpm/tpm_int.h
+index 08f87cb..2f582ca 100644
+--- a/hw/tpm/tpm_int.h
++++ b/hw/tpm/tpm_int.h
+@@ -33,6 +33,13 @@ struct TPMState {
+ 
+ #define TPM(obj) OBJECT_CHECK(TPMState, (obj), TYPE_TPM_TIS)
+ 
++#define TPM_STANDARD_CMDLINE_OPTS \
++    { \
++        .name = "type", \
++        .type = QEMU_OPT_STRING, \
++        .help = "Type of TPM backend", \
++    }
++
+ struct tpm_req_hdr {
+     uint16_t tag;
+     uint32_t len;
+diff --git a/hw/tpm/tpm_passthrough.c b/hw/tpm/tpm_passthrough.c
+index 416b9b6..7d575f5 100644
+--- a/hw/tpm/tpm_passthrough.c
++++ b/hw/tpm/tpm_passthrough.c
+@@ -528,8 +528,24 @@ static void tpm_passthrough_destroy(TPMBackend *tb)
+     g_free(tpm_pt->tpm_dev);
+ }
+ 
++static const QemuOptDesc tpm_passthrough_cmdline_opts[] = {
++    TPM_STANDARD_CMDLINE_OPTS,
++    {
++        .name = "cancel-path",
++        .type = QEMU_OPT_STRING,
++        .help = "Sysfs file entry for canceling TPM commands",
++    },
++    {
++        .name = "path",
++        .type = QEMU_OPT_STRING,
++        .help = "Path to TPM device on the host",
++    },
++    { /* end of list */ },
++};
++
+ static const TPMDriverOps tpm_passthrough_driver = {
+     .type                     = TPM_TYPE_PASSTHROUGH,
++    .opts                     = tpm_passthrough_cmdline_opts,
+     .desc                     = tpm_passthrough_create_desc,
+     .create                   = tpm_passthrough_create,
+     .destroy                  = tpm_passthrough_destroy,
+diff --git a/include/sysemu/tpm_backend.h b/include/sysemu/tpm_backend.h
+index 4667874..825f33b 100644
+--- a/include/sysemu/tpm_backend.h
++++ b/include/sysemu/tpm_backend.h
+@@ -65,6 +65,7 @@ typedef struct TPMSizedBuffer {
+ 
+ struct TPMDriverOps {
+     enum TpmType type;
++    const QemuOptDesc *opts;
+     /* get a descriptive text of the backend to display to the user */
+     const char *(*desc)(void);
+ 
+diff --git a/tpm.c b/tpm.c
+index c91da43..f13c9bc 100644
+--- a/tpm.c
++++ b/tpm.c
+@@ -159,6 +159,14 @@ static int configure_tpm(QemuOpts *opts)
+         return 1;
+     }
+ 
++    /* validate backend specific opts */
++    qemu_opts_validate(opts, be->opts, &local_err);
++    if (error_is_set(&local_err)) {
++        qerror_report_err(local_err);
++        error_free(local_err);
++        return 1;
++    }
++
+     drv = be->create(opts, id);
+     if (!drv) {
+         return 1;
+diff --git a/vl.c b/vl.c
+index 2ef00d8..f33a9bd 100644
+--- a/vl.c
++++ b/vl.c
+@@ -502,21 +502,7 @@ static QemuOptsList qemu_tpmdev_opts = {
+     .implied_opt_name = "type",
+     .head = QTAILQ_HEAD_INITIALIZER(qemu_tpmdev_opts.head),
+     .desc = {
+-        {
+-            .name = "type",
+-            .type = QEMU_OPT_STRING,
+-            .help = "Type of TPM backend",
+-        },
+-        {
+-            .name = "cancel-path",
+-            .type = QEMU_OPT_STRING,
+-            .help = "Sysfs file entry for canceling TPM commands",
+-        },
+-        {
+-            .name = "path",
+-            .type = QEMU_OPT_STRING,
+-            .help = "Path to TPM device on the host",
+-        },
++        /* options are defined in the TPM backends */
+         { /* end of list */ }
+     },
+ };
+-- 
+1.7.11.7
+
+

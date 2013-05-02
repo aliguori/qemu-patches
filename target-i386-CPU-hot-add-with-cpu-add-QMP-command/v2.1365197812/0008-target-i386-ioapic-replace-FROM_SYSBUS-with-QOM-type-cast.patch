@@ -1,0 +1,38 @@
+From patches Mon Sep 17 00:00:00 2001
+From: "Igor Mammedov" <imammedo@redhat.com>
+To: Paolo Bonzini <pbonzini@redhat.com>, Igor Mammedov <imammedo@redhat.com>,
+ qemu-devel@nongnu.org, li guang <lig.fnst@cn.fujitsu.com>
+Cc: Anthony Liguori <aliguori@us.ibm.com>, Paolo Bonzini <pbonzini@redhat.com>,
+ aliguori@us.ibm.com, ehabkost@redhat.com, claudio.fontana@huawei.com,
+ qemu-devel@nongnu.org, aderumier@odiso.com, lcapitulino@redhat.com,
+ Igor Mammedov <imammedo@redhat.com>, jfrei@linux.vnet.ibm.com,
+ li guang <lig.fnst@cn.fujitsu.com>, yang.z.zhang@intel.com,
+ pbonzini@redhat.com, eblake@redhat.com, afaerber@suse.de,
+ lig.fnst@cn.fujitsu.com, rth@twiddle.net
+Date: Fri,  5 Apr 2013 16:37:00 +0200
+Message-id: 1365172636-28628-9-git-send-email-imammedo@redhat.com
+Subject: [PATCH 08/22] target-i386: ioapic: replace FROM_SYSBUS() with QOM
+ type cast
+
+Signed-off-by: Igor Mammedov <imammedo@redhat.com>
+---
+ hw/ioapic_common.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/hw/ioapic_common.c b/hw/ioapic_common.c
+index d4aff29..561b987 100644
+--- a/hw/ioapic_common.c
++++ b/hw/ioapic_common.c
+@@ -59,7 +59,7 @@ static int ioapic_dispatch_post_load(void *opaque, int version_id)
+ 
+ static int ioapic_init_common(SysBusDevice *dev)
+ {
+-    IOAPICCommonState *s = FROM_SYSBUS(IOAPICCommonState, dev);
++    IOAPICCommonState *s = IOAPIC_COMMON(dev);
+     IOAPICCommonClass *info;
+     static int ioapic_no;
+ 
+-- 
+1.8.1.4
+
+

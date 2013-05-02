@@ -1,0 +1,188 @@
+From patches Mon Sep 17 00:00:00 2001
+From: =?utf-8?q?Andreas_F=C3=A4rber_=3Cafaerber=40suse=2Ede=3E?=
+To: qemu-devel@nongnu.org
+Cc: Blue Swirl <blauwirbel@gmail.com>, Michael Walle <michael@walle.cc>,
+ Anthony Liguori <anthony@codemonkey.ws>,
+ =?UTF-8?q?Aur=C3=A9lien=20Jarno?= <aurelien@aurel32.net>,
+ qemu-devel@nongnu.org, Richard Henderson <rth@twiddle.net>,
+ =?UTF-8?B?QXVyw6lsaWVuIEo=?= =?UTF-8?B?YXJubw==?= <aurelien@aurel32.net>,
+ =?UTF-8?q?Andreas=20F=C3=A4rber?= <afaerber@suse.de>,
+ "Edgar E. Iglesias" <edgar.iglesias@gmail.com>,
+ Peter Maydell <peter.maydell@linaro.org>
+Date: Mon, 25 Feb 2013 19:45:47 +0100
+Message-id: 1361817954-8984-1-git-send-email-afaerber@suse.de
+Subject: [PATCH 0/7] QOM CPUState, part 9: CPU_COMMON for interrupts
+
+Hello,
+
+Rebased on my CPU VMState series v3, this series proceeds with moving fields
+from CPU_COMMON / CPU*State to CPUState.
+
+Thereby v2 doesn't need to drop x86 CPU version 5 VMState support.
+v2 also QOM'ifies CRISv10 do_interrupt support.
+
+Available for testing at:
+git://github.com/afaerber/qemu-cpu.git qom-cpu-9.v2
+https://github.com/afaerber/qemu-cpu/commits/qom-cpu-9.v2
+
+Regards,
+Andreas
+
+v1 -> v2:
+* Prototype cleanups were merged already.
+* Rebased onto CPU VMState series.
+* Cleaned up cpu vs. cs in target-cris/helper.c.
+* Added patch for crisv10 do_interrupt now that there's subclasses.
+* Converted new env->halted occurrence in target-sparc/helper.c.
+* Rebased onto ENV_OFFSET addition.
+
+Cc: Anthony Liguori <anthony@codemonkey.ws>
+Cc: Blue Swirl <blauwirbel@gmail.com>
+Cc: Aurélien Jarno <aurelien@aurel32.net>
+
+Cc: Richard Henderson <rth@twiddle.net>
+Cc: Michael Walle <michael@walle.cc>
+
+Cc: Peter Maydell <peter.maydell@linaro.org>
+Cc: Edgar E. Iglesias <edgar.iglesias@gmail.com>
+
+Andreas Färber (7):
+  target-cris/helper.c: Update Coding Style
+  cpu: Move halted and interrupt_request fields to CPUState
+  exec: Pass CPUState to cpu_reset_interrupt()
+  cpu: Pass CPUState to cpu_interrupt()
+  cpu: Replace do_interrupt() by CPUClass::do_interrupt method
+  target-arm: Override do_interrupt for ARMv7-M profile
+  target-cris: Override do_interrupt for pre-v32 CPU cores
+
+ cpu-exec.c                         |   70 ++++---
+ cpus.c                             |    6 +-
+ exec.c                             |   19 +-
+ gdbstub.c                          |    2 +-
+ hw/alpha_typhoon.c                 |   18 +-
+ hw/apic.c                          |   25 +--
+ hw/arm_pic.c                       |   20 +-
+ hw/cris_pic_cpu.c                  |   14 +-
+ hw/leon3.c                         |   12 +-
+ hw/lm32_boards.c                   |    9 +-
+ hw/lpc_ich9.c                      |    2 +-
+ hw/microblaze_pic_cpu.c            |   15 +-
+ hw/milkymist.c                     |    9 +-
+ hw/mips_int.c                      |   10 +-
+ hw/omap1.c                         |   11 +-
+ hw/openrisc_pic.c                  |    5 +-
+ hw/openrisc_timer.c                |    4 +-
+ hw/pc.c                            |   14 +-
+ hw/pc_piix.c                       |    3 +-
+ hw/ppc.c                           |   34 +--
+ hw/ppc/e500.c                      |   10 +-
+ hw/ppc405_uc.c                     |    4 +-
+ hw/ppce500_spin.c                  |    2 +-
+ hw/puv3.c                          |   10 +-
+ hw/pxa2xx.c                        |    7 +-
+ hw/pxa2xx_gpio.c                   |    5 +-
+ hw/pxa2xx_pic.c                    |   13 +-
+ hw/s390x/s390-virtio.c             |   14 +-
+ hw/sh_intc.c                       |   14 +-
+ hw/spapr.c                         |   10 +-
+ hw/spapr_hcall.c                   |    2 +-
+ hw/spapr_rtas.c                    |    6 +-
+ hw/sun4m.c                         |   35 ++--
+ hw/sun4u.c                         |   26 ++-
+ hw/xen_machine_pv.c                |    6 +-
+ hw/xtensa_pic.c                    |   12 +-
+ include/exec/cpu-all.h             |   15 --
+ include/exec/cpu-defs.h            |    2 -
+ include/qom/cpu.h                  |   39 ++++
+ kvm-all.c                          |    6 +-
+ qom/cpu.c                          |    7 +
+ target-alpha/cpu-qom.h             |    2 +
+ target-alpha/cpu.c                 |    1 +
+ target-alpha/cpu.h                 |    5 +-
+ target-alpha/helper.c              |    4 +-
+ target-alpha/translate.c           |    3 +-
+ target-arm/cpu-qom.h               |    3 +
+ target-arm/cpu.c                   |   15 +-
+ target-arm/cpu.h                   |    5 +-
+ target-arm/helper.c                |   23 +-
+ target-arm/op_helper.c             |    4 +-
+ target-cris/cpu-qom.h              |    3 +
+ target-cris/cpu.c                  |    9 +
+ target-cris/cpu.h                  |    5 +-
+ target-cris/helper.c               |  406 ++++++++++++++++++------------------
+ target-cris/translate.c            |    3 +-
+ target-i386/cpu-qom.h              |    6 +
+ target-i386/cpu.c                  |    3 +-
+ target-i386/cpu.h                  |   23 +-
+ target-i386/helper.c               |   18 +-
+ target-i386/kvm.c                  |   50 ++---
+ target-i386/machine.c              |    2 +-
+ target-i386/misc_helper.c          |   21 +-
+ target-i386/seg_helper.c           |    5 +-
+ target-i386/svm_helper.c           |    9 +-
+ target-lm32/cpu-qom.h              |    2 +
+ target-lm32/cpu.c                  |    1 +
+ target-lm32/cpu.h                  |    5 +-
+ target-lm32/helper.c               |    5 +-
+ target-lm32/op_helper.c            |    4 +-
+ target-m68k/cpu-qom.h              |    2 +
+ target-m68k/cpu.c                  |    1 +
+ target-m68k/cpu.h                  |    5 +-
+ target-m68k/helper.c               |   10 +-
+ target-m68k/op_helper.c            |   14 +-
+ target-m68k/qregs.def              |    1 -
+ target-m68k/translate.c            |    8 +-
+ target-microblaze/cpu-qom.h        |    2 +
+ target-microblaze/cpu.c            |    1 +
+ target-microblaze/cpu.h            |    5 +-
+ target-microblaze/helper.c         |    9 +-
+ target-mips/cpu-qom.h              |    2 +
+ target-mips/cpu.c                  |    2 +
+ target-mips/cpu.h                  |    5 +-
+ target-mips/helper.c               |    5 +-
+ target-mips/op_helper.c            |   23 +-
+ target-mips/translate.c            |    4 +-
+ target-openrisc/cpu.c              |    1 +
+ target-openrisc/cpu.h              |    6 +-
+ target-openrisc/interrupt.c        |    4 +-
+ target-openrisc/interrupt_helper.c |    3 +-
+ target-openrisc/sys_helper.c       |    3 +-
+ target-ppc/cpu-qom.h               |    2 +
+ target-ppc/cpu.h                   |    6 +-
+ target-ppc/excp_helper.c           |   34 ++-
+ target-ppc/helper_regs.h           |   11 +-
+ target-ppc/kvm.c                   |   16 +-
+ target-ppc/translate.c             |    3 +-
+ target-ppc/translate_init.c        |    1 +
+ target-s390x/cpu-qom.h             |    2 +
+ target-s390x/cpu.c                 |    9 +-
+ target-s390x/cpu.h                 |   12 +-
+ target-s390x/helper.c              |   19 +-
+ target-sh4/cpu-qom.h               |    2 +
+ target-sh4/cpu.c                   |    1 +
+ target-sh4/cpu.h                   |    5 +-
+ target-sh4/helper.c                |   13 +-
+ target-sh4/op_helper.c             |    4 +-
+ target-sparc/cpu-qom.h             |    2 +
+ target-sparc/cpu.c                 |    2 +
+ target-sparc/cpu.h                 |    6 +-
+ target-sparc/helper.c              |    4 +-
+ target-sparc/int32_helper.c        |    4 +-
+ target-sparc/int64_helper.c        |    4 +-
+ target-unicore32/cpu-qom.h         |    2 +
+ target-unicore32/cpu.c             |    1 +
+ target-unicore32/cpu.h             |    5 +-
+ target-unicore32/helper.c          |    5 +-
+ target-unicore32/softmmu.c         |    6 +-
+ target-xtensa/cpu-qom.h            |    2 +
+ target-xtensa/cpu.c                |    1 +
+ target-xtensa/cpu.h                |    1 -
+ target-xtensa/helper.c             |    5 +-
+ target-xtensa/op_helper.c          |    5 +-
+ translate-all.c                    |   18 +-
+ xen-all.c                          |   10 +-
+ 126 Dateien geändert, 893 Zeilen hinzugefügt(+), 638 Zeilen entfernt(-)
+
+-- 
+1.7.10.4
+

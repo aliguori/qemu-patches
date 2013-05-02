@@ -1,0 +1,38 @@
+From patches Mon Sep 17 00:00:00 2001
+From: =?utf-8?q?Andreas_F=C3=A4rber_=3Cafaerber=40suse=2Ede=3E?=
+To: qemu-devel@nongnu.org
+Cc: Igor Mammedov <imammedo@redhat.com>,
+ =?UTF-8?q?Andreas=20F=C3=A4rber?= <afaerber@suse.de>
+Date: Thu,  2 May 2013 15:35:42 +0200
+Message-id: 1367501755-32272-17-git-send-email-afaerber@suse.de
+Subject: [PATCH 16/29] kvmvapic: Make dependency on sysbus.h explicit
+
+From: Igor Mammedov <imammedo@redhat.com>
+
+Allows kvmvapic to compile if sysbus.h is removed from apic_internal.h,
+from which it is indirectly included.
+sysbus.h will be removed from apic_internal.h after converting
+APICs to ICCDevice.
+
+Signed-off-by: Igor Mammedov <imammedo@redhat.com>
+Signed-off-by: Andreas Färber <afaerber@suse.de>
+---
+ hw/i386/kvmvapic.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/hw/i386/kvmvapic.c b/hw/i386/kvmvapic.c
+index 3a10c07..5b558aa 100644
+--- a/hw/i386/kvmvapic.c
++++ b/hw/i386/kvmvapic.c
+@@ -12,6 +12,7 @@
+ #include "sysemu/cpus.h"
+ #include "sysemu/kvm.h"
+ #include "hw/i386/apic_internal.h"
++#include "hw/sysbus.h"
+ 
+ #define VAPIC_IO_PORT           0x7e
+ 
+-- 
+1.8.1.4
+
+

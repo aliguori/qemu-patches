@@ -1,0 +1,166 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Hu Tao <hutao@cn.fujitsu.com>
+To: Paolo Bonzini <pbonzini@redhat.com>, qemu-devel <qemu-devel@nongnu.org>,
+ Luiz Capitulino <lcapitulino@redhat.com>, Wen Congyang <wency@cn.fujitsu.com>,
+ Jan Kiszka <jan.kiszka@siemens.com>,
+ KAMEZAWA Hiroyuki <kamezawa.hiroyu@jp.fujitsu.com>,
+ Anthony Liguori <aliguori@us.ibm.com>, "Michael S. Tsirkin" <mst@redhat.com>,
+ Gleb Natapov <gleb@redhat.com>, Peter Maydell <peter.maydell@linaro.org>,
+ Blue Swirl <blauwirbel@gmail.com>, Alexander Graf <agraf@suse.de>,
+ Christian Borntraeger <borntraeger@de.ibm.com>,
+ Sasha Levin <levinsasha928@gmail.com>, Orit Wasserman <owasserm@redhat.com>,
+ Andrew Jones <drjones@redhat.com>, Markus Armbruster <armbru@redhat.com>,
+ Stefan Hajnoczi <stefanha@redhat.com>, Eric Blake <eblake@redhat.com>,
+ Juan Quintela <quintela@redhat.com>,
+ "Daniel P. Berrange" <berrange@redhat.com>,
+ Marcelo Tosatti <mtosatti@redhat.com>,
+ Alex Williamson <alex.williamson@redhat.com>
+Cc: 
+Date: Thu, 18 Apr 2013 10:14:45 +0800
+Message-id: 2d968bbf4b661faadcedba5ab7bda7c2cecc625a.1366250561.git.hutao@cn.fujitsu.com
+Subject: [PATCH 6/7] pvpanic: create pvpanic by default for machine 1.5
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+Signed-off-by: Hu Tao <hutao@cn.fujitsu.com>
+---
+ hw/i386/pc_piix.c    | 16 ++++++++++++++--
+ hw/i386/pc_q35.c     | 15 ++++++++++++++-
+ hw/misc/pvpanic.c    |  7 +++++++
+ include/hw/i386/pc.h |  3 +++
+ 4 files changed, 38 insertions(+), 3 deletions(-)
+
+diff --git a/hw/i386/pc_piix.c b/hw/i386/pc_piix.c
+index 943758a..4d24b09 100644
+--- a/hw/i386/pc_piix.c
++++ b/hw/i386/pc_piix.c
+@@ -55,6 +55,8 @@ static const int ide_iobase[MAX_IDE_BUS] = { 0x1f0, 0x170 };
+ static const int ide_iobase2[MAX_IDE_BUS] = { 0x3f6, 0x376 };
+ static const int ide_irq[MAX_IDE_BUS] = { 14, 15 };
+ 
++static bool has_pvpanic = true;
++
+ /* PC hardware initialisation */
+ static void pc_init1(MemoryRegion *system_memory,
+                      MemoryRegion *system_io,
+@@ -218,6 +220,10 @@ static void pc_init1(MemoryRegion *system_memory,
+     if (pci_enabled) {
+         pc_pci_device_init(pci_bus);
+     }
++
++    if (has_pvpanic) {
++        pvpanic_init(isa_bus);
++    }
+ }
+ 
+ static void pc_init_pci(QEMUMachineInitArgs *args)
+@@ -235,10 +241,16 @@ static void pc_init_pci(QEMUMachineInitArgs *args)
+              initrd_filename, cpu_model, 1, 1);
+ }
+ 
++static void pc_init_pci_1_4(QEMUMachineInitArgs *args)
++{
++    has_pvpanic = false;
++    pc_init_pci(args);
++}
++
+ static void pc_init_pci_1_3(QEMUMachineInitArgs *args)
+ {
+     enable_compat_apic_id_mode();
+-    pc_init_pci(args);
++    pc_init_pci_1_4(args);
+ }
+ 
+ /* PC machine init function for pc-0.14 to pc-1.2 */
+@@ -309,7 +321,7 @@ static QEMUMachine pc_i440fx_machine_v1_5 = {
+ static QEMUMachine pc_i440fx_machine_v1_4 = {
+     .name = "pc-i440fx-1.4",
+     .desc = "Standard PC (i440FX + PIIX, 1996)",
+-    .init = pc_init_pci,
++    .init = pc_init_pci_1_4,
+     .max_cpus = 255,
+     .compat_props = (GlobalProperty[]) {
+         PC_COMPAT_1_4,
+diff --git a/hw/i386/pc_q35.c b/hw/i386/pc_q35.c
+index 6ac1a89..cbdbf77 100644
+--- a/hw/i386/pc_q35.c
++++ b/hw/i386/pc_q35.c
+@@ -45,6 +45,8 @@
+ /* ICH9 AHCI has 6 ports */
+ #define MAX_SATA_PORTS     6
+ 
++static bool has_pvpanic = true;
++
+ /* set CMOS shutdown status register (index 0xF) as S3_resume(0xFE)
+  *    BIOS will read it and start S3 resume at POST Entry */
+ static void pc_cmos_set_s3_resume(void *opaque, int irq, int level)
+@@ -207,8 +209,19 @@ static void pc_q35_init(QEMUMachineInitArgs *args)
+     if (pci_enabled) {
+         pc_pci_device_init(host_bus);
+     }
++
++    if (has_pvpanic) {
++        pvpanic_init(isa_bus);
++    }
++}
++
++static void pc_q35_init_1_4(QEMUMachineInitArgs *args)
++{
++    has_pvpanic = false;
++    pc_q35_init(args);
+ }
+ 
++
+ static QEMUMachine pc_q35_machine_v1_5 = {
+     .name = "pc-q35-1.5",
+     .alias = "q35",
+@@ -221,7 +234,7 @@ static QEMUMachine pc_q35_machine_v1_5 = {
+ static QEMUMachine pc_q35_machine_v1_4 = {
+     .name = "pc-q35-1.4",
+     .desc = "Standard PC (Q35 + ICH9, 2009)",
+-    .init = pc_q35_init,
++    .init = pc_q35_init_1_4,
+     .max_cpus = 255,
+     .compat_props = (GlobalProperty[]) {
+         PC_COMPAT_1_4,
+diff --git a/hw/misc/pvpanic.c b/hw/misc/pvpanic.c
+index 23599a3..1a86e9a 100644
+--- a/hw/misc/pvpanic.c
++++ b/hw/misc/pvpanic.c
+@@ -19,6 +19,7 @@
+ #include <sysemu/kvm.h>
+ 
+ #include "hw/nvram/fw_cfg.h"
++#include "hw/i386/pc.h"
+ 
+ /* The bit of supported pv event */
+ #define PVPANIC_F_PANICKED      0
+@@ -107,6 +108,12 @@ static int pvpanic_isa_initfn(ISADevice *dev)
+     return 0;
+ }
+ 
++int pvpanic_init(ISABus *bus)
++{
++    isa_create_simple(bus, TYPE_ISA_PVPANIC_DEVICE);
++    return 0;
++}
++
+ static Property pvpanic_isa_properties[] = {
+     DEFINE_PROP_UINT16("ioport", PVPanicState, ioport, 0x505),
+     DEFINE_PROP_END_OF_LIST(),
+diff --git a/include/hw/i386/pc.h b/include/hw/i386/pc.h
+index 9bcc819..250806d 100644
+--- a/include/hw/i386/pc.h
++++ b/include/hw/i386/pc.h
+@@ -170,6 +170,9 @@ static inline bool isa_ne2000_init(ISABus *bus, int base, int irq, NICInfo *nd)
+ /* pc_sysfw.c */
+ void pc_system_firmware_init(MemoryRegion *rom_memory);
+ 
++/* pvpanic.c */
++int pvpanic_init(ISABus *bus);
++
+ /* e820 types */
+ #define E820_RAM        1
+ #define E820_RESERVED   2
+-- 
+1.8.1.4
+

@@ -1,0 +1,1 @@
+../Fix-versatile_pci-now-without-breaking-linux/v2.1364311320/0005-versatile_pci-Use-separate-PCI-I-O-space-rather-than-system-I-O-space.patch

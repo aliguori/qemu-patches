@@ -1,0 +1,101 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Richard Henderson <rth@twiddle.net>
+To: Aurelien Jarno <aurelien@aurel32.net>, qemu-devel@nongnu.org,
+ Richard Henderson <rth@twiddle.net>
+Cc: Aurelien Jarno <aurelien@aurel32.net>, qemu-devel@nongnu.org
+Date: Sun, 31 Mar 2013 15:34:55 -0700
+Message-id: 1364769305-3687-10-git-send-email-rth@twiddle.net
+Subject: [PATCH 09/19] tcg-arm: Implement deposit for armv7
+
+We have BFI and BFC available for implementing it.
+
+Signed-off-by: Richard Henderson <rth@twiddle.net>
+---
+ tcg/arm/tcg-target.c | 36 ++++++++++++++++++++++++++++++++++++
+ tcg/arm/tcg-target.h |  5 ++++-
+ 2 files changed, 40 insertions(+), 1 deletion(-)
+
+diff --git a/tcg/arm/tcg-target.c b/tcg/arm/tcg-target.c
+index 1f38795..1044c68 100644
+--- a/tcg/arm/tcg-target.c
++++ b/tcg/arm/tcg-target.c
+@@ -702,6 +702,35 @@ static inline void tcg_out_bswap32(TCGContext *s, int cond, int rd, int rn)
+     }
+ }
+ 
++bool tcg_target_deposit_valid(int ofs, int len)
++{
++    /* ??? Without bfi, we could improve over generic code by combining
++       the right-shift from a non-zero ofs with the orr.  We do run into
++       problems when rd == rs, and the mask generated from ofs+len don't
++       fit into an immediate.  We would have to be careful not to pessimize
++       wrt the optimizations performed on the expanded code.  */
++    return use_armv7_instructions;
++}
++
++static inline void tcg_out_deposit(TCGContext *s, int cond, TCGReg rd,
++                                   TCGArg a1, int ofs, int len, bool const_a1)
++{
++    if (const_a1) {
++        uint32_t mask = (2u << (len - 1)) - 1;
++        a1 &= mask;
++        if (a1 == 0) {
++            /* bfi becomes bfc with rn == 15.  */
++            a1 = 15;
++        } else {
++            tcg_out_movi32(s, cond, TCG_REG_R8, a1);
++            a1 = TCG_REG_R8;
++        }
++    }
++    /* bfi/bfc */
++    tcg_out32(s, 0x07c00010 | (cond << 28) | (rd << 12) | a1
++              | (ofs << 7) | ((ofs + len - 1) << 16));
++}
++
+ static inline void tcg_out_ld32_12(TCGContext *s, int cond,
+                 int rd, int rn, tcg_target_long im)
+ {
+@@ -1835,6 +1864,11 @@ static inline void tcg_out_op(TCGContext *s, TCGOpcode opc,
+         tcg_out_ext16u(s, COND_AL, args[0], args[1]);
+         break;
+ 
++    case INDEX_op_deposit_i32:
++        tcg_out_deposit(s, COND_AL, args[0], args[2],
++                        args[3], args[4], const_args[2]);
++        break;
++
+     default:
+         tcg_abort();
+     }
+@@ -1919,6 +1953,8 @@ static const TCGTargetOpDef arm_op_defs[] = {
+     { INDEX_op_ext16s_i32, { "r", "r" } },
+     { INDEX_op_ext16u_i32, { "r", "r" } },
+ 
++    { INDEX_op_deposit_i32, { "r", "0", "ri" } },
++
+     { -1 },
+ };
+ 
+diff --git a/tcg/arm/tcg-target.h b/tcg/arm/tcg-target.h
+index 354dd8a..209f585 100644
+--- a/tcg/arm/tcg-target.h
++++ b/tcg/arm/tcg-target.h
+@@ -71,10 +71,13 @@ typedef enum {
+ #define TCG_TARGET_HAS_eqv_i32          0
+ #define TCG_TARGET_HAS_nand_i32         0
+ #define TCG_TARGET_HAS_nor_i32          0
+-#define TCG_TARGET_HAS_deposit_i32      0
++#define TCG_TARGET_HAS_deposit_i32      1
+ #define TCG_TARGET_HAS_movcond_i32      1
+ #define TCG_TARGET_HAS_muls2_i32        1
+ 
++extern bool tcg_target_deposit_valid(int ofs, int len);
++#define TCG_TARGET_deposit_i32_valid  tcg_target_deposit_valid
++
+ enum {
+     TCG_AREG0 = TCG_REG_R6,
+ };
+-- 
+1.8.1.4
+
+

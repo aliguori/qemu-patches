@@ -1,0 +1,189 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Amos Kong <akong@redhat.com>
+To: Eric Blake <eblake@redhat.com>, Amos Kong <akong@redhat.com>,
+ qemu-devel@nongnu.org, jyang@redhat.com, Paolo Bonzini <pbonzini@redhat.com>
+Cc: Anthony Liguori <aliguori@us.ibm.com>, Paolo Bonzini <pbonzini@redhat.com>,
+ qemu-devel@nongnu.org, Amos Kong <akong@redhat.com>, mdroth@linux.vnet.ibm.com,
+ Eric Blake <eblake@redhat.com>, jyang@redhat.com, lcapitulino@redhat.com
+Date: Fri, 19 Apr 2013 17:52:03 +0800
+Message-id: 1366365123-5412-1-git-send-email-akong@redhat.com
+Subject: [PATCH 1/1] monitor: introduce query-config-schema
+
+Libvirt doesn't have a stable way to know option support
+detail. This patch introdued a new qmp command to query
+configuration schema information. hmp command isn't added.
+
+Signed-off-by: Amos Kong <akong@redhat.com>
+CC: Osier Yang <jyang@redhat.com>
+CC: Anthony Liguori <aliguori@us.ibm.com>
+---
+Reposted this patch: https://www.redhat.com/archives/libvir-list/2013-January/msg01656.html
+---
+ qapi-schema.json       |   26 ++++++++++++++++++++++++++
+ qemu-options-wrapper.h |   16 ++++++++++++++++
+ qmp-commands.hx        |   32 ++++++++++++++++++++++++++++++++
+ qmp.c                  |   36 ++++++++++++++++++++++++++++++++++++
+ 4 files changed, 110 insertions(+), 0 deletions(-)
+
+diff --git a/qapi-schema.json b/qapi-schema.json
+index 751d3c2..f781372 100644
+--- a/qapi-schema.json
++++ b/qapi-schema.json
+@@ -3505,3 +3505,29 @@
+     '*asl_compiler_rev':  'uint32',
+     '*file':              'str',
+     '*data':              'str' }}
++
++##
++# @ConfigSchemaInfo:
++#
++# Configration schema information.
++#
++# @option: option name
++#
++# @config-schema: configuration schema string of one option
++#
++# Since 1.5
++##
++{ 'type': 'ConfigSchemaInfo', 'data': {'option': 'str', 'config-schema': 'str'} }
++
++##
++# @query-config-schema
++#
++# Query configuration schema information of options
++#
++# @option: #optional option name
++#
++# Returns: @ConfigSchemaInfo list
++#
++# Since 1.5
++##
++{'command': 'query-config-schema', 'data': {'*option': 'str'}, 'returns': ['ConfigSchemaInfo']}
+diff --git a/qemu-options-wrapper.h b/qemu-options-wrapper.h
+index 13bfea0..6449268 100644
+--- a/qemu-options-wrapper.h
++++ b/qemu-options-wrapper.h
+@@ -18,6 +18,22 @@
+ 
+ #define DEFHEADING(text) ARCHHEADING(text, QEMU_ARCH_ALL)
+ 
++#elif defined(QEMU_OPTIONS_GENERATE_CONFIG)
++
++#define DEF(option, opt_arg, opt_enum, opt_help, arch_mask)    \
++    opt_help,
++
++#define DEFHEADING(text)
++#define ARCHHEADING(text, arch_mask)
++
++#elif defined(QEMU_OPTIONS_GENERATE_NAME)
++
++#define DEF(option, opt_arg, opt_enum, opt_help, arch_mask)    \
++    option,
++
++#define DEFHEADING(text)
++#define ARCHHEADING(text, arch_mask)
++
+ #elif defined(QEMU_OPTIONS_GENERATE_OPTIONS)
+ 
+ #define DEF(option, opt_arg, opt_enum, opt_help, arch_mask)     \
+diff --git a/qmp-commands.hx b/qmp-commands.hx
+index 4d65422..1bb691e 100644
+--- a/qmp-commands.hx
++++ b/qmp-commands.hx
+@@ -2414,7 +2414,39 @@ EQMP
+         .args_type  = "",
+         .mhandler.cmd_new = qmp_marshal_input_query_uuid,
+     },
++SQMP
++query-config-schema
++------------
++
++Show configuration schema.
++
++Return configuration schema of one option, if no option is assigned,
++will return configuration schema of all options.
++
++- "option": option name
++- "config-schema": configuration schema string of one option
++
++Example:
++-> {"execute": "query-config-schema", "arguments" : {"option": "boot"}}
++<- {"return": [
++     {"config-schema": "-boot [order=drives][,once=drives][,menu=on|off]\n
++        [,splash=sp_name][,splash-time=sp_time][,reboot-timeout=rb_time][,strict=on|off]\n
++	'drives': floppy (a), hard disk (c), CD-ROM (d), network (n)\n
++	'sp_name': the file's name that would be passed to bios as logo picture, if menu=on\n
++	'sp_time': the period that splash picture last if menu=on, unit is ms\n
++	'rb_timeout': the timeout before guest reboot when boot failed, unit is ms\n",
++      "option": "boot"
++     }
++    ]
++}
++
++EQMP
+ 
++    {
++        .name       = "query-config-schema",
++        .args_type  = "option:s?",
++        .mhandler.cmd_new = qmp_marshal_input_query_config_schema,
++    },
+ SQMP
+ query-migrate
+ -------------
+diff --git a/qmp.c b/qmp.c
+index ed6c7ef..a3f7cc9 100644
+--- a/qmp.c
++++ b/qmp.c
+@@ -24,6 +24,9 @@
+ #include "hw/qdev.h"
+ #include "sysemu/blockdev.h"
+ #include "qom/qom-qobject.h"
++#include "qemu-options.h"
++#include "net/net.h"
++#include "exec/gdbstub.h"
+ 
+ NameInfo *qmp_query_name(Error **errp)
+ {
+@@ -78,6 +81,39 @@ UuidInfo *qmp_query_uuid(Error **errp)
+     return info;
+ }
+ 
++ConfigSchemaInfoList *qmp_query_config_schema(bool has_option,
++                              const char *option, Error **errp)
++{
++    ConfigSchemaInfoList *conf_list = NULL, *entry;
++    ConfigSchemaInfo *info;
++
++    char const *optionstr[] = {
++#define QEMU_OPTIONS_GENERATE_NAME
++#include "qemu-options-wrapper.h"
++    };
++
++    char const *configstr[] = {
++#define QEMU_OPTIONS_GENERATE_CONFIG
++#include "qemu-options-wrapper.h"
++    };
++
++    int i;
++    for (i = 0; i < sizeof(optionstr) / sizeof(char *); i++) {
++        if (!has_option || !strcmp(option, optionstr[i])) {
++            info = g_malloc0(sizeof(*info));
++            info->option = g_strdup(option);
++            info->config_schema = g_strdup(configstr[i]);
++
++            entry = g_malloc0(sizeof(*entry));
++            entry->value = info;
++            entry->next = conf_list;
++            conf_list = entry;
++        }
++    }
++
++    return conf_list;
++}
++
+ void qmp_quit(Error **err)
+ {
+     no_shutdown = 0;
+-- 
+1.7.1
+

@@ -1,0 +1,67 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Peter Maydell <peter.maydell@linaro.org>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, Paolo Bonzini <pbonzini@redhat.com>,
+ Juan Quintela <quintela@redhat.com>, patches@linaro.org
+Date: Mon, 8 Apr 2013 15:43:47 +0100
+Message-id: 1365432230-20028-1-git-send-email-peter.maydell@linaro.org
+Subject: [PATCH 0/3] target-arm: convert to VMState, fix bugs
+
+This patch series converts target-arm to doing migration via
+a VMState structure, and fixes some minor bugs in migration
+of the CPU as well. The bulk of it is a patch Juan sent out
+back in the middle of last year
+ https://lists.gnu.org/archive/html/qemu-devel/2012-05/msg00550.html
+which I have rebased and messed about with somewhat:
+ * rebased and fixed conflicts
+ * updated to use cpu_class_set_vmsd()
+ * updated with new/removed fields since original patch
+ * corrected subsection names so vmload doesn't fail
+ * changed to use custom VMStateInfo for cpsr rather than
+   presave/postload hooks
+
+The last of these was the subject of some discussion when Juan
+posted the patch (see URL above for the thread). The fundamental
+problem that has to be solved is "how do you deal with cases
+where the representation in the in memory struct is not the
+same as the on the wire representation?":
+(a) Juan's original patch does "write wire format to random dummy
+    field in the struct and then clean things up in presave/postload
+    hooks".
+(b) My patch follows what Alpha, i386 and some devices do: define
+    a custom VMStateInfo which reads/writes the wire format and
+    does the conversion to/from the struct.
+(c) There was a mooted third approach of defining new vmstate macros
+    and functionality so you could specify conversion functions for
+    a field but leave actual reading and writing of the wire format
+    to the core savevm code.
+
+The argument against (b) was that it makes introducing a new
+migration wire format harder, but on the other hand it's a year
+later and nobody has, and we already have examples of this in
+tree so another user is no big deal. So it doesn't seem
+to me to merit the effort of actually implementing (c). I've
+gone for (b) because I think it's better than (a).
+
+Overall I think the whole series is an improvement over the
+separate save/load fields; I'd also like to get this changeover
+done before we start having to worry about freezing the ARM
+migration format.
+
+
+Juan Quintela (1):
+  target-arm: port ARM CPU save/load to use VMState
+
+Peter Maydell (2):
+  target-arm: Add some missing CPU state fields to VMState
+  target-arm: Correctly restore FPSCR
+
+ target-arm/cpu-qom.h |    4 +
+ target-arm/cpu.c     |    1 +
+ target-arm/cpu.h     |    2 -
+ target-arm/machine.c |  430 +++++++++++++++++++++++++-------------------------
+ 4 files changed, 221 insertions(+), 216 deletions(-)
+
+-- 
+1.7.9.5
+

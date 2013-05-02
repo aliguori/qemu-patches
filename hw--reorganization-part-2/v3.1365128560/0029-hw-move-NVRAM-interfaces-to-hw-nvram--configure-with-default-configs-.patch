@@ -1,0 +1,48 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: 
+Date: Thu,  4 Apr 2013 21:23:09 +0200
+Message-id: 1365103395-11547-30-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 29/35] hw: move NVRAM interfaces to hw/nvram/,
+ configure with default-configs/
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ hw/nvram/Makefile.objs       | 1 +
+ hw/{ => nvram}/spapr_nvram.c | 0
+ hw/ppc/Makefile.objs         | 5 -----
+ 3 files changed, 1 insertion(+), 5 deletions(-)
+ rename hw/{ => nvram}/spapr_nvram.c (100%)
+
+diff --git a/hw/nvram/Makefile.objs b/hw/nvram/Makefile.objs
+index 80fb1b0..e9a6694 100644
+--- a/hw/nvram/Makefile.objs
++++ b/hw/nvram/Makefile.objs
+@@ -2,3 +2,4 @@ common-obj-$(CONFIG_DS1225Y) += ds1225y.o
+ common-obj-y += eeprom93xx.o
+ common-obj-y += fw_cfg.o
+ common-obj-$(CONFIG_MAC_NVRAM) += mac_nvram.o
++obj-$(CONFIG_PSERIES) += spapr_nvram.o
+diff --git a/hw/spapr_nvram.c b/hw/nvram/spapr_nvram.c
+similarity index 100%
+rename from hw/spapr_nvram.c
+rename to hw/nvram/spapr_nvram.c
+diff --git a/hw/ppc/Makefile.objs b/hw/ppc/Makefile.objs
+index 280ed26..be00d1d 100644
+--- a/hw/ppc/Makefile.objs
++++ b/hw/ppc/Makefile.objs
+@@ -1,8 +1,3 @@
+-# IBM pSeries (sPAPR)
+-obj-$(CONFIG_PSERIES) += spapr_nvram.o
+-
+-obj-y := $(addprefix ../,$(obj-y))
+-
+ # shared objects
+ obj-y += ppc.o ppc_booke.o
+ # IBM pSeries (sPAPR)
+-- 
+1.8.1.4
+
+
+

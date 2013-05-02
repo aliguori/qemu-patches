@@ -1,0 +1,1 @@
+../make-audio-card-configuration-uniform/v1.1366328636/0007-audio-look-for-the-ISA-and-PCI-buses.patch

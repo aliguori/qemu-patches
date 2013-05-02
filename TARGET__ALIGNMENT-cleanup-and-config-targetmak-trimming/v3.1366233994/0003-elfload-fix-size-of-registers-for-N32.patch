@@ -1,0 +1,67 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: peter.maydell@linaro.org, edgar.iglesias@gmail.com
+Date: Wed, 17 Apr 2013 16:26:37 +0200
+Message-id: 1366208807-4433-4-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 03/13] elfload: fix size of registers for N32
+
+Registers are 64-bit in size for the MIPS n32 ABI.  Define
+target_elf_greg_t accordingly, and use the correct function
+to do endian swaps.
+
+Reviewed-by: Peter Maydell <peter.maydell@redhat.com>
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ linux-user/elfload.c | 21 ++++++++++++++-------
+ 1 file changed, 14 insertions(+), 7 deletions(-)
+
+diff --git a/linux-user/elfload.c b/linux-user/elfload.c
+index d3589ff..9d5dbb8 100644
+--- a/linux-user/elfload.c
++++ b/linux-user/elfload.c
+@@ -101,7 +101,14 @@ enum {
+ #define ELF_DATA        ELFDATA2LSB
+ #endif
+ 
++#ifdef TARGET_ABI_MIPSN32
+ typedef target_ulong    target_elf_greg_t;
++#define tswapreg(ptr)   tswapl(ptr)
++#else
++typedef abi_ulong       target_elf_greg_t;
++#define tswapreg(ptr)   tswapal(ptr)
++#endif
++
+ #ifdef USE_UID16
+ typedef target_ushort   target_uid_t;
+ typedef target_ushort   target_gid_t;
+@@ -747,17 +754,17 @@ static void elf_core_copy_regs(target_elf_gregset_t *regs, const CPUMIPSState *e
+     (*regs)[TARGET_EF_R0] = 0;
+ 
+     for (i = 1; i < ARRAY_SIZE(env->active_tc.gpr); i++) {
+-        (*regs)[TARGET_EF_R0 + i] = tswapl(env->active_tc.gpr[i]);
++        (*regs)[TARGET_EF_R0 + i] = tswapreg(env->active_tc.gpr[i]);
+     }
+ 
+     (*regs)[TARGET_EF_R26] = 0;
+     (*regs)[TARGET_EF_R27] = 0;
+-    (*regs)[TARGET_EF_LO] = tswapl(env->active_tc.LO[0]);
+-    (*regs)[TARGET_EF_HI] = tswapl(env->active_tc.HI[0]);
+-    (*regs)[TARGET_EF_CP0_EPC] = tswapl(env->active_tc.PC);
+-    (*regs)[TARGET_EF_CP0_BADVADDR] = tswapl(env->CP0_BadVAddr);
+-    (*regs)[TARGET_EF_CP0_STATUS] = tswapl(env->CP0_Status);
+-    (*regs)[TARGET_EF_CP0_CAUSE] = tswapl(env->CP0_Cause);
++    (*regs)[TARGET_EF_LO] = tswapreg(env->active_tc.LO[0]);
++    (*regs)[TARGET_EF_HI] = tswapreg(env->active_tc.HI[0]);
++    (*regs)[TARGET_EF_CP0_EPC] = tswapreg(env->active_tc.PC);
++    (*regs)[TARGET_EF_CP0_BADVADDR] = tswapreg(env->CP0_BadVAddr);
++    (*regs)[TARGET_EF_CP0_STATUS] = tswapreg(env->CP0_Status);
++    (*regs)[TARGET_EF_CP0_CAUSE] = tswapreg(env->CP0_Cause);
+ }
+ 
+ #define USE_ELF_CORE_DUMP
+-- 
+1.8.1.4
+
+
+

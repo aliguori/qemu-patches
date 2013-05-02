@@ -1,0 +1,7 @@
+0000-KVM-flash-memory-support.txt
+0001-kvm-add-kvm_readonly_mem_enabled.patch
+0002-kvm-support-using-KVM_MEM_READONLY-flag-for-readonly-regions.patch
+0003-kvm-workaround-a-possible-KVM-bug-when-using-KVM_MEM_READONLY.patch
+0004-pflash_cfi01-memory-region-should-be-set-to-enable-readonly-mode.patch
+0005-pc_sysfw-allow-flash--pflash-memory-to-be-used-with-KVM.patch
+0006-pc_sysfw-change-rom_only-default-to-0.patch

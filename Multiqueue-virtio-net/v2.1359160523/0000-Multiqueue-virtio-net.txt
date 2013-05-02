@@ -1,0 +1,258 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Jason Wang <jasowang@redhat.com>
+To: aliguori@us.ibm.com, mst@redhat.com, qemu-devel@nongnu.org,
+ Jason Wang <jasowang@redhat.com>, shajnocz@redhat.com,
+ gaowanlong@cn.fujitsu.com
+Cc: krkumar2@in.ibm.com, aliguori@us.ibm.com, kvm@vger.kernel.org,
+ mst@redhat.com, mprivozn@redhat.com, rusty@rustcorp.com.au,
+ qemu-devel@nongnu.org, Jason Wang <jasowang@redhat.com>, shajnocz@redhat.com,
+ gaowanlong@cn.fujitsu.com, Wanlong Gao <gaowanlong@cn.fujitsu.com>,
+ jwhan@filewood.snu.ac.kr, shiyer@redhat.com
+Date: Fri, 25 Jan 2013 18:35:23 +0800
+Message-id: 1359110143-42984-1-git-send-email-jasowang@redhat.com
+Subject: [PATCH 00/20] Multiqueue virtio-net
+
+Hello all:
+
+This seires is an update of last version of multiqueue virtio-net support.
+
+This series tries to brings multiqueue support to virtio-net through a
+multiqueue support tap backend and multiple vhost threads.
+
+To support this, multiqueue nic support were added to qemu. This is done by
+introducing an array of NetClientStates in NICState, and make each pair of peers
+to be an queue of the nic. This is done in patch 1-7.
+
+Tap were also converted to be able to create a multiple queue
+backend. Currently, only linux support this by issuing TUNSETIFF N times with
+the same device name to create N queues. Each fd returned by TUNSETIFF were a
+queue supported by kernel. Three new command lines were introduced, "queues"
+were used to tell how many queues will be created by qemu; "fds" were used to
+pass multiple pre-created tap file descriptors to qemu; "vhostfds" were used to
+pass multiple pre-created vhost descriptors to qemu. This is done in patch 8-13.
+
+A method of deleting a queue and queue_index were also introduce for virtio,
+this is done in patch 14-15.
+
+Vhost were also changed to support multiqueue by introducing a start vq index
+which tracks the first virtqueue that will be used by vhost instead of the
+assumption that the vhost always use virtqueue from index 0. This is done in
+patch 16.
+
+The last part is the multiqueue userspace changes, this is done in patch 17-20.
+
+With this changes, user could start a multiqueue virtio-net device through
+
+./qemu -netdev tap,id=hn0,queues=2,vhost=on -device virtio-net-pci,netdev=hn0
+
+Management tools such as libvirt can pass multiple pre-created fds/vhostfds through
+
+./qemu -netdev tap,id=hn0,fds=X:Y,vhostfds=M:N -device virtio-net-pci,netdev=hn0
+
+No git tree this round since github is unavailable in China...
+
+Changes from V1:
+- silent checkpatch (Blue)
+- use fds/vhostfds instead of fd/vhostfd (Stefan)
+- use fds="X:Y:Z" instead of fd=X,fd=Y,fd=Z (Anthony)
+- split patches (Stefan)
+- typos in commit log (Stefan)
+- Warn 'queues=' when fds/vhostfds is used (Stefan)
+- rename __net_init_tap to net_init_tap_one (Stefan)
+- check the consistency of vnet_hdr of multiple tap fds (Stefan)
+- disable multiqueue support for bridge-helper (Stefan)
+- rename tap_attach()/tap_detach() to tap_enable()/tap_disable() (Stefan)
+- fix booting with legacy guest (WanLong)
+- don't bump the version when doing migration (Michael)
+- simplify the interface between virtio-net and multiqueue vhost_net (Michael)
+- rebase the patches to latest
+- re-order the patches that let the net part comes first to simplify the
+  reviewing
+- simplify the interface between virtio-net and multiqueue vhost_net
+- move the guest notifiers setup from vhost to vhost_net
+- fix a build issue of hw/mcf_fce.c
+
+Changes from RFC v2:
+- rebase the codes to latest qemu
+- align the multiqueue virtio-net implementation to virtio spec
+- split the patches into more smaller patches
+- set_link and hotplug support
+
+Changes from RFC V1:
+- rebase to the latest
+- fix memory leak in parse_netdev
+- fix guest notifiers assignment/de-assignment
+- changes the command lines to:
+   qemu -netdev tap,queues=2 -device virtio-net-pci,queues=2
+
+Reference:
+V1: http://lists.nongnu.org/archive/html/qemu-devel/2012-12/msg03558.html
+RFC v2: http://lists.gnu.org/archive/html/qemu-devel/2012-06/msg04108.html
+RFC v1: http://comments.gmane.org/gmane.comp.emulators.qemu/100481
+
+Perf Numbers:
+- norm is short for normalize result
+- trans.rate is short for transaction rate
+
+Two Intel Xeon 5620 with direct connected intel 82599EB
+Host/Guest kernel: David net tree
+vhost enabled
+
+- lots of improvents of both latency and cpu utilization in request-reponse test
+- get regression of guest sending small packets which because TCP tends to batch
+  less when the latency were improved
+
+1q/2q/4q
+TCP_RR
+ size #sessions trans.rate  norm trans.rate  norm trans.rate  norm
+1 1     9393.26   595.64  9408.18   597.34  9375.19   584.12
+1 20    72162.1   2214.24 129880.22 2456.13 196949.81 2298.13
+1 50    107513.38 2653.99 139721.93 2490.58 259713.82 2873.57
+1 100   126734.63 2676.54 145553.5  2406.63 265252.68 2943
+64 1    9453.42   632.33  9371.37   616.13  9338.19   615.97
+64 20   70620.03  2093.68 125155.75 2409.15 191239.91 2253.32
+64 50   106966    2448.29 146518.67 2514.47 242134.07 2720.91
+64 100  117046.35 2394.56 190153.09 2696.82 238881.29 2704.41
+256 1   8733.29   736.36  8701.07   680.83  8608.92   530.1
+256 20  69279.89  2274.45 115103.07 2299.76 144555.16 1963.53
+256 50  97676.02  2296.09 150719.57 2522.92 254510.5  3028.44
+256 100 150221.55 2949.56 197569.3  2790.92 300695.78 3494.83
+TCP_CRR
+ size #sessions trans.rate  norm trans.rate  norm trans.rate  norm
+1 1     2848.37  163.41 2230.39  130.89 2013.09  120.47
+1 20    23434.5  562.11 31057.43 531.07 49488.28 564.41
+1 50    28514.88 582.17 40494.23 605.92 60113.35 654.97
+1 100   28827.22 584.73 48813.25 661.6  61783.62 676.56
+64 1    2780.08  159.4  2201.07  127.96 2006.8   117.63
+64 20   23318.51 564.47 30982.44 530.24 49734.95 566.13
+64 50   28585.72 582.54 40576.7  610.08 60167.89 656.56
+64 100  28747.37 584.17 49081.87 667.87 60612.94 662
+256 1   2772.08  160.51 2231.84  131.05 2003.62  113.45
+256 20  23086.35 559.8  30929.09 528.16 48454.9  555.22
+256 50  28354.7  579.85 40578.31 607    60261.71 657.87
+256 100 28844.55 585.67 48541.86 659.08 61941.07 676.72
+TCP_STREAM guest receiving
+ size #sessions throughput  norm throughput  norm throughput  norm
+1 1     16.27   1.33   16.1    1.12   16.13   0.99
+1 2     33.04   2.08   32.96   2.19   32.75   1.98
+1 4     66.62   6.83   68.3    5.56   66.14   2.65
+64 1    896.55  56.67  914.02  58.14  898.9   61.56
+64 2    1830.46 91.02  1812.02 64.59  1835.57 66.26
+64 4    3626.61 142.55 3636.25 100.64 3607.46 75.03
+256 1   2619.49 131.23 2543.19 129.03 2618.69 132.39
+256 2   5136.58 203.02 5163.31 141.11 5236.51 149.4
+256 4   7063.99 242.83 9365.4  208.49 9421.03 159.94
+512 1   3592.43 165.24 3603.12 167.19 3552.5  169.57
+512 2   7042.62 246.59 7068.46 180.87 7258.52 186.3
+512 4   6996.08 241.49 9298.34 206.12 9418.52 159.33
+1024 1  4339.54 192.95 4370.2  191.92 4211.72 192.49
+1024 2  7439.45 254.77 9403.99 215.24 9120.82 222.67
+1024 4  7953.86 272.11 9403.87 208.23 9366.98 159.49
+4096 1  7696.28 272.04 7611.41 270.38 7778.71 267.76
+4096 2  7530.35 261.1  8905.43 246.27 8990.18 267.57
+4096 4  7121.6  247.02 9411.75 206.71 9654.96 184.67
+16384 1 7795.73 268.54 7780.94 267.2  7634.26 260.73
+16384 2 7436.57 255.81 9381.86 220.85 9392    220.36
+16384 4 7199.07 247.81 9420.96 205.87 9373.69 159.57
+TCP_MAERTS guest sending
+ size #sessions throughput  norm throughput  norm throughput  norm
+1 1     15.94   0.62   15.55   0.61   15.13   0.59
+1 2     36.11   0.83   32.46   0.69   32.28   0.69
+1 4     71.59   1      68.91   0.94   61.52   0.77
+64 1    630.71  22.52  622.11  22.35  605.09  21.84
+64 2    1442.36 30.57  1292.15 25.82  1282.67 25.55
+64 4    3186.79 42.59  2844.96 36.03  2529.69 30.06
+256 1   1760.96 58.07  1738.44 57.43  1695.99 56.19
+256 2   4834.23 95.19  3524.85 64.21  3511.94 64.45
+256 4   9324.63 145.74 8956.49 116.39 6720.17 73.86
+512 1   2678.03 84.1   2630.68 82.93  2636.54 82.57
+512 2   9368.17 195.61 9408.82 204.53 5316.3  92.99
+512 4   9186.34 209.68 9358.72 183.82 9489.29 160.42
+1024 1  3620.71 109.88 3625.54 109.83 3606.61 112.35
+1024 2  9429    258.32 7082.79 120.55 7403.53 134.78
+1024 4  9430.66 290.44 9499.29 232.31 9414.6  190.92
+4096 1  9339.28 296.48 9374.23 372.88 9348.76 298.49
+4096 2  9410.53 378.69 9412.61 286.18 9409.75 278.31
+4096 4  9487.35 374.1  9556.91 288.81 9441.94 221.64
+16384 1 9380.43 403.8  9379.78 399.13 9382.42 393.55
+16384 2 9367.69 406.93 9415.04 312.68 9409.29 300.9
+16384 4 9391.96 405.17 9695.12 310.54 9423.76 223.47
+
+Jason Wang (20):
+  net: introduce qemu_get_queue()
+  net: introduce qemu_get_nic()
+  net: intorduce qemu_del_nic()
+  net: introduce qemu_find_net_clients_except()
+  net: introduce qemu_net_client_setup()
+  net: introduce NetClientState destructor
+  net: multiqueue support
+  tap: import linux multiqueue constants
+  tap: factor out common tap initialization
+  tap: add Linux multiqueue support
+  tap: support enabling or disabling a queue
+  tap: introduce a helper to get the name of an interface
+  tap: multiqueue support
+  vhost: multiqueue support
+  virtio: introduce virtio_del_queue()
+  virtio: add a queue_index to VirtQueue
+  virtio-net: separate virtqueue from VirtIONet
+  virtio-net: multiqueue support
+  virtio-net: migration support for multiqueue
+  virtio-net: compat multiqueue support
+
+ hw/cadence_gem.c            |   17 +-
+ hw/dp8393x.c                |   17 +-
+ hw/e1000.c                  |   32 ++--
+ hw/eepro100.c               |   18 +-
+ hw/etraxfs_eth.c            |   10 +-
+ hw/lan9118.c                |   16 +-
+ hw/lance.c                  |    2 +-
+ hw/mcf_fec.c                |   12 +-
+ hw/milkymist-minimac2.c     |   10 +-
+ hw/mipsnet.c                |   10 +-
+ hw/musicpal.c               |    6 +-
+ hw/ne2000-isa.c             |    4 +-
+ hw/ne2000.c                 |   13 +-
+ hw/opencores_eth.c          |   12 +-
+ hw/pc_piix.c                |    4 +
+ hw/pcnet-pci.c              |    4 +-
+ hw/pcnet.c                  |   13 +-
+ hw/qdev-properties-system.c |   46 ++++-
+ hw/qdev-properties.h        |    6 +-
+ hw/rtl8139.c                |   22 +-
+ hw/smc91c111.c              |   10 +-
+ hw/spapr_llan.c             |    8 +-
+ hw/stellaris_enet.c         |   11 +-
+ hw/usb/dev-network.c        |   16 +-
+ hw/vhost.c                  |   82 +++----
+ hw/vhost.h                  |    2 +
+ hw/vhost_net.c              |   92 +++++++-
+ hw/vhost_net.h              |    6 +-
+ hw/virtio-net.c             |  519 +++++++++++++++++++++++++++++++------------
+ hw/virtio-net.h             |   28 +++-
+ hw/virtio.c                 |   17 ++
+ hw/virtio.h                 |    3 +
+ hw/xen_nic.c                |   17 +-
+ hw/xgmac.c                  |   10 +-
+ hw/xilinx_axienet.c         |   10 +-
+ hw/xilinx_ethlite.c         |   10 +-
+ include/net/net.h           |   26 ++-
+ include/net/tap.h           |    2 +
+ net/net.c                   |  198 +++++++++++++----
+ net/tap-aix.c               |   19 ++-
+ net/tap-bsd.c               |   18 ++-
+ net/tap-haiku.c             |   18 ++-
+ net/tap-linux.c             |   67 ++++++-
+ net/tap-linux.h             |    4 +
+ net/tap-solaris.c           |   18 ++-
+ net/tap-win32.c             |   10 +
+ net/tap.c                   |  295 ++++++++++++++++++-------
+ net/tap_int.h               |    6 +-
+ qapi-schema.json            |    5 +-
+ savevm.c                    |    2 +-
+ 50 files changed, 1319 insertions(+), 484 deletions(-)
+
+--
+To unsubscribe from this list: send the line "unsubscribe kvm" in
+the body of a message to majordomo@vger.kernel.org
+More majordomo info at  http://vger.kernel.org/majordomo-info.html

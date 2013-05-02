@@ -1,0 +1,68 @@
+From patches Mon Sep 17 00:00:00 2001
+From: =?utf-8?q?Andreas_F=C3=A4rber_=3Cafaerber=40suse=2Ede=3E?=
+To: qemu-devel@nongnu.org
+Cc: Igor Mammedov <imammedo@redhat.com>,
+ =?UTF-8?q?Andreas=20F=C3=A4rber?= <afaerber@suse.de>
+Date: Thu,  2 May 2013 15:35:31 +0200
+Message-id: 1367501755-32272-6-git-send-email-afaerber@suse.de
+Subject: [PATCH 05/29] cpu: Introduce CPU hot-plug notifier
+
+From: Igor Mammedov <imammedo@redhat.com>
+
+Hot-add CPU event will be distributed to acpi_piix4 and rtc_cmos.
+
+Signed-off-by: Igor Mammedov <imammedo@redhat.com>
+Signed-off-by: Andreas Färber <afaerber@suse.de>
+---
+ include/sysemu/sysemu.h |  3 +++
+ qom/cpu.c               | 12 ++++++++++++
+ 2 files changed, 15 insertions(+)
+
+diff --git a/include/sysemu/sysemu.h b/include/sysemu/sysemu.h
+index 010e412..2fb71af 100644
+--- a/include/sysemu/sysemu.h
++++ b/include/sysemu/sysemu.h
+@@ -153,6 +153,9 @@ void do_pci_device_hot_remove(Monitor *mon, const QDict *qdict);
+ /* generic hotplug */
+ void drive_hot_add(Monitor *mon, const QDict *qdict);
+ 
++/* CPU hotplug */
++void qemu_register_cpu_added_notifier(Notifier *notifier);
++
+ /* pcie aer error injection */
+ void pcie_aer_inject_error_print(Monitor *mon, const QObject *data);
+ int do_pcie_aer_inject_error(Monitor *mon,
+diff --git a/qom/cpu.c b/qom/cpu.c
+index b91213e..34fa805 100644
+--- a/qom/cpu.c
++++ b/qom/cpu.c
+@@ -21,6 +21,17 @@
+ #include "qom/cpu.h"
+ #include "qemu-common.h"
+ #include "sysemu/kvm.h"
++#include "qemu/notify.h"
++#include "sysemu/sysemu.h"
++
++/* CPU hot-plug notifiers */
++static NotifierList cpu_added_notifiers =
++    NOTIFIER_LIST_INITIALIZER(cpu_add_notifiers);
++
++void qemu_register_cpu_added_notifier(Notifier *notifier)
++{
++    notifier_list_add(&cpu_added_notifiers, notifier);
++}
+ 
+ void cpu_reset_interrupt(CPUState *cpu, int mask)
+ {
+@@ -62,6 +73,7 @@ static void cpu_common_realizefn(DeviceState *dev, Error **errp)
+ 
+     if (dev->hotplugged) {
+         cpu_synchronize_post_init(cpu);
++        notifier_list_notify(&cpu_added_notifiers, dev);
+         cpu_resume(cpu);
+     }
+ }
+-- 
+1.8.1.4
+
+

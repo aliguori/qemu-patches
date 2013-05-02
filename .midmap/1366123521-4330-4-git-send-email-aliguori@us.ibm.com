@@ -1,0 +1,1 @@
+../qtest-add-libqos/v1.1366123514/0003-libqos-add-fw_cfg-support.patch

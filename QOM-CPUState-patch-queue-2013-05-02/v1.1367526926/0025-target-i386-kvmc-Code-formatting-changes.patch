@@ -1,0 +1,45 @@
+From patches Mon Sep 17 00:00:00 2001
+From: =?utf-8?q?Andreas_F=C3=A4rber_=3Cafaerber=40suse=2Ede=3E?=
+To: qemu-devel@nongnu.org
+Cc: Marcelo Tosatti <mtosatti@redhat.com>,
+ Eduardo Habkost <ehabkost@redhat.com>, "open list:X86" <kvm@vger.kernel.org>,
+ =?UTF-8?q?Andreas=20F=C3=A4rber?= <afaerber@suse.de>,
+ Gleb Natapov <gleb@redhat.com>
+Date: Thu,  2 May 2013 15:35:51 +0200
+Message-id: 1367501755-32272-26-git-send-email-afaerber@suse.de
+Subject: [PATCH 25/29] target-i386/kvm.c: Code formatting changes
+
+From: Eduardo Habkost <ehabkost@redhat.com>
+
+Add appropriate spaces around operators, and break line where it needs
+to be broken to allow feature-words array to be introduced without
+having too-long lines.
+
+Signed-off-by: Eduardo Habkost <ehabkost@redhat.com>
+Reviewed-by: Igor Mammedov <imammedo@redhat.com>
+Signed-off-by: Andreas Färber <afaerber@suse.de>
+---
+ target-i386/kvm.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/target-i386/kvm.c b/target-i386/kvm.c
+index 0e7cc81..03d3059 100644
+--- a/target-i386/kvm.c
++++ b/target-i386/kvm.c
+@@ -613,7 +613,8 @@ int kvm_arch_init_vcpu(CPUState *cs)
+     cpuid_data.cpuid.nent = cpuid_i;
+ 
+     if (((env->cpuid_version >> 8)&0xF) >= 6
+-        && (env->cpuid_features&(CPUID_MCE|CPUID_MCA)) == (CPUID_MCE|CPUID_MCA)
++        && (env->cpuid_features & (CPUID_MCE | CPUID_MCA)) ==
++           (CPUID_MCE | CPUID_MCA)
+         && kvm_check_extension(cs->kvm_state, KVM_CAP_MCE) > 0) {
+         uint64_t mcg_cap;
+         int banks;
+-- 
+1.8.1.4
+
+--
+To unsubscribe from this list: send the line "unsubscribe kvm" in
+the body of a message to majordomo@vger.kernel.org
+More majordomo info at  http://vger.kernel.org/majordomo-info.html

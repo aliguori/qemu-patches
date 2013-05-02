@@ -1,0 +1,36 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Kevin Wolf <kwolf@redhat.com>
+To: Paolo Bonzini <pbonzini@redhat.com>, Stefan Hajnoczi <stefanha@gmail.com>,
+ Kevin Wolf <kwolf@redhat.com>, qemu-devel@nongnu.org
+Cc: kwolf@redhat.com, Stefan Hajnoczi <stefanha@gmail.com>,
+ Kevin Wolf <kwolf@redhat.com>, qemu-devel@nongnu.org, stefanha@redhat.com,
+ pbonzini@redhat.com
+Date: Fri,  5 Apr 2013 21:27:52 +0200
+Message-id: 1365190076-20268-1-git-send-email-kwolf@redhat.com
+Subject: [PATCH 0/4] block: Vectored bdrv_writev_vmstate
+
+This gives us back reasonable savevm performance, which regressed in
+commit 500f0061.
+
+Kevin Wolf (4):
+  block: Introduce bdrv_writev_vmstate
+  savevm: Implement block_writev_buffer()
+  block: Introduce bdrv_pwritev() for qcow2_save_vmstate
+  qemu-iotests: A few more bdrv_pread/pwrite tests
+
+ block.c                       | 105 +++++++++++++++++++++++++++++++-----------
+ block/qcow2.c                 |   6 +--
+ block/sheepdog.c              |  13 ++++--
+ include/block/block.h         |   3 ++
+ include/block/block_int.h     |   4 +-
+ include/migration/qemu-file.h |   2 +-
+ savevm.c                      |  25 ++++++++--
+ tests/qemu-iotests/002        |  13 ++++++
+ tests/qemu-iotests/002.out    |  26 +++++++++++
+ 9 files changed, 157 insertions(+), 40 deletions(-)
+
+Reviewed-by: Stefan Hajnoczi <stefanha@redhat.com>
+-- 
+1.8.1.4
+
+

@@ -1,0 +1,52 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Richard Henderson <rth@twiddle.net>
+To: qemu-devel@nongnu.org
+Cc: av1474@comtv.ru, aurelien@aurel32.net
+Date: Mon, 15 Apr 2013 20:40:45 +0200
+Message-id: 1366051272-12979-7-git-send-email-rth@twiddle.net
+Subject: [PATCH 06/33] tcg-ppc64: Introduce and use tcg_out_shri64
+
+Reviewed-by: Aurelien Jarno <aurelien@aurel32.net>
+Signed-off-by: Richard Henderson <rth@twiddle.net>
+---
+ tcg/ppc64/tcg-target.c | 9 +++++++--
+ 1 file changed, 7 insertions(+), 2 deletions(-)
+
+diff --git a/tcg/ppc64/tcg-target.c b/tcg/ppc64/tcg-target.c
+index 9199ac4..82e1da7 100644
+--- a/tcg/ppc64/tcg-target.c
++++ b/tcg/ppc64/tcg-target.c
+@@ -461,6 +461,11 @@ static inline void tcg_out_shli64(TCGContext *s, TCGReg dst, TCGReg src, int c)
+     tcg_out_rld(s, RLDICR, dst, src, c, 63 - c);
+ }
+ 
++static inline void tcg_out_shri64(TCGContext *s, TCGReg dst, TCGReg src, int c)
++{
++    tcg_out_rld(s, RLDICL, dst, src, 64 - c, c);
++}
++
+ static void tcg_out_movi32(TCGContext *s, TCGReg ret, int32_t arg)
+ {
+     if (arg == (int16_t) arg)
+@@ -864,7 +869,7 @@ static void tcg_out_qemu_st (TCGContext *s, const TCGArg *args, int opc)
+         if (bswap) {
+             tcg_out32 (s, STWBRX | SAB (data_reg, rbase, r0));
+             tcg_out32 (s, ADDI | RT (r1) | RA (r0) | 4);
+-            tcg_out_rld (s, RLDICL, 0, data_reg, 32, 0);
++            tcg_out_shri64(s, 0, data_reg, 32);
+             tcg_out32 (s, STWBRX | SAB (0, rbase, r1));
+         }
+         else tcg_out32 (s, STDX | SAB (data_reg, rbase, r0));
+@@ -1455,7 +1460,7 @@ static void tcg_out_op (TCGContext *s, TCGOpcode opc, const TCGArg *args,
+         break;
+     case INDEX_op_shr_i64:
+         if (const_args[2])
+-            tcg_out_rld (s, RLDICL, args[0], args[1], 64 - args[2], args[2]);
++            tcg_out_shri64(s, args[0], args[1], args[2]);
+         else
+             tcg_out32 (s, SRD | SAB (args[1], args[0], args[2]));
+         break;
+-- 
+1.8.1.4
+
+

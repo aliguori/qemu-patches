@@ -1,0 +1,1 @@
+../QMP-queue/v1.1365171127/0003-hmp-human-monitor-command-stop-using-the-Memory-chardev-driver.patch

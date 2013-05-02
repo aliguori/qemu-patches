@@ -1,0 +1,47 @@
+From patches Mon Sep 17 00:00:00 2001
+From: John Rigby <john.rigby@linaro.org>
+To: qemu-devel <qemu-devel@nongnu.org>
+Cc: Riku Voipio <riku.voipio@iki.org>, Peter Maydell <peter.maydell@linaro.org>,
+ Alexander Graf <agraf@suse.de>
+Date: Tue, 30 Apr 2013 00:37:53 -0600
+Message-id: 1367303873-9702-1-git-send-email-john.rigby@linaro.org
+Subject: [PATCH 06/12] linux-user: AArch64 requires at least 3.8.0
+
+From: Alexander Graf <agraf@suse.de>
+
+Glibc 1.17 checks for the host kernel version on startup. Unfortunately,
+it also checks whether the host kernel version is recent enough for the
+target to run at all.
+
+Since AArch64 support only got introduced in 3.8.0, that means that glibc
+refuses to run on any older kernel version than that.
+
+To allow for execution of linux-user guests even on older host kernels,
+let's always fake the kernel version to 3.8.0 on AArch64 guests.
+
+Signed-off-by: Alexander Graf <agraf@suse.de>
+---
+ linux-user/syscall.c |    5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/linux-user/syscall.c b/linux-user/syscall.c
+index 30e93bc..1c23314 100644
+--- a/linux-user/syscall.c
++++ b/linux-user/syscall.c
+@@ -316,7 +316,12 @@ static int sys_uname(struct new_utsname *buf)
+   memset(buf, 0, sizeof(*buf));
+   COPY_UTSNAME_FIELD(buf->sysname, uts_buf.sysname);
+   COPY_UTSNAME_FIELD(buf->nodename, uts_buf.nodename);
++#ifdef TARGET_AARCH64
++  /* glibc refuses to run on older kernels */
++  COPY_UTSNAME_FIELD(buf->release, "3.8.0");
++#else
+   COPY_UTSNAME_FIELD(buf->release, uts_buf.release);
++#endif
+   COPY_UTSNAME_FIELD(buf->version, uts_buf.version);
+   COPY_UTSNAME_FIELD(buf->machine, uts_buf.machine);
+ #ifdef _GNU_SOURCE
+-- 
+1.7.9.5
+
+

@@ -1,0 +1,189 @@
+From patches Mon Sep 17 00:00:00 2001
+From: minyard@acm.org
+To: qemu-devel@nongnu.org
+Cc: Corey Minyard <cminyard@mvista.com>
+Date: Tue, 18 Sep 2012 15:00:30 -0500
+Message-id: 1347998443-20599-4-git-send-email-minyard@acm.org
+Subject: [PATCH 03/16] qemu-char: Allow a chardev to reconnect if disconnected
+
+From: Corey Minyard <cminyard@mvista.com>
+
+Allow a socket that connects to reconnect on a periodic basis if it
+fails to connect at startup or if the connection drops while in use.
+
+Signed-off-by: Corey Minyard <cminyard@mvista.com>
+---
+ qemu-char.c     |   62 ++++++++++++++++++++++++++++++++++++++++++++++++++----
+ qemu-char.h     |    4 +++
+ qemu-config.c   |    3 ++
+ qemu-options.hx |   11 +++++++--
+ 4 files changed, 72 insertions(+), 8 deletions(-)
+
+diff --git a/qemu-char.c b/qemu-char.c
+index 1409d67..f6a671b 100644
+--- a/qemu-char.c
++++ b/qemu-char.c
+@@ -111,9 +111,17 @@ void qemu_chr_be_event(CharDriverState *s, int event)
+     /* Keep track if the char device is open */
+     switch (event) {
+         case CHR_EVENT_OPENED:
++            if (s->recon_timer) {
++                qemu_del_timer(s->recon_timer);
++            }
+             s->opened = 1;
+             break;
+         case CHR_EVENT_CLOSED:
++            if (s->recon_timer) {
++                qemu_mod_timer(s->recon_timer,
++                               (qemu_get_clock_ns(vm_clock) +
++                                (s->recon_time * 1000000000ULL)));
++            }
+             s->opened = 0;
+             break;
+     }
+@@ -2737,6 +2745,20 @@ static const struct {
+ #endif
+ };
+ 
++static void recon_timeout(void *opaque)
++{
++    CharDriverState *chr = opaque;
++
++    if (chr->opened) {
++        return;
++    }
++
++    qemu_mod_timer(chr->recon_timer,
++                   (qemu_get_clock_ns(vm_clock) +
++                    (chr->recon_time * 1000000000ULL)));
++    backend_table[chr->backend].open(chr, chr->opts);
++}
++
+ CharDriverState *qemu_chr_new_from_opts(QemuOpts *opts,
+                                     void (*init)(struct CharDriverState *s))
+ {
+@@ -2764,11 +2786,37 @@ CharDriverState *qemu_chr_new_from_opts(QemuOpts *opts,
+     }
+ 
+     chr = g_malloc0(sizeof(CharDriverState));
++
++    chr->backend = i;
++    chr->recon_time = qemu_opt_get_number(opts, "reconnect", 0);
++    if (chr->recon_time) {
++        if (strcmp(qemu_opt_get(opts, "backend"), "socket") != 0) {
++            g_free(chr);
++            fprintf(stderr, "chardev: reconnect only supported on sockets\n");
++            return NULL;
++        }
++        if (qemu_opt_get_bool(opts, "server", 0)) {
++            g_free(chr);
++            fprintf(stderr, "chardev: server device cannot reconnect\n");
++            return NULL;
++        }
++        chr->opts = opts;
++        chr->recon_timer = qemu_new_timer_ns(vm_clock, recon_timeout, chr);
++
++        /* Make sure it connects in time. */
++        qemu_mod_timer(chr->recon_timer,
++                       (qemu_get_clock_ns(vm_clock) +
++                        (chr->recon_time * 1000000000ULL)));
++    }
++
+     if (!backend_table[i].open(chr, opts)) {
+-        g_free(chr);
+-        fprintf(stderr, "chardev: opening backend \"%s\" failed\n",
+-                qemu_opt_get(opts, "backend"));
+-        return NULL;
++        if (!chr->recon_time) {
++            /* Reconnect is not enabled, give up */
++            g_free(chr);
++            fprintf(stderr, "chardev: opening backend \"%s\" failed\n",
++                    qemu_opt_get(opts, "backend"));
++            return NULL;
++        }
+     }
+ 
+     if (!chr->filename)
+@@ -2838,8 +2886,12 @@ void qemu_chr_fe_close(struct CharDriverState *chr)
+ void qemu_chr_delete(CharDriverState *chr)
+ {
+     QTAILQ_REMOVE(&chardevs, chr, next);
+-    if (chr->chr_close)
++    if (chr->chr_close) {
+         chr->chr_close(chr);
++    }
++    if (chr->recon_timer) {
++        qemu_free_timer(chr->recon_timer);
++    }
+     g_free(chr->filename);
+     g_free(chr->label);
+     g_free(chr);
+diff --git a/qemu-char.h b/qemu-char.h
+index 486644b..d21ae39 100644
+--- a/qemu-char.h
++++ b/qemu-char.h
+@@ -75,6 +75,10 @@ struct CharDriverState {
+     int opened;
+     int avail_connections;
+     QTAILQ_ENTRY(CharDriverState) next;
++    int backend;
++    QemuOpts *opts;
++    QEMUTimer *recon_timer;
++    uint64_t recon_time;
+ };
+ 
+ /**
+diff --git a/qemu-config.c b/qemu-config.c
+index eba977e..63fa2ba 100644
+--- a/qemu-config.c
++++ b/qemu-config.c
+@@ -205,6 +205,9 @@ static QemuOptsList qemu_chardev_opts = {
+             .name = "mux",
+             .type = QEMU_OPT_BOOL,
+         },{
++            .name = "reconnect",
++            .type = QEMU_OPT_NUMBER,
++        },{
+             .name = "signal",
+             .type = QEMU_OPT_BOOL,
+         },{
+diff --git a/qemu-options.hx b/qemu-options.hx
+index 804a2d1..d60af6a 100644
+--- a/qemu-options.hx
++++ b/qemu-options.hx
+@@ -1659,8 +1659,9 @@ DEFHEADING(Character device options:)
+ DEF("chardev", HAS_ARG, QEMU_OPTION_chardev,
+     "-chardev null,id=id[,mux=on|off]\n"
+     "-chardev socket,id=id[,host=host],port=host[,to=to][,ipv4][,ipv6][,nodelay]\n"
+-    "         [,server][,nowait][,telnet][,mux=on|off] (tcp)\n"
+-    "-chardev socket,id=id,path=path[,server][,nowait][,telnet],[mux=on|off] (unix)\n"
++    "         [,server][,nowait][,telnet][,mux=on|off][,reconnect=seconds] (tcp)\n"
++    "-chardev socket,id=id,path=path[,server][,nowait][,telnet][,mux=on|off]\n"
++    "         [,reconnect=seconds] (unix)\n"
+     "-chardev udp,id=id[,host=host],port=port[,localaddr=localaddr]\n"
+     "         [,localport=localport][,ipv4][,ipv6][,mux=on|off]\n"
+     "-chardev msmouse,id=id[,mux=on|off]\n"
+@@ -1729,7 +1730,7 @@ Options to each backend are described below.
+ A void device. This device will not emit any data, and will drop any data it
+ receives. The null backend does not take any options.
+ 
+-@item -chardev socket ,id=@var{id} [@var{TCP options} or @var{unix options}] [,server] [,nowait] [,telnet]
++@item -chardev socket ,id=@var{id} [@var{TCP options} or @var{unix options}] [,server] [,nowait] [,telnet] [,reconnect=@var{seconds}]
+ 
+ Create a two-way stream socket, which can be either a TCP or a unix socket. A
+ unix socket will be created if @option{path} is specified. Behaviour is
+@@ -1743,6 +1744,10 @@ connect to a listening socket.
+ @option{telnet} specifies that traffic on the socket should interpret telnet
+ escape sequences.
+ 
++@option{reconnect} specifies that if the socket does not come up at startup,
++or if the socket is closed for some reason (like the other end exited),
++wait the given number of seconds and attempt to reconnect.
++
+ TCP and unix socket options are given below:
+ 
+ @table @option
+-- 
+1.7.4.1
+
+

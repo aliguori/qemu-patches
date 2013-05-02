@@ -1,0 +1,48 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Liu Ping Fan <qemulist@gmail.com>
+To: Liu Ping Fan <qemulist@gmail.com>, Stefan Hajnoczi <stefanha@gmail.com>,
+ qemu-devel@nongnu.org
+Cc: Paolo Bonzini <pbonzini@redhat.com>,
+ Anthony Liguori <anthony@codemonkey.ws>, qemu-devel@nongnu.org,
+ mdroth <mdroth@linux.vnet.ibm.com>, Jan Kiszka <jan.kiszka@siemens.com>,
+ Stefan Hajnoczi <stefanha@redhat.com>
+Date: Wed, 17 Apr 2013 16:39:13 +0800
+Message-id: 1366187964-14265-5-git-send-email-qemulist@gmail.com
+Subject: [PATCH 04/15] net: resolve race of tap backend and its peer
+
+From: Liu Ping Fan <pingfank@linux.vnet.ibm.com>
+
+When vhost net enabled, we should be sure that the user space
+fd handler is not in flight
+
+Signed-off-by: Liu Ping Fan <pingfank@linux.vnet.ibm.com>
+---
+ net/tap.c |    5 +++++
+ 1 files changed, 5 insertions(+), 0 deletions(-)
+
+diff --git a/net/tap.c b/net/tap.c
+index 35cbb6e..b5629e3 100644
+--- a/net/tap.c
++++ b/net/tap.c
+@@ -41,6 +41,7 @@
+ #include "qemu/error-report.h"
+ 
+ #include "net/tap.h"
++#include "util/event_gsource.h"
+ 
+ #include "hw/vhost_net.h"
+ 
+@@ -327,6 +328,10 @@ static void tap_poll(NetClientState *nc, bool enable)
+     tap_read_poll(s, enable);
+     tap_write_poll(s, enable);
+ 
++    if (!enable) {
++        /* need sync so vhost can take over polling */
++        g_source_remove_poll(&s->nsrc->source, &s->nsrc->gfd);
++    }
+ }
+ 
+ int tap_get_fd(NetClientState *nc)
+-- 
+1.7.4.4
+

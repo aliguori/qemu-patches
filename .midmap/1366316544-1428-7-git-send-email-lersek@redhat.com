@@ -1,0 +1,1 @@
+../publish-etc-acpi-APIC-in-fw_cfg/v4.1366341737/0006-hw-i386-pcc-move-IO_APIC_DEFAULT_ADDRESS-to-include-hw-i386-apich.patch

@@ -1,0 +1,40 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: Paolo Bonzini <pbonzini@redhat.com>, qemu-devel@nongnu.org
+Cc: amit.shah@redhat.com, Anthony Liguori <aliguori@us.ibm.com>,
+ aliguori@us.ibm.com, kraxel@redhat.com
+Date: Fri, 19 Apr 2013 17:32:05 +0200
+Message-id: 1366385529-10329-1-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 0/4] another round of qemu-char fixes
+
+These three patches fix the bugs that Gerd reported.
+
+The first patches try to make the code consistent (which should avoid
+that half of the drivers bark with CRITICAL messages from glib) and
+also fix detection of pty connections so that they do not go berserk
+with polling.  This is likely the same failure reported by Michael Hines,
+but I couldn't reproduce it with "-serial pty", only with the monitor.
+
+The last patch works around a glib bug that happens on RHEL6 and Wheezy,
+where destroying a source from a finalize callback can deadlock the
+GMainLoop.  This bug locks up QEMU when a socket chardev's client
+disconnects.
+
+I tested the pty fix on F18 and Gerd tested it on RHEL6.  I tested
+the socket fix on RHEL6.
+
+I believe these patches let us revert commit 893986f (main-loop: drop
+the BQL if the I/O appears to be spinning, 2013-04-05).
+
+Paolo
+
+
+Paolo Bonzini (4):
+  qemu-char: use consistent idiom for removing sources
+  qemu-char: simplify pty polling
+  qemu-char: correct return value from chr_read functions
+  qemu-char: do not operate on sources from finalize callbacks
+
+ qemu-char.c |  134 ++++++++++++++++++++++++++++++++++++++--------------------
+ 1 files changed, 88 insertions(+), 46 deletions(-)
+

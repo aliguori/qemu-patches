@@ -1,0 +1,1 @@
+../Add-pvpanic-device-to-deal-with-guest-panic-event/v18.1365611629/0002-add-a-new-qevent-QEVENT_GUEST_PANICKED.patch

@@ -1,0 +1,75 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Jason Wang <jasowang@redhat.com>
+To: aliguori@us.ibm.com, shajnocz@redhat.com, qemu-devel@nongnu.org,
+ mst@redhat.com
+Cc: krkumar2@in.ibm.com, kvm@vger.kernel.org, mprivozn@redhat.com,
+ rusty@rustcorp.com.au, Jason Wang <jasowang@redhat.com>,
+ gaowanlong@cn.fujitsu.com, jwhan@filewood.snu.ac.kr, shiyer@redhat.com
+Date: Fri, 25 Jan 2013 18:35:28 +0800
+Message-id: 1359110143-42984-6-git-send-email-jasowang@redhat.com
+Subject: [PATCH 05/20] net: introduce qemu_net_client_setup()
+
+This patch separates the setup of NetClientState from its allocation, this will
+allow allocating an arrays of NetClientState and does the initialization one by
+one which is what multiqueue needs.
+
+Signed-off-by: Jason Wang <jasowang@redhat.com>
+---
+ net/net.c |   29 +++++++++++++++++++----------
+ 1 files changed, 19 insertions(+), 10 deletions(-)
+
+diff --git a/net/net.c b/net/net.c
+index 6457fc0..4e84d54 100644
+--- a/net/net.c
++++ b/net/net.c
+@@ -182,17 +182,12 @@ static char *assign_name(NetClientState *nc1, const char *model)
+     return g_strdup(buf);
+ }
+ 
+-NetClientState *qemu_new_net_client(NetClientInfo *info,
+-                                    NetClientState *peer,
+-                                    const char *model,
+-                                    const char *name)
++static void qemu_net_client_setup(NetClientState *nc,
++                                  NetClientInfo *info,
++                                  NetClientState *peer,
++                                  const char *model,
++                                  const char *name)
+ {
+-    NetClientState *nc;
+-
+-    assert(info->size >= sizeof(NetClientState));
+-
+-    nc = g_malloc0(info->size);
+-
+     nc->info = info;
+     nc->model = g_strdup(model);
+     if (name) {
+@@ -210,6 +205,20 @@ NetClientState *qemu_new_net_client(NetClientInfo *info,
+ 
+     nc->send_queue = qemu_new_net_queue(nc);
+ 
++}
++
++NetClientState *qemu_new_net_client(NetClientInfo *info,
++                                    NetClientState *peer,
++                                    const char *model,
++                                    const char *name)
++{
++    NetClientState *nc;
++
++    assert(info->size >= sizeof(NetClientState));
++
++    nc = g_malloc0(info->size);
++    qemu_net_client_setup(nc, info, peer, model, name);
++
+     return nc;
+ }
+ 
+-- 
+1.7.1
+
+--
+To unsubscribe from this list: send the line "unsubscribe kvm" in
+the body of a message to majordomo@vger.kernel.org
+More majordomo info at  http://vger.kernel.org/majordomo-info.html

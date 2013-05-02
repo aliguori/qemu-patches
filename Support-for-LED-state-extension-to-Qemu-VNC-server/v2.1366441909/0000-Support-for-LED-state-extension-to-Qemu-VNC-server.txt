@@ -1,0 +1,34 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Lei Li <lilei@linux.vnet.ibm.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, lagarcia@br.ibm.com,
+ Lei Li <lilei@linux.vnet.ibm.com>
+Date: Sat, 20 Apr 2013 02:11:49 +0800
+Message-id: 1366395112-31581-1-git-send-email-lilei@linux.vnet.ibm.com
+Subject: [PATCH 0/3] Support for LED state extension to Qemu VNC server
+
+Hi guys,
+
+This patch series tries to add support for LED state
+extension to Qemu VNC server. The proposal has been sent
+few days ago as link below:
+
+http://lists.gnu.org/archive/html/qemu-devel/2013-04/msg01421.html
+
+Hi Anthony,
+
+This series has not been completely tested, it takes longer than
+expected for that I found that it needs to add hack on gtk-vnc 
+not just gvncfb, so still mark it as RFC. Send it out first to make
+sure I understood your previous suggestions correctly. Please let
+me know if this seems like the direction we should be headed.
+
+Your suggestions and comments are very appreciated!
+
+Thanks
+
+Changes since v1:
+  - Address the comments from Anthony includes:
+    - Use Pseudo-encoding for led state;
+    - Get rid of send_ext_leds_state_ack;
+    - Add document for the led state Pseudo-encoding.

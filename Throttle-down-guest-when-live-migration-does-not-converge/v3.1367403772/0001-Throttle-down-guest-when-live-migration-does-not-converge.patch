@@ -1,0 +1,417 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Chegu Vinod <chegu_vinod@hp.com>
+To: Paolo Bonzini <pbonzini@redhat.com>, Chegu Vinod <chegu_vinod@hp.com>,
+ quintela@redhat.com, qemu-devel@nongnu.org, Eric Blake <eblake@redhat.com>,
+ owasserm@redhat.com, anthony@codemonkey.ws, pbonzini@redhat.com,
+ eblake@redhat.com
+Cc: quintela@redhat.com, qemu-devel@nongnu.org,
+ Chegu Vinod <chegu_vinod@hp.com>, owasserm@redhat.com,
+ Eric Blake <eblake@redhat.com>, anthony@codemonkey.ws, pbonzini@redhat.com
+Date: Wed,  1 May 2013 05:22:52 -0700
+Message-id: 1367410972-22972-1-git-send-email-chegu_vinod@hp.com
+Subject: [PATCH 1/1] Throttle-down guest when live migration does not converge.
+
+Busy enterprise workloads hosted on large sized VM's tend to dirty
+memory faster than the transfer rate achieved via live guest migration.
+Despite some good recent improvements (& using dedicated 10Gig NICs
+between hosts) the live migration does NOT converge.
+
+If a user chooses to force convergence of their migration via a new
+migration capability "auto-converge" then this change will auto-detect
+lack of convergence scenario and trigger a slow down of the workload
+by explicitly disallowing the VCPUs from spending much time in the VM
+context.
+
+The migration thread tries to catchup and this eventually leads
+to convergence in some "deterministic" amount of time. Yes it does
+impact the performance of all the VCPUs but in my observation that
+lasts only for a short duration of time. i.e. we end up entering
+stage 3 (downtime phase) soon after that. No external trigger is
+required.
+
+Thanks to Juan and Paolo for their useful suggestions.
+
+Verified the convergence using the following :
+- SpecJbb2005 workload running on a 20VCPU/256G guest(~80% busy)
+- OLTP like workload running on a 80VCPU/512G guest (~80% busy)
+
+Sample results with SpecJbb2005 workload : (migrate speed set to 20Gb and
+migrate downtime set to 4seconds).
+
+(qemu) info migrate
+capabilities: xbzrle: off auto-converge: off  <----
+Migration status: active
+total time: 1487503 milliseconds
+expected downtime: 519 milliseconds
+transferred ram: 383749347 kbytes
+remaining ram: 2753372 kbytes
+total ram: 268444224 kbytes
+duplicate: 65461532 pages
+skipped: 64901568 pages
+normal: 95750218 pages
+normal bytes: 383000872 kbytes
+dirty pages rate: 67551 pages
+
+---
+
+(qemu) info migrate
+capabilities: xbzrle: off auto-converge: on   <----
+Migration status: completed
+total time: 241161 milliseconds
+downtime: 6373 milliseconds
+transferred ram: 28235307 kbytes
+remaining ram: 0 kbytes
+total ram: 268444224 kbytes
+duplicate: 64946416 pages
+skipped: 64903523 pages
+normal: 7044971 pages
+normal bytes: 28179884 kbytes
+
+---
+
+Changes from v2:
+- incorporated feedback from Orit, Juan and Eric
+- stop the throttling thread at the start of stage 3
+- rebased to latest qemu.git
+
+Changes from v1:
+- rebased to latest qemu.git
+- added auto-converge capability(default off) - suggested by Anthony Liguori &
+                                                Eric Blake.
+
+Signed-off-by: Chegu Vinod <chegu_vinod@hp.com>
+---
+ arch_init.c                   |   61 +++++++++++++++++++++++++++++++++++++++++
+ cpus.c                        |   12 ++++++++
+ include/migration/migration.h |    7 +++++
+ include/qemu/main-loop.h      |    3 ++
+ kvm-all.c                     |   46 +++++++++++++++++++++++++++++++
+ migration.c                   |   18 ++++++++++++
+ qapi-schema.json              |    7 ++++-
+ 7 files changed, 153 insertions(+), 1 deletions(-)
+
+diff --git a/arch_init.c b/arch_init.c
+index 49c5dc2..7e03b2c 100644
+--- a/arch_init.c
++++ b/arch_init.c
+@@ -104,6 +104,7 @@ int graphic_depth = 15;
+ #endif
+ 
+ const uint32_t arch_type = QEMU_ARCH;
++static bool mig_throttle_on;
+ 
+ /***********************************************************/
+ /* ram save/restore */
+@@ -379,7 +380,14 @@ static void migration_bitmap_sync(void)
+     MigrationState *s = migrate_get_current();
+     static int64_t start_time;
+     static int64_t num_dirty_pages_period;
++    static int64_t bytes_xfer_prev;
+     int64_t end_time;
++    int64_t bytes_xfer_now;
++    static int dirty_rate_high_cnt;
++
++    if (!bytes_xfer_prev) {
++        bytes_xfer_prev = ram_bytes_transferred();
++    }
+ 
+     if (!start_time) {
+         start_time = qemu_get_clock_ms(rt_clock);
+@@ -404,6 +412,27 @@ static void migration_bitmap_sync(void)
+ 
+     /* more than 1 second = 1000 millisecons */
+     if (end_time > start_time + 1000) {
++        if (migrate_auto_converge()) {
++            /* The following detection logic can be refined later. For now:
++               Check to see if the dirtied bytes is 50% more than the approx.
++               amount of bytes that just got transferred since the last time we
++               were in this routine. If that happens N times (for now N==5)
++               we turn on the throttle down logic */
++            bytes_xfer_now = ram_bytes_transferred();
++            if (s->dirty_pages_rate &&
++                ((num_dirty_pages_period*TARGET_PAGE_SIZE) >
++                ((bytes_xfer_now - bytes_xfer_prev)/2))) {
++                if (dirty_rate_high_cnt++ > 5) {
++                    DPRINTF("Unable to converge. Throtting down guest\n");
++                    qemu_mutex_lock_mig_throttle();
++                    if (!mig_throttle_on) {
++                        mig_throttle_on = true;
++                    }
++                    qemu_mutex_unlock_mig_throttle();
++                }
++             }
++             bytes_xfer_prev = bytes_xfer_now;
++        }
+         s->dirty_pages_rate = num_dirty_pages_period * 1000
+             / (end_time - start_time);
+         s->dirty_bytes_rate = s->dirty_pages_rate * TARGET_PAGE_SIZE;
+@@ -496,6 +525,33 @@ static int ram_save_block(QEMUFile *f, bool last_stage)
+     return bytes_sent;
+ }
+ 
++bool throttling_needed(void)
++{
++    bool value = false;
++
++    if (!migrate_auto_converge()) {
++        return false;
++    }
++
++    qemu_mutex_lock_mig_throttle();
++    value = mig_throttle_on;
++    qemu_mutex_unlock_mig_throttle();
++
++    return value;
++}
++
++void stop_throttling(void)
++{
++    qemu_mutex_lock_mig_throttle();
++    mig_throttle_on = false;
++    qemu_mutex_unlock_mig_throttle();
++
++    /* wait for the throttling thread to get out */
++    while (throttling_now()) {
++        ;
++    }
++}
++
+ static uint64_t bytes_transferred;
+ 
+ static ram_addr_t ram_save_remaining(void)
+@@ -544,6 +600,10 @@ static void migration_end(void)
+ 
+ static void ram_migration_cancel(void *opaque)
+ {
++    qemu_mutex_lock_mig_throttle();
++    mig_throttle_on = false;
++    qemu_mutex_unlock_mig_throttle();
++
+     migration_end();
+ }
+ 
+@@ -585,6 +645,7 @@ static int ram_save_setup(QEMUFile *f, void *opaque)
+     bytes_transferred = 0;
+     reset_ram_globals();
+ 
++    mig_throttle_on = false;
+     memory_global_dirty_log_start();
+     migration_bitmap_sync();
+     qemu_mutex_unlock_iothread();
+diff --git a/cpus.c b/cpus.c
+index 5a98a37..615c25a 100644
+--- a/cpus.c
++++ b/cpus.c
+@@ -616,6 +616,7 @@ static void qemu_tcg_init_cpu_signals(void)
+ #endif /* _WIN32 */
+ 
+ static QemuMutex qemu_global_mutex;
++static QemuMutex qemu_mig_throttle_mutex;
+ static QemuCond qemu_io_proceeded_cond;
+ static bool iothread_requesting_mutex;
+ 
+@@ -638,6 +639,7 @@ void qemu_init_cpu_loop(void)
+     qemu_cond_init(&qemu_work_cond);
+     qemu_cond_init(&qemu_io_proceeded_cond);
+     qemu_mutex_init(&qemu_global_mutex);
++    qemu_mutex_init(&qemu_mig_throttle_mutex);
+ 
+     qemu_thread_get_self(&io_thread);
+ }
+@@ -943,6 +945,16 @@ void qemu_mutex_unlock_iothread(void)
+     qemu_mutex_unlock(&qemu_global_mutex);
+ }
+ 
++void qemu_mutex_lock_mig_throttle(void)
++{
++    qemu_mutex_lock(&qemu_mig_throttle_mutex);
++}
++
++void qemu_mutex_unlock_mig_throttle(void)
++{
++    qemu_mutex_unlock(&qemu_mig_throttle_mutex);
++}
++
+ static int all_vcpus_paused(void)
+ {
+     CPUArchState *penv = first_cpu;
+diff --git a/include/migration/migration.h b/include/migration/migration.h
+index e2acec6..4b54dbf 100644
+--- a/include/migration/migration.h
++++ b/include/migration/migration.h
+@@ -127,4 +127,11 @@ int migrate_use_xbzrle(void);
+ int64_t migrate_xbzrle_cache_size(void);
+ 
+ int64_t xbzrle_cache_resize(int64_t new_size);
++
++bool migrate_auto_converge(void);
++bool throttling_needed(void);
++bool throttling_now(void);
++void stop_throttling(void);
++void *migration_throttle_down(void *);
++
+ #endif
+diff --git a/include/qemu/main-loop.h b/include/qemu/main-loop.h
+index 6f0200a..9a3886d 100644
+--- a/include/qemu/main-loop.h
++++ b/include/qemu/main-loop.h
+@@ -299,6 +299,9 @@ void qemu_mutex_lock_iothread(void);
+  */
+ void qemu_mutex_unlock_iothread(void);
+ 
++void qemu_mutex_lock_mig_throttle(void);
++void qemu_mutex_unlock_mig_throttle(void);
++
+ /* internal interfaces */
+ 
+ void qemu_fd_register(int fd);
+diff --git a/kvm-all.c b/kvm-all.c
+index 2d92721..448d4e4 100644
+--- a/kvm-all.c
++++ b/kvm-all.c
+@@ -33,6 +33,8 @@
+ #include "exec/memory.h"
+ #include "exec/address-spaces.h"
+ #include "qemu/event_notifier.h"
++#include "sysemu/cpus.h"
++#include "migration/migration.h"
+ 
+ /* This check must be after config-host.h is included */
+ #ifdef CONFIG_EVENTFD
+@@ -116,6 +118,11 @@ static const KVMCapabilityInfo kvm_required_capabilites[] = {
+     KVM_CAP_LAST_INFO
+ };
+ 
++static void mig_delay_vcpu(void)
++{
++    g_usleep(50*1000);
++}
++
+ static KVMSlot *kvm_alloc_slot(KVMState *s)
+ {
+     int i;
+@@ -1609,6 +1616,10 @@ int kvm_cpu_exec(CPUArchState *env)
+         }
+         qemu_mutex_unlock_iothread();
+ 
++        if (throttling_needed()) {
++            mig_delay_vcpu();
++        }
++
+         run_ret = kvm_vcpu_ioctl(cpu, KVM_RUN, 0);
+ 
+         qemu_mutex_lock_iothread();
+@@ -2032,3 +2043,38 @@ int kvm_on_sigbus(int code, void *addr)
+ {
+     return kvm_arch_on_sigbus(code, addr);
+ }
++
++static bool throttling;
++bool throttling_now(void)
++{
++    return throttling;
++}
++
++/* Stub used for getting the vcpu out of VM and into qemu via
++   run_on_cpu()*/
++static void mig_kick_cpu(void *opq)
++{
++    return;
++}
++
++/* To reduce the dirty rate explicitly disallow the VCPUs from spending
++   much time in the VM. The migration thread will try to catchup.
++   Workload will experience a greater performance drop but for a shorter
++   duration.
++*/
++void *migration_throttle_down(void *opaque)
++{
++    throttling = true;
++    while (throttling_needed()) {
++        CPUArchState *penv = first_cpu;
++        while (penv) {
++            qemu_mutex_lock_iothread();
++            run_on_cpu(ENV_GET_CPU(penv), mig_kick_cpu, NULL);
++            qemu_mutex_unlock_iothread();
++            penv = penv->next_cpu;
++        }
++        g_usleep(25*1000);
++    }
++    throttling = false;
++    return NULL;
++}
+diff --git a/migration.c b/migration.c
+index 3eb0fad..d170e7b 100644
+--- a/migration.c
++++ b/migration.c
+@@ -24,6 +24,7 @@
+ #include "qemu/thread.h"
+ #include "qmp-commands.h"
+ #include "trace.h"
++#include "sysemu/cpus.h"
+ 
+ //#define DEBUG_MIGRATION
+ 
+@@ -474,6 +475,15 @@ void qmp_migrate_set_downtime(double value, Error **errp)
+     max_downtime = (uint64_t)value;
+ }
+ 
++bool migrate_auto_converge(void)
++{
++    MigrationState *s;
++
++    s = migrate_get_current();
++
++    return s->enabled_capabilities[MIGRATION_CAPABILITY_AUTO_CONVERGE];
++}
++
+ int migrate_use_xbzrle(void)
+ {
+     MigrationState *s;
+@@ -503,6 +513,7 @@ static void *migration_thread(void *opaque)
+     int64_t max_size = 0;
+     int64_t start_time = initial_time;
+     bool old_vm_running = false;
++    QemuThread thread;
+ 
+     DPRINTF("beginning savevm\n");
+     qemu_savevm_state_begin(s->file, &s->params);
+@@ -517,8 +528,15 @@ static void *migration_thread(void *opaque)
+             DPRINTF("pending size %lu max %lu\n", pending_size, max_size);
+             if (pending_size && pending_size >= max_size) {
+                 qemu_savevm_state_iterate(s->file);
++                if (throttling_needed() && !throttling_now()) {
++                    qemu_thread_create(&thread, migration_throttle_down,
++                               NULL, QEMU_THREAD_DETACHED);
++                }
+             } else {
+                 DPRINTF("done iterating\n");
++                if (throttling_now()) {
++                    stop_throttling();
++                }
+                 qemu_mutex_lock_iothread();
+                 start_time = qemu_get_clock_ms(rt_clock);
+                 qemu_system_wakeup_request(QEMU_WAKEUP_REASON_OTHER);
+diff --git a/qapi-schema.json b/qapi-schema.json
+index 5b0fb3b..554373a 100644
+--- a/qapi-schema.json
++++ b/qapi-schema.json
+@@ -600,9 +600,14 @@
+ #          loads, by sending compressed difference of the pages
+ #
+ # Since: 1.2
++#
++# @auto-converge: Migration supports automatic throttling down of guest
++#          to force convergence. Disabled by default.
++#
++# Since: 1.6
+ ##
+ { 'enum': 'MigrationCapability',
+-  'data': ['xbzrle'] }
++  'data': ['xbzrle', 'auto-converge'] }
+ 
+ ##
+ # @MigrationCapabilityStatus
+-- 
+1.7.1
+

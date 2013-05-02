@@ -1,0 +1,51 @@
+From patches Mon Sep 17 00:00:00 2001
+From: fred.konrad@greensocs.com
+To: Anthony Liguori <aliguori@us.ibm.com>, qemu-devel@nongnu.org
+Cc: peter.maydell@linaro.org, mark.burton@greensocs.com, agraf@suse.de,
+ Libaiqing <libaiqing@huawei.com>, amit.shah@redhat.com,
+ Michal Privoznik <mprivozn@redhat.com>, cornelia.huck@de.ibm.com,
+ pbonzini@redhat.com, afaerber@suse.de, fred.konrad@greensocs.com
+Date: Mon, 29 Apr 2013 17:12:41 +0200
+Message-id: 1367248365-27260-1-git-send-email-fred.konrad@greensocs.com
+Subject: [PATCH 0/4] virtio: fix bus command line compatibility.
+
+From: KONRAD Frederic <fred.konrad@greensocs.com>
+
+Cc: Libaiqing <libaiqing@huawei.com>
+Cc: Michal Privoznik <mprivozn@redhat.com>
+
+This series fix the bus name for virtio-serial-device and virtio-scsi-device.
+
+The bus name for virtio-serial-device and virtio-scsi-device is not "id.0" as it
+was the case before the refactoring.
+
+This trigger the error:
+
+qemu-system-xxx -device virtio-serial-pci,id=virtio-serial0
+                -device virtserialport,bus=virtio-serial0.0
+
+Bus 'virtio-serial0.0' is full
+Bus 'virtio-serial0.0' not found
+
+So this series set the name of those bus before the virtio-device's init.
+
+KONRAD Frederic (4):
+  virtio-x-bus: force bus name to virtio-bus.
+  virtio-serial: fix command line compatibility.
+  scsi: add scsi_named_bus_new().
+  virtio-scsi: fix the command line compatibility.
+
+ hw/char/virtio-serial-bus.c       | 16 +++++++++++++++-
+ hw/s390x/s390-virtio-bus.c        | 22 +++++++++++++++++++++-
+ hw/s390x/virtio-ccw.c             | 22 +++++++++++++++++++++-
+ hw/scsi/scsi-bus.c                | 12 +++++++++---
+ hw/scsi/virtio-scsi.c             | 14 +++++++++++++-
+ hw/virtio/virtio-pci.c            | 23 ++++++++++++++++++++++-
+ include/hw/scsi/scsi.h            |  2 ++
+ include/hw/virtio/virtio-scsi.h   |  7 +++++++
+ include/hw/virtio/virtio-serial.h |  8 ++++++++
+ 9 files changed, 118 insertions(+), 8 deletions(-)
+
+-- 
+1.8.1.4
+

@@ -1,0 +1,74 @@
+From patches Mon Sep 17 00:00:00 2001
+From: peter.crosthwaite@xilinx.com
+To: peter.crosthwaite@xilinx.com, qemu-devel@nongnu.org
+Cc: edgar.iglesias@gmail.com, qemu-devel@nongnu.org
+Date: Tue, 16 Apr 2013 10:18:08 +1000
+Message-id: cover.1366069170.git.peter.crosthwaite@xilinx.com
+Subject: [PATCH 00/16] Stream Patches
+
+From: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+
+Hi all. The Xilinx AXIEnet and DMA devices have two AXI stream connections
+(control and data), only one of which is currently modelled (data). AXI stream
+is modelled using the stream QOM interface described in stream.h. Unfortunately,
+interfaces have no nice way of modelling multiple connections of the same type.
+So to overcome this I created a secondary object which acts as a proxy for the
+stream connection. Multiple connections can be implemented using multiple
+proxies and stream masters link to the relevant proxy, rather than the ethernet
+device itself. This Series changes AXI Enet and DMA to be connected as such.
+
+Also changed the stream interface to implement flow control handshaking. This
+is needed for the AXIEnet to be be able to implement the net can_receive() flow
+control.
+
+Patches 1-10 are low-impact cleanup of axienet/dma as per the current QOM
+styling guidelines and can be cherry-picked off the front.
+
+changed from v5:
+rebased against hw ro-organisation
+changed from v4:
+resynchronized control flow stream API
+reordered series for better consistency.
+Folded patch 17 in 16 (app array length fix)
+Fixed DMA tx path halted bit
+changed from v3:
+Changed from asynchronous flow control to synchronous (Edgar review)
+changed from v2:
+Reordered patches (from low impact -> high impact)
+Added styling refactoring of AXIDMA
+Added asynchronous patches
+Removed dummy second stream connection patch (former patch 8)
+Added (functional) second stream connection
+changed from v1:
+Removed former P1&2 (already merged)
+Address Andreas review
+Refactor axienet to be more QOM friendly.
+
+
+Peter Crosthwaite (16):
+  xilinx_axienet: typedef XilinxAXIEnet struct
+  xilinx_axienet: Defined and use type cast macro
+  xilinx_axienet: Register reset properly
+  xilinx_axienet: converted init->realize
+  xilinx_axidma: typedef XilinxAXIDMA struct
+  xilinx_axidma: Defined and use type cast macro
+  xilinx_axidma: Register reset properly
+  xilinx_axidma: converted init->realize
+  petalogix_ml605_mmu: Fix machine node attachment
+  petalogix_ml605_mmu: Attach ethernet to machine
+  xilinx_axienet: Create Proxy object for stream
+  xilinx_axidma: Create Proxy object for stream
+  xilinx_axidma: Fix rx/tx halted bit.
+  stream: Add flow control API
+  xilinx_axienet/dma: Implement rx path flow control
+  stream: Remove app argument hack
+
+ hw/core/stream.c                    |   15 ++-
+ hw/dma/xilinx_axidma.c              |  261 +++++++++++++++++++++++++++--------
+ hw/microblaze/petalogix_ml605_mmu.c |   28 +++-
+ hw/net/xilinx_axienet.c             |  255 +++++++++++++++++++++++++++-------
+ include/hw/stream.h                 |   36 ++++-
+ include/hw/xilinx.h                 |   21 ++-
+ 6 files changed, 483 insertions(+), 133 deletions(-)
+
+

@@ -1,0 +1,1 @@
+../fix-win32-compilation/v1.1366681995/0001-add-missing-inclusions-of-config-hosth.patch

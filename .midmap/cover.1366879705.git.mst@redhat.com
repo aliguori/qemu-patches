@@ -1,0 +1,1 @@
+../seabios-move-acpi-table-formatting-out-of-bios/v1.1366909340/0000-seabios-move-acpi-table-formatting-out-of-bios.txt

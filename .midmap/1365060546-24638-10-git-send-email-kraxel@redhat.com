@@ -1,0 +1,1 @@
+../console-console-overhaul-continued/v3.1365085722/0009-console-switch-color_table_rgb-to-pixman_color_t.patch

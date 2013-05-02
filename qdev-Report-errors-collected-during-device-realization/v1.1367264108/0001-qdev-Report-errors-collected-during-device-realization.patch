@@ -1,0 +1,35 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Jan Kiszka <jan.kiszka@siemens.com>
+To: None <afaerber@suse.de>, Jan Kiszka <jan.kiszka@siemens.com>,
+ qemu-devel <qemu-devel@nongnu.org>,
+ =?ISO-8859-1?Q?Andreas_F=E4rber?= <afaerber@suse.de>
+Cc: Luiz Capitulino <lcapitulino@redhat.com>,
+ Paolo Bonzini <pbonzini@redhat.com>, qemu-devel <qemu-devel@nongnu.org>,
+ Markus Armbruster <armbru@redhat.com>
+Date: Mon, 29 Apr 2013 14:35:08 +0200
+Message-id: 517E68FC.6030400@siemens.com
+Subject: [PATCH 1/1] qdev: Report errors collected during device realization
+
+Better than just releasing the error object silently.
+
+Signed-off-by: Jan Kiszka <jan.kiszka@siemens.com>
+Reviewed-by: Andreas Färber <afaerber@suse.de>
+---
+ hw/core/qdev.c |    1 +
+ 1 files changed, 1 insertions(+), 0 deletions(-)
+
+diff --git a/hw/core/qdev.c b/hw/core/qdev.c
+index 4eb0134..ab1d8f5 100644
+--- a/hw/core/qdev.c
++++ b/hw/core/qdev.c
+@@ -162,6 +162,7 @@ int qdev_init(DeviceState *dev)
+ 
+     object_property_set_bool(OBJECT(dev), true, "realized", &local_err);
+     if (local_err != NULL) {
++        qerror_report_err(local_err);
+         error_free(local_err);
+         qdev_free(dev);
+         return -1;
+-- 
+1.7.3.4
+

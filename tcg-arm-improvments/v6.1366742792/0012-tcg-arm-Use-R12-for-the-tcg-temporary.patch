@@ -1,0 +1,34 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Richard Henderson <rth@twiddle.net>
+To: qemu-devel@nongnu.org
+Cc: aurelien@aurel32.net
+Date: Tue, 23 Apr 2013 13:46:44 -0700
+Message-id: 1366750012-25015-13-git-send-email-rth@twiddle.net
+Subject: [PATCH 12/20] tcg-arm: Use R12 for the tcg temporary
+
+R12 is call clobbered, while R8 is call saved.  This change
+gives tcg one more call saved register for real data.
+
+Reviewed-by: Aurelien Jarno <aurelien@aurel32.net>
+Signed-off-by: Richard Henderson <rth@twiddle.net>
+---
+ tcg/arm/tcg-target.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/tcg/arm/tcg-target.c b/tcg/arm/tcg-target.c
+index cc442b6..ff75379 100644
+--- a/tcg/arm/tcg-target.c
++++ b/tcg/arm/tcg-target.c
+@@ -113,7 +113,7 @@ static const int tcg_target_call_oarg_regs[2] = {
+     TCG_REG_R0, TCG_REG_R1
+ };
+ 
+-#define TCG_REG_TMP  TCG_REG_R8
++#define TCG_REG_TMP  TCG_REG_R12
+ 
+ static inline void reloc_abs32(void *code_ptr, tcg_target_long target)
+ {
+-- 
+1.8.1.4
+
+

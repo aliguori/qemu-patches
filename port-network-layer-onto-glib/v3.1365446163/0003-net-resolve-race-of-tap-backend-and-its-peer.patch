@@ -1,0 +1,37 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Liu Ping Fan <pingfank@linux.vnet.ibm.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <anthony@codemonkey.ws>,
+ Paolo Bonzini <pbonzini@redhat.com>, mdroth <mdroth@linux.vnet.ibm.com>,
+ Stefan Hajnoczi <stefanha@redhat.com>
+Date: Mon,  8 Apr 2013 13:36:06 +0800
+Message-id: 1365399368-26967-4-git-send-email-pingfank@linux.vnet.ibm.com
+Subject: [PATCH 3/5] net: resolve race of tap backend and its peer
+
+When vhost net enabled, we should be sure that the user space
+fd handler is not in flight
+
+Signed-off-by: Liu Ping Fan <pingfank@linux.vnet.ibm.com>
+---
+ net/tap.c |    5 +++++
+ 1 files changed, 5 insertions(+), 0 deletions(-)
+
+diff --git a/net/tap.c b/net/tap.c
+index e19bb07..a3947eb 100644
+--- a/net/tap.c
++++ b/net/tap.c
+@@ -324,6 +324,11 @@ static void tap_poll(NetClientState *nc, bool enable)
+     /* fixme, when tap backend on another thread, the disable should be sync */
+     tap_read_poll(s, enable);
+     tap_write_poll(s, enable);
++
++    if (!enable) {
++        /* need sync so vhost can take over polling */
++        g_source_remove_poll(&nc->nsrc->source, &nc->nsrc->gfd);
++    }
+ }
+ 
+ int tap_get_fd(NetClientState *nc)
+-- 
+1.7.4.4
+

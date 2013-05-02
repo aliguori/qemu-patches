@@ -1,0 +1,77 @@
+From patches Mon Sep 17 00:00:00 2001
+From: =?utf-8?q?Andreas_F=C3=A4rber_=3Cafaerber=40suse=2Ede=3E?=
+To: qemu-devel@nongnu.org
+Cc: "Vassili Karpov \(malc\)" <av1474@comtv.ru>,
+ =?UTF-8?q?Andreas=20F=C3=A4rber?= <afaerber@suse.de>
+Date: Sat, 27 Apr 2013 22:18:48 +0200
+Message-id: 1367093935-29091-14-git-send-email-afaerber@suse.de
+Subject: [PATCH 13/20] pcspk: QOM'ify
+
+Introduce type constant and cast macro to obsolete DO_UPCAST().
+
+Prepares for ISA realizefn.
+
+Signed-off-by: Andreas Färber <afaerber@suse.de>
+---
+ hw/audio/pcspk.c         | 9 ++++++---
+ include/hw/audio/pcspk.h | 4 +++-
+ 2 files changed, 9 insertions(+), 4 deletions(-)
+
+diff --git a/hw/audio/pcspk.c b/hw/audio/pcspk.c
+index 34e0df7..d844e85 100644
+--- a/hw/audio/pcspk.c
++++ b/hw/audio/pcspk.c
+@@ -35,8 +35,11 @@
+ #define PCSPK_MAX_FREQ (PCSPK_SAMPLE_RATE >> 1)
+ #define PCSPK_MIN_COUNT ((PIT_FREQ + PCSPK_MAX_FREQ - 1) / PCSPK_MAX_FREQ)
+ 
++#define PC_SPEAKER(obj) OBJECT_CHECK(PCSpkState, (obj), TYPE_PC_SPEAKER)
++
+ typedef struct {
+-    ISADevice dev;
++    ISADevice parent_obj;
++
+     MemoryRegion ioport;
+     uint32_t iobase;
+     uint8_t sample_buf[PCSPK_BUF_LEN];
+@@ -161,7 +164,7 @@ static const MemoryRegionOps pcspk_io_ops = {
+ 
+ static int pcspk_initfn(ISADevice *dev)
+ {
+-    PCSpkState *s = DO_UPCAST(PCSpkState, dev, dev);
++    PCSpkState *s = PC_SPEAKER(dev);
+ 
+     memory_region_init_io(&s->ioport, &pcspk_io_ops, s, "elcr", 1);
+     isa_register_ioport(dev, &s->ioport, s->iobase);
+@@ -188,7 +191,7 @@ static void pcspk_class_initfn(ObjectClass *klass, void *data)
+ }
+ 
+ static const TypeInfo pcspk_info = {
+-    .name           = "isa-pcspk",
++    .name           = TYPE_PC_SPEAKER,
+     .parent         = TYPE_ISA_DEVICE,
+     .instance_size  = sizeof(PCSpkState),
+     .class_init     = pcspk_class_initfn,
+diff --git a/include/hw/audio/pcspk.h b/include/hw/audio/pcspk.h
+index ce8ef4f..b60c000 100644
+--- a/include/hw/audio/pcspk.h
++++ b/include/hw/audio/pcspk.h
+@@ -28,11 +28,13 @@
+ #include "hw/hw.h"
+ #include "hw/isa/isa.h"
+ 
++#define TYPE_PC_SPEAKER "isa-pcspk"
++
+ static inline ISADevice *pcspk_init(ISABus *bus, ISADevice *pit)
+ {
+     ISADevice *dev;
+ 
+-    dev = isa_create(bus, "isa-pcspk");
++    dev = isa_create(bus, TYPE_PC_SPEAKER);
+     qdev_prop_set_uint32(&dev->qdev, "iobase", 0x61);
+     qdev_prop_set_ptr(&dev->qdev, "pit", pit);
+     qdev_init_nofail(&dev->qdev);
+-- 
+1.8.1.4
+
+

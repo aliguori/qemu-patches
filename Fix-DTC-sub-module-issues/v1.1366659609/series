@@ -1,0 +1,3 @@
+0000-Fix-DTC-sub-module-issues.txt
+0001-Makefile-Dont-build-shared-libfdt.patch
+0002-Makefile-Use-QEMU_FLAGS-for-DTC-compilation.patch

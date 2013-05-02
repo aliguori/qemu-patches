@@ -1,0 +1,1 @@
+../usb-patch-queue/v1.1366132383/0005-xhci-use-slotid-as-device-address.patch

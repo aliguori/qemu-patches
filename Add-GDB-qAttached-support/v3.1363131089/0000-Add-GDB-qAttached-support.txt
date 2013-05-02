@@ -1,0 +1,26 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Fabien Chouteau <chouteau@adacore.com>
+To: qemu-devel@nongnu.org
+Cc: jan.kiszka@siemens.com
+Date: Tue, 12 Mar 2013 18:31:29 +0100
+Message-id: 1363109492-1901-1-git-send-email-chouteau@adacore.com
+Subject: [PATCH 0/3] Add GDB qAttached support
+
+v3:
+  - split 'Add GDB qAttached support' and 'New option -gdb-opts'
+
+Fabien Chouteau (3):
+  Add GDB qAttached support
+  Revert "gdbstub: Do not kill target in system emulation mode"
+  New option -gdb-opts
+
+ gdbstub.c              |   40 +++++++++++++++++++++++++++++++++++++---
+ include/exec/gdbstub.h |    2 ++
+ qemu-options.hx        |   17 +++++++++++++++++
+ vl.c                   |    3 +++
+ 4 files changed, 59 insertions(+), 3 deletions(-)
+
+-- 
+1.7.9.5
+
+

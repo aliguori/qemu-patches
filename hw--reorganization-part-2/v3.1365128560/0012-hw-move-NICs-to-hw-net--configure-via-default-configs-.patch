@@ -1,0 +1,296 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: 
+Date: Thu,  4 Apr 2013 21:22:52 +0200
+Message-id: 1365103395-11547-13-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 12/35] hw: move NICs to hw/net/, configure via default-configs/
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ default-configs/arm-softmmu.mak          | 1 +
+ default-configs/cris-softmmu.mak         | 1 +
+ default-configs/lm32-softmmu.mak         | 1 +
+ default-configs/m68k-softmmu.mak         | 1 +
+ default-configs/microblaze-softmmu.mak   | 1 +
+ default-configs/microblazeel-softmmu.mak | 1 +
+ default-configs/ppc-softmmu.mak          | 1 +
+ default-configs/ppc64-softmmu.mak        | 1 +
+ default-configs/ppcemb-softmmu.mak       | 1 +
+ default-configs/sparc-softmmu.mak        | 1 +
+ hw/arm/Makefile.objs                     | 2 +-
+ hw/cris/Makefile.objs                    | 1 -
+ hw/lm32/Makefile.objs                    | 1 -
+ hw/m68k/Makefile.objs                    | 2 +-
+ hw/microblaze/Makefile.objs              | 1 -
+ hw/net/Makefile.objs                     | 8 ++++++++
+ hw/{ => net}/etraxfs_eth.c               | 0
+ hw/{ => net}/lance.c                     | 0
+ hw/{ => net}/mcf_fec.c                   | 0
+ hw/{ => net}/milkymist-minimac2.c        | 0
+ hw/{ => net}/spapr_llan.c                | 0
+ hw/{ => net}/stellaris_enet.c            | 0
+ hw/{ => net}/xilinx_ethlite.c            | 0
+ hw/ppc/Makefile.objs                     | 5 +----
+ hw/sparc/Makefile.objs                   | 2 +-
+ 25 files changed, 22 insertions(+), 10 deletions(-)
+ rename hw/{ => net}/etraxfs_eth.c (100%)
+ rename hw/{ => net}/lance.c (100%)
+ rename hw/{ => net}/mcf_fec.c (100%)
+ rename hw/{ => net}/milkymist-minimac2.c (100%)
+ rename hw/{ => net}/spapr_llan.c (100%)
+ rename hw/{ => net}/stellaris_enet.c (100%)
+ rename hw/{ => net}/xilinx_ethlite.c (100%)
+
+diff --git a/default-configs/arm-softmmu.mak b/default-configs/arm-softmmu.mak
+index 4b72019..cd353bd 100644
+--- a/default-configs/arm-softmmu.mak
++++ b/default-configs/arm-softmmu.mak
+@@ -17,6 +17,7 @@ CONFIG_TSC2005=y
+ CONFIG_LM832X=y
+ CONFIG_TMP105=y
+ CONFIG_STELLARIS_INPUT=y
++CONFIG_STELLARIS_ENET=y
+ CONFIG_SSD0303=y
+ CONFIG_SSD0323=y
+ CONFIG_ADS7846=y
+diff --git a/default-configs/cris-softmmu.mak b/default-configs/cris-softmmu.mak
+index 1a479cd..d970d50 100644
+--- a/default-configs/cris-softmmu.mak
++++ b/default-configs/cris-softmmu.mak
+@@ -1,5 +1,6 @@
+ # Default configuration for cris-softmmu
+ 
++CONFIG_ETRAXFS=y
+ CONFIG_NAND=y
+ CONFIG_PTIMER=y
+ CONFIG_PFLASH_CFI02=y
+diff --git a/default-configs/lm32-softmmu.mak b/default-configs/lm32-softmmu.mak
+index 0d19974..2654ad6 100644
+--- a/default-configs/lm32-softmmu.mak
++++ b/default-configs/lm32-softmmu.mak
+@@ -1,5 +1,6 @@
+ # Default configuration for lm32-softmmu
+ 
++CONFIG_MILKYMIST=y
+ CONFIG_PTIMER=y
+ CONFIG_PFLASH_CFI01=y
+ CONFIG_PFLASH_CFI02=y
+diff --git a/default-configs/m68k-softmmu.mak b/default-configs/m68k-softmmu.mak
+index 778ea82..51fe5bb 100644
+--- a/default-configs/m68k-softmmu.mak
++++ b/default-configs/m68k-softmmu.mak
+@@ -2,5 +2,6 @@
+ 
+ include pci.mak
+ include usb.mak
++CONFIG_COLDFIRE=y
+ CONFIG_GDBSTUB_XML=y
+ CONFIG_PTIMER=y
+diff --git a/default-configs/microblaze-softmmu.mak b/default-configs/microblaze-softmmu.mak
+index 2f442e5..050e273 100644
+--- a/default-configs/microblaze-softmmu.mak
++++ b/default-configs/microblaze-softmmu.mak
+@@ -5,5 +5,6 @@ CONFIG_PFLASH_CFI01=y
+ CONFIG_SERIAL=y
+ CONFIG_XILINX=y
+ CONFIG_XILINX_AXI=y
++CONFIG_XILINX_ETHLITE=y
+ CONFIG_SSI=y
+ CONFIG_SSI_M25P80=y
+diff --git a/default-configs/microblazeel-softmmu.mak b/default-configs/microblazeel-softmmu.mak
+index af9a3cd..db82dd8 100644
+--- a/default-configs/microblazeel-softmmu.mak
++++ b/default-configs/microblazeel-softmmu.mak
+@@ -5,5 +5,6 @@ CONFIG_PFLASH_CFI01=y
+ CONFIG_SERIAL=y
+ CONFIG_XILINX=y
+ CONFIG_XILINX_AXI=y
++CONFIG_XILINX_ETHLITE=y
+ CONFIG_SSI=y
+ CONFIG_SSI_M25P80=y
+diff --git a/default-configs/ppc-softmmu.mak b/default-configs/ppc-softmmu.mak
+index d9ced3a..36a8ed3 100644
+--- a/default-configs/ppc-softmmu.mak
++++ b/default-configs/ppc-softmmu.mak
+@@ -40,6 +40,7 @@ CONFIG_PFLASH_CFI02=y
+ CONFIG_PTIMER=y
+ CONFIG_I8259=y
+ CONFIG_XILINX=y
++CONFIG_XILINX_ETHLITE=y
+ CONFIG_E500=$(CONFIG_FDT)
+ # For PReP
+ CONFIG_MC146818RTC=y
+diff --git a/default-configs/ppc64-softmmu.mak b/default-configs/ppc64-softmmu.mak
+index 7d62e14..2d5df77 100644
+--- a/default-configs/ppc64-softmmu.mak
++++ b/default-configs/ppc64-softmmu.mak
+@@ -40,6 +40,7 @@ CONFIG_PFLASH_CFI02=y
+ CONFIG_PTIMER=y
+ CONFIG_I8259=y
+ CONFIG_XILINX=y
++CONFIG_XILINX_ETHLITE=y
+ CONFIG_PSERIES=$(CONFIG_FDT)
+ CONFIG_E500=$(CONFIG_FDT)
+ # For pSeries
+diff --git a/default-configs/ppcemb-softmmu.mak b/default-configs/ppcemb-softmmu.mak
+index 9d8c5c7..ce705a9 100644
+--- a/default-configs/ppcemb-softmmu.mak
++++ b/default-configs/ppcemb-softmmu.mak
+@@ -35,6 +35,7 @@ CONFIG_PFLASH_CFI02=y
+ CONFIG_PTIMER=y
+ CONFIG_I8259=y
+ CONFIG_XILINX=y
++CONFIG_XILINX_ETHLITE=y
+ CONFIG_E500=$(CONFIG_FDT)
+ # For PReP
+ CONFIG_MC146818RTC=y
+diff --git a/default-configs/sparc-softmmu.mak b/default-configs/sparc-softmmu.mak
+index b0310c5..6d11ba0 100644
+--- a/default-configs/sparc-softmmu.mak
++++ b/default-configs/sparc-softmmu.mak
+@@ -8,3 +8,4 @@ CONFIG_PTIMER=y
+ CONFIG_FDC=y
+ CONFIG_EMPTY_SLOT=y
+ CONFIG_PCNET_COMMON=y
++CONFIG_LANCE=y
+diff --git a/hw/arm/Makefile.objs b/hw/arm/Makefile.objs
+index d809ad8..b14beb8 100644
+--- a/hw/arm/Makefile.objs
++++ b/hw/arm/Makefile.objs
+@@ -8,7 +8,7 @@ obj-y += exynos4210_uart.o exynos4210_pwm.o
+ obj-y += exynos4210_pmu.o exynos4210_mct.o exynos4210_fimd.o
+ obj-y += exynos4210_rtc.o exynos4210_i2c.o
+ obj-y += arm_mptimer.o a15mpcore.o
+-obj-y += armv7m_nvic.o stellaris_enet.o
++obj-y += armv7m_nvic.o
+ obj-y += pxa2xx_timer.o pxa2xx_dma.o
+ obj-y += pxa2xx_lcd.o pxa2xx_mmci.o pxa2xx_pcmcia.o pxa2xx_keypad.o
+ obj-y += zaurus.o tc6393xb.o
+diff --git a/hw/cris/Makefile.objs b/hw/cris/Makefile.objs
+index a94c624..e02365d 100644
+--- a/hw/cris/Makefile.objs
++++ b/hw/cris/Makefile.objs
+@@ -1,7 +1,6 @@
+ # IO blocks
+ obj-y += etraxfs_dma.o
+ obj-y += etraxfs_pic.o
+-obj-y += etraxfs_eth.o
+ obj-y += etraxfs_timer.o
+ obj-y += etraxfs_ser.o
+ 
+diff --git a/hw/lm32/Makefile.objs b/hw/lm32/Makefile.objs
+index 68ca90a..d72756c 100644
+--- a/hw/lm32/Makefile.objs
++++ b/hw/lm32/Makefile.objs
+@@ -7,7 +7,6 @@ obj-y += lm32_sys.o
+ obj-y += milkymist-ac97.o
+ obj-y += milkymist-hpdmc.o
+ obj-y += milkymist-memcard.o
+-obj-y += milkymist-minimac2.o
+ obj-y += milkymist-pfpu.o
+ obj-y += milkymist-softusb.o
+ obj-y += milkymist-sysctl.o
+diff --git a/hw/m68k/Makefile.objs b/hw/m68k/Makefile.objs
+index ede32a7..ebbe003 100644
+--- a/hw/m68k/Makefile.objs
++++ b/hw/m68k/Makefile.objs
+@@ -1,4 +1,4 @@
+-obj-y = mcf_uart.o mcf_fec.o
++obj-y = mcf_uart.o
+ 
+ obj-y := $(addprefix ../,$(obj-y))
+ 
+diff --git a/hw/microblaze/Makefile.objs b/hw/microblaze/Makefile.objs
+index 9e7f249..75f5ce6 100644
+--- a/hw/microblaze/Makefile.objs
++++ b/hw/microblaze/Makefile.objs
+@@ -1,5 +1,4 @@
+ obj-y += xilinx_spi.o
+-obj-y += xilinx_ethlite.o
+ 
+ obj-y := $(addprefix ../,$(obj-y))
+ 
+diff --git a/hw/net/Makefile.objs b/hw/net/Makefile.objs
+index 73217d8..951cca3 100644
+--- a/hw/net/Makefile.objs
++++ b/hw/net/Makefile.objs
+@@ -20,6 +20,14 @@ common-obj-$(CONFIG_MIPSNET) += mipsnet.o
+ common-obj-$(CONFIG_XILINX_AXI) += xilinx_axienet.o
+ 
+ common-obj-$(CONFIG_CADENCE) += cadence_gem.o
++common-obj-$(CONFIG_STELLARIS_ENET) += stellaris_enet.o
++common-obj-$(CONFIG_LANCE) += lance.o
++
++obj-$(CONFIG_ETRAXFS) += etraxfs_eth.o
++obj-$(CONFIG_COLDFIRE) += mcf_fec.o
++obj-$(CONFIG_MILKYMIST) += milkymist-minimac2.o
++obj-$(CONFIG_PSERIES) += spapr_llan.o
++obj-$(CONFIG_XILINX_ETHLITE) += xilinx_ethlite.o
+ 
+ obj-$(CONFIG_VIRTIO) += virtio-net.o
+ obj-y += vhost_net.o
+diff --git a/hw/etraxfs_eth.c b/hw/net/etraxfs_eth.c
+similarity index 100%
+rename from hw/etraxfs_eth.c
+rename to hw/net/etraxfs_eth.c
+diff --git a/hw/lance.c b/hw/net/lance.c
+similarity index 100%
+rename from hw/lance.c
+rename to hw/net/lance.c
+diff --git a/hw/mcf_fec.c b/hw/net/mcf_fec.c
+similarity index 100%
+rename from hw/mcf_fec.c
+rename to hw/net/mcf_fec.c
+diff --git a/hw/milkymist-minimac2.c b/hw/net/milkymist-minimac2.c
+similarity index 100%
+rename from hw/milkymist-minimac2.c
+rename to hw/net/milkymist-minimac2.c
+diff --git a/hw/spapr_llan.c b/hw/net/spapr_llan.c
+similarity index 100%
+rename from hw/spapr_llan.c
+rename to hw/net/spapr_llan.c
+diff --git a/hw/stellaris_enet.c b/hw/net/stellaris_enet.c
+similarity index 100%
+rename from hw/stellaris_enet.c
+rename to hw/net/stellaris_enet.c
+diff --git a/hw/xilinx_ethlite.c b/hw/net/xilinx_ethlite.c
+similarity index 100%
+rename from hw/xilinx_ethlite.c
+rename to hw/net/xilinx_ethlite.c
+diff --git a/hw/ppc/Makefile.objs b/hw/ppc/Makefile.objs
+index b22a6f1..42c7d08 100644
+--- a/hw/ppc/Makefile.objs
++++ b/hw/ppc/Makefile.objs
+@@ -1,5 +1,5 @@
+ # IBM pSeries (sPAPR)
+-obj-$(CONFIG_PSERIES) += spapr_vty.o spapr_llan.o spapr_vscsi.o
++obj-$(CONFIG_PSERIES) += spapr_vty.o spapr_vscsi.o
+ obj-$(CONFIG_PSERIES) += spapr_pci.o
+ obj-$(CONFIG_PSERIES) += spapr_nvram.o
+ # PowerPC 4xx boards
+@@ -7,9 +7,6 @@ obj-y += ppc4xx_pci.o
+ # PowerPC OpenPIC
+ obj-y += openpic.o
+ 
+-# Xilinx PPC peripherals
+-obj-y += xilinx_ethlite.o
+-
+ obj-y := $(addprefix ../,$(obj-y))
+ 
+ # shared objects
+diff --git a/hw/sparc/Makefile.objs b/hw/sparc/Makefile.objs
+index 71bbddf..56eeb90 100644
+--- a/hw/sparc/Makefile.objs
++++ b/hw/sparc/Makefile.objs
+@@ -1,4 +1,4 @@
+-obj-y = lance.o tcx.o sun4m_iommu.o slavio_intctl.o
++obj-y = tcx.o sun4m_iommu.o slavio_intctl.o
+ obj-y += slavio_timer.o slavio_misc.o sparc32_dma.o
+ obj-y += cs4231.o eccmemctl.o sbi.o sun4c_intctl.o
+ 
+-- 
+1.8.1.4
+
+
+

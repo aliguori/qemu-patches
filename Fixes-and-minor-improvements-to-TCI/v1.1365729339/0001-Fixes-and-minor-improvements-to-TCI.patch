@@ -1,0 +1,51 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Stefan Weil <sw@weilnetz.de>
+To: Anthony Liguori <aliguori@us.ibm.com>, Stefan Weil <sw@weilnetz.de>
+Cc: Anthony Liguori <aliguori@us.ibm.com>, qemu-devel@nongnu.org,
+ Richard Henderson <rth@twiddle.net>
+Date: Thu, 11 Apr 2013 20:15:39 +0200
+Message-id: 1365704144-8852-1-git-send-email-sw@weilnetz.de
+Subject: [PATCH 1/1] Fixes and minor improvements to TCI
+
+Hello Anthony,
+
+please pull these five patches for TCI. They fix a regression caused
+by commit 378df4b23753a11be650af7664ca76bc75cb9f01 and include
+some improvements.
+
+Thanks,
+
+Stefan Weil
+
+
+The following changes since commit 93b48c201eb6c0404d15550a0eaa3c0f7937e35e:
+
+  virtio-9p: Fix virtio-9p no longer building after hw-dirs branch merge (2013-04-09 07:47:00 -0500)
+
+are available in the git repository at:
+
+  git://qemu.weilnetz.de/qemu.git tci
+
+for you to fetch changes up to ee79c356ffe18eea90ea4bbde2057cebe6bb654f:
+
+  tci: Make tcg temporaries local to tcg_qemu_tb_exec (2013-04-11 19:58:21 +0200)
+
+----------------------------------------------------------------
+Richard Henderson (5):
+      tci: Use 32-bit signed offsets to loads/stores
+      tci: Use a local variable for env
+      tci: Avoid code before declarations
+      tci: Delete unused tb_ret_addr
+      tci: Make tcg temporaries local to tcg_qemu_tb_exec
+
+ tcg/tci/tcg-target.c |   22 +++++++++-------------
+ tcg/tci/tcg-target.h |    8 +++++++-
+ tci.c                |   57 +++++++++++++++++++++++++++++++++------------------------
+ 3 files changed, 49 insertions(+), 38 deletions(-)
+
+[PATCH 1/5] tci: Use 32-bit signed offsets to loads/stores
+[PATCH 2/5] tci: Use a local variable for env
+[PATCH 3/5] tci: Avoid code before declarations
+[PATCH 4/5] tci: Delete unused tb_ret_addr
+[PATCH 5/5] tci: Make tcg temporaries local to tcg_qemu_tb_exec
+

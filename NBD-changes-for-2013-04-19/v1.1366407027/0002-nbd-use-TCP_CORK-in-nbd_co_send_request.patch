@@ -1,0 +1,59 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: stefanha@redhat.com
+Date: Fri, 19 Apr 2013 16:30:29 +0200
+Message-id: 1366381830-11267-3-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 2/3] nbd: use TCP_CORK in nbd_co_send_request()
+
+From: Stefan Hajnoczi <stefanha@redhat.com>
+
+Use TCP_CORK to defer packet transmission until both the header and the
+payload have been written.
+
+Suggested-by: Nick Thomas <nick@bytemark.co.uk>
+Signed-off-by: Stefan Hajnoczi <stefanha@redhat.com>
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ block/nbd.c | 22 ++++++++++++++++------
+ 1 file changed, 16 insertions(+), 6 deletions(-)
+
+diff --git a/block/nbd.c b/block/nbd.c
+index 662df16..485bbf0 100644
+--- a/block/nbd.c
++++ b/block/nbd.c
+@@ -334,13 +334,23 @@ static int nbd_co_send_request(BDRVNBDState *s, struct nbd_request *request,
+     s->send_coroutine = qemu_coroutine_self();
+     qemu_aio_set_fd_handler(s->sock, nbd_reply_ready, nbd_restart_write,
+                             nbd_have_request, s);
+-    rc = nbd_send_request(s->sock, request);
+-    if (rc >= 0 && qiov) {
+-        ret = qemu_co_sendv(s->sock, qiov->iov, qiov->niov,
+-                            offset, request->len);
+-        if (ret != request->len) {
+-            rc = -EIO;
++    if (qiov) {
++        if (!s->is_unix) {
++            socket_set_cork(s->sock, 1);
+         }
++        rc = nbd_send_request(s->sock, request);
++        if (rc >= 0) {
++            ret = qemu_co_sendv(s->sock, qiov->iov, qiov->niov,
++                                offset, request->len);
++            if (ret != request->len) {
++                rc = -EIO;
++            }
++        }
++        if (!s->is_unix) {
++            socket_set_cork(s->sock, 0);
++        }
++    } else {
++        rc = nbd_send_request(s->sock, request);
+     }
+     qemu_aio_set_fd_handler(s->sock, nbd_reply_ready, NULL,
+                             nbd_have_request, s);
+-- 
+1.8.1.4
+
+
+

@@ -1,0 +1,81 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Hu Tao <hutao@cn.fujitsu.com>
+To: Paolo Bonzini <pbonzini@redhat.com>, qemu-devel <qemu-devel@nongnu.org>,
+ Luiz Capitulino <lcapitulino@redhat.com>, Wen Congyang <wency@cn.fujitsu.com>,
+ Jan Kiszka <jan.kiszka@siemens.com>,
+ KAMEZAWA Hiroyuki <kamezawa.hiroyu@jp.fujitsu.com>,
+ Anthony Liguori <aliguori@us.ibm.com>, "Michael S. Tsirkin" <mst@redhat.com>,
+ Gleb Natapov <gleb@redhat.com>, Peter Maydell <peter.maydell@linaro.org>,
+ Blue Swirl <blauwirbel@gmail.com>, Alexander Graf <agraf@suse.de>,
+ Christian Borntraeger <borntraeger@de.ibm.com>,
+ Sasha Levin <levinsasha928@gmail.com>, Orit Wasserman <owasserm@redhat.com>,
+ Andrew Jones <drjones@redhat.com>, Markus Armbruster <armbru@redhat.com>,
+ Stefan Hajnoczi <stefanha@redhat.com>, Eric Blake <eblake@redhat.com>,
+ Juan Quintela <quintela@redhat.com>,
+ "Daniel P. Berrange" <berrange@redhat.com>,
+ Marcelo Tosatti <mtosatti@redhat.com>,
+ Alex Williamson <alex.williamson@redhat.com>
+Cc: 
+Date: Wed, 10 Apr 2013 11:33:51 +0800
+Message-id: 99c7411a2700c300c13ba108db31ec27f5829930.1365564298.git.hutao@cn.fujitsu.com
+Subject: [PATCH 2/7] add a new qevent: QEVENT_GUEST_PANICKED
+
+This event will be emited when qemu detects guest panic.
+
+Signed-off-by: Wen Congyang <wency@cn.fujitsu.com>
+Signed-off-by: Hu Tao <hutao@cn.fujitsu.com>
+---
+ QMP/qmp-events.txt        | 14 ++++++++++++++
+ include/monitor/monitor.h |  1 +
+ monitor.c                 |  1 +
+ 3 files changed, 16 insertions(+)
+
+diff --git a/QMP/qmp-events.txt b/QMP/qmp-events.txt
+index dcc826d..92fe5fb 100644
+--- a/QMP/qmp-events.txt
++++ b/QMP/qmp-events.txt
+@@ -446,3 +446,17 @@ Example:
+ 
+ Note: If action is "reset", "shutdown", or "pause" the WATCHDOG event is
+ followed respectively by the RESET, SHUTDOWN, or STOP events.
++
++GUEST_PANICKED
++--------------
++
++Emitted when guest OS panic is detected.
++
++Data:
++
++- "action": Action that has been taken (json-string, currently always "pause").
++
++Example:
++
++{ "event": "GUEST_PANICKED",
++     "data": { "action": "pause" } }
+diff --git a/include/monitor/monitor.h b/include/monitor/monitor.h
+index b868760..1a6cfcf 100644
+--- a/include/monitor/monitor.h
++++ b/include/monitor/monitor.h
+@@ -46,6 +46,7 @@ typedef enum MonitorEvent {
+     QEVENT_WAKEUP,
+     QEVENT_BALLOON_CHANGE,
+     QEVENT_SPICE_MIGRATE_COMPLETED,
++    QEVENT_GUEST_PANICKED,
+ 
+     /* Add to 'monitor_event_names' array in monitor.c when
+      * defining new events here */
+diff --git a/monitor.c b/monitor.c
+index c897e80..444e297 100644
+--- a/monitor.c
++++ b/monitor.c
+@@ -496,6 +496,7 @@ static const char *monitor_event_names[] = {
+     [QEVENT_WAKEUP] = "WAKEUP",
+     [QEVENT_BALLOON_CHANGE] = "BALLOON_CHANGE",
+     [QEVENT_SPICE_MIGRATE_COMPLETED] = "SPICE_MIGRATE_COMPLETED",
++    [QEVENT_GUEST_PANICKED] = "GUEST_PANICKED",
+ };
+ QEMU_BUILD_BUG_ON(ARRAY_SIZE(monitor_event_names) != QEVENT_MAX)
+ 
+-- 
+1.8.1.4
+

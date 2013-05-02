@@ -1,0 +1,1 @@
+../virtio-fix-bus-command-line-compatibility/v1.1367273561/0003-scsi-add-scsi_named_bus_new.patch

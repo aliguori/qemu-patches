@@ -1,0 +1,22 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Kevin Wolf <kwolf@redhat.com>
+To: Kevin Wolf <kwolf@redhat.com>, qemu-devel@nongnu.org
+Cc: kwolf@redhat.com, qemu-devel@nongnu.org, aurelien@aurel32.net
+Date: Tue,  2 Apr 2013 11:28:23 +0200
+Message-id: 1364894905-12955-1-git-send-email-kwolf@redhat.com
+Subject: [PATCH 0/2] More translation improvements
+
+This series is meant to be applied on top of Aurélien's series.
+
+Kevin Wolf (2):
+  po/Makefile: Fix dependency for %.mo
+  po: Update German translation
+
+ po/Makefile |  2 +-
+ po/de_DE.po | 12 ++++++------
+ 2 files changed, 7 insertions(+), 7 deletions(-)
+
+-- 
+1.8.1.4
+
+

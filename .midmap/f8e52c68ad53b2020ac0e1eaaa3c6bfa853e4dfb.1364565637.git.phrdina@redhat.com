@@ -1,0 +1,1 @@
+../convert-savevm-to-use-qapi-and-introduce-qmp-command/v4.1364587947/0011-savevm-add-force-parameter-to-HMP-command-and-return-snapshot-info.patch

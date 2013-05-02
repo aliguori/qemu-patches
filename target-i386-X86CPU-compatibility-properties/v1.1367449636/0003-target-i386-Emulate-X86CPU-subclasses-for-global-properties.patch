@@ -1,0 +1,51 @@
+From patches Mon Sep 17 00:00:00 2001
+From: =?utf-8?q?Andreas_F=C3=A4rber_=3Cafaerber=40suse=2Ede=3E?=
+To: qemu-devel@nongnu.org, Andreas =?iso-8859-1?Q?F=E4rber?= <afaerber@suse.de>
+Cc: ehabkost@redhat.com, qemu-devel@nongnu.org,
+ =?UTF-8?q?Andreas=20F=C3=A4rber?= <afaerber@suse.de>, anthony@codemonkey.ws,
+ pbonzini@redhat.com, imammedo@redhat.com
+Date: Wed,  1 May 2013 18:07:19 +0200
+Message-id: 1367424440-16687-4-git-send-email-afaerber@suse.de
+Subject: [PATCH 3/4] target-i386: Emulate X86CPU subclasses for global
+ properties
+
+After initializing the object from its x86_def_t and before setting any
+additional -cpu arguments, set any global properties for the designated
+subclass <name>-{i386,x86_64}-cpu.
+
+Signed-off-by: Andreas Färber <afaerber@suse.de>
+Reviewed-by: Eduardo Habkost <ehabkost@redhat.com>
+---
+ target-i386/cpu.c | 9 +++++++++
+ 1 file changed, 9 insertions(+)
+
+diff --git a/target-i386/cpu.c b/target-i386/cpu.c
+index bba41fe..8a9563b 100644
+--- a/target-i386/cpu.c
++++ b/target-i386/cpu.c
+@@ -1626,6 +1626,7 @@ X86CPU *cpu_x86_create(const char *cpu_model, DeviceState *icc_bridge,
+     CPUX86State *env;
+     gchar **model_pieces;
+     char *name, *features;
++    char *typename;
+     Error *error = NULL;
+ 
+     model_pieces = g_strsplit(cpu_model, ",", 2);
+@@ -1653,6 +1654,14 @@ X86CPU *cpu_x86_create(const char *cpu_model, DeviceState *icc_bridge,
+         goto out;
+     }
+ 
++    /* Emulate per-model subclasses for global properties */
++    typename = g_strdup_printf("%s-" TYPE_X86_CPU, name);
++    qdev_prop_set_custom_globals(DEVICE(cpu), typename, &error);
++    g_free(typename);
++    if (error) {
++        goto out;
++    }
++
+     cpu_x86_parse_featurestr(cpu, features, &error);
+     if (error) {
+         goto out;
+-- 
+1.8.1.4
+

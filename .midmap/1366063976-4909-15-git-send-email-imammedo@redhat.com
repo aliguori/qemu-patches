@@ -1,0 +1,1 @@
+../target-i386-CPU-hot-add-with-cpu-add-QMP-command/v4.1366089160/0014-target-i386-move-APIC-to-ICC-bus.patch

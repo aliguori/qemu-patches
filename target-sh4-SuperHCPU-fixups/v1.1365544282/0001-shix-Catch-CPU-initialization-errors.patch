@@ -1,0 +1,37 @@
+From patches Mon Sep 17 00:00:00 2001
+From: =?utf-8?q?Andreas_F=C3=A4rber_=3Cafaerber=40suse=2Ede=3E?=
+To: qemu-devel@nongnu.org, =?UTF-8?Q?Andreas_F=C3=A4rber?= <afaerber@suse.de>
+Cc: peter.maydell@linaro.org,
+ =?UTF-8?q?Andreas=20F=C3=A4rber?= <afaerber@suse.de>, aurelien@aurel32.net,
+ qemu-devel@nongnu.org
+Date: Tue,  9 Apr 2013 16:51:23 +0200
+Message-id: 1365519084-4229-2-git-send-email-afaerber@suse.de
+Subject: [PATCH 1/2] shix: Catch CPU initialization errors
+
+Print an error message as done for the r2d machine and exit.
+
+Signed-off-by: Andreas Färber <afaerber@suse.de>
+Reviewed-by: Peter Maydell <peter.maydell@linaro.org>
+---
+ hw/sh4/shix.c | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/hw/sh4/shix.c b/hw/sh4/shix.c
+index c23d4af..f5cfef9 100644
+--- a/hw/sh4/shix.c
++++ b/hw/sh4/shix.c
+@@ -52,6 +52,10 @@ static void shix_init(QEMUMachineInitArgs *args)
+ 
+     printf("Initializing CPU\n");
+     env = cpu_init(cpu_model);
++    if (env == NULL) {
++        fprintf(stderr, "Unable to find CPU definition\n");
++        exit(1);
++    }
+ 
+     /* Allocate memory space */
+     printf("Allocating ROM\n");
+-- 
+1.8.1.4
+
+

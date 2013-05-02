@@ -1,0 +1,47 @@
+From patches Mon Sep 17 00:00:00 2001
+From: =?utf-8?q?Llu=C3=ADs_Vilanova_=3Cvilanova=40ac=2Eupc=2Eedu=3E?=
+To: qemu-devel@nongnu.org
+Cc: 
+Date: Tue, 26 Mar 2013 15:00:32 +0100
+Message-id: 20130326140032.4471.70243.stgit@fimbulvetr.bsc.es
+Subject: [PATCH 02/22] trace: [simple] Do not include "trace/simple.h" in
+ generated tracer headers
+
+The header is not necessary, given that the simple backend does not define any
+inlined tracing routines.
+
+Signed-off-by: Lluís Vilanova <vilanova@ac.upc.edu>
+---
+ scripts/tracetool/backend/simple.py |    3 ---
+ trace/simple.c                      |    2 ++
+ 2 files changed, 2 insertions(+), 3 deletions(-)
+
+diff --git a/scripts/tracetool/backend/simple.py b/scripts/tracetool/backend/simple.py
+index 37ef599..30faac9 100644
+--- a/scripts/tracetool/backend/simple.py
++++ b/scripts/tracetool/backend/simple.py
+@@ -93,9 +93,6 @@ def c(events):
+ 
+ 
+ def h(events):
+-    out('#include "trace/simple.h"',
+-        '')
+-
+     for event in events:
+         out('void trace_%(name)s(%(args)s);',
+             name = event.name,
+diff --git a/trace/simple.c b/trace/simple.c
+index 1e3f691..8b59760 100644
+--- a/trace/simple.c
++++ b/trace/simple.c
+@@ -8,6 +8,8 @@
+  *
+  */
+ 
++#include "trace/simple.h"
++
+ #include <stdlib.h>
+ #include <stdint.h>
+ #include <stdio.h>
+
+

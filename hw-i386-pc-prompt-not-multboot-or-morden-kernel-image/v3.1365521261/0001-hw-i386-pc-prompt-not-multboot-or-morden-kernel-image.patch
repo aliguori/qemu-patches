@@ -1,0 +1,44 @@
+From patches Mon Sep 17 00:00:00 2001
+From: liguang <lig.fnst@cn.fujitsu.com>
+To: qemu-trivial@nongnu.org, Stefan Hajnoczi <stefanha@gmail.com>,
+ qemu-devel@nongnu.org, liguang <lig.fnst@cn.fujitsu.com>,
+ Jesse Larrew <jlarrew@linux.vnet.ibm.com>, li guang <lig.fnst@cn.fujitsu.com>
+Cc: Anthony Liguori <aliguori@us.ibm.com>, qemu-trivial@nongnu.org,
+ Stefan Hajnoczi <stefanha@gmail.com>, qemu-devel@nongnu.org,
+ liguang <lig.fnst@cn.fujitsu.com>, Jesse Larrew <jlarrew@linux.vnet.ibm.com>
+Date: Tue, 9 Apr 2013 10:27:41 +0800
+Message-id: 1365474461-17474-1-git-send-email-lig.fnst@cn.fujitsu.com
+Subject: [PATCH 1/1] hw/i386/pc: prompt not multboot or morden kernel image
+
+if head magic is missing or wrong unexpectedly, we'd
+better to prompt memssage for this.
+e.g.
+I make a mistake to boot a vmlinuz for MIPS(which
+I think it's for x86) like this:
+qemu-system-x86_64 -kernel vmlinuz -initrd demord
+then qemu report:
+"qemu: linux kernel too old to load a ram disk"
+that's misleading.
+
+Signed-off-by: liguang <lig.fnst@cn.fujitsu.com>
+---
+ hw/i386/pc.c |    2 ++
+ 1 files changed, 2 insertions(+), 0 deletions(-)
+
+diff --git a/hw/i386/pc.c b/hw/i386/pc.c
+index ebbf059..6b29c3f 100644
+--- a/hw/i386/pc.c
++++ b/hw/i386/pc.c
+@@ -686,6 +686,8 @@ static void load_linux(void *fw_cfg,
+         if (load_multiboot(fw_cfg, f, kernel_filename, initrd_filename,
+                            kernel_cmdline, kernel_size, header)) {
+             return;
++        } else {
++            fprintf(stderr, "warn: invalid multiboot or modern kernel image\n");
+         }
+         protocol = 0;
+     }
+-- 
+1.7.2.5
+
+

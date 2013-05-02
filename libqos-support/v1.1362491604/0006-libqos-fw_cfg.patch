@@ -1,0 +1,178 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Anthony Liguori <aliguori@us.ibm.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>,
+ Stefan Hajnoczi <stefanha@redhat.com>, Kevin Wolf <kwolf@redhat.com>
+Date: Tue, 5 Mar 2013 07:53:30 -0600
+Message-id: 1362491612-19226-7-git-send-email-aliguori@us.ibm.com
+Subject: [PATCH 6/8] libqos: fw_cfg
+
+Signed-off-by: Anthony Liguori <aliguori@us.ibm.com>
+---
+ tests/Makefile        |  2 +-
+ tests/fw_cfg-test.c   | 48 +-----------------------------------------------
+ tests/libqos/fw_cfg.c | 39 +++++++++++++++++++++++++++++++++++++++
+ tests/libqos/fw_cfg.h | 22 ++++++++++++++++++++++
+ 4 files changed, 63 insertions(+), 48 deletions(-)
+ create mode 100644 tests/libqos/fw_cfg.c
+ create mode 100644 tests/libqos/fw_cfg.h
+
+diff --git a/tests/Makefile b/tests/Makefile
+index 7482297..7e436c0 100644
+--- a/tests/Makefile
++++ b/tests/Makefile
+@@ -130,7 +130,7 @@ tests/test-visitor-serialization$(EXESUF): tests/test-visitor-serialization.o $(
+ 
+ tests/test-mul64$(EXESUF): tests/test-mul64.o libqemuutil.a
+ 
+-libqos-obj-y = tests/libqos/pci.o
++libqos-obj-y = tests/libqos/pci.o tests/libqos/fw_cfg.o
+ libqos-pc-obj-y = $(libqos-obj-y) tests/libqos/pci-pc.o
+ 
+ tests/rtc-test$(EXESUF): tests/rtc-test.o
+diff --git a/tests/fw_cfg-test.c b/tests/fw_cfg-test.c
+index b784dc8..99643c0 100644
+--- a/tests/fw_cfg-test.c
++++ b/tests/fw_cfg-test.c
+@@ -2,18 +2,11 @@
+ 
+ #include "libqtest.h"
+ #include "hw/fw_cfg.h"
++#include "libqos/fw_cfg.h"
+ 
+ #include <string.h>
+ #include <glib.h>
+ 
+-typedef struct QFWCFG QFWCFG;
+-
+-struct QFWCFG
+-{
+-    void (*select)(QFWCFG *fw_cfg, uint16_t key);
+-    void (*read)(QFWCFG *fw_cfg, void *data, size_t len);
+-};
+-
+ /* PC specific */
+ 
+ static void pc_fw_cfg_select(QFWCFG *fw_cfg, uint16_t key)
+@@ -41,45 +34,6 @@ static QFWCFG *pc_fw_cfg_init(void)
+     return fw_cfg;
+ }
+ 
+-/* Generic code */
+-
+-static void qfw_cfg_select(QFWCFG *fw_cfg, uint16_t key)
+-{
+-    fw_cfg->select(fw_cfg, key);
+-}
+-
+-static void qfw_cfg_read_data(QFWCFG *fw_cfg, void *data, size_t len)
+-{
+-    fw_cfg->read(fw_cfg, data, len);
+-}
+-
+-static void qfw_cfg_get(QFWCFG *fw_cfg, uint16_t key, void *data, size_t len)
+-{
+-    qfw_cfg_select(fw_cfg, key);
+-    qfw_cfg_read_data(fw_cfg, data, len);
+-}
+-
+-static uint16_t qfw_cfg_get_u16(QFWCFG *fw_cfg, uint16_t key)
+-{
+-    uint16_t value;
+-    qfw_cfg_get(fw_cfg, key, &value, sizeof(value));
+-    return value;
+-}
+-
+-static uint32_t qfw_cfg_get_u32(QFWCFG *fw_cfg, uint16_t key)
+-{
+-    uint32_t value;
+-    qfw_cfg_get(fw_cfg, key, &value, sizeof(value));
+-    return value;
+-}
+-
+-static uint64_t qfw_cfg_get_u64(QFWCFG *fw_cfg, uint16_t key)
+-{
+-    uint64_t value;
+-    qfw_cfg_get(fw_cfg, key, &value, sizeof(value));
+-    return value;
+-}
+-
+ static uint64_t ram_size = 128 << 20;
+ static uint16_t nb_cpus = 1;
+ static uint16_t max_cpus = 1;
+diff --git a/tests/libqos/fw_cfg.c b/tests/libqos/fw_cfg.c
+new file mode 100644
+index 0000000..f6f53c5
+--- /dev/null
++++ b/tests/libqos/fw_cfg.c
+@@ -0,0 +1,39 @@
++#include "libqos/fw_cfg.h"
++
++void qfw_cfg_select(QFWCFG *fw_cfg, uint16_t key)
++{
++    fw_cfg->select(fw_cfg, key);
++}
++
++void qfw_cfg_read_data(QFWCFG *fw_cfg, void *data, size_t len)
++{
++    fw_cfg->read(fw_cfg, data, len);
++}
++
++void qfw_cfg_get(QFWCFG *fw_cfg, uint16_t key, void *data, size_t len)
++{
++    qfw_cfg_select(fw_cfg, key);
++    qfw_cfg_read_data(fw_cfg, data, len);
++}
++
++uint16_t qfw_cfg_get_u16(QFWCFG *fw_cfg, uint16_t key)
++{
++    uint16_t value;
++    qfw_cfg_get(fw_cfg, key, &value, sizeof(value));
++    return value;
++}
++
++uint32_t qfw_cfg_get_u32(QFWCFG *fw_cfg, uint16_t key)
++{
++    uint32_t value;
++    qfw_cfg_get(fw_cfg, key, &value, sizeof(value));
++    return value;
++}
++
++uint64_t qfw_cfg_get_u64(QFWCFG *fw_cfg, uint16_t key)
++{
++    uint64_t value;
++    qfw_cfg_get(fw_cfg, key, &value, sizeof(value));
++    return value;
++}
++
+diff --git a/tests/libqos/fw_cfg.h b/tests/libqos/fw_cfg.h
+new file mode 100644
+index 0000000..a82d2da
+--- /dev/null
++++ b/tests/libqos/fw_cfg.h
+@@ -0,0 +1,22 @@
++#ifndef LIBQOS_FW_CFG_H
++#define LIBQOS_FW_CFG_H
++
++#include <stdint.h>
++#include <sys/types.h>
++
++typedef struct QFWCFG QFWCFG;
++
++struct QFWCFG
++{
++    void (*select)(QFWCFG *fw_cfg, uint16_t key);
++    void (*read)(QFWCFG *fw_cfg, void *data, size_t len);
++};
++
++void qfw_cfg_select(QFWCFG *fw_cfg, uint16_t key);
++void qfw_cfg_read_data(QFWCFG *fw_cfg, void *data, size_t len);
++void qfw_cfg_get(QFWCFG *fw_cfg, uint16_t key, void *data, size_t len);
++uint16_t qfw_cfg_get_u16(QFWCFG *fw_cfg, uint16_t key);
++uint32_t qfw_cfg_get_u32(QFWCFG *fw_cfg, uint16_t key);
++uint64_t qfw_cfg_get_u64(QFWCFG *fw_cfg, uint16_t key);
++
++#endif
+-- 
+1.8.0
+

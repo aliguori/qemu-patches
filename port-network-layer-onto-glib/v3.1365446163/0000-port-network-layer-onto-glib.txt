@@ -1,0 +1,51 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Liu Ping Fan <pingfank@linux.vnet.ibm.com>
+To: Stefan Hajnoczi <stefanha@gmail.com>, qemu-devel@nongnu.org,
+ Liu Ping Fan <pingfank@linux.vnet.ibm.com>, liu ping fan <qemulist@gmail.com>,
+ Jan Kiszka <jan.kiszka@siemens.com>, Stefan Hajnoczi <stefanha@redhat.com>
+Cc: Paolo Bonzini <pbonzini@redhat.com>, qemu-devel <qemu-devel@nongnu.org>,
+ Anthony Liguori <anthony@codemonkey.ws>, Stefan Hajnoczi <stefanha@gmail.com>,
+ qemu-devel@nongnu.org, Liu Ping Fan <pingfank@linux.vnet.ibm.com>,
+ mdroth <mdroth@linux.vnet.ibm.com>, Jan Kiszka <jan.kiszka@siemens.com>,
+ Stefan Hajnoczi <stefanha@redhat.com>
+Date: Mon,  8 Apr 2013 13:36:03 +0800
+Message-id: 1365399368-26967-1-git-send-email-pingfank@linux.vnet.ibm.com
+Subject: [PATCH 0/5] port network layer onto glib
+
+This series focus on network backend (excluding slirp). The related patch
+for core's re-entrant (queue.c net.c) will be sent out separatelly.
+
+The choice between  GSource or AioContext is not decided yet.
+If we choose AioContext, I think we need to expand extra interface for 
+readable() and writable(). readable() is different from io_flush, which
+causes block for sync, but this sync is not neccessary for NetWork.
+
+
+
+v2->v3:
+  1.drop hub and the frontend(virtio net)
+  2.split the patch for NetClientSource 
+
+v1->v2:
+  1.NetClientState can associate with up to 2 GSource, for virtio net, one for tx, one for rx,
+    so vq can run on different threads.
+  2.make network front-end onto glib, currently virtio net dataplane
+
+
+Liu Ping Fan (5):
+  net: introduce glib function for network
+  net: port tap onto glib
+  net: resolve race of tap backend and its peer
+  net: port vde onto glib
+  net: port socket to glib
+
+ include/net/net.h |   15 +++++
+ net/net.c         |   61 +++++++++++++++++++++
+ net/socket.c      |  152 ++++++++++++++++++++++++++++++++++++++++-------------
+ net/tap.c         |   63 ++++++++++++++++++----
+ net/vde.c         |   15 +++++-
+ 5 files changed, 258 insertions(+), 48 deletions(-)
+
+-- 
+1.7.4.4
+

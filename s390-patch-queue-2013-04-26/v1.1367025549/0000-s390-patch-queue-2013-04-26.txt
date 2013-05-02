@@ -1,0 +1,96 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Alexander Graf <agraf@suse.de>
+To: Alexander Graf <agraf@suse.de>, qemu-ppc@nongnu.org
+Cc: Blue Swirl <blauwirbel@gmail.com>, qemu-ppc@nongnu.org,
+ Aurelien Jarno <aurelien@aurel32.net>, qemu-devel@nongnu.org
+Date: Fri, 26 Apr 2013 20:19:09 +0200
+Message-id: 1367000373-7972-1-git-send-email-agraf@suse.de
+Subject: [PATCH 00/24] s390 patch queue 2013-04-26
+
+Hi Blue / Aurelien,
+
+This is my current patch queue for s390.  Please pull.
+
+Alex
+
+
+The following changes since commit bf9b255f484fd61cbaa91faeff254140a0ecd18c:
+  Anthony Liguori (1):
+        gtk: refactor menu creation
+
+are available in the git repository at:
+
+  git://github.com/agraf/qemu.git s390-for-upstream
+
+Alexander Graf (12):
+      S390: Make IPL reset address dynamic
+      S390: IPL: Support ELF firmware
+      S390: IPL: Use different firmware for different machines
+      S390: ccw firmware: Add start assembly
+      S390: ccw firmware: Add main program
+      S390: ccw firmware: Add sclp output
+      S390: ccw firmware: Add virtio device drivers
+      S390: ccw firmware: Add glue header
+      S390: ccw firmware: Add bootmap interpreter
+      S390: ccw firmware: Add Makefile
+      S390: ccw firmware: Add compiled blob
+      S390: CCW: Use new, working firmware by default
+
+Christian Borntraeger (4):
+      s390-ccw.img: replace while loop with a disabled wait on s390 bios
+      s390-ccw.img: build s390-ccw rom on s3900 system by default
+      s390-ccw.img: Take care of the elf->img transition
+      s390-ccw.img: Fix compile warning in s390 ccw virtio code
+
+Cornelia Huck (4):
+      s390-ccw.img: Detect devices with stsch.
+      s390-ccw.img: Enhance drain_irqs().
+      s390-ccw.img: Rudimentary error checking.
+      s390-ccw.img: Get queue config from host.
+
+Dominik Dingel (1):
+      Common: Add quick access to first boot device
+
+Jason J. Herne (2):
+      Allow selective runtime register synchronization
+      Utilize selective runtime reg sync for hot code paths
+
+KONRAD Frederic (1):
+      virtio-rng-s390: add properties.
+
+ .gitignore                    |    2 +
+ Makefile                      |    1 +
+ configure                     |    7 +-
+ hw/s390x/ipl.c                |   41 +++---
+ hw/s390x/s390-virtio-bus.c    |    8 +
+ hw/s390x/s390-virtio-ccw.c    |    2 +-
+ hw/s390x/s390-virtio.c        |    7 +-
+ hw/s390x/s390-virtio.h        |    3 +-
+ include/sysemu/sysemu.h       |    2 +
+ pc-bios/s390-ccw.img          |  Bin 0 -> 9432 bytes
+ pc-bios/s390-ccw/Makefile     |   26 ++++
+ pc-bios/s390-ccw/bootmap.c    |  235 ++++++++++++++++++++++++++++++
+ pc-bios/s390-ccw/cio.h        |  322 +++++++++++++++++++++++++++++++++++++++++
+ pc-bios/s390-ccw/main.c       |   61 ++++++++
+ pc-bios/s390-ccw/s390-ccw.h   |  134 +++++++++++++++++
+ pc-bios/s390-ccw/sclp-ascii.c |   81 ++++++++++
+ pc-bios/s390-ccw/sclp.h       |  107 ++++++++++++++
+ pc-bios/s390-ccw/start.S      |   31 ++++
+ pc-bios/s390-ccw/virtio.c     |  298 ++++++++++++++++++++++++++++++++++++++
+ pc-bios/s390-ccw/virtio.h     |  163 +++++++++++++++++++++
+ target-s390x/cpu.h            |   17 ++
+ target-s390x/kvm.c            |   82 ++++++++++-
+ vl.c                          |   18 +++
+ 23 files changed, 1622 insertions(+), 26 deletions(-)
+ create mode 100644 pc-bios/s390-ccw.img
+ create mode 100644 pc-bios/s390-ccw/Makefile
+ create mode 100644 pc-bios/s390-ccw/bootmap.c
+ create mode 100644 pc-bios/s390-ccw/cio.h
+ create mode 100644 pc-bios/s390-ccw/main.c
+ create mode 100644 pc-bios/s390-ccw/s390-ccw.h
+ create mode 100644 pc-bios/s390-ccw/sclp-ascii.c
+ create mode 100644 pc-bios/s390-ccw/sclp.h
+ create mode 100644 pc-bios/s390-ccw/start.S
+ create mode 100644 pc-bios/s390-ccw/virtio.c
+ create mode 100644 pc-bios/s390-ccw/virtio.h
+

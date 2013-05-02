@@ -1,0 +1,120 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Hu Tao <hutao@cn.fujitsu.com>
+To: Paolo Bonzini <pbonzini@redhat.com>, qemu-devel <qemu-devel@nongnu.org>,
+ Kevin O'Connor <kevin@koconnor.net>, seabios@seabios.org,
+ Luiz Capitulino <lcapitulino@redhat.com>, Wen Congyang <wency@cn.fujitsu.com>,
+ Jan Kiszka <jan.kiszka@siemens.com>,
+ KAMEZAWA Hiroyuki <kamezawa.hiroyu@jp.fujitsu.com>,
+ Anthony Liguori <aliguori@us.ibm.com>, "Michael S. Tsirkin" <mst@redhat.com>,
+ Gleb Natapov <gleb@redhat.com>, Peter Maydell <peter.maydell@linaro.org>,
+ Blue Swirl <blauwirbel@gmail.com>, Alexander Graf <agraf@suse.de>,
+ Christian Borntraeger <borntraeger@de.ibm.com>,
+ Sasha Levin <levinsasha928@gmail.com>, Orit Wasserman <owasserm@redhat.com>,
+ Alex Williamson <alex.williamson@redhat.com>,
+ Markus Armbruster <armbru@redhat.com>, Stefan Hajnoczi <stefanha@redhat.com>,
+ Eric Blake <eblake@redhat.com>, Juan Quintela <quintela@redhat.com>,
+ "Daniel P. Berrange" <berrange@redhat.com>,
+ Marcelo Tosatti <mtosatti@redhat.com>, Andrew Jones <drjones@redhat.com>
+Cc: qemu-devel <qemu-devel@nongnu.org>, seabios@seabios.org,
+ Eric Blake <eblake@redhat.com>, Wen Congyang <wency@cn.fujitsu.com>,
+ Jan Kiszka <jan.kiszka@siemens.com>,
+ KAMEZAWA Hiroyuki <kamezawa.hiroyu@jp.fujitsu.com>,
+ Anthony Liguori <aliguori@us.ibm.com>, "Michael S. Tsirkin" <mst@redhat.com>,
+ Gleb Natapov <gleb@redhat.com>, Blue Swirl <blauwirbel@gmail.com>,
+ Alexander Graf <agraf@suse.de>, Sasha Levin <levinsasha928@gmail.com>,
+ Orit Wasserman <owasserm@redhat.com>, Andrew Jones <drjones@redhat.com>,
+ Markus Armbruster <armbru@redhat.com>, Stefan Hajnoczi <stefanha@redhat.com>,
+ Luiz Capitulino <lcapitulino@redhat.com>, Juan Quintela <quintela@redhat.com>,
+ Hu Tao <hutao@cn.fujitsu.com>, "Daniel P. Berrange" <berrange@redhat.com>,
+ Marcelo Tosatti <mtosatti@redhat.com>,
+ Alex Williamson <alex.williamson@redhat.com>
+Date: Fri, 5 Apr 2013 15:17:51 +0800
+Message-id: 1365146271-6220-1-git-send-email-hutao@cn.fujitsu.com
+Subject: [PATCH 1/1] Add pvpanic device driver
+
+pvpanic device is used to notify host(qemu) when guest panic happens.
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+Signed-off-by: Hu Tao <hutao@cn.fujitsu.com>
+---
+
+No change from v16. qemu patches at:
+
+http://lists.nongnu.org/archive/html/qemu-devel/2013-04/msg01028.html
+
+ src/acpi.c        |  3 +++
+ src/ssdt-misc.dsl | 46 ++++++++++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 49 insertions(+)
+
+diff --git a/src/acpi.c b/src/acpi.c
+index bc4d8ea..fe504f0 100644
+--- a/src/acpi.c
++++ b/src/acpi.c
+@@ -534,6 +534,9 @@ build_ssdt(void)
+         ssdt_ptr[acpi_pci64_valid[0]] = 0;
+     }
+ 
++    int pvpanic_port = romfile_loadint("etc/pvpanic-port", 0x0);
++    *(u16 *)(ssdt_ptr + *ssdt_isa_pest) = pvpanic_port;
++
+     ssdt_ptr += sizeof(ssdp_misc_aml);
+ 
+     // build Scope(_SB_) header
+diff --git a/src/ssdt-misc.dsl b/src/ssdt-misc.dsl
+index 679422b..acc850e 100644
+--- a/src/ssdt-misc.dsl
++++ b/src/ssdt-misc.dsl
+@@ -55,4 +55,50 @@ DefinitionBlock ("ssdt-misc.aml", "SSDT", 0x01, "BXPC", "BXSSDTSUSP", 0x1)
+             Zero   /* reserved */
+         })
+     }
++
++    External(\_SB.PCI0, DeviceObj)
++    External(\_SB.PCI0.ISA, DeviceObj)
++
++    Scope(\_SB.PCI0.ISA) {
++        Device(PEVT) {
++            Name(_HID, "QEMU0001")
++            /* PEST will be patched to be Zero if no such device */
++            ACPI_EXTRACT_NAME_WORD_CONST ssdt_isa_pest
++            Name(PEST, 0xFFFF)
++            OperationRegion(PEOR, SystemIO, PEST, 0x01)
++            Field(PEOR, ByteAcc, NoLock, Preserve) {
++                PEPT,   8,
++            }
++
++            Method(_STA, 0, NotSerialized) {
++                Store(PEST, Local0)
++                If (LEqual(Local0, Zero)) {
++                    Return (0x00)
++                } Else {
++                    Return (0x0F)
++                }
++            }
++
++            Method(RDPT, 0, NotSerialized) {
++                Store(PEPT, Local0)
++                Return (Local0)
++            }
++
++            Method(WRPT, 1, NotSerialized) {
++                Store(Arg0, PEPT)
++            }
++
++            Name(_CRS, ResourceTemplate() {
++                IO(Decode16, 0x00, 0x00, 0x01, 0x01, IO)
++            })
++
++            CreateWordField(_CRS, IO._MIN, IOMN)
++            CreateWordField(_CRS, IO._MAX, IOMX)
++
++            Method(_INI, 0, NotSerialized) {
++                Store(PEST, IOMN)
++                Store(PEST, IOMX)
++            }
++        }
++    }
+ }
+-- 
+1.8.1.4
+

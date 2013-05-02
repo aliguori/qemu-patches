@@ -1,0 +1,1 @@
+../virtio-ccw-Indicators-fix/v1.1366759668/0001-virtio-ccw-Check-indicators-location.patch

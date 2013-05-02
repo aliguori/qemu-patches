@@ -1,0 +1,32 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Orit Wasserman <owasserm@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: pbonzini@redhat.com, quintela@redhat.com, chegu_vinod@hp.com,
+ Orit Wasserman <owasserm@redhat.com>, mst@redhat.com
+Date: Fri, 22 Mar 2013 16:47:59 +0200
+Message-id: 1363963683-26157-4-git-send-email-owasserm@redhat.com
+Subject: [PATCH 3/7] Update bytes_xfer in qemu_put_byte
+
+Signed-off-by: Orit Wasserman <owasserm@redhat.com>
+Reviewed-by: Juan Quintela <quintela@redhat.com>
+---
+ savevm.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/savevm.c b/savevm.c
+index 21140c4..2ba0d85 100644
+--- a/savevm.c
++++ b/savevm.c
+@@ -648,6 +648,8 @@ void qemu_put_byte(QEMUFile *f, int v)
+ 
+     f->buf[f->buf_index++] = v;
+     f->is_write = 1;
++    f->bytes_xfer++;
++
+     if (f->buf_index >= IO_BUF_SIZE) {
+         qemu_fflush(f);
+     }
+-- 
+1.7.11.7
+
+

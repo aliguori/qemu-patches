@@ -1,0 +1,51 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: pmaydell@linaro.org, aurelien@aurel32.net
+Date: Wed,  3 Apr 2013 12:31:58 +0200
+Message-id: 1364985128-23772-1-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 00/10] TARGET_*_ALIGNMENT cleanup,
+ and config-target.mak trimming
+
+This series expands on the one I sent yesterday, but also fixes some
+confusion between target (CPU) and ABI types in linux-user/elfload.c.
+
+target_short/int/llong and the corresponding unsigned types are renamed
+to abi_short/int/llong, and TARGET_*_ALIGNMENT is similarly renamed to
+ABI_*_ALIGNMENT.  target_long/ulong, which identify the register width
+in the CPU, do not have special alignment anymore.  Core dumps are
+changed to use the new types, with fixes to include the full 64-bit
+contents of mipsn32 registers.
+
+Patches 1-3 are new.  Patches 4-7 are also new, and replace patches 1-2
+in the previous submission.  Patches 8-10 are the same as patches 3-5
+in the previous submission, with a fix for -lm link errors in patch 9.
+
+Paolo
+
+Paolo Bonzini (10):
+  elfload: fix size of ABI-dependent fields in core dumps
+  elfload: fix size of registers for N32
+  elfload: use tswapreg consistently in elf_core_copy_regs
+  elfload: use abi_short/ushort instead of target_short/ushort
+  elfload: use abi_int/uint instead of target_int/uint
+  elfload: only give abi_long/ulong the alignment specified by the target
+  elfload: use abi_llong/ullong instead of target_llong/ullong
+  configure: move CONFIG_QEMU_LDST_OPTIMIZATION to config-host.mak
+  configure: move common libraries to config-host.mak
+  configure: CONFIG_NO_XEN is duplicated
+
+ Makefile.target              |  10 +--
+ configure                    |  43 +++--------
+ hw/xen.h                     |   2 +-
+ include/exec/cpu-defs.h      |  14 +---
+ include/exec/user/abitypes.h |  36 +++++++--
+ linux-user/elfload.c         | 175 ++++++++++++++++++++++---------------------
+ target-arm/cpu.h             |   1 +
+ target-m68k/cpu.h            |   3 +
+ 8 files changed, 147 insertions(+), 137 deletions(-)
+
+-- 
+1.8.1.4
+
+

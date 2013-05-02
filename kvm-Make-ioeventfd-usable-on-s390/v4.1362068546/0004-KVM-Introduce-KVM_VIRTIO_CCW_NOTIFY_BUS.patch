@@ -1,0 +1,39 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Cornelia Huck <cornelia.huck@de.ibm.com>
+To: Marcelo Tosatti <mtosatti@redhat.com>, Gleb Natapov <gleb@redhat.com>
+Cc: Alexander Graf <agraf@suse.de>, qemu-devel <qemu-devel@nongnu.org>,
+ Carsten Otte <cotte@de.ibm.com>,
+ Christian Borntraeger <borntraeger@de.ibm.com>,
+ Heiko Carstens <heiko.carstens@de.ibm.com>, KVM <kvm@vger.kernel.org>,
+ "Michael S. Tsirkin" <mst@redhat.com>, linux-s390 <linux-s390@vger.kernel.org>,
+ Martin Schwidefsky <schwidefsky@de.ibm.com>
+Date: Thu, 28 Feb 2013 10:22:30 +0100
+Message-id: 1362043352-56889-5-git-send-email-cornelia.huck@de.ibm.com
+Subject: [PATCH 4/6] KVM: Introduce KVM_VIRTIO_CCW_NOTIFY_BUS.
+
+Add a new bus type for virtio-ccw devices on s390.
+
+Signed-off-by: Cornelia Huck <cornelia.huck@de.ibm.com>
+---
+ include/linux/kvm_host.h | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/include/linux/kvm_host.h b/include/linux/kvm_host.h
+index 3b768ef..206247f 100644
+--- a/include/linux/kvm_host.h
++++ b/include/linux/kvm_host.h
+@@ -148,6 +148,7 @@ struct kvm_io_bus {
+ enum kvm_bus {
+ 	KVM_MMIO_BUS,
+ 	KVM_PIO_BUS,
++	KVM_VIRTIO_CCW_NOTIFY_BUS,
+ 	KVM_NR_BUSES
+ };
+ 
+-- 
+1.7.12.4
+
+--
+To unsubscribe from this list: send the line "unsubscribe kvm" in
+the body of a message to majordomo@vger.kernel.org
+More majordomo info at  http://vger.kernel.org/majordomo-info.html

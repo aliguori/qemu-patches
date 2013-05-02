@@ -1,0 +1,1 @@
+../ccid-and-libcacard-fixes-for-windows-mingw/v3.1366671870/0009-libcacard-split-vscclient-main-from-socket-reading.patch

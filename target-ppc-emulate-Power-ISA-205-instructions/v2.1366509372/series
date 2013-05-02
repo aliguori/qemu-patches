@@ -1,0 +1,11 @@
+0000-target-ppc-emulate-Power-ISA-205-instructions.txt
+0001-target-ppc-optimize-fabs-fnabs-fneg.patch
+0002-disas-Disassemble-all-ppc-insns-for-the-guest.patch
+0003-target-ppc-add-instruction-flags-for-Book-I-205.patch
+0004-target-ppc-emulate-cmpb-instruction.patch
+0005-target-ppc-emulate-prtyw-and-prtyd-instructions.patch
+0006-target-ppc-emulate-fcpsgn-instruction.patch
+0007-target-ppc-emulate-lfiwax-instruction.patch
+0008-target-ppc-emulate-load-doubleword-pair-instructions.patch
+0009-target-ppc-emulate-store-doubleword-pair-instructions.patch
+0010-target-ppc-add-support-for-extended-mtfsf-mtfsfi-forms.patch

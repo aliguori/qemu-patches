@@ -1,0 +1,74 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Gerd Hoffmann <kraxel@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Hans de Goede <hdegoede@redhat.com>, Gerd Hoffmann <kraxel@redhat.com>
+Date: Tue, 16 Apr 2013 12:13:04 +0200
+Message-id: 1366107190-30853-2-git-send-email-kraxel@redhat.com
+Subject: [PATCH 1/7] usb-serial: Remove double call to qemu_chr_add_handlers(
+ NULL )
+
+From: Hans de Goede <hdegoede@redhat.com>
+
+usb-serial has a qdev chardev property, and hw/qdev-properties-system.c
+already contains:
+
+static void release_chr(Object *obj, const char *name, void *opaque)
+{
+    DeviceState *dev = DEVICE(obj);
+    Property *prop = opaque;
+    CharDriverState **ptr = qdev_get_prop_ptr(dev, prop);
+    CharDriverState *chr = *ptr;
+
+    if (chr) {
+        qemu_chr_add_handlers(chr, NULL, NULL, NULL, NULL);
+        qemu_chr_fe_release(chr);
+    }
+}
+
+So doing the qemu_chr_add_handlers(s->cs, NULL, NULL, NULL, NULL); from
+the usb handle_destroy function too will lead to it being done twice.
+
+Signed-off-by: Hans de Goede <hdegoede@redhat.com>
+Signed-off-by: Gerd Hoffmann <kraxel@redhat.com>
+---
+ hw/usb/dev-serial.c |    9 ---------
+ 1 file changed, 9 deletions(-)
+
+diff --git a/hw/usb/dev-serial.c b/hw/usb/dev-serial.c
+index dd0a608..2fc8a3b 100644
+--- a/hw/usb/dev-serial.c
++++ b/hw/usb/dev-serial.c
+@@ -410,13 +410,6 @@ static void usb_serial_handle_data(USBDevice *dev, USBPacket *p)
+     }
+ }
+ 
+-static void usb_serial_handle_destroy(USBDevice *dev)
+-{
+-    USBSerialState *s = (USBSerialState *)dev;
+-
+-    qemu_chr_add_handlers(s->cs, NULL, NULL, NULL, NULL);
+-}
+-
+ static int usb_serial_can_read(void *opaque)
+ {
+     USBSerialState *s = opaque;
+@@ -595,7 +588,6 @@ static void usb_serial_class_initfn(ObjectClass *klass, void *data)
+     uc->handle_reset   = usb_serial_handle_reset;
+     uc->handle_control = usb_serial_handle_control;
+     uc->handle_data    = usb_serial_handle_data;
+-    uc->handle_destroy = usb_serial_handle_destroy;
+     dc->vmsd = &vmstate_usb_serial;
+     dc->props = serial_properties;
+ }
+@@ -623,7 +615,6 @@ static void usb_braille_class_initfn(ObjectClass *klass, void *data)
+     uc->handle_reset   = usb_serial_handle_reset;
+     uc->handle_control = usb_serial_handle_control;
+     uc->handle_data    = usb_serial_handle_data;
+-    uc->handle_destroy = usb_serial_handle_destroy;
+     dc->vmsd = &vmstate_usb_serial;
+     dc->props = braille_properties;
+ }
+-- 
+1.7.9.7
+
+

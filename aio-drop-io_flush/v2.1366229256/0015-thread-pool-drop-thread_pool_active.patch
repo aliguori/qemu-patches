@@ -1,0 +1,50 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Stefan Hajnoczi <stefanha@redhat.com>
+To: Stefan Hajnoczi <stefanha@redhat.com>, qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, Paolo Bonzini <pbonzini@redhat.com>,
+ pingfank@linux.vnet.ibm.com, Kevin Wolf <kwolf@redhat.com>,
+ qemu-devel@nongnu.org, Stefan Hajnoczi <stefanha@redhat.com>
+Date: Wed, 17 Apr 2013 15:07:51 +0200
+Message-id: 1366204073-8468-16-git-send-email-stefanha@redhat.com
+Subject: [PATCH 15/17] thread-pool: drop thread_pool_active()
+
+.io_flush() is no longer called so drop thread_pool_active().  The block
+layer is the only thread-pool.c user and it already tracks in-flight
+requests, therefore we do not need thread_pool_active().
+
+Signed-off-by: Stefan Hajnoczi <stefanha@redhat.com>
+Reviewed-by: Polo Bonzini <pbonzini@redhat.com>
+---
+ thread-pool.c | 8 +-------
+ 1 file changed, 1 insertion(+), 7 deletions(-)
+
+diff --git a/thread-pool.c b/thread-pool.c
+index 0ebd4c2..096f007 100644
+--- a/thread-pool.c
++++ b/thread-pool.c
+@@ -197,12 +197,6 @@ restart:
+     }
+ }
+ 
+-static int thread_pool_active(EventNotifier *notifier)
+-{
+-    ThreadPool *pool = container_of(notifier, ThreadPool, notifier);
+-    return !QLIST_EMPTY(&pool->head);
+-}
+-
+ static void thread_pool_cancel(BlockDriverAIOCB *acb)
+ {
+     ThreadPoolElement *elem = (ThreadPoolElement *)acb;
+@@ -310,7 +304,7 @@ static void thread_pool_init_one(ThreadPool *pool, AioContext *ctx)
+     QTAILQ_INIT(&pool->request_list);
+ 
+     aio_set_event_notifier(ctx, &pool->notifier, event_notifier_ready,
+-                           thread_pool_active);
++                           NULL);
+ }
+ 
+ ThreadPool *thread_pool_new(AioContext *ctx)
+-- 
+1.8.1.4
+
+

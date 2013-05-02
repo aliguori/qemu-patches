@@ -1,0 +1,1 @@
+../qmp-hmp-interfaces-for-internal-snapshot-info/v12.1365890189/0003-qemu-img-remove-unused-parameter-in-collect_image_info.patch

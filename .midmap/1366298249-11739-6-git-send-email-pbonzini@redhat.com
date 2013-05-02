@@ -1,0 +1,1 @@
+../qcow2py-dump-metadata/v1.1366323444/0005-qcow2py-add-dump-map-command.patch

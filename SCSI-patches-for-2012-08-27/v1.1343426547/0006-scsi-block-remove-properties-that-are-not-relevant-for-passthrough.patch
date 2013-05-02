@@ -1,0 +1,37 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: 
+Date: Fri, 27 Jul 2012 17:02:33 +0200
+Message-id: 1343401379-19495-7-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 06/32] scsi-block: remove properties that are not relevant for
+ passthrough
+
+scsi-block is a passthrough device and does not allow customization
+of vendor, product, removable, DPOFUA, block size or any other piece of
+information.  Thus, drop DEFINE_SCSI_DISK_PROPERTIES() from the
+list of qdev properties.
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ hw/scsi-disk.c |    2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/hw/scsi-disk.c b/hw/scsi-disk.c
+index 525816c..8907197 100644
+--- a/hw/scsi-disk.c
++++ b/hw/scsi-disk.c
+@@ -2040,7 +2040,7 @@ static TypeInfo scsi_cd_info = {
+ 
+ #ifdef __linux__
+ static Property scsi_block_properties[] = {
+-    DEFINE_SCSI_DISK_PROPERTIES(),
++    DEFINE_PROP_DRIVE("drive", SCSIDiskState, qdev.conf.bs),
+     DEFINE_PROP_END_OF_LIST(),
+ };
+ 
+-- 
+1.7.10.4
+
+
+

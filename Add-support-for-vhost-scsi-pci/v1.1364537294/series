@@ -1,0 +1,3 @@
+0000-Add-support-for-vhost-scsi-pci.txt
+0001-virtio-scsi-create-VirtIOSCSICommon.patch
+0002-vhost-scsi-new-device-supporting-the-tcm_vhost-Linux-kernel-module.patch

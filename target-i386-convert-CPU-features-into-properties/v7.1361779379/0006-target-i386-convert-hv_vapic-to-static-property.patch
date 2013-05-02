@@ -1,0 +1,38 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Igor Mammedov <imammedo@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: ehabkost@redhat.com, afaerber@suse.de
+Date: Mon, 25 Feb 2013 02:03:05 +0100
+Message-id: 1361754189-29809-7-git-send-email-imammedo@redhat.com
+Subject: [PATCH 06/10] target-i386: convert 'hv_vapic' to static property
+
+Signed-off-by: Igor Mammedov <imammedo@redhat.com>
+---
+ target-i386/cpu.c |    3 ++-
+ 1 files changed, 2 insertions(+), 1 deletions(-)
+
+diff --git a/target-i386/cpu.c b/target-i386/cpu.c
+index e38c369..8f7132a 100644
+--- a/target-i386/cpu.c
++++ b/target-i386/cpu.c
+@@ -1350,6 +1350,7 @@ static Property cpu_x86_properties[] = {
+     DEFINE_PROP_TSC_FREQ("tsc-frequency"),
+     DEFINE_PROP_HV_SPINLOCKS("hv-spinlocks", HYPERV_SPINLOCK_NEVER_RETRY),
+     DEFINE_PROP_BOOL("hv-relaxed", X86CPU, env.hyperv_relaxed_timing, false),
++    DEFINE_PROP_BOOL("hv-vapic", X86CPU, env.hyperv_vapic, false),
+     DEFINE_PROP_END_OF_LIST(),
+ };
+ 
+@@ -1492,7 +1493,7 @@ static void cpu_x86_parse_featurestr(X86CPU *cpu, char *features, Error **errp)
+         } else if (!strcmp(featurestr, "hv_relaxed")) {
+             object_property_parse(OBJECT(cpu), "on", "hv-relaxed", errp);
+         } else if (!strcmp(featurestr, "hv_vapic")) {
+-            env->hyperv_vapic = true;
++            object_property_parse(OBJECT(cpu), "on", "hv-vapic", errp);
+         } else {
+             error_setg(errp, "feature string `%s' not in format (+feature|"
+                        "-feature|feature=xyz)", featurestr);
+-- 
+1.7.1
+
+

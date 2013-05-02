@@ -1,0 +1,86 @@
+From patches Mon Sep 17 00:00:00 2001
+From: fred.konrad@greensocs.com
+To: Anthony Liguori <aliguori@us.ibm.com>, qemu-devel@nongnu.org
+Cc: cornelia.huck@de.ibm.com, peter.maydell@linaro.org,
+ mark.burton@greensocs.com, fred.konrad@greensocs.com
+Date: Sun, 14 Apr 2013 23:26:30 +0200
+Message-id: 1365974797-13217-2-git-send-email-fred.konrad@greensocs.com
+Subject: [PATCH 1/8] virtio-bus: add new functions.
+
+From: KONRAD Frederic <fred.konrad@greensocs.com>
+
+This add two functions:
+   * virtio_bus_set_vdev_config.
+   * virtio_bus_set_vdev_feature.
+
+Needed by virtio-ccw.
+
+Signed-off-by: KONRAD Frederic <fred.konrad@greensocs.com>
+---
+ hw/virtio/virtio-bus.c         | 23 +++++++++++++++++++++++
+ include/hw/virtio/virtio-bus.h |  5 +++++
+ 2 files changed, 28 insertions(+)
+
+diff --git a/hw/virtio/virtio-bus.c b/hw/virtio/virtio-bus.c
+index 1596a1c..dd10849 100644
+--- a/hw/virtio/virtio-bus.c
++++ b/hw/virtio/virtio-bus.c
+@@ -124,6 +124,18 @@ uint32_t virtio_bus_get_vdev_features(VirtioBusState *bus,
+     return k->get_features(bus->vdev, requested_features);
+ }
+ 
++/* Set the features of the plugged device. */
++void virtio_bus_set_vdev_features(VirtioBusState *bus,
++                                      uint32_t requested_features)
++{
++    VirtioDeviceClass *k;
++    assert(bus->vdev != NULL);
++    k = VIRTIO_DEVICE_GET_CLASS(bus->vdev);
++    if (k->set_features != NULL) {
++        k->set_features(bus->vdev, requested_features);
++    }
++}
++
+ /* Get bad features of the plugged device. */
+ uint32_t virtio_bus_get_vdev_bad_features(VirtioBusState *bus)
+ {
+@@ -148,6 +160,17 @@ void virtio_bus_get_vdev_config(VirtioBusState *bus, uint8_t *config)
+     }
+ }
+ 
++/* Set config of the plugged device. */
++void virtio_bus_set_vdev_config(VirtioBusState *bus, uint8_t *config)
++{
++    VirtioDeviceClass *k;
++    assert(bus->vdev != NULL);
++    k = VIRTIO_DEVICE_GET_CLASS(bus->vdev);
++    if (k->set_config != NULL) {
++        k->set_config(bus->vdev, config);
++    }
++}
++
+ static const TypeInfo virtio_bus_info = {
+     .name = TYPE_VIRTIO_BUS,
+     .parent = TYPE_BUS,
+diff --git a/include/hw/virtio/virtio-bus.h b/include/hw/virtio/virtio-bus.h
+index 311e8c7..ec82238 100644
+--- a/include/hw/virtio/virtio-bus.h
++++ b/include/hw/virtio/virtio-bus.h
+@@ -86,9 +86,14 @@ size_t virtio_bus_get_vdev_config_len(VirtioBusState *bus);
+ /* Get the features of the plugged device. */
+ uint32_t virtio_bus_get_vdev_features(VirtioBusState *bus,
+                                     uint32_t requested_features);
++/* Set the features of the plugged device. */
++void virtio_bus_set_vdev_features(VirtioBusState *bus,
++                                  uint32_t requested_features);
+ /* Get bad features of the plugged device. */
+ uint32_t virtio_bus_get_vdev_bad_features(VirtioBusState *bus);
+ /* Get config of the plugged device. */
+ void virtio_bus_get_vdev_config(VirtioBusState *bus, uint8_t *config);
++/* Set config of the plugged device. */
++void virtio_bus_set_vdev_config(VirtioBusState *bus, uint8_t *config);
+ 
+ #endif /* VIRTIO_BUS_H */
+-- 
+1.7.11.7
+

@@ -1,0 +1,35 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Dong Xu Wang <wdongxu@linux.vnet.ibm.com>
+To: qemu-devel@nongnu.org, Dong Xu Wang <wdongxu@linux.vnet.ibm.com>
+Cc: Anthony Liguori <aliguori@us.ibm.com>, wdongxu@cn.ibm.com,
+ Dong Xu Wang <wdongxu@linux.vnet.ibm.com>, qemu-devel@nongnu.org
+Date: Tue, 9 Apr 2013 18:50:28 +0800
+Message-id: 1365504628-6027-1-git-send-email-wdongxu@linux.vnet.ibm.com
+Subject: [PATCH 1/1] fix compile error
+
+Since 0d09e41a51aa0752b1ce525ce084f7cd210e461b virtio-9p-device.h has
+been renamed as virtio-9p.h, so there will be a compiling error. This
+patch will fix it. 
+
+
+Signed-off-by: Dong Xu Wang <wdongxu@linux.vnet.ibm.com>
+---
+ hw/9pfs/virtio-9p-device.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/hw/9pfs/virtio-9p-device.c b/hw/9pfs/virtio-9p-device.c
+index 43f930e..f8accb7 100644
+--- a/hw/9pfs/virtio-9p-device.c
++++ b/hw/9pfs/virtio-9p-device.c
+@@ -16,7 +16,7 @@
+ #include "qemu/sockets.h"
+ #include "virtio-9p.h"
+ #include "fsdev/qemu-fsdev.h"
+-#include "virtio-9p-device.h"
++#include "virtio-9p.h"
+ #include "virtio-9p-xattr.h"
+ #include "virtio-9p-coth.h"
+ 
+-- 
+1.7.11.7
+

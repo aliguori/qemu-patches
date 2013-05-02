@@ -1,0 +1,8 @@
+0000-replace-cpuid_features-fields-with-a-featue-word-array-v8.txt
+0001-target-i386-Move-cpuid_xlevel-cpuid_xlevel2-fields-in-X86CPU.patch
+0002-target-i386-kvmc-Code-formatting-changes.patch
+0003-target-i386-Move-xlevel-xlevel2-in-struct-x86_def_t.patch
+0004-target-i386-cpuc-Break-lines-on-kvm_cpu_fill_host.patch
+0005-target-i386-cpuc-Break-lines-on-kvm_check_features_against_host.patch
+0006-target-i386-cpuc-Break-lines-on-builtin_x86_defs-array.patch
+0007-target-i386-Replace-cpuid_features-fields-with-a-feature-word-array.patch

@@ -1,0 +1,1 @@
+../Add-pvpanic-device-to-deal-with-guest-panic-event/v19.1366298079/0003-introduce-a-new-qom-device-to-deal-with-panicked-event.patch

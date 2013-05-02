@@ -1,0 +1,379 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Pavel Hrdina <phrdina@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: phrdina@redhat.com, armbru@redhat.com, lcapitulino@redhat.com
+Date: Tue, 16 Apr 2013 18:05:22 +0200
+Message-id: 40b3d5785dd7af478ca1a9ba329b97ed7d90b7fc.1366127809.git.phrdina@redhat.com
+Subject: [PATCH 10/11] qapi: Convert savevm
+
+QMP command vm-snapshot-save now takes one parameter name and the name is
+mandatory. The command returns SnapshotInfo on success, otherwise it returns
+an error message. If there is a snapshot with the same name it also returns
+an error message and if you want to overwrite that snapshot, you will have to
+at first call vm-snapshot-delete.
+
+HMP command savevm now has one optional parameter name and one flag -f.
+If the name parameter isn't provided the HMP command will create new one for
+internally used vm-snapshot-save. You can also specify the -f flag for overwrite
+existing snapshot which will internally use vm-snapshot-delete before
+vm-snapshot-save, otherwise it will print an error message if there is already
+a snapshot with the same name. If something else goes wrong, an error message
+will be printed.
+
+These improves behavior of the command to let you select only the name of the
+snapshot you want to create. This will ensure that if you want snapshot with
+the name '2', it will not rewrite or fail if there is any snapshot with id '2'.
+
+Signed-off-by: Pavel Hrdina <phrdina@redhat.com>
+---
+ hmp-commands.hx         | 18 +++++------
+ hmp.c                   | 49 +++++++++++++++++++++++++++++
+ hmp.h                   |  1 +
+ include/sysemu/sysemu.h |  1 -
+ qapi-schema.json        | 19 +++++++++++
+ qmp-commands.hx         | 39 +++++++++++++++++++++++
+ savevm.c                | 83 +++++++++++++++++--------------------------------
+ 7 files changed, 145 insertions(+), 65 deletions(-)
+
+diff --git a/hmp-commands.hx b/hmp-commands.hx
+index e80410b..638f1d7 100644
+--- a/hmp-commands.hx
++++ b/hmp-commands.hx
+@@ -307,19 +307,19 @@ ETEXI
+ 
+     {
+         .name       = "savevm",
+-        .args_type  = "name:s?",
+-        .params     = "[tag|id]",
+-        .help       = "save a VM snapshot. If no tag or id are provided, a new snapshot is created",
+-        .mhandler.cmd = do_savevm,
++        .args_type  = "force:-f,name:s?",
++        .params     = "[-f] [tag]",
++        .help       = "save a VM snapshot, to replace existing snapshot use force flag",
++        .mhandler.cmd = hmp_vm_snapshot_save,
+     },
+ 
+ STEXI
+-@item savevm [@var{tag}|@var{id}]
++@item savevm [@var{-f}] [@var{tag}]
+ @findex savevm
+-Create a snapshot of the whole virtual machine. If @var{tag} is
+-provided, it is used as human readable identifier. If there is already
+-a snapshot with the same tag or ID, it is replaced. More info at
+-@ref{vm_snapshots}.
++Create a snapshot of the whole virtual machine. Parameter "name" is optional.
++If @var{tag} is provided, it is used as human readable identifier. If there is
++already a snapshot with the same @var{tag} or @var{id}, @var{-f} flag needs to
++be specified. More info at @ref{vm_snapshots}.
+ ETEXI
+ 
+     {
+diff --git a/hmp.c b/hmp.c
+index 516bb09..401cdfc 100644
+--- a/hmp.c
++++ b/hmp.c
+@@ -1495,3 +1495,52 @@ void hmp_vm_snapshot_load(Monitor *mon, const QDict *qdict)
+     qapi_free_SnapshotInfo(info);
+     hmp_handle_error(mon, &local_err);
+ }
++
++void hmp_vm_snapshot_save(Monitor *mon, const QDict *qdict)
++{
++    const char *name = qdict_get_try_str(qdict, "name");
++    bool force = qdict_get_try_bool(qdict, "force", 0);
++    Error *local_err = NULL;
++    SnapshotInfo *info = NULL;
++    qemu_timeval tv;
++    struct tm tm;
++    char tmp_name[256];
++
++    if (!name) {
++        localtime_r((const time_t *)&tv.tv_sec, &tm);
++        strftime(tmp_name, sizeof(tmp_name), "vm-%Y%m%d%H%M%S", &tm);
++        name = tmp_name;
++    }
++
++    if (force) {
++        info = qmp_vm_snapshot_delete(true, name, false, NULL, &local_err);
++        // we don't need print info about deleted snapshot
++        // it still needs to be freed
++        qapi_free_SnapshotInfo(info);
++        if (error_is_set(&local_err)) {
++            hmp_handle_error(mon, &local_err);
++            return;
++        }
++    }
++
++    info = qmp_vm_snapshot_save(name, &local_err);
++
++    if (info) {
++        char buf[256];
++        QEMUSnapshotInfo sn = {
++            .vm_state_size = info->vm_state_size,
++            .date_sec = info->date_sec,
++            .date_nsec = info->date_nsec,
++            .vm_clock_nsec = info->vm_clock_sec * 1000000000 +
++                             info->vm_clock_nsec,
++        };
++        pstrcpy(sn.id_str, sizeof(sn.id_str), info->id);
++        pstrcpy(sn.name, sizeof(sn.name), info->name);
++        monitor_printf(mon, "Created snapshot's info:\n");
++        monitor_printf(mon, "%s\n", bdrv_snapshot_dump(buf, sizeof(buf), NULL));
++        monitor_printf(mon, "%s\n", bdrv_snapshot_dump(buf, sizeof(buf), &sn));
++    }
++
++    qapi_free_SnapshotInfo(info);
++    hmp_handle_error(mon, &local_err);
++}
+diff --git a/hmp.h b/hmp.h
+index a65cbf2..77e1715 100644
+--- a/hmp.h
++++ b/hmp.h
+@@ -87,5 +87,6 @@ void hmp_chardev_add(Monitor *mon, const QDict *qdict);
+ void hmp_chardev_remove(Monitor *mon, const QDict *qdict);
+ void hmp_vm_snapshot_delete(Monitor *mon, const QDict *qdict);
+ void hmp_vm_snapshot_load(Monitor *mon, const QDict *qdict);
++void hmp_vm_snapshot_save(Monitor *mon, const QDict *qdict);
+ 
+ #endif
+diff --git a/include/sysemu/sysemu.h b/include/sysemu/sysemu.h
+index 0e3f30a..25cd310 100644
+--- a/include/sysemu/sysemu.h
++++ b/include/sysemu/sysemu.h
+@@ -65,7 +65,6 @@ void qemu_remove_exit_notifier(Notifier *notify);
+ 
+ void qemu_add_machine_init_done_notifier(Notifier *notify);
+ 
+-void do_savevm(Monitor *mon, const QDict *qdict);
+ void do_info_snapshots(Monitor *mon, const QDict *qdict);
+ 
+ void qemu_announce_self(void);
+diff --git a/qapi-schema.json b/qapi-schema.json
+index d19b410..350d2bc 100644
+--- a/qapi-schema.json
++++ b/qapi-schema.json
+@@ -3540,3 +3540,22 @@
+ ##
+ { 'command': 'vm-snapshot-load', 'data': {'*name': 'str', '*id': 'str'},
+   'returns': 'SnapshotInfo' }
++
++##
++# @vm-snapshot-save:
++#
++# Create a snapshot of the whole virtual machine. Provided tag as @name,
++# it is used as human readable identifier. If there is already a snapshot
++# with the same @name it returns an error.
++#
++# The VM is automatically stopped and resumed and saving a snapshot can take
++# a long time.
++#
++# @name: tag of new snapshot or tag|id of existing snapshot
++#
++# Returns: SnapshotInfo on success
++#
++# Since: 1.5
++##
++{ 'command': 'vm-snapshot-save', 'data': {'name': 'str'},
++  'returns': 'SnapshotInfo' }
+diff --git a/qmp-commands.hx b/qmp-commands.hx
+index f2d5da8..1b098fd 100644
+--- a/qmp-commands.hx
++++ b/qmp-commands.hx
+@@ -1509,6 +1509,45 @@ Example:
+ 
+ EQMP
+     {
++        .name       = "vm-snapshot-save",
++        .args_type  = "name:s",
++        .params     = "name",
++        .help       = "save a VM snapshot",
++        .mhandler.cmd_new = qmp_marshal_input_vm_snapshot_save
++    },
++
++SQMP
++vm-snapshot-save
++------
++
++Create a snapshot of the whole virtual machine. Provided tag as name,
++it is used as human readable identifier. If there is already a snapshot
++with the same name it returns an error.
++
++The VM is automatically stopped and resumed and saving a snapshot can take
++a long time.
++
++Arguments:
++
++- "name": tag of new snapshot or tag of existing snapshot (json-string)
++
++Example:
++
++-> { "execute": "vm-snapshot-save", "arguments": { "name": "my_snapshot" } }
++<- {
++      "return": {
++         "id": "1",
++         "name": "my_snapshot",
++         "date-sec": 1364480534,
++         "date-nsec": 978215000,
++         "vm-clock-sec": 5,
++         "vm-clock-nsec": 153620449,
++         "vm-state-size": 5709953
++      }
++   }
++
++EQMP
++    {
+         .name       = "qmp_capabilities",
+         .args_type  = "",
+         .params     = "",
+diff --git a/savevm.c b/savevm.c
+index 8736eb4..66753da 100644
+--- a/savevm.c
++++ b/savevm.c
+@@ -2246,45 +2246,19 @@ static int bdrv_snapshot_find(BlockDriverState *bs, QEMUSnapshotInfo *sn_info,
+     return found;
+ }
+ 
+-/*
+- * Deletes snapshots of a given name in all opened images.
+- */
+-static int del_existing_snapshots(Monitor *mon, const char *name)
+-{
+-    BlockDriverState *bs;
+-    QEMUSnapshotInfo sn1, *snapshot = &sn1;
+-    Error *local_err = NULL;
+-
+-    bs = NULL;
+-    while ((bs = bdrv_next(bs))) {
+-        if (bdrv_can_snapshot(bs)
+-                && bdrv_snapshot_find(bs, snapshot, name, name, true))
+-        {
+-            bdrv_snapshot_delete(bs, name, &local_err);
+-            if (error_is_set(&local_err)) {
+-                monitor_printf(mon, "%s\n", error_get_pretty(local_err));
+-                error_free(local_err);
+-                return -1;
+-            }
+-        }
+-    }
+-
+-    return 0;
+-}
+-
+-void do_savevm(Monitor *mon, const QDict *qdict)
++SnapshotInfo *qmp_vm_snapshot_save(const char *name, Error **errp)
+ {
+     BlockDriverState *bs, *bs1;
+     QEMUSnapshotInfo sn1, *sn = &sn1, old_sn1, *old_sn = &old_sn1;
++    SnapshotInfo *info = NULL;
+     QEMUFile *f;
+     int saved_vm_running;
+     uint64_t vm_state_size;
+     qemu_timeval tv;
+-    struct tm tm;
+-    const char *name = qdict_get_try_str(qdict, "name");
+     Error *local_err = NULL;
+ 
+-    /* Verify if there is a device that doesn't support snapshots and is writable */
++    /* Verify if there is a device that doesn't support snapshots and is
++     * writable */
+     bs = NULL;
+     while ((bs = bdrv_next(bs))) {
+ 
+@@ -2293,16 +2267,16 @@ void do_savevm(Monitor *mon, const QDict *qdict)
+         }
+ 
+         if (!bdrv_can_snapshot(bs)) {
+-            monitor_printf(mon, "Device '%s' is writable but does not support snapshots.\n",
+-                               bdrv_get_device_name(bs));
+-            return;
++            error_setg(errp, "device '%s' is writable but does not support "
++                       "snapshots", bdrv_get_device_name(bs));
++            return NULL;
+         }
+     }
+ 
+     bs = bdrv_snapshots();
+     if (!bs) {
+-        monitor_printf(mon, "No block device can accept snapshots\n");
+-        return;
++        error_setg(errp, "no block device can accept snapshots");
++        return NULL;
+     }
+ 
+     saved_vm_running = runstate_is_running();
+@@ -2316,36 +2290,24 @@ void do_savevm(Monitor *mon, const QDict *qdict)
+     sn->date_nsec = tv.tv_usec * 1000;
+     sn->vm_clock_nsec = qemu_get_clock_ns(vm_clock);
+ 
+-    if (name) {
+-        if (bdrv_snapshot_find(bs, old_sn, name, name, true)) {
+-            pstrcpy(sn->name, sizeof(sn->name), old_sn->name);
+-            pstrcpy(sn->id_str, sizeof(sn->id_str), old_sn->id_str);
+-        } else {
+-            pstrcpy(sn->name, sizeof(sn->name), name);
+-        }
+-    } else {
+-        /* cast below needed for OpenBSD where tv_sec is still 'long' */
+-        localtime_r((const time_t *)&tv.tv_sec, &tm);
+-        strftime(sn->name, sizeof(sn->name), "vm-%Y%m%d%H%M%S", &tm);
+-    }
+-
+-    /* Delete old snapshots of the same name */
+-    if (name && del_existing_snapshots(mon, name) < 0) {
++    if (bdrv_snapshot_find(bs, old_sn, name, NULL, false)) {
++        error_setg(errp, "snapshot '%s' exists", name);
+         goto the_end;
++    } else {
++        pstrcpy(sn->name, sizeof(sn->name), name);
+     }
+ 
+     /* save the VM state */
+     f = qemu_fopen_bdrv(bs, 1);
+     if (!f) {
+-        monitor_printf(mon, "Could not open VM state file\n");
++        error_setg(errp, "failed to open '%s' file", bdrv_get_device_name(bs));
+         goto the_end;
+     }
+     qemu_savevm_state(f, &local_err);
+     vm_state_size = qemu_ftell(f);
+     qemu_fclose(f);
+     if (error_is_set(&local_err)) {
+-        monitor_printf(mon, "%s\n", error_get_pretty(local_err));
+-        error_free(local_err);
++        error_propagate(errp, local_err);
+         goto the_end;
+     }
+ 
+@@ -2358,15 +2320,26 @@ void do_savevm(Monitor *mon, const QDict *qdict)
+             sn->vm_state_size = (bs == bs1 ? vm_state_size : 0);
+             bdrv_snapshot_create(bs1, sn, &local_err);
+             if (error_is_set(&local_err)) {
+-                monitor_printf(mon, "'%s'\n", error_get_pretty(local_err));
+-                error_free(local_err);
++                error_propagate(errp, local_err);
++                goto the_end;
+             }
+         }
+     }
+ 
++    info = g_malloc0(sizeof(SnapshotInfo));
++    info->id = g_strdup(sn->id_str);
++    info->name = g_strdup(sn->name);
++    info->date_nsec = sn->date_nsec;
++    info->date_sec = sn->date_sec;
++    info->vm_state_size = vm_state_size;
++    info->vm_clock_nsec = sn->vm_clock_nsec % 1000000000;
++    info->vm_clock_sec = sn->vm_clock_nsec / 1000000000;
++
+  the_end:
+     if (saved_vm_running)
+         vm_start();
++
++    return info;
+ }
+ 
+ void qmp_xen_save_devices_state(const char *filename, Error **errp)
+-- 
+1.8.1.4
+
+

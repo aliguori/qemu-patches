@@ -1,0 +1,1 @@
+../console-qom-ify-consoles/v2.1366901769/0006-console-add-dummy-surface-for-guests-without-graphic-card.patch

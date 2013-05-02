@@ -1,0 +1,1 @@
+../console-console-overhaul-continued/v3.1365085722/0005-pixman-add-qemu_pixman_color.patch

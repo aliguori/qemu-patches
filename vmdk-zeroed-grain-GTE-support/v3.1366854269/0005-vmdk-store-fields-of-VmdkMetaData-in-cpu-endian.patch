@@ -1,0 +1,63 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Fam Zheng <famz@redhat.com>
+To: Fam Zheng <famz@redhat.com>, qemu-devel@nongnu.org
+Cc: kwolf@redhat.com, Fam Zheng <famz@redhat.com>, qemu-devel@nongnu.org,
+ stefanha@redhat.com
+Date: Wed, 24 Apr 2013 20:44:34 +0800
+Message-id: 1366807475-26350-6-git-send-email-famz@redhat.com
+Subject: [PATCH 5/6] vmdk: store fields of VmdkMetaData in cpu endian
+
+Previously VmdkMetaData.offset is stored little endian while other
+fields are cpu endian. This changes offset to cpu endian and convert
+before writing to image.
+Signed-off-by: Fam Zheng <famz@redhat.com>
+---
+ block/vmdk.c | 12 ++++++------
+ 1 file changed, 6 insertions(+), 6 deletions(-)
+
+diff --git a/block/vmdk.c b/block/vmdk.c
+index 0463d3b..16e1417 100644
+--- a/block/vmdk.c
++++ b/block/vmdk.c
+@@ -813,14 +813,15 @@ static int get_whole_cluster(BlockDriverState *bs,
+ 
+ static int vmdk_L2update(VmdkExtent *extent, VmdkMetaData *m_data)
+ {
++    uint32_t offset;
++    QEMU_BUILD_BUG_ON(sizeof(offset) != sizeof(m_data->offset));
++    offset = cpu_to_le32(m_data->offset);
+     /* update L2 table */
+     if (bdrv_pwrite_sync(
+                 extent->file,
+                 ((int64_t)m_data->l2_offset * 512)
+                     + (m_data->l2_index * sizeof(m_data->offset)),
+-                &(m_data->offset),
+-                sizeof(m_data->offset)
+-            ) < 0) {
++                &offset, sizeof(offset)) < 0) {
+         return VMDK_ERROR;
+     }
+     /* update backup L2 table */
+@@ -830,8 +831,7 @@ static int vmdk_L2update(VmdkExtent *extent, VmdkMetaData *m_data)
+                     extent->file,
+                     ((int64_t)m_data->l2_offset * 512)
+                         + (m_data->l2_index * sizeof(m_data->offset)),
+-                    &(m_data->offset), sizeof(m_data->offset)
+-                ) < 0) {
++                    &offset, sizeof(offset)) < 0) {
+             return VMDK_ERROR;
+         }
+     }
+@@ -938,7 +938,7 @@ static int get_cluster_offset(BlockDriverState *bs,
+         }
+ 
+         if (m_data) {
+-            m_data->offset = tmp;
++            m_data->offset = *cluster_offset;
+             m_data->l1_index = l1_index;
+             m_data->l2_index = l2_index;
+             m_data->l2_offset = l2_offset;
+-- 
+1.8.1.4
+
+

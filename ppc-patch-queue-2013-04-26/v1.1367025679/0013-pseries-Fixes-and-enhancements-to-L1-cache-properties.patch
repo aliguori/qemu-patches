@@ -1,0 +1,146 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Alexander Graf <agraf@suse.de>
+To: qemu-ppc@nongnu.org
+Cc: Blue Swirl <blauwirbel@gmail.com>,
+ David Gibson <david@gibson.dropbear.id.au>,
+ Aurelien Jarno <aurelien@aurel32.net>, qemu-devel@nongnu.org
+Date: Fri, 26 Apr 2013 20:21:32 +0200
+Message-id: 1367000509-8833-14-git-send-email-agraf@suse.de
+Subject: [PATCH 13/30] pseries: Fixes and enhancements to L1 cache properties
+
+From: David Gibson <david@gibson.dropbear.id.au>
+
+PAPR requires that the device tree's CPU nodes have several properties
+with information about the L1 cache.  We already create two of these
+properties, but with incorrect names - "[id]cache-block-size" instead
+of "[id]-cache-block-size" (note the extra hyphen).
+
+We were also missing some of the required cache properties.  This
+patch adds the [id]-cache-line-size properties (which have the same
+values as the block size properties in all current cases).  We also
+add the [id]-cache-size properties.
+
+Adding the cache sizes requires some extra infrastructure in the
+general target-ppc code to (optionally) set the cache sizes for
+various CPUs.  The CPU family descriptions in translate_init.c can set
+these sizes - this patch adds correct information for POWER7, I'm
+leaving other CPU types to people who have a physical example to
+verify against.  In addition, for -cpu host we take the values
+advertised by the host (if available) and use those to override the
+information based on PVR.
+
+Signed-off-by: David Gibson <david@gibson.dropbear.id.au>
+Signed-off-by: Alexander Graf <agraf@suse.de>
+---
+ hw/ppc/spapr.c              |   21 +++++++++++++++++++--
+ target-ppc/cpu-qom.h        |    1 +
+ target-ppc/kvm.c            |   10 ++++++++++
+ target-ppc/translate_init.c |    3 +++
+ 4 files changed, 33 insertions(+), 2 deletions(-)
+
+diff --git a/hw/ppc/spapr.c b/hw/ppc/spapr.c
+index e35c26f..c96ac81 100644
+--- a/hw/ppc/spapr.c
++++ b/hw/ppc/spapr.c
+@@ -308,6 +308,7 @@ static void *spapr_create_fdt_skel(const char *cpu_model,
+ 
+     for (env = first_cpu; env != NULL; env = env->next_cpu) {
+         CPUState *cpu = CPU(ppc_env_get_cpu(env));
++        PowerPCCPUClass *pcc = POWERPC_CPU_GET_CLASS(cpu);
+         int index = cpu->cpu_index;
+         uint32_t servers_prop[smp_threads];
+         uint32_t gservers_prop[smp_threads * 2];
+@@ -333,10 +334,26 @@ static void *spapr_create_fdt_skel(const char *cpu_model,
+         _FDT((fdt_property_string(fdt, "device_type", "cpu")));
+ 
+         _FDT((fdt_property_cell(fdt, "cpu-version", env->spr[SPR_PVR])));
+-        _FDT((fdt_property_cell(fdt, "dcache-block-size",
++        _FDT((fdt_property_cell(fdt, "d-cache-block-size",
+                                 env->dcache_line_size)));
+-        _FDT((fdt_property_cell(fdt, "icache-block-size",
++        _FDT((fdt_property_cell(fdt, "d-cache-line-size",
++                                env->dcache_line_size)));
++        _FDT((fdt_property_cell(fdt, "i-cache-block-size",
++                                env->icache_line_size)));
++        _FDT((fdt_property_cell(fdt, "i-cache-line-size",
+                                 env->icache_line_size)));
++
++        if (pcc->l1_dcache_size) {
++            _FDT((fdt_property_cell(fdt, "d-cache-size", pcc->l1_dcache_size)));
++        } else {
++            fprintf(stderr, "Warning: Unknown L1 dcache size for cpu\n");
++        }
++        if (pcc->l1_icache_size) {
++            _FDT((fdt_property_cell(fdt, "i-cache-size", pcc->l1_icache_size)));
++        } else {
++            fprintf(stderr, "Warning: Unknown L1 icache size for cpu\n");
++        }
++
+         _FDT((fdt_property_cell(fdt, "timebase-frequency", tbfreq)));
+         _FDT((fdt_property_cell(fdt, "clock-frequency", cpufreq)));
+         _FDT((fdt_property_cell(fdt, "ibm,slb-size", env->slb_nr)));
+diff --git a/target-ppc/cpu-qom.h b/target-ppc/cpu-qom.h
+index c27cef7..eb03a00 100644
+--- a/target-ppc/cpu-qom.h
++++ b/target-ppc/cpu-qom.h
+@@ -63,6 +63,7 @@ typedef struct PowerPCCPUClass {
+     powerpc_input_t bus_model;
+     uint32_t flags;
+     int bfd_mach;
++    uint32_t l1_dcache_size, l1_icache_size;
+ #if defined(TARGET_PPC64)
+     const struct ppc_segment_page_sizes *sps;
+ #endif
+diff --git a/target-ppc/kvm.c b/target-ppc/kvm.c
+index a1fa8d3..4e8f448 100644
+--- a/target-ppc/kvm.c
++++ b/target-ppc/kvm.c
+@@ -1603,6 +1603,8 @@ static void kvmppc_host_cpu_class_init(ObjectClass *oc, void *data)
+     PowerPCCPUClass *pcc = POWERPC_CPU_CLASS(oc);
+     uint32_t vmx = kvmppc_get_vmx();
+     uint32_t dfp = kvmppc_get_dfp();
++    uint32_t dcache_size = kvmppc_read_int_cpu_dt("d-cache-size");
++    uint32_t icache_size = kvmppc_read_int_cpu_dt("i-cache-size");
+ 
+     /* Now fix up the class with information we can query from the host */
+ 
+@@ -1615,6 +1617,14 @@ static void kvmppc_host_cpu_class_init(ObjectClass *oc, void *data)
+         /* Only override when we know what the host supports */
+         alter_insns(&pcc->insns_flags2, PPC2_DFP, dfp);
+     }
++
++    if (dcache_size != -1) {
++        pcc->l1_dcache_size = dcache_size;
++    }
++
++    if (icache_size != -1) {
++        pcc->l1_icache_size = icache_size;
++    }
+ }
+ 
+ int kvmppc_fixup_cpu(PowerPCCPU *cpu)
+diff --git a/target-ppc/translate_init.c b/target-ppc/translate_init.c
+index a9bacd2..769f5fd 100644
+--- a/target-ppc/translate_init.c
++++ b/target-ppc/translate_init.c
+@@ -7004,6 +7004,7 @@ static void init_proc_POWER7 (CPUPPCState *env)
+     init_excp_POWER7(env);
+     env->dcache_line_size = 128;
+     env->icache_line_size = 128;
++
+     /* Allocate hardware IRQ controller */
+     ppcPOWER7_irq_init(env);
+     /* Can't find information on what this should be on reset.  This
+@@ -7041,6 +7042,8 @@ POWERPC_FAMILY(POWER7)(ObjectClass *oc, void *data)
+     pcc->flags = POWERPC_FLAG_VRE | POWERPC_FLAG_SE |
+                  POWERPC_FLAG_BE | POWERPC_FLAG_PMM |
+                  POWERPC_FLAG_BUS_CLK | POWERPC_FLAG_CFAR;
++    pcc->l1_dcache_size = 0x8000;
++    pcc->l1_icache_size = 0x8000;
+ }
+ #endif /* defined (TARGET_PPC64) */
+ 
+-- 
+1.6.0.2
+
+

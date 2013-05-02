@@ -1,0 +1,527 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: Paolo Bonzini <pbonzini@redhat.com>, qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, qemu-devel@nongnu.org
+Date: Mon, 15 Apr 2013 15:19:29 +0200
+Message-id: 1366031973-7718-9-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 08/12] tpm: reorganize headers and split hardware part
+
+The TPM subsystem does not have a full front-end/back-end separation.
+The sole available backend, tpm_passthrough, depends on the data
+structures of the sole available frontend, tpm_tis.
+
+However, we can at least try to split the user interface (tpm.c) from the
+implementation (hw/tpm).  The patches makes tpm.c not include tpm_int.h,
+which is shared between tpm_tis.c and tpm_passthrough.c; instead it
+moves more stuff to tpm_backend.h.
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ Makefile.objs                                      |  2 +-
+ backends/tpm.c                                     | 38 +++++++++++++-
+ hw/Makefile.objs                                   |  1 +
+ {tpm => hw/tpm}/Makefile.objs                      |  2 -
+ {tpm => hw/tpm}/tpm_int.h                          | 37 +-------------
+ {tpm => hw/tpm}/tpm_passthrough.c                  | 20 +++++++-
+ {tpm => hw/tpm}/tpm_tis.c                          |  2 +-
+ {tpm => hw/tpm}/tpm_tis.h                          |  5 --
+ include/backends/tpm.h                             | 42 +++++++++++++++-
+ include/{tpm => sysemu}/tpm.h                      |  2 -
+ .../sysemu/tpm_backend_int.h                       |  0
+ monitor.c                                          |  2 +-
+ tpm/tpm.c => tpm.c                                 | 19 +------
+ tpm/tpm_backend.c                                  | 58 ----------------------
+ vl.c                                               |  2 +-
+ 15 files changed, 104 insertions(+), 128 deletions(-)
+ rename {tpm => hw/tpm}/Makefile.objs (61%)
+ rename {tpm => hw/tpm}/tpm_int.h (50%)
+ rename {tpm => hw/tpm}/tpm_passthrough.c (96%)
+ rename {tpm => hw/tpm}/tpm_tis.c (99%)
+ rename {tpm => hw/tpm}/tpm_tis.h (96%)
+ rename include/{tpm => sysemu}/tpm.h (82%)
+ rename tpm/tpm_backend.h => include/sysemu/tpm_backend_int.h (100%)
+ rename tpm/tpm.c => tpm.c (93%)
+ delete mode 100644 tpm/tpm_backend.c
+
+diff --git a/Makefile.objs b/Makefile.objs
+index e568c01..a473348 100644
+--- a/Makefile.objs
++++ b/Makefile.objs
+@@ -65,7 +65,7 @@ common-obj-y += bt-host.o bt-vhci.o
+ 
+ common-obj-y += dma-helpers.o
+ common-obj-y += vl.o
+-common-obj-y += tpm/
++common-obj-y += tpm.o
+ 
+ common-obj-$(CONFIG_SLIRP) += slirp/
+ 
+diff --git a/backends/tpm.c b/backends/tpm.c
+index 28148c2..0580108 100644
+--- a/backends/tpm.c
++++ b/backends/tpm.c
+@@ -13,8 +13,10 @@
+  */
+ 
+ #include "backends/tpm.h"
+-#include "tpm/tpm_int.h"
+ #include "qapi/qmp/qerror.h"
++#include "sysemu/tpm.h"
++#include "qemu/thread.h"
++#include "sysemu/tpm_backend_int.h"
+ 
+ enum TpmType tpm_backend_get_type(TPMBackend *s)
+ {
+@@ -137,6 +139,40 @@ static void tpm_backend_instance_init(Object *obj)
+                              NULL);
+ }
+ 
++void tpm_backend_thread_deliver_request(TPMBackendThread *tbt)
++{
++   g_thread_pool_push(tbt->pool, (gpointer)TPM_BACKEND_CMD_PROCESS_CMD, NULL);
++}
++
++void tpm_backend_thread_create(TPMBackendThread *tbt,
++                               GFunc func, gpointer user_data)
++{
++    if (!tbt->pool) {
++        tbt->pool = g_thread_pool_new(func, user_data, 1, TRUE, NULL);
++        g_thread_pool_push(tbt->pool, (gpointer)TPM_BACKEND_CMD_INIT, NULL);
++    }
++}
++
++void tpm_backend_thread_end(TPMBackendThread *tbt)
++{
++    if (tbt->pool) {
++        g_thread_pool_push(tbt->pool, (gpointer)TPM_BACKEND_CMD_END, NULL);
++        g_thread_pool_free(tbt->pool, FALSE, TRUE);
++        tbt->pool = NULL;
++    }
++}
++
++void tpm_backend_thread_tpm_reset(TPMBackendThread *tbt,
++                                  GFunc func, gpointer user_data)
++{
++    if (!tbt->pool) {
++        tpm_backend_thread_create(tbt, func, user_data);
++    } else {
++        g_thread_pool_push(tbt->pool, (gpointer)TPM_BACKEND_CMD_TPM_RESET,
++                           NULL);
++    }
++}
++
+ static const TypeInfo tpm_backend_info = {
+     .name = TYPE_TPM_BACKEND,
+     .parent = TYPE_OBJECT,
+diff --git a/hw/Makefile.objs b/hw/Makefile.objs
+index 1cb86fa..b7a1613 100644
+--- a/hw/Makefile.objs
++++ b/hw/Makefile.objs
+@@ -22,6 +22,7 @@ devices-dirs-$(CONFIG_SOFTMMU) += scsi/
+ devices-dirs-$(CONFIG_SOFTMMU) += sd/
+ devices-dirs-$(CONFIG_SOFTMMU) += ssi/
+ devices-dirs-$(CONFIG_SOFTMMU) += timer/
++devices-dirs-$(CONFIG_TPM) += tpm/
+ devices-dirs-$(CONFIG_SOFTMMU) += usb/
+ devices-dirs-$(CONFIG_SOFTMMU) += virtio/
+ devices-dirs-$(CONFIG_SOFTMMU) += watchdog/
+diff --git a/tpm/Makefile.objs b/hw/tpm/Makefile.objs
+similarity index 61%
+rename from tpm/Makefile.objs
+rename to hw/tpm/Makefile.objs
+index 366e4a7..99f5983 100644
+--- a/tpm/Makefile.objs
++++ b/hw/tpm/Makefile.objs
+@@ -1,4 +1,2 @@
+-common-obj-y = tpm.o
+-common-obj-$(CONFIG_TPM) += tpm_backend.o
+ common-obj-$(CONFIG_TPM_TIS) += tpm_tis.o
+ common-obj-$(CONFIG_TPM_PASSTHROUGH) += tpm_passthrough.o
+diff --git a/tpm/tpm_int.h b/hw/tpm/tpm_int.h
+similarity index 50%
+rename from tpm/tpm_int.h
+rename to hw/tpm/tpm_int.h
+index 340bfd5..08f87cb 100644
+--- a/tpm/tpm_int.h
++++ b/hw/tpm/tpm_int.h
+@@ -13,7 +13,7 @@
+ #define TPM_TPM_INT_H
+ 
+ #include "exec/memory.h"
+-#include "tpm/tpm_tis.h"
++#include "tpm_tis.h"
+ 
+ /* overall state of the TPM interface */
+ struct TPMState {
+@@ -33,32 +33,6 @@ struct TPMState {
+ 
+ #define TPM(obj) OBJECT_CHECK(TPMState, (obj), TYPE_TPM_TIS)
+ 
+-struct TPMDriverOps {
+-    enum TpmType type;
+-    /* get a descriptive text of the backend to display to the user */
+-    const char *(*desc)(void);
+-
+-    TPMBackend *(*create)(QemuOpts *opts, const char *id);
+-    void (*destroy)(TPMBackend *t);
+-
+-    /* initialize the backend */
+-    int (*init)(TPMBackend *t, TPMState *s, TPMRecvDataCB *datacb);
+-    /* start up the TPM on the backend */
+-    int (*startup_tpm)(TPMBackend *t);
+-    /* returns true if nothing will ever answer TPM requests */
+-    bool (*had_startup_error)(TPMBackend *t);
+-
+-    size_t (*realloc_buffer)(TPMSizedBuffer *sb);
+-
+-    void (*deliver_request)(TPMBackend *t);
+-
+-    void (*reset)(TPMBackend *t);
+-
+-    void (*cancel_cmd)(TPMBackend *t);
+-
+-    bool (*get_tpm_established_flag)(TPMBackend *t);
+-};
+-
+ struct tpm_req_hdr {
+     uint16_t tag;
+     uint32_t len;
+@@ -83,13 +57,4 @@ struct tpm_resp_hdr {
+ 
+ #define TPM_ORD_GetTicks          0xf1
+ 
+-TPMBackend *qemu_find_tpm(const char *id);
+-int tpm_register_model(enum TpmModel model);
+-int tpm_register_driver(const TPMDriverOps *tdo);
+-void tpm_display_backend_drivers(void);
+-const TPMDriverOps *tpm_get_backend_driver(const char *type);
+-void tpm_write_fatal_error_response(uint8_t *out, uint32_t out_len);
+-
+-extern const TPMDriverOps tpm_passthrough_driver;
+-
+ #endif /* TPM_TPM_INT_H */
+diff --git a/tpm/tpm_passthrough.c b/hw/tpm/tpm_passthrough.c
+similarity index 96%
+rename from tpm/tpm_passthrough.c
+rename to hw/tpm/tpm_passthrough.c
+index 1fdd66d..5781277 100644
+--- a/tpm/tpm_passthrough.c
++++ b/hw/tpm/tpm_passthrough.c
+@@ -31,8 +31,8 @@
+ #include "tpm_int.h"
+ #include "hw/hw.h"
+ #include "hw/i386/pc.h"
++#include "sysemu/tpm_backend_int.h"
+ #include "tpm_tis.h"
+-#include "tpm_backend.h"
+ 
+ /* #define DEBUG_TPM */
+ 
+@@ -48,6 +48,8 @@
+ #define TPM_PASSTHROUGH(obj) \
+     OBJECT_CHECK(TPMPassthruState, (obj), TYPE_TPM_PASSTHROUGH)
+ 
++static const TPMDriverOps tpm_passthrough_driver;
++
+ /* data structures */
+ typedef struct TPMPassthruThreadParams {
+     TPMState *tpm_state;
+@@ -96,6 +98,20 @@ static uint32_t tpm_passthrough_get_size_from_buffer(const uint8_t *buf)
+     return be32_to_cpu(resp->len);
+ }
+ 
++/*
++ * Write an error message in the given output buffer.
++ */
++static void tpm_write_fatal_error_response(uint8_t *out, uint32_t out_len)
++{
++    if (out_len >= sizeof(struct tpm_resp_hdr)) {
++        struct tpm_resp_hdr *resp = (struct tpm_resp_hdr *)out;
++
++        resp->tag = cpu_to_be16(TPM_TAG_RSP_COMMAND);
++        resp->len = cpu_to_be32(sizeof(struct tpm_resp_hdr));
++        resp->errcode = cpu_to_be32(TPM_FAIL);
++    }
++}
++
+ static int tpm_passthrough_unix_tx_bufs(TPMPassthruState *tpm_pt,
+                                         const uint8_t *in, uint32_t in_len,
+                                         uint8_t *out, uint32_t out_len)
+@@ -512,7 +528,7 @@ static void tpm_passthrough_destroy(TPMBackend *tb)
+     g_free(tpm_pt->tpm_dev);
+ }
+ 
+-const TPMDriverOps tpm_passthrough_driver = {
++static const TPMDriverOps tpm_passthrough_driver = {
+     .type                     = TPM_TYPE_PASSTHROUGH,
+     .desc                     = tpm_passthrough_create_desc,
+     .create                   = tpm_passthrough_create,
+diff --git a/tpm/tpm_tis.c b/hw/tpm/tpm_tis.c
+similarity index 99%
+rename from tpm/tpm_tis.c
+rename to hw/tpm/tpm_tis.c
+index f0a45846..faa3cec 100644
+--- a/tpm/tpm_tis.c
++++ b/hw/tpm/tpm_tis.c
+@@ -26,7 +26,7 @@
+ #include "hw/hw.h"
+ #include "hw/i386/pc.h"
+ #include "hw/pci/pci_ids.h"
+-#include "tpm/tpm_tis.h"
++#include "tpm_tis.h"
+ #include "qemu-common.h"
+ 
+ /*#define DEBUG_TIS */
+diff --git a/tpm/tpm_tis.h b/hw/tpm/tpm_tis.h
+similarity index 96%
+rename from tpm/tpm_tis.h
+rename to hw/tpm/tpm_tis.h
+index 1be4ddc..916152a 100644
+--- a/tpm/tpm_tis.h
++++ b/hw/tpm/tpm_tis.h
+@@ -35,11 +35,6 @@
+ #define TYPE_TPM_TIS                "tpm-tis"
+ 
+ 
+-struct TPMSizedBuffer {
+-    uint32_t size;
+-    uint8_t  *buffer;
+-};
+-
+ typedef enum {
+     TPM_TIS_STATE_IDLE = 0,
+     TPM_TIS_STATE_READY,
+diff --git a/include/backends/tpm.h b/include/backends/tpm.h
+index 9e93cc5..a96b110 100644
+--- a/include/backends/tpm.h
++++ b/include/backends/tpm.h
+@@ -18,7 +18,7 @@
+ #include "qapi/error.h"
+ #include "qapi-types.h"
+ #include "qemu/option.h"
+-#include "tpm/tpm.h"
++#include "sysemu/tpm.h"
+ 
+ #define TYPE_TPM_BACKEND "tpm-backend"
+ #define TPM_BACKEND(obj) \
+@@ -30,6 +30,7 @@
+ 
+ typedef struct TPMBackendClass TPMBackendClass;
+ typedef struct TPMBackend TPMBackend;
++typedef struct TPMState TPMState;
+ 
+ typedef struct TPMDriverOps TPMDriverOps;
+ 
+@@ -56,6 +57,39 @@ struct TPMBackend {
+     QLIST_ENTRY(TPMBackend) list;
+ };
+ 
++typedef void (TPMRecvDataCB)(TPMState *, uint8_t locty);
++
++typedef struct TPMSizedBuffer {
++    uint32_t size;
++    uint8_t  *buffer;
++} TPMSizedBuffer;
++
++struct TPMDriverOps {
++    enum TpmType type;
++    /* get a descriptive text of the backend to display to the user */
++    const char *(*desc)(void);
++
++    TPMBackend *(*create)(QemuOpts *opts, const char *id);
++    void (*destroy)(TPMBackend *t);
++
++    /* initialize the backend */
++    int (*init)(TPMBackend *t, TPMState *s, TPMRecvDataCB *datacb);
++    /* start up the TPM on the backend */
++    int (*startup_tpm)(TPMBackend *t);
++    /* returns true if nothing will ever answer TPM requests */
++    bool (*had_startup_error)(TPMBackend *t);
++
++    size_t (*realloc_buffer)(TPMSizedBuffer *sb);
++
++    void (*deliver_request)(TPMBackend *t);
++
++    void (*reset)(TPMBackend *t);
++
++    void (*cancel_cmd)(TPMBackend *t);
++
++    bool (*get_tpm_established_flag)(TPMBackend *t);
++};
++
+ 
+ /**
+  * tpm_backend_get_type:
+@@ -167,4 +201,10 @@ bool tpm_backend_get_tpm_established_flag(TPMBackend *s);
+  */
+ void tpm_backend_open(TPMBackend *s, Error **errp);
+ 
++TPMBackend *qemu_find_tpm(const char *id);
++
++const TPMDriverOps *tpm_get_backend_driver(const char *type);
++int tpm_register_model(enum TpmModel model);
++int tpm_register_driver(const TPMDriverOps *tdo);
++
+ #endif
+diff --git a/include/tpm/tpm.h b/include/sysemu/tpm.h
+similarity index 82%
+rename from include/tpm/tpm.h
+rename to include/sysemu/tpm.h
+index 2d457c4..13febdd 100644
+--- a/include/tpm/tpm.h
++++ b/include/sysemu/tpm.h
+@@ -15,8 +15,6 @@
+ #include "qemu/option.h"
+ 
+ typedef struct TPMState TPMState;
+-typedef struct TPMSizedBuffer TPMSizedBuffer;
+-typedef void (TPMRecvDataCB)(TPMState *, uint8_t locty);
+ 
+ int tpm_config_parse(QemuOptsList *opts_list, const char *optarg);
+ int tpm_init(void);
+diff --git a/tpm/tpm_backend.h b/include/sysemu/tpm_backend_int.h
+similarity index 100%
+rename from tpm/tpm_backend.h
+rename to include/sysemu/tpm_backend_int.h
+diff --git a/monitor.c b/monitor.c
+index c897e80..e605822 100644
+--- a/monitor.c
++++ b/monitor.c
+@@ -47,7 +47,7 @@
+ #include "migration/migration.h"
+ #include "sysemu/kvm.h"
+ #include "qemu/acl.h"
+-#include "tpm/tpm.h"
++#include "sysemu/tpm.h"
+ #include "qapi/qmp/qint.h"
+ #include "qapi/qmp/qfloat.h"
+ #include "qapi/qmp/qlist.h"
+diff --git a/tpm/tpm.c b/tpm.c
+similarity index 93%
+rename from tpm/tpm.c
+rename to tpm.c
+index 1f4ac8d..1e94314 100644
+--- a/tpm/tpm.c
++++ b/tpm.c
+@@ -16,8 +16,7 @@
+ #include "monitor/monitor.h"
+ #include "qapi/qmp/qerror.h"
+ #include "backends/tpm.h"
+-#include "tpm_int.h"
+-#include "tpm/tpm.h"
++#include "sysemu/tpm.h"
+ #include "qemu/config-file.h"
+ #include "qmp-commands.h"
+ 
+@@ -62,20 +61,6 @@ static bool tpm_model_is_registered(enum TpmModel model)
+     return false;
+ }
+ 
+-/*
+- * Write an error message in the given output buffer.
+- */
+-void tpm_write_fatal_error_response(uint8_t *out, uint32_t out_len)
+-{
+-    if (out_len >= sizeof(struct tpm_resp_hdr)) {
+-        struct tpm_resp_hdr *resp = (struct tpm_resp_hdr *)out;
+-
+-        resp->tag = cpu_to_be16(TPM_TAG_RSP_COMMAND);
+-        resp->len = cpu_to_be32(sizeof(struct tpm_resp_hdr));
+-        resp->errcode = cpu_to_be32(TPM_FAIL);
+-    }
+-}
+-
+ const TPMDriverOps *tpm_get_backend_driver(const char *type)
+ {
+     int i;
+@@ -109,7 +94,7 @@ int tpm_register_driver(const TPMDriverOps *tdo)
+  * Walk the list of available TPM backend drivers and display them on the
+  * screen.
+  */
+-void tpm_display_backend_drivers(void)
++static void tpm_display_backend_drivers(void)
+ {
+     int i;
+ 
+diff --git a/tpm/tpm_backend.c b/tpm/tpm_backend.c
+deleted file mode 100644
+index 4144ef7..0000000
+--- a/tpm/tpm_backend.c
++++ /dev/null
+@@ -1,58 +0,0 @@
+-/*
+- *  common TPM backend driver functions
+- *
+- *  Copyright (c) 2012-2013 IBM Corporation
+- *  Authors:
+- *    Stefan Berger <stefanb@us.ibm.com>
+- *
+- * This library is free software; you can redistribute it and/or
+- * modify it under the terms of the GNU Lesser General Public
+- * License as published by the Free Software Foundation; either
+- * version 2 of the License, or (at your option) any later version.
+- *
+- * This library is distributed in the hope that it will be useful,
+- * but WITHOUT ANY WARRANTY; without even the implied warranty of
+- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+- * Lesser General Public License for more details.
+- *
+- * You should have received a copy of the GNU Lesser General Public
+- * License along with this library; if not, see <http://www.gnu.org/licenses/>
+- */
+-
+-#include "tpm/tpm.h"
+-#include "qemu/thread.h"
+-#include "tpm_backend.h"
+-
+-void tpm_backend_thread_deliver_request(TPMBackendThread *tbt)
+-{
+-   g_thread_pool_push(tbt->pool, (gpointer)TPM_BACKEND_CMD_PROCESS_CMD, NULL);
+-}
+-
+-void tpm_backend_thread_create(TPMBackendThread *tbt,
+-                               GFunc func, gpointer user_data)
+-{
+-    if (!tbt->pool) {
+-        tbt->pool = g_thread_pool_new(func, user_data, 1, TRUE, NULL);
+-        g_thread_pool_push(tbt->pool, (gpointer)TPM_BACKEND_CMD_INIT, NULL);
+-    }
+-}
+-
+-void tpm_backend_thread_end(TPMBackendThread *tbt)
+-{
+-    if (tbt->pool) {
+-        g_thread_pool_push(tbt->pool, (gpointer)TPM_BACKEND_CMD_END, NULL);
+-        g_thread_pool_free(tbt->pool, FALSE, TRUE);
+-        tbt->pool = NULL;
+-    }
+-}
+-
+-void tpm_backend_thread_tpm_reset(TPMBackendThread *tbt,
+-                                  GFunc func, gpointer user_data)
+-{
+-    if (!tbt->pool) {
+-        tpm_backend_thread_create(tbt, func, user_data);
+-    } else {
+-        g_thread_pool_push(tbt->pool, (gpointer)TPM_BACKEND_CMD_TPM_RESET,
+-                           NULL);
+-    }
+-}
+diff --git a/vl.c b/vl.c
+index d694a90..ce7bed7 100644
+--- a/vl.c
++++ b/vl.c
+@@ -139,7 +139,7 @@ int main(int argc, char **argv)
+ #include "sysemu/blockdev.h"
+ #include "hw/block/block.h"
+ #include "migration/block.h"
+-#include "tpm/tpm.h"
++#include "sysemu/tpm.h"
+ #include "sysemu/dma.h"
+ #include "audio/audio.h"
+ #include "migration/migration.h"
+-- 
+1.8.1.4
+
+
+

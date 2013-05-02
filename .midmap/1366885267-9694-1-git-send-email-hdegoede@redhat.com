@@ -1,0 +1,1 @@
+../uhci-Use-an-intermediate-buffer-for-usb-packet-data/v1.1366910467/0001-uhci-Use-an-intermediate-buffer-for-usb-packet-data.patch

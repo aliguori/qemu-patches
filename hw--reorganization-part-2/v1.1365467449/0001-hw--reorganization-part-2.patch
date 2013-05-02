@@ -1,0 +1,1414 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: Paolo Bonzini <pbonzini@redhat.com>, qemu-devel@nongnu.org,
+ Peter Maydell <peter.maydell@linaro.org>
+Cc: qemu-devel@nongnu.org
+Date: Mon,  8 Apr 2013 19:30:49 +0200
+Message-id: 1365442249-18259-1-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 1/1] hw/ reorganization part 2
+
+Anthony,
+
+The following changes since commit 9196dd411d580c27f85daa209ff9a501d719ebc0:
+
+  Merge branch 'arm-devs.next' of git://git.linaro.org/people/pmaydell/qemu-arm (2013-04-06 12:53:54 +0000)
+
+are available in the git repository at:
+
+
+  git://github.com/bonzini/qemu.git hw-dirs
+
+for you to fetch changes up to 47b43a1f414c5b3eb9eb7502d0b0be0d134259ba:
+
+  hw: move private headers to hw/ subdirectories. (2013-04-08 18:13:16 +0200)
+
+----------------------------------------------------------------
+Paolo Bonzini (35):
+      build: enable using $(CONFIG_FOO) on the rhs of config files
+      hw: move headers to include/
+      hw: make subdirectories for devices
+      moxie: configure with default-configs file
+      hw: move target-independent files to subdirectories
+      hw: move virtio devices to hw/ subdirectories
+      hw: make all of hw/ide/ configurable via default-configs/
+      hw: make all of hw/usb/ configurable via default-configs/
+      hw: make all of hw/pci/ configurable via default-configs/
+      hw: move watchdogs to hw/watchdog, configure via default-configs/
+      hw: move MC146818RTC to hw/timer/, configure via default-configs/
+      hw: move NICs to hw/net/, configure via default-configs/
+      hw: move block devices to hw/block/, configure via default-configs/
+      hw: move audio devices to hw/audio/, configure via default-configs/
+      hw: move display devices to hw/display/, configure via default-configs/
+      hw: move I2C controllers to hw/i2c/, configure via default-configs/
+      hw: move SSI controllers to hw/ssi/, configure via default-configs/
+      hw: move SCSI controllers to hw/scsi/, configure via default-configs/
+      hw: move more files to hw/xen/
+      hw: move char devices to hw/char/, configure via default-configs/
+      hw: move ISA bridges and devices to hw/isa/, configure with default-configs/
+      hw: move timer devices to hw/timer/, configure with default-configs/
+      hw: move SD/MMC devices to hw/sd/, configure with default-configs/
+      hw: move PCI bridges to hw/pci-* or hw/ARCH
+      hw: move VFIO and ivshmem to hw/misc/
+      hw: move DMA controllers to hw/dma/, configure with default-configs/
+      hw: move interrupt controllers to hw/intc/, configure with default-configs/
+      hw: move GPIO interfaces to hw/gpio/, configure with default-configs/
+      hw: move NVRAM interfaces to hw/nvram/, configure with default-configs/
+      hw: move other devices to hw/misc/, configure with default-configs/
+      hw: move ARM CPU cores to hw/cpu/, configure with default-configs/
+      hw: move hw/kvm/ to hw/i386/kvm
+      hw: move last file to hw/arm/
+      MAINTAINERS: update for source code movement
+      hw: move private headers to hw/ subdirectories.
+
+ MAINTAINERS                                        | 174 +++++++-------
+ Makefile                                           |   5 +-
+ arch_init.c                                        |   8 +-
+ block/iscsi.c                                      |   4 +-
+ blockdev-nbd.c                                     |   2 +-
+ blockdev.c                                         |   2 +-
+ configure                                          |   2 +-
+ default-configs/alpha-softmmu.mak                  |   1 +
+ default-configs/arm-softmmu.mak                    |  30 +++
+ default-configs/cris-softmmu.mak                   |   1 +
+ default-configs/i386-softmmu.mak                   |  19 +-
+ default-configs/lm32-softmmu.mak                   |   3 +
+ default-configs/m68k-softmmu.mak                   |   1 +
+ default-configs/microblaze-softmmu.mak             |   2 +
+ default-configs/microblazeel-softmmu.mak           |   2 +
+ default-configs/mips-softmmu.mak                   |   4 +-
+ default-configs/mips64-softmmu.mak                 |   4 +-
+ default-configs/mips64el-softmmu.mak               |   4 +-
+ default-configs/mipsel-softmmu.mak                 |   4 +-
+ default-configs/moxie-softmmu.mak                  |   4 +
+ default-configs/pci.mak                            |   1 +
+ default-configs/ppc-softmmu.mak                    |   6 +-
+ default-configs/ppc64-softmmu.mak                  |   8 +-
+ default-configs/ppcemb-softmmu.mak                 |   6 +-
+ default-configs/s390x-softmmu.mak                  |   1 +
+ default-configs/sh4-softmmu.mak                    |   3 +
+ default-configs/sh4eb-softmmu.mak                  |   3 +
+ default-configs/sparc-softmmu.mak                  |   8 +
+ default-configs/sparc64-softmmu.mak                |   2 +
+ default-configs/x86_64-softmmu.mak                 |  19 +-
+ exec.c                                             |   2 +-
+ gdbstub.c                                          |   2 +-
+ hw/9pfs/virtio-9p-device.c                         |   4 +-
+ hw/9pfs/virtio-9p-handle.c                         |   2 +-
+ hw/9pfs/virtio-9p-local.c                          |   2 +-
+ hw/9pfs/virtio-9p-posix-acl.c                      |   2 +-
+ hw/9pfs/virtio-9p-proxy.c                          |   2 +-
+ hw/9pfs/virtio-9p-synth.c                          |   2 +-
+ hw/9pfs/virtio-9p-xattr-user.c                     |   2 +-
+ hw/9pfs/virtio-9p-xattr.c                          |   2 +-
+ hw/9pfs/virtio-9p.c                                |   4 +-
+ hw/9pfs/virtio-9p.h                                |   2 +-
+ hw/Makefile.objs                                   | 250 +++------------------
+ hw/acpi/Makefile.objs                              |   2 +
+ hw/{acpi.c => acpi/core.c}                         |   4 +-
+ hw/{acpi_ich9.c => acpi/ich9.c}                    |   6 +-
+ hw/{acpi_piix4.c => acpi/piix4.c}                  |  10 +-
+ hw/alpha/Makefile.objs                             |   7 +-
+ hw/{ => alpha}/alpha_sys.h                         |   2 +-
+ hw/alpha/dp264.c                                   |   8 +-
+ hw/alpha/pci.c                                     |   2 +-
+ hw/{alpha_typhoon.c => alpha/typhoon.c}            |   4 +-
+ hw/arm/Makefile.objs                               |  31 +--
+ hw/arm/armv7m.c                                    |   2 +-
+ hw/arm/boot.c                                      |   2 +-
+ hw/arm/collie.c                                    |   8 +-
+ hw/arm/exynos4210.c                                |   4 +-
+ hw/arm/exynos4_boards.c                            |   4 +-
+ hw/arm/gumstix.c                                   |   6 +-
+ hw/arm/highbank.c                                  |   4 +-
+ hw/arm/integratorcp.c                              |   4 +-
+ hw/arm/kzm.c                                       |   8 +-
+ hw/arm/mainstone.c                                 |   8 +-
+ hw/arm/musicpal.c                                  |  10 +-
+ hw/arm/nseries.c                                   |  10 +-
+ hw/arm/omap1.c                                     |   6 +-
+ hw/arm/omap2.c                                     |   8 +-
+ hw/arm/omap_sx1.c                                  |   6 +-
+ hw/arm/palm.c                                      |   6 +-
+ hw/arm/pic_cpu.c                                   |   2 +-
+ hw/arm/pxa2xx.c                                    |   6 +-
+ hw/arm/pxa2xx_gpio.c                               |   2 +-
+ hw/arm/pxa2xx_pic.c                                |   2 +-
+ hw/arm/realview.c                                  |   8 +-
+ hw/arm/spitz.c                                     |  12 +-
+ hw/arm/stellaris.c                                 |   6 +-
+ hw/{ => arm}/strongarm.c                           |   4 +-
+ hw/{ => arm}/strongarm.h                           |   0
+ hw/arm/tosa.c                                      |  10 +-
+ hw/arm/versatilepb.c                               |   8 +-
+ hw/arm/vexpress.c                                  |   8 +-
+ hw/arm/xilinx_zynq.c                               |   4 +-
+ hw/arm/z2.c                                        |  10 +-
+ hw/audio/Makefile.objs                             |  20 ++
+ hw/{ => audio}/ac97.c                              |   2 +-
+ hw/{ => audio}/adlib.c                             |   6 +-
+ hw/{ => audio}/cs4231.c                            |   0
+ hw/{ => audio}/cs4231a.c                           |   4 +-
+ hw/{ => audio}/es1370.c                            |   2 +-
+ hw/{ => audio}/fmopl.c                             |   2 +-
+ hw/{ => audio}/fmopl.h                             |   0
+ hw/{ => audio}/gus.c                               |   8 +-
+ hw/{ => audio}/gusemu.h                            |   0
+ hw/{ => audio}/gusemu_hal.c                        |   4 +-
+ hw/{ => audio}/gusemu_mixer.c                      |   4 +-
+ hw/{ => audio}/gustate.h                           |   0
+ hw/{hda-audio.c => audio/hda-codec.c}              |   4 +-
+ hw/{ => audio}/intel-hda-defs.h                    |   0
+ hw/{ => audio}/intel-hda.c                         |   6 +-
+ hw/{ => audio}/intel-hda.h                         |   0
+ hw/{ => audio}/lm4549.c                            |   2 +-
+ hw/{ => audio}/lm4549.h                            |   0
+ .../marvell_88w8618.c}                             |   2 +-
+ hw/{ => audio}/milkymist-ac97.c                    |   0
+ hw/{ => audio}/pcspk.c                             |   8 +-
+ hw/{ => audio}/pl041.c                             |   4 +-
+ hw/{ => audio}/pl041.h                             |   0
+ hw/{ => audio}/pl041.hx                            |   0
+ hw/{ => audio}/sb16.c                              |   4 +-
+ hw/{ => audio}/wm8750.c                            |   2 +-
+ hw/block/Makefile.objs                             |  15 ++
+ hw/{block-common.c => block/block.c}               |   2 +-
+ hw/{ => block}/cdrom.c                             |   2 +-
+ hw/block/dataplane/Makefile.objs                   |   1 +
+ hw/{ => block}/dataplane/ioq.c                     |   0
+ hw/{ => block}/dataplane/ioq.h                     |   0
+ hw/{ => block}/dataplane/virtio-blk.c              |   6 +-
+ hw/{ => block}/dataplane/virtio-blk.h              |   2 +-
+ hw/{ => block}/ecc.c                               |   2 +-
+ hw/{ => block}/fdc.c                               |   4 +-
+ hw/{ => block}/hd-geometry.c                       |   2 +-
+ hw/{ => block}/m25p80.c                            |   2 +-
+ hw/{ => block}/nand.c                              |   2 +-
+ hw/{ => block}/onenand.c                           |   2 +-
+ hw/{ => block}/pc_sysfw.c                          |   4 +-
+ hw/{ => block}/pflash_cfi01.c                      |   2 +-
+ hw/{ => block}/pflash_cfi02.c                      |   2 +-
+ hw/{ => block}/tc58128.c                           |   2 +-
+ hw/{ => block}/virtio-blk.c                        |  11 +-
+ hw/{ => block}/xen_blkif.h                         |   0
+ hw/{ => block}/xen_disk.c                          |   4 +-
+ hw/bt/Makefile.objs                                |   3 +
+ hw/{bt.c => bt/core.c}                             |   0
+ hw/{bt-hci-csr.c => bt/hci-csr.c}                  |   0
+ hw/{bt-hci.c => bt/hci.c}                          |   0
+ hw/{bt-hid.c => bt/hid.c}                          |   2 +-
+ hw/{bt-l2cap.c => bt/l2cap.c}                      |   0
+ hw/{bt-sdp.c => bt/sdp.c}                          |   0
+ hw/char/Makefile.objs                              |  27 +++
+ hw/{ => char}/cadence_uart.c                       |   0
+ hw/{ => char}/debugcon.c                           |   4 +-
+ hw/{ => char}/escc.c                               |   2 +-
+ hw/{ => char}/etraxfs_ser.c                        |   2 -
+ hw/{ => char}/exynos4210_uart.c                    |   2 +-
+ hw/{ => char}/grlib_apbuart.c                      |   0
+ hw/{ => char}/imx_serial.c                         |   2 +-
+ hw/{ => char}/ipack.c                              |   2 +-
+ hw/{ => char}/ipack.h                              |   0
+ hw/{ => char}/ipoctal232.c                         |   2 +-
+ hw/{ => char}/lm32_juart.c                         |   2 +-
+ hw/{ => char}/lm32_uart.c                          |   0
+ hw/{ => char}/mcf_uart.c                           |   2 +-
+ hw/{ => char}/milkymist-uart.c                     |   0
+ hw/{ => char}/omap_uart.c                          |   4 +-
+ hw/{ => char}/parallel.c                           |   4 +-
+ hw/{ => char}/pl011.c                              |   0
+ hw/{s390x => char}/sclpconsole.c                   |   2 +-
+ hw/{ => char}/serial-isa.c                         |   4 +-
+ hw/{ => char}/serial-pci.c                         |   2 +-
+ hw/{ => char}/serial.c                             |   2 +-
+ hw/{ => char}/sh_serial.c                          |   2 +-
+ hw/{ => char}/spapr_vty.c                          |   4 +-
+ hw/{ => char}/tpci200.c                            |   2 +-
+ hw/{ => char}/virtio-console.c                     |   2 +-
+ hw/{ => char}/virtio-serial-bus.c                  |   2 +-
+ hw/{ => char}/xen_console.c                        |   2 +-
+ hw/{ => char}/xilinx_uartlite.c                    |   0
+ hw/core/Makefile.objs                              |  14 ++
+ hw/{ => core}/empty_slot.c                         |   0
+ hw/{ => core}/irq.c                                |   0
+ hw/{ => core}/loader.c                             |   4 +-
+ hw/{ => core}/null-machine.c                       |   0
+ hw/{ => core}/ptimer.c                             |   0
+ hw/{ => core}/qdev-addr.c                          |   0
+ hw/{ => core}/qdev-properties-system.c             |   2 +-
+ hw/{ => core}/qdev-properties.c                    |   2 +-
+ hw/{ => core}/qdev.c                               |   0
+ hw/{ => core}/stream.c                             |   0
+ hw/{ => core}/sysbus.c                             |   0
+ hw/{ => core}/uboot_image.h                        |   0
+ hw/cpu/Makefile.objs                               |   4 +
+ hw/{ => cpu}/a15mpcore.c                           |   0
+ hw/{ => cpu}/a9mpcore.c                            |   0
+ hw/{ => cpu}/arm11mpcore.c                         |   0
+ hw/cris/Makefile.objs                              |  10 -
+ hw/cris/axis_dev88.c                               |   6 +-
+ hw/cris/boot.c                                     |   2 +-
+ hw/{cris-boot.h => cris/boot.h}                    |   0
+ hw/cris/pic_cpu.c                                  |   2 +-
+ hw/dataplane/Makefile.objs                         |   1 -
+ hw/display/Makefile.objs                           |  34 +++
+ hw/{ => display}/ads7846.c                         |   0
+ hw/{ => display}/blizzard.c                        |  14 +-
+ hw/{ => display}/blizzard_template.h               |   2 +-
+ hw/{ => display}/cirrus_vga.c                      |  38 ++--
+ hw/{ => display}/cirrus_vga_rop.h                  |   8 +-
+ hw/{ => display}/cirrus_vga_rop2.h                 |   0
+ hw/{ => display}/cirrus_vga_template.h             |   0
+ hw/{ => display}/exynos4210_fimd.c                 |   5 +-
+ hw/{ => display}/framebuffer.c                     |   2 +-
+ hw/{ => display}/framebuffer.h                     |   0
+ hw/{ => display}/g364fb.c                          |   0
+ hw/{ => display}/jazz_led.c                        |   0
+ hw/{ => display}/milkymist-tmu2.c                  |   0
+ hw/{ => display}/milkymist-vgafb.c                 |  12 +-
+ hw/{ => display}/milkymist-vgafb_template.h        |   2 +-
+ hw/{ => display}/omap_dss.c                        |   2 +-
+ hw/{ => display}/omap_lcd_template.h               |   0
+ hw/{ => display}/omap_lcdc.c                       |  12 +-
+ hw/{ => display}/pl110.c                           |  12 +-
+ hw/{ => display}/pl110_template.h                  |  12 +-
+ hw/{ => display}/pxa2xx_lcd.c                      |  14 +-
+ hw/{ => display}/pxa2xx_template.h                 |   0
+ hw/{ => display}/qxl-logger.c                      |   2 +-
+ hw/{ => display}/qxl-render.c                      |   2 +-
+ hw/{ => display}/qxl.c                             |   2 +-
+ hw/{ => display}/qxl.h                             |   2 +-
+ hw/{ => display}/sm501.c                           |  18 +-
+ hw/{ => display}/sm501_template.h                  |   0
+ hw/{ => display}/ssd0303.c                         |   2 +-
+ hw/{ => display}/ssd0323.c                         |   0
+ hw/{ => display}/tc6393xb.c                        |  14 +-
+ hw/{ => display}/tc6393xb_template.h               |   0
+ hw/{ => display}/tcx.c                             |   0
+ hw/{ => display}/vga-isa-mm.c                      |   4 +-
+ hw/{ => display}/vga-isa.c                         |   4 +-
+ hw/{ => display}/vga-pci.c                         |   2 +-
+ hw/{ => display}/vga.c                             |  22 +-
+ hw/{ => display}/vga.h                             |   0
+ hw/{ => display}/vga_int.h                         |   0
+ hw/{ => display}/vga_template.h                    |   0
+ hw/{ => display}/vmware_vga.c                      |   2 +-
+ hw/{ => display}/xenfb.c                           |   2 +-
+ hw/dma/Makefile.objs                               |  13 ++
+ hw/{ => dma}/etraxfs_dma.c                         |   2 +-
+ hw/{ => dma}/i82374.c                              |   2 +-
+ hw/{dma.c => dma/i8257.c}                          |   2 +-
+ hw/{ => dma}/omap_dma.c                            |   4 +-
+ hw/{ => dma}/pl080.c                               |   0
+ hw/{ => dma}/pl330.c                               |   2 +-
+ hw/{ => dma}/puv3_dma.c                            |   2 +-
+ hw/{ => dma}/pxa2xx_dma.c                          |   2 +-
+ hw/{ => dma}/rc4030.c                              |   2 +-
+ hw/{ => dma}/soc_dma.c                             |   2 +-
+ hw/{ => dma}/sparc32_dma.c                         |   4 +-
+ hw/{ => dma}/sun4m_iommu.c                         |   5 +-
+ hw/{ => dma}/xilinx_axidma.c                       |   0
+ hw/gpio/Makefile.objs                              |   6 +
+ hw/{ => gpio}/max7310.c                            |   2 +-
+ hw/{ => gpio}/omap_gpio.c                          |   2 +-
+ hw/{ => gpio}/pl061.c                              |   0
+ hw/{ => gpio}/puv3_gpio.c                          |   2 +-
+ hw/{ => gpio}/zaurus.c                             |   2 +-
+ hw/i2c/Makefile.objs                               |   7 +
+ hw/{ => i2c}/bitbang_i2c.c                         |   2 +-
+ hw/{ => i2c}/bitbang_i2c.h                         |   2 +-
+ hw/{i2c.c => i2c/core.c}                           |   2 +-
+ hw/{ => i2c}/exynos4210_i2c.c                      |   2 +-
+ hw/{ => i2c}/omap_i2c.c                            |   4 +-
+ hw/{ => i2c}/pm_smbus.c                            |   6 +-
+ hw/{ => i2c}/smbus.c                               |   4 +-
+ hw/{ => i2c}/smbus_eeprom.c                        |   4 +-
+ hw/{ => i2c}/smbus_ich9.c                          |  10 +-
+ hw/{ => i2c}/versatile_i2c.c                       |   2 +-
+ hw/i386/Makefile.objs                              |  18 +-
+ hw/i386/kvm/Makefile.objs                          |   1 +
+ hw/{ => i386}/kvm/apic.c                           |   2 +-
+ hw/{ => i386}/kvm/clock.c                          |   0
+ hw/{ => i386}/kvm/i8254.c                          |   4 +-
+ hw/{ => i386}/kvm/i8259.c                          |   4 +-
+ hw/{ => i386}/kvm/ioapic.c                         |   6 +-
+ hw/{ => i386}/kvm/pci-assign.c                     |   2 +-
+ hw/i386/kvmvapic.c                                 |   2 +-
+ hw/i386/multiboot.c                                |   4 +-
+ hw/{ => i386}/multiboot.h                          |   0
+ hw/i386/pc.c                                       |  26 +--
+ hw/i386/pc_piix.c                                  |   8 +-
+ hw/i386/pc_q35.c                                   |  10 +-
+ hw/i386/smbios.c                                   |   2 +-
+ hw/i386/xen_domainbuild.c                          |   4 +-
+ hw/{ => i386}/xen_domainbuild.h                    |   2 +-
+ hw/i386/xen_machine_pv.c                           |   6 +-
+ hw/ide/Makefile.objs                               |   2 +
+ hw/ide/ahci.c                                      |   2 +-
+ hw/ide/atapi.c                                     |   2 +-
+ hw/ide/cmd646.c                                    |   4 +-
+ hw/ide/core.c                                      |   6 +-
+ hw/ide/ich.c                                       |   4 +-
+ hw/ide/internal.h                                  |   6 +-
+ hw/ide/isa.c                                       |   4 +-
+ hw/ide/macio.c                                     |   2 +-
+ hw/ide/microdrive.c                                |   2 +-
+ hw/ide/pci.c                                       |   4 +-
+ hw/ide/piix.c                                      |   4 +-
+ hw/ide/qdev.c                                      |   2 +-
+ hw/ide/via.c                                       |   4 +-
+ hw/input/Makefile.objs                             |  13 ++
+ hw/{ => input}/adb.c                               |   2 +-
+ hw/{ => input}/hid.c                               |   2 +-
+ hw/{ => input}/lm832x.c                            |   2 +-
+ hw/{ => input}/milkymist-softusb.c                 |   2 +-
+ hw/{ => input}/pckbd.c                             |   6 +-
+ hw/{ => input}/pl050.c                             |   2 +-
+ hw/{ => input}/ps2.c                               |   2 +-
+ hw/{ => input}/pxa2xx_keypad.c                     |   2 +-
+ hw/{ => input}/stellaris_input.c                   |   2 +-
+ hw/{ => input}/tsc2005.c                           |   2 +-
+ hw/{ => input}/tsc210x.c                           |   4 +-
+ hw/{ => input}/vmmouse.c                           |   4 +-
+ hw/intc/Makefile.objs                              |  23 ++
+ hw/{ => intc}/apic.c                               |  10 +-
+ hw/{ => intc}/apic_common.c                        |   4 +-
+ hw/{ => intc}/arm_gic.c                            |   2 +-
+ hw/{ => intc}/arm_gic_common.c                     |   2 +-
+ hw/{kvm/arm_gic.c => intc/arm_gic_kvm.c}           |   2 +-
+ hw/{ => intc}/armv7m_nvic.c                        |   4 +-
+ hw/{ => intc}/etraxfs_pic.c                        |   0
+ hw/{ => intc}/exynos4210_combiner.c                |   2 +-
+ hw/{ => intc}/exynos4210_gic.c                     |   2 +-
+ hw/{arm_gic_internal.h => intc/gic_internal.h}     |   0
+ hw/{ => intc}/grlib_irqmp.c                        |   2 +-
+ hw/{ => intc}/heathrow_pic.c                       |   0
+ hw/{ => intc}/i8259.c                              |   6 +-
+ hw/{ => intc}/i8259_common.c                       |   4 +-
+ hw/{ => intc}/imx_avic.c                           |   0
+ hw/{ => intc}/ioapic.c                             |   7 +-
+ hw/{ => intc}/ioapic_common.c                      |   4 +-
+ hw/{ => intc}/lm32_pic.c                           |   4 +-
+ hw/{ => intc}/omap_intc.c                          |   2 +-
+ hw/{ => intc}/openpic.c                            |   4 +-
+ hw/{ => intc}/pl190.c                              |   0
+ hw/{ => intc}/puv3_intc.c                          |   2 +-
+ hw/{ => intc}/realview_gic.c                       |   0
+ hw/{ => intc}/sbi.c                                |   0
+ hw/{ => intc}/sh_intc.c                            |   4 +-
+ hw/{ => intc}/slavio_intctl.c                      |   2 +-
+ hw/{ => intc}/sun4c_intctl.c                       |   2 +-
+ hw/{ => intc}/xilinx_intc.c                        |   0
+ hw/isa/Makefile.objs                               |   9 +
+ hw/{ => isa}/apm.c                                 |   2 +-
+ hw/{ => isa}/i82378.c                              |   6 +-
+ hw/{ => isa}/isa-bus.c                             |   2 +-
+ hw/{ => isa}/isa_mmio.c                            |   2 +-
+ hw/{ => isa}/lpc_ich9.c                            |  15 +-
+ hw/{ => isa}/pc87312.c                             |   2 +-
+ hw/{ => isa}/piix4.c                               |   4 +-
+ hw/{ => isa}/vt82c686.c                            |  18 +-
+ hw/kvm/Makefile.objs                               |   1 -
+ hw/lm32/Makefile.objs                              |  20 --
+ hw/{ => lm32}/lm32.h                               |   0
+ hw/lm32/lm32_boards.c                              |   8 +-
+ hw/{ => lm32}/lm32_hwsetup.h                       |   0
+ hw/{ => lm32}/milkymist-hw.h                       |   0
+ hw/lm32/milkymist.c                                |   8 +-
+ hw/m68k/Makefile.objs                              |   4 -
+ hw/m68k/an5206.c                                   |   2 +-
+ hw/m68k/mcf5206.c                                  |   2 +-
+ hw/m68k/mcf5208.c                                  |   2 +-
+ hw/m68k/mcf_intc.c                                 |   2 +-
+ hw/microblaze/Makefile.objs                        |   5 -
+ hw/microblaze/boot.c                               |   2 +-
+ hw/{microblaze_boot.h => microblaze/boot.h}        |   0
+ hw/microblaze/petalogix_ml605_mmu.c                |  10 +-
+ hw/microblaze/petalogix_s3adsp1800_mmu.c           |   8 +-
+ hw/microblaze/pic_cpu.c                            |   2 +-
+ hw/{microblaze_pic_cpu.h => microblaze/pic_cpu.h}  |   0
+ hw/mips/Makefile.objs                              |   6 +-
+ hw/mips/addr.c                                     |   2 +-
+ hw/mips/cputimer.c                                 |   2 +-
+ hw/{gt64xxx.c => mips/gt64xxx_pci.c}               |   4 +-
+ hw/mips/mips_fulong2e.c                            |  22 +-
+ hw/mips/mips_int.c                                 |   2 +-
+ hw/mips/mips_jazz.c                                |  22 +-
+ hw/mips/mips_malta.c                               |  20 +-
+ hw/mips/mips_mipssim.c                             |  10 +-
+ hw/mips/mips_r4k.c                                 |  18 +-
+ hw/misc/Makefile.objs                              |  40 ++++
+ hw/{ => misc}/a9scu.c                              |   0
+ hw/{ => misc}/applesmc.c                           |   2 +-
+ hw/{ => misc}/arm_l2x0.c                           |   0
+ hw/{ => misc}/arm_sysctl.c                         |   2 +-
+ hw/{ => misc}/cbus.c                               |   2 +-
+ hw/{ => misc}/debugexit.c                          |   2 +-
+ hw/{ => misc}/eccmemctl.c                          |   0
+ hw/{ => misc}/exynos4210_pmu.c                     |   0
+ hw/{ => misc}/imx_ccm.c                            |   2 +-
+ hw/{ => misc}/ivshmem.c                            |   2 +-
+ hw/{ => misc}/lm32_sys.c                           |   0
+ hw/misc/macio/Makefile.objs                        |   3 +
+ hw/{ => misc/macio}/cuda.c                         |   2 +-
+ hw/{ => misc/macio}/mac_dbdma.c                    |   4 +-
+ hw/{ => misc/macio}/macio.c                        |   4 +-
+ hw/{ => misc}/max111x.c                            |   0
+ hw/{ => misc}/milkymist-hpdmc.c                    |   0
+ hw/{ => misc}/milkymist-pfpu.c                     |   0
+ hw/{ => misc}/mst_fpga.c                           |   0
+ hw/{ => misc}/omap_clk.c                           |   2 +-
+ hw/{ => misc}/omap_gpmc.c                          |   4 +-
+ hw/{ => misc}/omap_l4.c                            |   2 +-
+ hw/{ => misc}/omap_sdrc.c                          |   2 +-
+ hw/{ => misc}/omap_tap.c                           |   2 +-
+ hw/{ => misc}/pc-testdev.c                         |   2 +-
+ hw/{ => misc}/puv3_pm.c                            |   2 +-
+ hw/{ => misc}/pxa2xx_pcmcia.c                      |   2 +-
+ hw/{ => misc}/sga.c                                |   2 +-
+ hw/{ => misc}/slavio_misc.c                        |   0
+ hw/{ => misc}/tmp105.c                             |   4 +-
+ hw/{ => misc}/tmp105.h                             |   4 +-
+ hw/{vfio_pci.c => misc/vfio.c}                     |   0
+ hw/{ => misc}/vmport.c                             |   4 +-
+ hw/{ => misc}/zynq_slcr.c                          |   0
+ hw/moxie/Makefile.objs                             |   3 -
+ hw/moxie/moxiesim.c                                |   6 +-
+ hw/net/Makefile.objs                               |  33 +++
+ hw/{ => net}/cadence_gem.c                         |   0
+ hw/{ => net}/dp8393x.c                             |   2 +-
+ hw/{ => net}/e1000.c                               |   2 +-
+ hw/{e1000_hw.h => net/e1000_regs.h}                |   0
+ hw/{ => net}/eepro100.c                            |   2 +-
+ hw/{ => net}/etraxfs_eth.c                         |   2 +-
+ hw/{ => net}/lan9118.c                             |   2 +-
+ hw/{ => net}/lance.c                               |   4 +-
+ hw/{ => net}/mcf_fec.c                             |   2 +-
+ hw/{ => net}/milkymist-minimac2.c                  |   0
+ hw/{ => net}/mipsnet.c                             |   0
+ hw/{ => net}/ne2000-isa.c                          |   6 +-
+ hw/{ => net}/ne2000.c                              |   2 +-
+ hw/{ => net}/ne2000.h                              |   0
+ hw/{ => net}/opencores_eth.c                       |   0
+ hw/{ => net}/pcnet-pci.c                           |   2 +-
+ hw/{ => net}/pcnet.c                               |   2 +-
+ hw/{ => net}/pcnet.h                               |   0
+ hw/{ => net}/rtl8139.c                             |   0
+ hw/{ => net}/smc91c111.c                           |   2 +-
+ hw/{ => net}/spapr_llan.c                          |   4 +-
+ hw/{ => net}/stellaris_enet.c                      |   0
+ hw/{ => net}/vhost_net.c                           |   6 +-
+ hw/{ => net}/virtio-net.c                          |   6 +-
+ hw/{ => net}/vmware_utils.h                        |   0
+ hw/{ => net}/vmxnet3.c                             |   9 +-
+ hw/{ => net}/vmxnet3.h                             |   0
+ hw/{ => net}/vmxnet_debug.h                        |   0
+ hw/{ => net}/vmxnet_rx_pkt.c                       |   0
+ hw/{ => net}/vmxnet_rx_pkt.h                       |   0
+ hw/{ => net}/vmxnet_tx_pkt.c                       |   0
+ hw/{ => net}/vmxnet_tx_pkt.h                       |   0
+ hw/{ => net}/xen_nic.c                             |   2 +-
+ hw/{ => net}/xgmac.c                               |   0
+ hw/{ => net}/xilinx_axienet.c                      |   0
+ hw/{ => net}/xilinx_ethlite.c                      |   0
+ hw/nvram/Makefile.objs                             |   5 +
+ hw/{ => nvram}/ds1225y.c                           |   0
+ hw/{ => nvram}/eeprom93xx.c                        |   2 +-
+ hw/{ => nvram}/fw_cfg.c                            |   4 +-
+ hw/{ => nvram}/mac_nvram.c                         |   2 +-
+ hw/{ => nvram}/spapr_nvram.c                       |   4 +-
+ hw/openrisc/openrisc_sim.c                         |   2 +-
+ hw/pci-bridge/Makefile.objs                        |   3 +
+ hw/{ => pci-bridge}/i82801b11.c                    |   2 +-
+ hw/{ => pci-bridge}/ioh3420.c                      |   2 +-
+ hw/{ => pci-bridge}/ioh3420.h                      |   0
+ hw/{ => pci-bridge}/pci_bridge_dev.c               |   0
+ hw/{ => pci-bridge}/xio3130_downstream.c           |   2 +-
+ hw/{ => pci-bridge}/xio3130_downstream.h           |   0
+ hw/{ => pci-bridge}/xio3130_upstream.c             |   2 +-
+ hw/{ => pci-bridge}/xio3130_upstream.h             |   0
+ hw/pci-host/Makefile.objs                          |  18 ++
+ hw/{apb_pci.c => pci-host/apb.c}                   |  10 +-
+ hw/{ => pci-host}/bonito.c                         |   4 +-
+ hw/{dec_pci.c => pci-host/dec.c}                   |   2 +-
+ hw/{dec_pci.h => pci-host/dec.h}                   |   0
+ hw/{grackle_pci.c => pci-host/grackle.c}           |   0
+ hw/{ => pci-host}/pam.c                            |   2 +-
+ hw/{piix_pci.c => pci-host/piix.c}                 |   8 +-
+ hw/{ppce500_pci.c => pci-host/ppce500.c}           |   2 +-
+ hw/{prep_pci.c => pci-host/prep.c}                 |   2 +-
+ hw/{ => pci-host}/q35.c                            |   2 +-
+ hw/{unin_pci.c => pci-host/uninorth.c}             |   0
+ hw/{versatile_pci.c => pci-host/versatile.c}       |   0
+ hw/pci/Makefile.objs                               |   4 +-
+ hw/pci/pci-hotplug.c                               |   6 +-
+ hw/ppc/Makefile.objs                               |  18 +-
+ hw/ppc/e500.c                                      |   8 +-
+ hw/ppc/e500plat.c                                  |   2 +-
+ hw/ppc/mac.h                                       |   2 +-
+ hw/ppc/mac_newworld.c                              |  14 +-
+ hw/ppc/mac_oldworld.c                              |  12 +-
+ hw/ppc/mpc8544ds.c                                 |   2 +-
+ hw/ppc/ppc.c                                       |   4 +-
+ hw/{ => ppc}/ppc405.h                              |   2 +-
+ hw/ppc/ppc405_boards.c                             |   8 +-
+ hw/ppc/ppc405_uc.c                                 |   6 +-
+ hw/ppc/ppc440_bamboo.c                             |   6 +-
+ hw/ppc/ppc4xx_devs.c                               |   4 +-
+ hw/{ => ppc}/ppc4xx_pci.c                          |   4 +-
+ hw/ppc/ppc_booke.c                                 |   4 +-
+ hw/ppc/prep.c                                      |  16 +-
+ hw/ppc/spapr.c                                     |  10 +-
+ hw/ppc/spapr_events.c                              |   4 +-
+ hw/ppc/spapr_hcall.c                               |   2 +-
+ hw/ppc/spapr_iommu.c                               |   2 +-
+ hw/{ => ppc}/spapr_pci.c                           |   4 +-
+ hw/ppc/spapr_rtas.c                                |   4 +-
+ hw/ppc/spapr_vio.c                                 |   6 +-
+ hw/ppc/virtex_ml507.c                              |  12 +-
+ hw/ppc/xics.c                                      |   4 +-
+ hw/s390x/Makefile.objs                             |   2 +-
+ hw/s390x/s390-virtio-bus.c                         |  10 +-
+ hw/s390x/s390-virtio-bus.h                         |  12 +-
+ hw/s390x/s390-virtio.c                             |   2 +-
+ hw/s390x/virtio-ccw.c                              |   8 +-
+ hw/s390x/virtio-ccw.h                              |  14 +-
+ hw/scsi/Makefile.objs                              |   8 +
+ hw/{ => scsi}/esp-pci.c                            |   4 +-
+ hw/{ => scsi}/esp.c                                |   2 +-
+ hw/{ => scsi}/lsi53c895a.c                         |   2 +-
+ hw/{ => scsi}/megasas.c                            |   6 +-
+ hw/{ => scsi}/mfi.h                                |   0
+ hw/{ => scsi}/scsi-bus.c                           |   4 +-
+ hw/{ => scsi}/scsi-disk.c                          |   6 +-
+ hw/{ => scsi}/scsi-generic.c                       |   4 +-
+ hw/{ => scsi}/spapr_vscsi.c                        |  12 +-
+ hw/{ => scsi}/srp.h                                |   0
+ hw/{ppc-viosrp.h => scsi/viosrp.h}                 |   0
+ hw/{ => scsi}/virtio-scsi.c                        |   8 +-
+ hw/sd/Makefile.objs                                |   8 +
+ hw/{ => sd}/milkymist-memcard.c                    |   0
+ hw/{ => sd}/omap_mmc.c                             |   2 +-
+ hw/{ => sd}/pl181.c                                |   0
+ hw/{ => sd}/pxa2xx_mmci.c                          |   2 +-
+ hw/{ => sd}/sd.c                                   |   0
+ hw/{ => sd}/sdhci.c                                |   2 +-
+ hw/{ => sd}/sdhci.h                                |   0
+ hw/{ => sd}/ssi-sd.c                               |   0
+ hw/sh4/Makefile.objs                               |   7 +-
+ hw/sh4/r2d.c                                       |   8 +-
+ hw/sh4/sh7750.c                                    |   8 +-
+ hw/sh4/sh7750_regnames.c                           |   6 +-
+ hw/{ => sh4}/sh7750_regnames.h                     |   0
+ hw/{ => sh4}/sh7750_regs.h                         |   0
+ hw/{ => sh4}/sh_pci.c                              |   2 +-
+ hw/sh4/shix.c                                      |   2 +-
+ hw/sparc/Makefile.objs                             |   9 -
+ hw/sparc/leon3.c                                   |   2 +-
+ hw/sparc/sun4m.c                                   |  20 +-
+ hw/sparc64/Makefile.objs                           |   5 -
+ hw/sparc64/sun4u.c                                 |  14 +-
+ hw/ssi/Makefile.objs                               |   6 +
+ hw/{ => ssi}/omap_spi.c                            |   2 +-
+ hw/{ => ssi}/pl022.c                               |   0
+ hw/{ => ssi}/ssi.c                                 |   0
+ hw/{ => ssi}/xilinx_spi.c                          |   0
+ hw/{ => ssi}/xilinx_spips.c                        |   0
+ hw/timer/Makefile.objs                             |  28 +++
+ hw/{ => timer}/arm_mptimer.c                       |   0
+ hw/{ => timer}/arm_timer.c                         |   0
+ hw/{ => timer}/cadence_ttc.c                       |   0
+ hw/{ => timer}/ds1338.c                            |   2 +-
+ hw/{ => timer}/etraxfs_timer.c                     |   0
+ hw/{ => timer}/exynos4210_mct.c                    |   2 +-
+ hw/{ => timer}/exynos4210_pwm.c                    |   2 +-
+ hw/{ => timer}/exynos4210_rtc.c                    |   2 +-
+ hw/{ => timer}/grlib_gptimer.c                     |   0
+ hw/{ => timer}/hpet.c                              |   8 +-
+ hw/{ => timer}/i8254.c                             |   8 +-
+ hw/{ => timer}/i8254_common.c                      |   8 +-
+ hw/{ => timer}/imx_timer.c                         |   2 +-
+ hw/{ => timer}/lm32_timer.c                        |   0
+ hw/{ => timer}/m48t59.c                            |   4 +-
+ hw/{ => timer}/mc146818rtc.c                       |   4 +-
+ hw/{ => timer}/milkymist-sysctl.c                  |   0
+ hw/{ => timer}/omap_gptimer.c                      |   2 +-
+ hw/{ => timer}/omap_synctimer.c                    |   2 +-
+ hw/{ => timer}/pl031.c                             |   0
+ hw/{ => timer}/puv3_ost.c                          |   2 +-
+ hw/{ => timer}/pxa2xx_timer.c                      |   2 +-
+ hw/{ => timer}/sh_timer.c                          |   2 +-
+ hw/{ => timer}/slavio_timer.c                      |   2 +-
+ hw/{ => timer}/tusb6010.c                          |   4 +-
+ hw/{ => timer}/twl92230.c                          |   2 +-
+ hw/{ => timer}/xilinx_timer.c                      |   0
+ hw/unicore32/puv3.c                                |   4 +-
+ hw/usb/Makefile.objs                               |   8 +-
+ hw/{ => usb}/ccid-card-emulated.c                  |   2 +-
+ hw/{ => usb}/ccid-card-passthru.c                  |   2 +-
+ hw/{ => usb}/ccid.h                                |   0
+ hw/usb/dev-audio.c                                 |   2 +-
+ hw/usb/dev-hid.c                                   |   2 +-
+ hw/usb/dev-smartcard-reader.c                      |   2 +-
+ hw/usb/dev-storage.c                               |   2 +-
+ hw/usb/dev-uas.c                                   |   4 +-
+ hw/virtio/Makefile.objs                            |   7 +
+ hw/virtio/dataplane/Makefile.objs                  |   1 +
+ hw/{ => virtio}/dataplane/hostmem.c                |   2 +-
+ hw/{ => virtio}/dataplane/vring.c                  |   2 +-
+ hw/{ => virtio}/vhost.c                            |   2 +-
+ hw/{ => virtio}/virtio-balloon.c                   |   8 +-
+ hw/{ => virtio}/virtio-bus.c                       |   4 +-
+ hw/{ => virtio}/virtio-pci.c                       |  16 +-
+ hw/{ => virtio}/virtio-pci.h                       |  16 +-
+ hw/{ => virtio}/virtio-rng.c                       |   4 +-
+ hw/{ => virtio}/virtio.c                           |   4 +-
+ hw/watchdog/Makefile.objs                          |   3 +
+ hw/{ => watchdog}/watchdog.c                       |   2 +-
+ hw/{ => watchdog}/wdt_i6300esb.c                   |   2 +-
+ hw/{ => watchdog}/wdt_ib700.c                      |   6 +-
+ hw/xen/Makefile.objs                               |   6 +
+ hw/{ => xen}/xen-host-pci-device.c                 |   2 +-
+ hw/{ => xen}/xen-host-pci-device.h                 |   0
+ hw/{ => xen}/xen_apic.c                            |   4 +-
+ hw/{ => xen}/xen_backend.c                         |   2 +-
+ hw/{ => xen}/xen_devconfig.c                       |   2 +-
+ hw/{ => xen}/xen_platform.c                        |   6 +-
+ hw/{ => xen}/xen_pt.c                              |   6 +-
+ hw/{ => xen}/xen_pt.h                              |   4 +-
+ hw/{ => xen}/xen_pt_config_init.c                  |   4 +-
+ hw/{ => xen}/xen_pt_msi.c                          |   6 +-
+ hw/{ => xtensa}/xtensa_bootparam.h                 |   0
+ hw/xtensa/xtensa_lx60.c                            |   6 +-
+ hw/scsi-defs.h => include/block/scsi.h             |   0
+ include/exec/memory-internal.h                     |   2 +-
+ {hw => include/hw/acpi}/acpi.h                     |   0
+ hw/acpi_ich9.h => include/hw/acpi/ich9.h           |   2 +-
+ hw/arm-misc.h => include/hw/arm.h                  |   0
+ {hw => include/hw/arm}/devices.h                   |   0
+ {hw => include/hw/arm}/exynos4210.h                |   0
+ {hw => include/hw/arm}/imx.h                       |   0
+ {hw => include/hw/arm}/omap.h                      |   0
+ {hw => include/hw/arm}/primecell.h                 |   0
+ {hw => include/hw/arm}/pxa.h                       |   0
+ {hw => include/hw/arm}/sharpsl.h                   |   0
+ {hw => include/hw/arm}/soc_dma.h                   |   0
+ hw/audiodev.h => include/hw/audio/audio.h          |   0
+ {hw => include/hw/audio}/pcspk.h                   |   2 +-
+ hw/block-common.h => include/hw/block/block.h      |   0
+ {hw => include/hw/block}/fdc.h                     |   0
+ {hw => include/hw/block}/flash.h                   |   0
+ {hw => include/hw}/boards.h                        |   0
+ {hw => include/hw}/bt.h                            |   0
+ {hw => include/hw/char}/escc.h                     |   0
+ {hw => include/hw/char}/serial.h                   |   0
+ {hw => include/hw/cris}/etraxfs.h                  |   2 +-
+ {hw => include/hw/cris}/etraxfs_dma.h              |   0
+ {hw => include/hw}/elf_ops.h                       |   0
+ {hw => include/hw}/empty_slot.h                    |   0
+ {hw => include/hw}/hw.h                            |   0
+ {hw => include/hw/i2c}/i2c.h                       |   0
+ {hw => include/hw/i2c}/pm_smbus.h                  |   0
+ {hw => include/hw/i2c}/smbus.h                     |   2 +-
+ {hw => include/hw/i386}/apic-msidef.h              |   0
+ {hw => include/hw/i386}/apic.h                     |   0
+ {hw => include/hw/i386}/apic_internal.h            |   0
+ {hw => include/hw/i386}/ich9.h                     |  13 +-
+ {hw => include/hw/i386}/ioapic.h                   |   0
+ {hw => include/hw/i386}/ioapic_internal.h          |   0
+ {hw => include/hw/i386}/pc.h                       |   6 +-
+ {hw => include/hw/i386}/smbios.h                   |   0
+ {hw => include/hw}/ide.h                           |   2 +-
+ {hw => include/hw/input}/adb.h                     |   0
+ {hw => include/hw/input}/hid.h                     |   0
+ {hw => include/hw/input}/ps2.h                     |   0
+ {hw => include/hw}/irq.h                           |   0
+ {hw => include/hw/isa}/apm.h                       |   0
+ {hw => include/hw/isa}/i8259_internal.h            |   4 +-
+ {hw => include/hw/isa}/isa.h                       |   0
+ {hw => include/hw/isa}/pc87312.h                   |   2 +-
+ {hw => include/hw/isa}/vt82c686.h                  |   0
+ {hw => include/hw}/kvm/clock.h                     |   0
+ {hw => include/hw/lm32}/lm32_juart.h               |   0
+ {hw => include/hw/lm32}/lm32_pic.h                 |   0
+ {hw => include/hw}/loader.h                        |   0
+ {hw => include/hw/m68k}/mcf.h                      |   0
+ hw/mips-bios.h => include/hw/mips/bios.h           |   0
+ hw/mips_cpudevs.h => include/hw/mips/cpudevs.h     |   0
+ {hw => include/hw/mips}/mips.h                     |   0
+ {hw => include/hw/misc}/tmp105_regs.h              |   0
+ {hw => include/hw/nvram}/eeprom93xx.h              |   0
+ {hw => include/hw/nvram}/fw_cfg.h                  |   0
+ hw/apb_pci.h => include/hw/pci-host/apb.h          |   0
+ {hw => include/hw/pci-host}/pam.h                  |   0
+ hw/ppce500_pci.h => include/hw/pci-host/ppce500.h  |   0
+ {hw => include/hw/pci-host}/q35.h                  |  13 +-
+ hw/spapr_pci.h => include/hw/pci-host/spapr.h      |   2 +-
+ {hw => include/hw}/pci/msi.h                       |   0
+ {hw => include/hw}/pci/msix.h                      |   0
+ {hw => include/hw}/pci/pci.h                       |   2 +-
+ {hw => include/hw}/pci/pci_bridge.h                |   0
+ {hw => include/hw}/pci/pci_bus.h                   |   0
+ {hw => include/hw}/pci/pci_host.h                  |   0
+ {hw => include/hw}/pci/pci_ids.h                   |   0
+ {hw => include/hw}/pci/pci_regs.h                  |   0
+ {hw => include/hw}/pci/pcie.h                      |   0
+ {hw => include/hw}/pci/pcie_aer.h                  |   0
+ {hw => include/hw}/pci/pcie_host.h                 |   0
+ {hw => include/hw}/pci/pcie_port.h                 |   0
+ {hw => include/hw}/pci/pcie_regs.h                 |   0
+ {hw => include/hw}/pci/shpc.h                      |   0
+ {hw => include/hw}/pci/slotid_cap.h                |   0
+ {hw => include/hw}/pcmcia.h                        |   0
+ {hw => include/hw/ppc}/mac_dbdma.h                 |   0
+ {hw => include/hw/ppc}/openpic.h                   |   0
+ {hw => include/hw/ppc}/ppc.h                       |   0
+ {hw => include/hw/ppc}/ppc4xx.h                    |   0
+ {hw => include/hw/ppc}/spapr.h                     |   2 +-
+ {hw => include/hw/ppc}/spapr_vio.h                 |   0
+ {hw => include/hw/ppc}/xics.h                      |   0
+ {hw => include/hw}/ptimer.h                        |   0
+ {hw => include/hw}/qdev-addr.h                     |   0
+ {hw => include/hw}/qdev-core.h                     |   0
+ {hw => include/hw}/qdev-dma.h                      |   0
+ {hw => include/hw}/qdev-properties.h               |   0
+ {hw => include/hw}/qdev.h                          |   0
+ {hw => include/hw}/s390x/event-facility.h          |   0
+ {hw => include/hw}/s390x/sclp.h                    |   0
+ {hw => include/hw/scsi}/esp.h                      |   2 +-
+ {hw => include/hw/scsi}/scsi.h                     |   2 +-
+ {hw => include/hw}/sd.h                            |   0
+ {hw => include/hw/sh4}/sh.h                        |   2 +-
+ {hw => include/hw/sh4}/sh_intc.h                   |   0
+ {hw => include/hw/sparc}/firmware_abi.h            |   0
+ {hw => include/hw/sparc}/grlib.h                   |   0
+ {hw => include/hw/sparc}/sparc32_dma.h             |   0
+ {hw => include/hw/sparc}/sun4m.h                   |   4 +-
+ {hw => include/hw}/ssi.h                           |   0
+ {hw => include/hw}/stream.h                        |   0
+ {hw => include/hw}/sysbus.h                        |   0
+ hw/hpet_emul.h => include/hw/timer/hpet.h          |   0
+ {hw => include/hw/timer}/i8254.h                   |   2 +-
+ {hw => include/hw/timer}/i8254_internal.h          |   4 +-
+ hw/nvram.h => include/hw/timer/m48t59.h            |   0
+ {hw => include/hw/timer}/mc146818rtc.h             |   4 +-
+ {hw => include/hw/timer}/mc146818rtc_regs.h        |   0
+ {hw => include/hw/unicore32}/puv3.h                |   0
+ {hw => include/hw}/usb.h                           |   0
+ {hw => include/hw/virtio}/dataplane/hostmem.h      |   0
+ {hw => include/hw/virtio}/dataplane/vring.h        |   2 +-
+ {hw => include/hw/virtio}/vhost.h                  |   2 +-
+ .../hw/virtio/virtio-9p.h                          |   0
+ {hw => include/hw/virtio}/virtio-balloon.h         |   2 +-
+ {hw => include/hw/virtio}/virtio-blk.h             |  11 +-
+ {hw => include/hw/virtio}/virtio-bus.h             |   2 +-
+ {hw => include/hw/virtio}/virtio-net.h             |   2 +-
+ {hw => include/hw/virtio}/virtio-rng.h             |   0
+ {hw => include/hw/virtio}/virtio-scsi.h            |   4 +-
+ {hw => include/hw/virtio}/virtio-serial.h          |   2 +-
+ {hw => include/hw/virtio}/virtio.h                 |   2 +-
+ {hw => include/hw/xen}/xen.h                       |   0
+ {hw => include/hw/xen}/xen_backend.h               |   2 +-
+ {hw => include/hw/xen}/xen_common.h                |   2 +-
+ {hw => include/hw}/xilinx.h                        |   0
+ {hw => include/net}/vhost_net.h                    |   0
+ {hw => include/sysemu}/watchdog.h                  |   0
+ monitor.c                                          |   8 +-
+ net/tap.c                                          |   2 +-
+ pc-bios/optionrom/optionrom.h                      |   2 +-
+ target-arm/arm-semi.c                              |   2 +-
+ target-arm/kvm.c                                   |   2 +-
+ target-i386/cpu.c                                  |   4 +-
+ target-i386/cpu.h                                  |   2 +-
+ target-i386/kvm.c                                  |   4 +-
+ target-i386/machine.c                              |   4 +-
+ target-lm32/op_helper.c                            |   4 +-
+ target-lm32/translate.c                            |   2 +-
+ target-ppc/kvm.c                                   |   6 +-
+ target-sh4/helper.c                                |   2 +-
+ tests/rtc-test.c                                   |   2 +-
+ tests/tmp105-test.c                                |   2 +-
+ tpm/tpm_passthrough.c                              |   2 +-
+ tpm/tpm_tis.c                                      |   2 +-
+ tpm/tpm_tis.h                                      |   2 +-
+ vl.c                                               |  12 +-
+ xen-all.c                                          |   6 +-
+ xen-mapcache.c                                     |   2 +-
+ xen-stub.c                                         |   2 +-
+ 774 files changed, 1647 insertions(+), 1463 deletions(-)
+ create mode 100644 hw/acpi/Makefile.objs
+ rename hw/{acpi.c => acpi/core.c} (99%)
+ rename hw/{acpi_ich9.c => acpi/ich9.c} (98%)
+ rename hw/{acpi_piix4.c => acpi/piix4.c} (99%)
+ rename hw/{ => alpha}/alpha_sys.h (95%)
+ rename hw/{alpha_typhoon.c => alpha/typhoon.c} (99%)
+ rename hw/{ => arm}/strongarm.c (99%)
+ rename hw/{ => arm}/strongarm.h (100%)
+ create mode 100644 hw/audio/Makefile.objs
+ rename hw/{ => audio}/ac97.c (99%)
+ rename hw/{ => audio}/adlib.c (99%)
+ rename hw/{ => audio}/cs4231.c (100%)
+ rename hw/{ => audio}/cs4231a.c (99%)
+ rename hw/{ => audio}/es1370.c (99%)
+ rename hw/{ => audio}/fmopl.c (99%)
+ rename hw/{ => audio}/fmopl.h (100%)
+ rename hw/{ => audio}/gus.c (98%)
+ rename hw/{ => audio}/gusemu.h (100%)
+ rename hw/{ => audio}/gusemu_hal.c (99%)
+ rename hw/{ => audio}/gusemu_mixer.c (99%)
+ rename hw/{ => audio}/gustate.h (100%)
+ rename hw/{hda-audio.c => audio/hda-codec.c} (99%)
+ rename hw/{ => audio}/intel-hda-defs.h (100%)
+ rename hw/{ => audio}/intel-hda.c (99%)
+ rename hw/{ => audio}/intel-hda.h (100%)
+ rename hw/{ => audio}/lm4549.c (99%)
+ rename hw/{ => audio}/lm4549.h (100%)
+ rename hw/{marvell_88w8618_audio.c => audio/marvell_88w8618.c} (99%)
+ rename hw/{ => audio}/milkymist-ac97.c (100%)
+ rename hw/{ => audio}/pcspk.c (98%)
+ rename hw/{ => audio}/pl041.c (99%)
+ rename hw/{ => audio}/pl041.h (100%)
+ rename hw/{ => audio}/pl041.hx (100%)
+ rename hw/{ => audio}/sb16.c (99%)
+ rename hw/{ => audio}/wm8750.c (99%)
+ create mode 100644 hw/block/Makefile.objs
+ rename hw/{block-common.c => block/block.c} (98%)
+ rename hw/{ => block}/cdrom.c (99%)
+ create mode 100644 hw/block/dataplane/Makefile.objs
+ rename hw/{ => block}/dataplane/ioq.c (100%)
+ rename hw/{ => block}/dataplane/ioq.h (100%)
+ rename hw/{ => block}/dataplane/virtio-blk.c (99%)
+ rename hw/{ => block}/dataplane/virtio-blk.h (96%)
+ rename hw/{ => block}/ecc.c (99%)
+ rename hw/{ => block}/fdc.c (99%)
+ rename hw/{ => block}/hd-geometry.c (99%)
+ rename hw/{ => block}/m25p80.c (99%)
+ rename hw/{ => block}/nand.c (99%)
+ rename hw/{ => block}/onenand.c (99%)
+ rename hw/{ => block}/pc_sysfw.c (99%)
+ rename hw/{ => block}/pflash_cfi01.c (99%)
+ rename hw/{ => block}/pflash_cfi02.c (99%)
+ rename hw/{ => block}/tc58128.c (99%)
+ rename hw/{ => block}/virtio-blk.c (99%)
+ rename hw/{ => block}/xen_blkif.h (100%)
+ rename hw/{ => block}/xen_disk.c (99%)
+ create mode 100644 hw/bt/Makefile.objs
+ rename hw/{bt.c => bt/core.c} (100%)
+ rename hw/{bt-hci-csr.c => bt/hci-csr.c} (100%)
+ rename hw/{bt-hci.c => bt/hci.c} (100%)
+ rename hw/{bt-hid.c => bt/hid.c} (99%)
+ rename hw/{bt-l2cap.c => bt/l2cap.c} (100%)
+ rename hw/{bt-sdp.c => bt/sdp.c} (100%)
+ create mode 100644 hw/char/Makefile.objs
+ rename hw/{ => char}/cadence_uart.c (100%)
+ rename hw/{ => char}/debugcon.c (98%)
+ rename hw/{ => char}/escc.c (99%)
+ rename hw/{ => char}/etraxfs_ser.c (98%)
+ rename hw/{ => char}/exynos4210_uart.c (99%)
+ rename hw/{ => char}/grlib_apbuart.c (100%)
+ rename hw/{ => char}/imx_serial.c (99%)
+ rename hw/{ => char}/ipack.c (99%)
+ rename hw/{ => char}/ipack.h (100%)
+ rename hw/{ => char}/ipoctal232.c (99%)
+ rename hw/{ => char}/lm32_juart.c (99%)
+ rename hw/{ => char}/lm32_uart.c (100%)
+ rename hw/{ => char}/mcf_uart.c (99%)
+ rename hw/{ => char}/milkymist-uart.c (100%)
+ rename hw/{ => char}/omap_uart.c (98%)
+ rename hw/{ => char}/parallel.c (99%)
+ rename hw/{ => char}/pl011.c (100%)
+ rename hw/{s390x => char}/sclpconsole.c (99%)
+ rename hw/{ => char}/serial-isa.c (98%)
+ rename hw/{ => char}/serial-pci.c (99%)
+ rename hw/{ => char}/serial.c (99%)
+ rename hw/{ => char}/sh_serial.c (99%)
+ rename hw/{ => char}/spapr_vty.c (99%)
+ rename hw/{ => char}/tpci200.c (99%)
+ rename hw/{ => char}/virtio-console.c (99%)
+ rename hw/{ => char}/virtio-serial-bus.c (99%)
+ rename hw/{ => char}/xen_console.c (99%)
+ rename hw/{ => char}/xilinx_uartlite.c (100%)
+ create mode 100644 hw/core/Makefile.objs
+ rename hw/{ => core}/empty_slot.c (100%)
+ rename hw/{ => core}/irq.c (100%)
+ rename hw/{ => core}/loader.c (99%)
+ rename hw/{ => core}/null-machine.c (100%)
+ rename hw/{ => core}/ptimer.c (100%)
+ rename hw/{ => core}/qdev-addr.c (100%)
+ rename hw/{ => core}/qdev-properties-system.c (99%)
+ rename hw/{ => core}/qdev-properties.c (99%)
+ rename hw/{ => core}/qdev.c (100%)
+ rename hw/{ => core}/stream.c (100%)
+ rename hw/{ => core}/sysbus.c (100%)
+ rename hw/{ => core}/uboot_image.h (100%)
+ create mode 100644 hw/cpu/Makefile.objs
+ rename hw/{ => cpu}/a15mpcore.c (100%)
+ rename hw/{ => cpu}/a9mpcore.c (100%)
+ rename hw/{ => cpu}/arm11mpcore.c (100%)
+ rename hw/{cris-boot.h => cris/boot.h} (100%)
+ delete mode 100644 hw/dataplane/Makefile.objs
+ create mode 100644 hw/display/Makefile.objs
+ rename hw/{ => display}/ads7846.c (100%)
+ rename hw/{ => display}/blizzard.c (99%)
+ rename hw/{ => display}/blizzard_template.h (99%)
+ rename hw/{ => display}/cirrus_vga.c (99%)
+ rename hw/{ => display}/cirrus_vga_rop.h (97%)
+ rename hw/{ => display}/cirrus_vga_rop2.h (100%)
+ rename hw/{ => display}/cirrus_vga_template.h (100%)
+ rename hw/{ => display}/exynos4210_fimd.c (99%)
+ rename hw/{ => display}/framebuffer.c (99%)
+ rename hw/{ => display}/framebuffer.h (100%)
+ rename hw/{ => display}/g364fb.c (100%)
+ rename hw/{ => display}/jazz_led.c (100%)
+ rename hw/{ => display}/milkymist-tmu2.c (100%)
+ rename hw/{ => display}/milkymist-vgafb.c (97%)
+ rename hw/{ => display}/milkymist-vgafb_template.h (98%)
+ rename hw/{ => display}/omap_dss.c (99%)
+ rename hw/{ => display}/omap_lcd_template.h (100%)
+ rename hw/{ => display}/omap_lcdc.c (98%)
+ rename hw/{ => display}/pl110.c (98%)
+ rename hw/{ => display}/pl110_template.h (98%)
+ rename hw/{ => display}/pxa2xx_lcd.c (99%)
+ rename hw/{ => display}/pxa2xx_template.h (100%)
+ rename hw/{ => display}/qxl-logger.c (99%)
+ rename hw/{ => display}/qxl-render.c (99%)
+ rename hw/{ => display}/qxl.c (99%)
+ rename hw/{ => display}/qxl.h (99%)
+ rename hw/{ => display}/sm501.c (99%)
+ rename hw/{ => display}/sm501_template.h (100%)
+ rename hw/{ => display}/ssd0303.c (99%)
+ rename hw/{ => display}/ssd0323.c (100%)
+ rename hw/{ => display}/tc6393xb.c (98%)
+ rename hw/{ => display}/tc6393xb_template.h (100%)
+ rename hw/{ => display}/tcx.c (100%)
+ rename hw/{ => display}/vga-isa-mm.c (98%)
+ rename hw/{ => display}/vga-isa.c (98%)
+ rename hw/{ => display}/vga-pci.c (99%)
+ rename hw/{ => display}/vga.c (99%)
+ rename hw/{ => display}/vga.h (100%)
+ rename hw/{ => display}/vga_int.h (100%)
+ rename hw/{ => display}/vga_template.h (100%)
+ rename hw/{ => display}/vmware_vga.c (99%)
+ rename hw/{ => display}/xenfb.c (99%)
+ create mode 100644 hw/dma/Makefile.objs
+ rename hw/{ => dma}/etraxfs_dma.c (99%)
+ rename hw/{ => dma}/i82374.c (99%)
+ rename hw/{dma.c => dma/i8257.c} (99%)
+ rename hw/{ => dma}/omap_dma.c (99%)
+ rename hw/{ => dma}/pl080.c (100%)
+ rename hw/{ => dma}/pl330.c (99%)
+ rename hw/{ => dma}/puv3_dma.c (98%)
+ rename hw/{ => dma}/pxa2xx_dma.c (99%)
+ rename hw/{ => dma}/rc4030.c (99%)
+ rename hw/{ => dma}/soc_dma.c (99%)
+ rename hw/{ => dma}/sparc32_dma.c (99%)
+ rename hw/{ => dma}/sun4m_iommu.c (99%)
+ rename hw/{ => dma}/xilinx_axidma.c (100%)
+ create mode 100644 hw/gpio/Makefile.objs
+ rename hw/{ => gpio}/max7310.c (99%)
+ rename hw/{ => gpio}/omap_gpio.c (99%)
+ rename hw/{ => gpio}/pl061.c (100%)
+ rename hw/{ => gpio}/puv3_gpio.c (99%)
+ rename hw/{ => gpio}/zaurus.c (99%)
+ create mode 100644 hw/i2c/Makefile.objs
+ rename hw/{ => i2c}/bitbang_i2c.c (99%)
+ rename hw/{ => i2c}/bitbang_i2c.h (92%)
+ rename hw/{i2c.c => i2c/core.c} (99%)
+ rename hw/{ => i2c}/exynos4210_i2c.c (99%)
+ rename hw/{ => i2c}/omap_i2c.c (99%)
+ rename hw/{ => i2c}/pm_smbus.c (98%)
+ rename hw/{ => i2c}/smbus.c (99%)
+ rename hw/{ => i2c}/smbus_eeprom.c (98%)
+ rename hw/{ => i2c}/smbus_ich9.c (96%)
+ rename hw/{ => i2c}/versatile_i2c.c (99%)
+ create mode 100644 hw/i386/kvm/Makefile.objs
+ rename hw/{ => i386}/kvm/apic.c (99%)
+ rename hw/{ => i386}/kvm/clock.c (100%)
+ rename hw/{ => i386}/kvm/i8254.c (99%)
+ rename hw/{ => i386}/kvm/i8259.c (98%)
+ rename hw/{ => i386}/kvm/ioapic.c (97%)
+ rename hw/{ => i386}/kvm/pci-assign.c (99%)
+ rename hw/{ => i386}/multiboot.h (100%)
+ rename hw/{ => i386}/xen_domainbuild.h (93%)
+ create mode 100644 hw/input/Makefile.objs
+ rename hw/{ => input}/adb.c (99%)
+ rename hw/{ => input}/hid.c (99%)
+ rename hw/{ => input}/lm832x.c (99%)
+ rename hw/{ => input}/milkymist-softusb.c (99%)
+ rename hw/{ => input}/pckbd.c (99%)
+ rename hw/{ => input}/pl050.c (99%)
+ rename hw/{ => input}/ps2.c (99%)
+ rename hw/{ => input}/pxa2xx_keypad.c (99%)
+ rename hw/{ => input}/stellaris_input.c (98%)
+ rename hw/{ => input}/tsc2005.c (99%)
+ rename hw/{ => input}/tsc210x.c (99%)
+ rename hw/{ => input}/vmmouse.c (99%)
+ create mode 100644 hw/intc/Makefile.objs
+ rename hw/{ => intc}/apic.c (99%)
+ rename hw/{ => intc}/apic_common.c (99%)
+ rename hw/{ => intc}/arm_gic.c (99%)
+ rename hw/{ => intc}/arm_gic_common.c (99%)
+ rename hw/{kvm/arm_gic.c => intc/arm_gic_kvm.c} (99%)
+ rename hw/{ => intc}/armv7m_nvic.c (99%)
+ rename hw/{ => intc}/etraxfs_pic.c (100%)
+ rename hw/{ => intc}/exynos4210_combiner.c (99%)
+ rename hw/{ => intc}/exynos4210_gic.c (99%)
+ rename hw/{arm_gic_internal.h => intc/gic_internal.h} (100%)
+ rename hw/{ => intc}/grlib_irqmp.c (99%)
+ rename hw/{ => intc}/heathrow_pic.c (100%)
+ rename hw/{ => intc}/i8259.c (99%)
+ rename hw/{ => intc}/i8259_common.c (98%)
+ rename hw/{ => intc}/imx_avic.c (100%)
+ rename hw/{ => intc}/ioapic.c (98%)
+ rename hw/{ => intc}/ioapic_common.c (98%)
+ rename hw/{ => intc}/lm32_pic.c (98%)
+ rename hw/{ => intc}/omap_intc.c (99%)
+ rename hw/{ => intc}/openpic.c (99%)
+ rename hw/{ => intc}/pl190.c (100%)
+ rename hw/{ => intc}/puv3_intc.c (99%)
+ rename hw/{ => intc}/realview_gic.c (100%)
+ rename hw/{ => intc}/sbi.c (100%)
+ rename hw/{ => intc}/sh_intc.c (99%)
+ rename hw/{ => intc}/slavio_intctl.c (99%)
+ rename hw/{ => intc}/sun4c_intctl.c (99%)
+ rename hw/{ => intc}/xilinx_intc.c (100%)
+ create mode 100644 hw/isa/Makefile.objs
+ rename hw/{ => isa}/apm.c (99%)
+ rename hw/{ => isa}/i82378.c (98%)
+ rename hw/{ => isa}/isa-bus.c (99%)
+ rename hw/{ => isa}/isa_mmio.c (99%)
+ rename hw/{ => isa}/lpc_ich9.c (98%)
+ rename hw/{ => isa}/pc87312.c (99%)
+ rename hw/{ => isa}/piix4.c (98%)
+ rename hw/{ => isa}/vt82c686.c (98%)
+ delete mode 100644 hw/kvm/Makefile.objs
+ rename hw/{ => lm32}/lm32.h (100%)
+ rename hw/{ => lm32}/lm32_hwsetup.h (100%)
+ rename hw/{ => lm32}/milkymist-hw.h (100%)
+ rename hw/{microblaze_boot.h => microblaze/boot.h} (100%)
+ rename hw/{microblaze_pic_cpu.h => microblaze/pic_cpu.h} (100%)
+ rename hw/{gt64xxx.c => mips/gt64xxx_pci.c} (99%)
+ create mode 100644 hw/misc/Makefile.objs
+ rename hw/{ => misc}/a9scu.c (100%)
+ rename hw/{ => misc}/applesmc.c (99%)
+ rename hw/{ => misc}/arm_l2x0.c (100%)
+ rename hw/{ => misc}/arm_sysctl.c (99%)
+ rename hw/{ => misc}/cbus.c (99%)
+ rename hw/{ => misc}/debugexit.c (98%)
+ rename hw/{ => misc}/eccmemctl.c (100%)
+ rename hw/{ => misc}/exynos4210_pmu.c (100%)
+ rename hw/{ => misc}/imx_ccm.c (99%)
+ rename hw/{ => misc}/ivshmem.c (99%)
+ rename hw/{ => misc}/lm32_sys.c (100%)
+ create mode 100644 hw/misc/macio/Makefile.objs
+ rename hw/{ => misc/macio}/cuda.c (99%)
+ rename hw/{ => misc/macio}/mac_dbdma.c (99%)
+ rename hw/{ => misc/macio}/macio.c (99%)
+ rename hw/{ => misc}/max111x.c (100%)
+ rename hw/{ => misc}/milkymist-hpdmc.c (100%)
+ rename hw/{ => misc}/milkymist-pfpu.c (100%)
+ rename hw/{ => misc}/mst_fpga.c (100%)
+ rename hw/{ => misc}/omap_clk.c (99%)
+ rename hw/{ => misc}/omap_gpmc.c (99%)
+ rename hw/{ => misc}/omap_l4.c (99%)
+ rename hw/{ => misc}/omap_sdrc.c (99%)
+ rename hw/{ => misc}/omap_tap.c (99%)
+ rename hw/{ => misc}/pc-testdev.c (99%)
+ rename hw/{ => misc}/puv3_pm.c (99%)
+ rename hw/{ => misc}/pxa2xx_pcmcia.c (99%)
+ rename hw/{ => misc}/sga.c (98%)
+ rename hw/{ => misc}/slavio_misc.c (100%)
+ rename hw/{ => misc}/tmp105.c (99%)
+ rename hw/{ => misc}/tmp105.h (94%)
+ rename hw/{vfio_pci.c => misc/vfio.c} (100%)
+ rename hw/{ => misc}/vmport.c (98%)
+ rename hw/{ => misc}/zynq_slcr.c (100%)
+ create mode 100644 hw/net/Makefile.objs
+ rename hw/{ => net}/cadence_gem.c (100%)
+ rename hw/{ => net}/dp8393x.c (99%)
+ rename hw/{ => net}/e1000.c (99%)
+ rename hw/{e1000_hw.h => net/e1000_regs.h} (100%)
+ rename hw/{ => net}/eepro100.c (99%)
+ rename hw/{ => net}/etraxfs_eth.c (99%)
+ rename hw/{ => net}/lan9118.c (99%)
+ rename hw/{ => net}/lance.c (99%)
+ rename hw/{ => net}/mcf_fec.c (99%)
+ rename hw/{ => net}/milkymist-minimac2.c (100%)
+ rename hw/{ => net}/mipsnet.c (100%)
+ rename hw/{ => net}/ne2000-isa.c (98%)
+ rename hw/{ => net}/ne2000.c (99%)
+ rename hw/{ => net}/ne2000.h (100%)
+ rename hw/{ => net}/opencores_eth.c (100%)
+ rename hw/{ => net}/pcnet-pci.c (99%)
+ rename hw/{ => net}/pcnet.c (99%)
+ rename hw/{ => net}/pcnet.h (100%)
+ rename hw/{ => net}/rtl8139.c (100%)
+ rename hw/{ => net}/smc91c111.c (99%)
+ rename hw/{ => net}/spapr_llan.c (99%)
+ rename hw/{ => net}/stellaris_enet.c (100%)
+ rename hw/{ => net}/vhost_net.c (98%)
+ rename hw/{ => net}/virtio-net.c (99%)
+ rename hw/{ => net}/vmware_utils.h (100%)
+ rename hw/{ => net}/vmxnet3.c (99%)
+ rename hw/{ => net}/vmxnet3.h (100%)
+ rename hw/{ => net}/vmxnet_debug.h (100%)
+ rename hw/{ => net}/vmxnet_rx_pkt.c (100%)
+ rename hw/{ => net}/vmxnet_rx_pkt.h (100%)
+ rename hw/{ => net}/vmxnet_tx_pkt.c (100%)
+ rename hw/{ => net}/vmxnet_tx_pkt.h (100%)
+ rename hw/{ => net}/xen_nic.c (99%)
+ rename hw/{ => net}/xgmac.c (100%)
+ rename hw/{ => net}/xilinx_axienet.c (100%)
+ rename hw/{ => net}/xilinx_ethlite.c (100%)
+ create mode 100644 hw/nvram/Makefile.objs
+ rename hw/{ => nvram}/ds1225y.c (100%)
+ rename hw/{ => nvram}/eeprom93xx.c (99%)
+ rename hw/{ => nvram}/fw_cfg.c (99%)
+ rename hw/{ => nvram}/mac_nvram.c (99%)
+ rename hw/{ => nvram}/spapr_nvram.c (98%)
+ create mode 100644 hw/pci-bridge/Makefile.objs
+ rename hw/{ => pci-bridge}/i82801b11.c (99%)
+ rename hw/{ => pci-bridge}/ioh3420.c (99%)
+ rename hw/{ => pci-bridge}/ioh3420.h (100%)
+ rename hw/{ => pci-bridge}/pci_bridge_dev.c (100%)
+ rename hw/{ => pci-bridge}/xio3130_downstream.c (99%)
+ rename hw/{ => pci-bridge}/xio3130_downstream.h (100%)
+ rename hw/{ => pci-bridge}/xio3130_upstream.c (99%)
+ rename hw/{ => pci-bridge}/xio3130_upstream.h (100%)
+ create mode 100644 hw/pci-host/Makefile.objs
+ rename hw/{apb_pci.c => pci-host/apb.c} (97%)
+ rename hw/{ => pci-host}/bonito.c (99%)
+ rename hw/{dec_pci.c => pci-host/dec.c} (99%)
+ rename hw/{dec_pci.h => pci-host/dec.h} (100%)
+ rename hw/{grackle_pci.c => pci-host/grackle.c} (100%)
+ rename hw/{ => pci-host}/pam.c (99%)
+ rename hw/{piix_pci.c => pci-host/piix.c} (99%)
+ rename hw/{ppce500_pci.c => pci-host/ppce500.c} (99%)
+ rename hw/{prep_pci.c => pci-host/prep.c} (99%)
+ rename hw/{ => pci-host}/q35.c (99%)
+ rename hw/{unin_pci.c => pci-host/uninorth.c} (100%)
+ rename hw/{versatile_pci.c => pci-host/versatile.c} (100%)
+ rename hw/{ => ppc}/ppc405.h (99%)
+ rename hw/{ => ppc}/ppc4xx_pci.c (99%)
+ rename hw/{ => ppc}/spapr_pci.c (99%)
+ create mode 100644 hw/scsi/Makefile.objs
+ rename hw/{ => scsi}/esp-pci.c (99%)
+ rename hw/{ => scsi}/esp.c (99%)
+ rename hw/{ => scsi}/lsi53c895a.c (99%)
+ rename hw/{ => scsi}/megasas.c (99%)
+ rename hw/{ => scsi}/mfi.h (100%)
+ rename hw/{ => scsi}/scsi-bus.c (99%)
+ rename hw/{ => scsi}/scsi-disk.c (99%)
+ rename hw/{ => scsi}/scsi-generic.c (99%)
+ rename hw/{ => scsi}/spapr_vscsi.c (99%)
+ rename hw/{ => scsi}/srp.h (100%)
+ rename hw/{ppc-viosrp.h => scsi/viosrp.h} (100%)
+ rename hw/{ => scsi}/virtio-scsi.c (99%)
+ create mode 100644 hw/sd/Makefile.objs
+ rename hw/{ => sd}/milkymist-memcard.c (100%)
+ rename hw/{ => sd}/omap_mmc.c (99%)
+ rename hw/{ => sd}/pl181.c (100%)
+ rename hw/{ => sd}/pxa2xx_mmci.c (99%)
+ rename hw/{ => sd}/sd.c (100%)
+ rename hw/{ => sd}/sdhci.c (99%)
+ rename hw/{ => sd}/sdhci.h (100%)
+ rename hw/{ => sd}/ssi-sd.c (100%)
+ rename hw/{ => sh4}/sh7750_regnames.h (100%)
+ rename hw/{ => sh4}/sh7750_regs.h (100%)
+ rename hw/{ => sh4}/sh_pci.c (99%)
+ create mode 100644 hw/ssi/Makefile.objs
+ rename hw/{ => ssi}/omap_spi.c (99%)
+ rename hw/{ => ssi}/pl022.c (100%)
+ rename hw/{ => ssi}/ssi.c (100%)
+ rename hw/{ => ssi}/xilinx_spi.c (100%)
+ rename hw/{ => ssi}/xilinx_spips.c (100%)
+ create mode 100644 hw/timer/Makefile.objs
+ rename hw/{ => timer}/arm_mptimer.c (100%)
+ rename hw/{ => timer}/arm_timer.c (100%)
+ rename hw/{ => timer}/cadence_ttc.c (100%)
+ rename hw/{ => timer}/ds1338.c (99%)
+ rename hw/{ => timer}/etraxfs_timer.c (100%)
+ rename hw/{ => timer}/exynos4210_mct.c (99%)
+ rename hw/{ => timer}/exynos4210_pwm.c (99%)
+ rename hw/{ => timer}/exynos4210_rtc.c (99%)
+ rename hw/{ => timer}/grlib_gptimer.c (100%)
+ rename hw/{ => timer}/hpet.c (99%)
+ rename hw/{ => timer}/i8254.c (98%)
+ rename hw/{ => timer}/i8254_common.c (98%)
+ rename hw/{ => timer}/imx_timer.c (99%)
+ rename hw/{ => timer}/lm32_timer.c (100%)
+ rename hw/{ => timer}/m48t59.c (99%)
+ rename hw/{ => timer}/mc146818rtc.c (99%)
+ rename hw/{ => timer}/milkymist-sysctl.c (100%)
+ rename hw/{ => timer}/omap_gptimer.c (99%)
+ rename hw/{ => timer}/omap_synctimer.c (99%)
+ rename hw/{ => timer}/pl031.c (100%)
+ rename hw/{ => timer}/puv3_ost.c (99%)
+ rename hw/{ => timer}/pxa2xx_timer.c (99%)
+ rename hw/{ => timer}/sh_timer.c (99%)
+ rename hw/{ => timer}/slavio_timer.c (99%)
+ rename hw/{ => timer}/tusb6010.c (99%)
+ rename hw/{ => timer}/twl92230.c (99%)
+ rename hw/{ => timer}/xilinx_timer.c (100%)
+ rename hw/{ => usb}/ccid-card-emulated.c (99%)
+ rename hw/{ => usb}/ccid-card-passthru.c (99%)
+ rename hw/{ => usb}/ccid.h (100%)
+ create mode 100644 hw/virtio/Makefile.objs
+ create mode 100644 hw/virtio/dataplane/Makefile.objs
+ rename hw/{ => virtio}/dataplane/hostmem.c (99%)
+ rename hw/{ => virtio}/dataplane/vring.c (99%)
+ rename hw/{ => virtio}/vhost.c (99%)
+ rename hw/{ => virtio}/virtio-balloon.c (98%)
+ rename hw/{ => virtio}/virtio-bus.c (98%)
+ rename hw/{ => virtio}/virtio-pci.c (99%)
+ rename hw/{ => virtio}/virtio-pci.h (92%)
+ rename hw/{ => virtio}/virtio-rng.c (98%)
+ rename hw/{ => virtio}/virtio.c (99%)
+ create mode 100644 hw/watchdog/Makefile.objs
+ rename hw/{ => watchdog}/watchdog.c (99%)
+ rename hw/{ => watchdog}/wdt_i6300esb.c (99%)
+ rename hw/{ => watchdog}/wdt_ib700.c (98%)
+ create mode 100644 hw/xen/Makefile.objs
+ rename hw/{ => xen}/xen-host-pci-device.c (99%)
+ rename hw/{ => xen}/xen-host-pci-device.h (100%)
+ rename hw/{ => xen}/xen_apic.c (97%)
+ rename hw/{ => xen}/xen_backend.c (99%)
+ rename hw/{ => xen}/xen_devconfig.c (99%)
+ rename hw/{ => xen}/xen_platform.c (99%)
+ rename hw/{ => xen}/xen_pt.c (99%)
+ rename hw/{ => xen}/xen_pt.h (99%)
+ rename hw/{ => xen}/xen_pt_config_init.c (99%)
+ rename hw/{ => xen}/xen_pt_msi.c (99%)
+ rename hw/{ => xtensa}/xtensa_bootparam.h (100%)
+ rename hw/scsi-defs.h => include/block/scsi.h (100%)
+ rename {hw => include/hw/acpi}/acpi.h (100%)
+ rename hw/acpi_ich9.h => include/hw/acpi/ich9.h (98%)
+ rename hw/arm-misc.h => include/hw/arm.h (100%)
+ rename {hw => include/hw/arm}/devices.h (100%)
+ rename {hw => include/hw/arm}/exynos4210.h (100%)
+ rename {hw => include/hw/arm}/imx.h (100%)
+ rename {hw => include/hw/arm}/omap.h (100%)
+ rename {hw => include/hw/arm}/primecell.h (100%)
+ rename {hw => include/hw/arm}/pxa.h (100%)
+ rename {hw => include/hw/arm}/sharpsl.h (100%)
+ rename {hw => include/hw/arm}/soc_dma.h (100%)
+ rename hw/audiodev.h => include/hw/audio/audio.h (100%)
+ rename {hw => include/hw/audio}/pcspk.h (98%)
+ rename hw/block-common.h => include/hw/block/block.h (100%)
+ rename {hw => include/hw/block}/fdc.h (100%)
+ rename {hw => include/hw/block}/flash.h (100%)
+ rename {hw => include/hw}/boards.h (100%)
+ rename {hw => include/hw}/bt.h (100%)
+ rename {hw => include/hw/char}/escc.h (100%)
+ rename {hw => include/hw/char}/serial.h (100%)
+ rename {hw => include/hw/cris}/etraxfs.h (98%)
+ rename {hw => include/hw/cris}/etraxfs_dma.h (100%)
+ rename {hw => include/hw}/elf_ops.h (100%)
+ rename {hw => include/hw}/empty_slot.h (100%)
+ rename {hw => include/hw}/hw.h (100%)
+ rename {hw => include/hw/i2c}/i2c.h (100%)
+ rename {hw => include/hw/i2c}/pm_smbus.h (100%)
+ rename {hw => include/hw/i2c}/smbus.h (99%)
+ rename {hw => include/hw/i386}/apic-msidef.h (100%)
+ rename {hw => include/hw/i386}/apic.h (100%)
+ rename {hw => include/hw/i386}/apic_internal.h (100%)
+ rename {hw => include/hw/i386}/ich9.h (98%)
+ rename {hw => include/hw/i386}/ioapic.h (100%)
+ rename {hw => include/hw/i386}/ioapic_internal.h (100%)
+ rename {hw => include/hw/i386}/pc.h (98%)
+ rename {hw => include/hw/i386}/smbios.h (100%)
+ rename {hw => include/hw}/ide.h (97%)
+ rename {hw => include/hw/input}/adb.h (100%)
+ rename {hw => include/hw/input}/hid.h (100%)
+ rename {hw => include/hw/input}/ps2.h (100%)
+ rename {hw => include/hw}/irq.h (100%)
+ rename {hw => include/hw/isa}/apm.h (100%)
+ rename {hw => include/hw/isa}/i8259_internal.h (98%)
+ rename {hw => include/hw/isa}/isa.h (100%)
+ rename {hw => include/hw/isa}/pc87312.h (98%)
+ rename {hw => include/hw/isa}/vt82c686.h (100%)
+ rename {hw => include/hw}/kvm/clock.h (100%)
+ rename {hw => include/hw/lm32}/lm32_juart.h (100%)
+ rename {hw => include/hw/lm32}/lm32_pic.h (100%)
+ rename {hw => include/hw}/loader.h (100%)
+ rename {hw => include/hw/m68k}/mcf.h (100%)
+ rename hw/mips-bios.h => include/hw/mips/bios.h (100%)
+ rename hw/mips_cpudevs.h => include/hw/mips/cpudevs.h (100%)
+ rename {hw => include/hw/mips}/mips.h (100%)
+ rename {hw => include/hw/misc}/tmp105_regs.h (100%)
+ rename {hw => include/hw/nvram}/eeprom93xx.h (100%)
+ rename {hw => include/hw/nvram}/fw_cfg.h (100%)
+ rename hw/apb_pci.h => include/hw/pci-host/apb.h (100%)
+ rename {hw => include/hw/pci-host}/pam.h (100%)
+ rename hw/ppce500_pci.h => include/hw/pci-host/ppce500.h (100%)
+ rename {hw => include/hw/pci-host}/q35.h (97%)
+ rename hw/spapr_pci.h => include/hw/pci-host/spapr.h (99%)
+ rename {hw => include/hw}/pci/msi.h (100%)
+ rename {hw => include/hw}/pci/msix.h (100%)
+ rename {hw => include/hw}/pci/pci.h (99%)
+ rename {hw => include/hw}/pci/pci_bridge.h (100%)
+ rename {hw => include/hw}/pci/pci_bus.h (100%)
+ rename {hw => include/hw}/pci/pci_host.h (100%)
+ rename {hw => include/hw}/pci/pci_ids.h (100%)
+ rename {hw => include/hw}/pci/pci_regs.h (100%)
+ rename {hw => include/hw}/pci/pcie.h (100%)
+ rename {hw => include/hw}/pci/pcie_aer.h (100%)
+ rename {hw => include/hw}/pci/pcie_host.h (100%)
+ rename {hw => include/hw}/pci/pcie_port.h (100%)
+ rename {hw => include/hw}/pci/pcie_regs.h (100%)
+ rename {hw => include/hw}/pci/shpc.h (100%)
+ rename {hw => include/hw}/pci/slotid_cap.h (100%)
+ rename {hw => include/hw}/pcmcia.h (100%)
+ rename {hw => include/hw/ppc}/mac_dbdma.h (100%)
+ rename {hw => include/hw/ppc}/openpic.h (100%)
+ rename {hw => include/hw/ppc}/ppc.h (100%)
+ rename {hw => include/hw/ppc}/ppc4xx.h (100%)
+ rename {hw => include/hw/ppc}/spapr.h (99%)
+ rename {hw => include/hw/ppc}/spapr_vio.h (100%)
+ rename {hw => include/hw/ppc}/xics.h (100%)
+ rename {hw => include/hw}/ptimer.h (100%)
+ rename {hw => include/hw}/qdev-addr.h (100%)
+ rename {hw => include/hw}/qdev-core.h (100%)
+ rename {hw => include/hw}/qdev-dma.h (100%)
+ rename {hw => include/hw}/qdev-properties.h (100%)
+ rename {hw => include/hw}/qdev.h (100%)
+ rename {hw => include/hw}/s390x/event-facility.h (100%)
+ rename {hw => include/hw}/s390x/sclp.h (100%)
+ rename {hw => include/hw/scsi}/esp.h (99%)
+ rename {hw => include/hw/scsi}/scsi.h (99%)
+ rename {hw => include/hw}/sd.h (100%)
+ rename {hw => include/hw/sh4}/sh.h (98%)
+ rename {hw => include/hw/sh4}/sh_intc.h (100%)
+ rename {hw => include/hw/sparc}/firmware_abi.h (100%)
+ rename {hw => include/hw/sparc}/grlib.h (100%)
+ rename {hw => include/hw/sparc}/sparc32_dma.h (100%)
+ rename {hw => include/hw/sparc}/sun4m.h (92%)
+ rename {hw => include/hw}/ssi.h (100%)
+ rename {hw => include/hw}/stream.h (100%)
+ rename {hw => include/hw}/sysbus.h (100%)
+ rename hw/hpet_emul.h => include/hw/timer/hpet.h (100%)
+ rename {hw => include/hw/timer}/i8254.h (98%)
+ rename {hw => include/hw/timer}/i8254_internal.h (98%)
+ rename hw/nvram.h => include/hw/timer/m48t59.h (100%)
+ rename {hw => include/hw/timer}/mc146818rtc.h (80%)
+ rename {hw => include/hw/timer}/mc146818rtc_regs.h (100%)
+ rename {hw => include/hw/unicore32}/puv3.h (100%)
+ rename {hw => include/hw}/usb.h (100%)
+ rename {hw => include/hw/virtio}/dataplane/hostmem.h (100%)
+ rename {hw => include/hw/virtio}/dataplane/vring.h (98%)
+ rename {hw => include/hw/virtio}/vhost.h (98%)
+ rename hw/9pfs/virtio-9p-device.h => include/hw/virtio/virtio-9p.h (100%)
+ rename {hw => include/hw/virtio}/virtio-balloon.h (98%)
+ rename {hw => include/hw/virtio}/virtio-blk.h (96%)
+ rename {hw => include/hw/virtio}/virtio-bus.h (99%)
+ rename {hw => include/hw/virtio}/virtio-net.h (99%)
+ rename {hw => include/hw/virtio}/virtio-rng.h (100%)
+ rename {hw => include/hw/virtio}/virtio-scsi.h (97%)
+ rename {hw => include/hw/virtio}/virtio-serial.h (99%)
+ rename {hw => include/hw/virtio}/virtio.h (99%)
+ rename {hw => include/hw/xen}/xen.h (100%)
+ rename {hw => include/hw/xen}/xen_backend.h (99%)
+ rename {hw => include/hw/xen}/xen_common.h (99%)
+ rename {hw => include/hw}/xilinx.h (100%)
+ rename {hw => include/net}/vhost_net.h (100%)
+ rename {hw => include/sysemu}/watchdog.h (100%)
+

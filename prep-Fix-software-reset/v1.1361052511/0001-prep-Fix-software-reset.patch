@@ -1,0 +1,91 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Julio Guerra <guerr@julio.in>
+To: Alexander Graf <agraf@suse.de>, qemu-ppc@nongnu.org, qemu-devel@nongnu.org,
+ =?UTF-8?Q?Andreas_F=C3=A4rber?= <andreas.faerber@web.de>,
+ Julio Guerra <guerr@julio.in>
+Cc: =?UTF-8?q?Andreas=20F=C3=A4rber?= <andreas.faerber@web.de>,
+ Alexander Graf <agraf@suse.de>, Anthony Liguori <anthony@codemonkey.ws>,
+ qemu-devel@nongnu.org,
+ =?UTF-8?B?SGVydsOpIFBvdXNzaW5lYXU=?= <hpoussin@reactos.org>,
+ qemu-ppc@nongnu.org,
+ =?iso-8859-1?Q?Andreas_F=E4rber?= <andreas.faerber@web.de>,
+ Markus Armbruster <armbru@redhat.com>, Julio Guerra <guerr@julio.in>
+Date: Sat, 16 Feb 2013 16:08:31 +0100
+Message-id: 1361027311-23437-1-git-send-email-guerr@julio.in
+Subject: [PATCH 1/1] prep: Fix software reset
+
+The software reset of a PReP machine should reset the entire system
+and not only the processor. It occurs when changing the 7th bit of
+port 0092 from 0 to 1.
+
+Adding a new variable in PReP's sysctrl_t to store the soft reset bit
+makes possible to be compliant with PReP specification :
+* reset the system when changing soft reset bit from 0 to 1.
+* the soft reset bit value is 1 after a soft reset.
+* Port 0092 is read/write.
+
+qemu_system_reset_request() does the required job (calling the reset
+handlers) when the software reset is needed.
+
+reset_irq is no longer needed, the CPU reset (calling ppc_prep_reset)
+is called when qemu_system_reset calls every reset handlers.
+
+Signed-off-by: Julio Guerra <guerr@julio.in>
+---
+ hw/ppc/prep.c | 13 ++++++++-----
+ 1 file changed, 8 insertions(+), 5 deletions(-)
+
+diff --git a/hw/ppc/prep.c b/hw/ppc/prep.c
+index e06dded..64dab8b 100644
+--- a/hw/ppc/prep.c
++++ b/hw/ppc/prep.c
+@@ -178,12 +178,12 @@ static const MemoryRegionOps PPC_XCSR_ops = {
+
+ /* Fake super-io ports for PREP platform (Intel 82378ZB) */
+ typedef struct sysctrl_t {
+-    qemu_irq reset_irq;
+     M48t59State *nvram;
+     uint8_t state;
+     uint8_t syscontrol;
+     int contiguous_map;
+     int endian;
++    uint8_t sreset;
+ } sysctrl_t;
+
+ enum {
+@@ -203,9 +203,11 @@ static void PREP_io_800_writeb (void *opaque, uint32_t addr, uint32_t val)
+         /* Special port 92 */
+         /* Check soft reset asked */
+         if (val & 0x01) {
+-            qemu_irq_raise(sysctrl->reset_irq);
++	    if (!sysctrl->sreset)
++                qemu_system_reset_request();
++            sysctrl->sreset = 1;
+         } else {
+-            qemu_irq_lower(sysctrl->reset_irq);
++            sysctrl->sreset = 0;
+         }
+         /* Check LE mode */
+         if (val & 0x02) {
+@@ -267,7 +269,7 @@ static uint32_t PREP_io_800_readb (void *opaque, uint32_t addr)
+     switch (addr) {
+     case 0x0092:
+         /* Special port 92 */
+-        retval = 0x00;
++        retval = (sysctrl->endian << 1) | sysctrl->sreset;
+         break;
+     case 0x0800:
+         /* Motorola CPU configuration register */
+@@ -624,7 +626,8 @@ static void ppc_prep_init(QEMUMachineInitArgs *args)
+     }
+     isa_create_simple(isa_bus, "i8042");
+
+-    sysctrl->reset_irq = first_cpu->irq_inputs[PPC6xx_INPUT_HRESET];
++    sysctrl->sreset = 0;
++    sysctrl->endian = 0;
+     /* System control ports */
+     register_ioport_read(0x0092, 0x01, 1, &PREP_io_800_readb, sysctrl);
+     register_ioport_write(0x0092, 0x01, 1, &PREP_io_800_writeb, sysctrl);
+--
+1.8.1.2
+

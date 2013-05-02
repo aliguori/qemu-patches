@@ -1,0 +1,29 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Fam Zheng <famz@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Stefan Hajnoczi <stefanha@gmail.com>, Kevin Wolf <kwolf@redhat.com>,
+ Fam Zheng <famz@redhat.com>
+Date: Fri, 19 Apr 2013 11:34:56 +0800
+Message-id: 1366342501-20500-1-git-send-email-famz@redhat.com
+Subject: [PATCH 0/5] vmdk: zeroed-grain GTE support
+
+Added support for zeroed-grain GTE to VMDK according to VMDK Spec 5.0[1].
+
+[1] Virtual Disk Format 5.0 - VMware,
+    http://www.vmware.com/support/developer/vddk/vmdk_50_technote.pdf?src=vmdk
+
+Feiran Zheng (5):
+  vmdk: named return code.
+  vmdk: add support for “zeroed‐grain” GTE
+  vmdk: Add option to create zeroed-grain image
+  vmdk: change magic number to macro
+  vmdk: add bdrv_co_write_zeroes
+
+ block/vmdk.c              | 165 ++++++++++++++++++++++++++++++++--------------
+ include/block/block_int.h |   1 +
+ 2 files changed, 117 insertions(+), 49 deletions(-)
+
+-- 
+1.8.1.4
+
+

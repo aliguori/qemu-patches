@@ -1,0 +1,32 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Luiz Capitulino <lcapitulino@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>
+Date: Fri, 12 Apr 2013 09:58:20 -0400
+Message-id: 1365775103-18737-1-git-send-email-lcapitulino@redhat.com
+Subject: [PATCH 0/3] QMP queue
+
+The changes (since 93b48c201eb6c0404d15550a0eaa3c0f7937e35e) are available
+in the following repository:
+
+    git://repo.or.cz/qemu/qmp-unstable.git queue/qmp
+
+Eric Blake (1):
+  qapi: use valid JSON in schema
+
+Michal Novotny (2):
+  New cpu-max field in query-machines QMP command output
+  Revert "New QMP command query-cpu-max and HMP command cpu_max"
+
+ hmp-commands.hx  |  2 --
+ hmp.c            |  8 --------
+ hmp.h            |  1 -
+ monitor.c        |  7 -------
+ qapi-schema.json | 18 +++++-------------
+ qmp-commands.hx  | 22 ----------------------
+ vl.c             |  6 +-----
+ 7 files changed, 6 insertions(+), 58 deletions(-)
+
+-- 
+1.8.1.4
+

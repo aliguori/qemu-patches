@@ -1,0 +1,1 @@
+../hw-i386-pc-reject-to-boot-a-wrong-header-magic-kernel/v2.1364826117/0001-hw-i386-pc-reject-to-boot-a-wrong-header-magic-kernel.patch

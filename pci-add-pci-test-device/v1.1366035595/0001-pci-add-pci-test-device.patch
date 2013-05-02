@@ -1,0 +1,48 @@
+From patches Mon Sep 17 00:00:00 2001
+From: "Michael S. Tsirkin" <mst@redhat.com>
+To: Anthony Liguori <anthony@codemonkey.ws>, qemu-devel@nongnu.org,
+ "Michael S. Tsirkin" <mst@redhat.com>
+Cc: qemu-devel@nongnu.org, mst@redhat.com
+Date: Mon, 15 Apr 2013 09:19:55 +0300
+Message-id: 20130415061955.GA24852@redhat.com
+Subject: [PATCH 1/1] pci: add pci test device
+
+The following changes since commit e2ec3f976803b360c70d9ae2ba13852fa5d11665:
+
+  qjson: to_json() case QTYPE_QSTRING is buggy, rewrite (2013-04-13 19:40:25 +0000)
+
+are available in the git repository at:
+
+  git://git.kernel.org/pub/scm/virt/kvm/mst/qemu.git tags/for_anthony
+
+for you to fetch changes up to efd70cb42aadca7e5cfe0fa037ef527d458bb3b5:
+
+  pci: add pci test device (2013-04-14 14:12:24 +0300)
+
+----------------------------------------------------------------
+pci: add pci test device
+
+This adds a new device that we can use for testing PCI PIO and MMIO, with and
+without ioeventfd in different configurations.  FAST_MMIO will be added if/when
+kvm supports it.  Also included are minor cleanups in kvm APIs that it needs.
+
+Signed-off-by: Michael S. Tsirkin <mst@redhat.com>
+
+----------------------------------------------------------------
+Michael S. Tsirkin (4):
+      kvm: remove unused APIs
+      kvm: support any size for pio eventfd
+      kvm: support non datamatch ioeventfd
+      pci: add pci test device
+
+ default-configs/pci.mak    |   1 +
+ docs/specs/pci-testdev.txt |  26 ++++
+ hw/misc/Makefile.objs      |   1 +
+ hw/misc/pci-testdev.c      | 306 +++++++++++++++++++++++++++++++++++++++++++++
+ include/hw/pci/pci.h       |   1 +
+ include/sysemu/kvm.h       |   4 -
+ kvm-all.c                  | 133 ++++++++++----------
+ kvm-stub.c                 |  10 --
+ 8 files changed, 403 insertions(+), 79 deletions(-)
+ create mode 100644 docs/specs/pci-testdev.txt
+ create mode 100644 hw/misc/pci-testdev.c

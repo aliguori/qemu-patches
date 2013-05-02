@@ -1,0 +1,1 @@
+../block-make-qmp_transaction-extendable/v1.1364857288/0003-block-change-rollback-sequence-in-qmp_transaction.patch

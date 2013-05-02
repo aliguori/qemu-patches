@@ -1,0 +1,1 @@
+../usb-patch-queue/v1.1366731125/0003-usb-better-speed-mismatch-error-reporting.patch

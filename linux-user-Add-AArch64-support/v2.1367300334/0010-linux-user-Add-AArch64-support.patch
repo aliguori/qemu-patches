@@ -1,0 +1,202 @@
+From patches Mon Sep 17 00:00:00 2001
+From: John Rigby <john.rigby@linaro.org>
+To: qemu-devel <qemu-devel@nongnu.org>
+Cc: Riku Voipio <riku.voipio@iki.org>, Peter Maydell <peter.maydell@linaro.org>,
+ Alexander Graf <agraf@suse.de>
+Date: Tue, 30 Apr 2013 00:38:54 -0600
+Message-id: 1367303934-9843-1-git-send-email-john.rigby@linaro.org
+Subject: [PATCH 10/12] linux-user: Add AArch64 support
+
+From: Alexander Graf <agraf@suse.de>
+
+This patch adds support for AArch64 in all the small corners of
+linux-user and beyond.
+
+Signed-off-by: Alexander Graf <agraf@suse.de>
+---
+ default-configs/aarch64-linux-user.mak |    3 +++
+ linux-user/arm/syscall.h               |   46 +++++++++++++++++++++++++++-----
+ linux-user/elfload.c                   |   15 +++++++++--
+ linux-user/main.c                      |    9 +++++++
+ target-arm/cpu.h                       |   20 +++++++++++---
+ 5 files changed, 81 insertions(+), 12 deletions(-)
+ create mode 100644 default-configs/aarch64-linux-user.mak
+
+diff --git a/default-configs/aarch64-linux-user.mak b/default-configs/aarch64-linux-user.mak
+new file mode 100644
+index 0000000..46d4aa2
+--- /dev/null
++++ b/default-configs/aarch64-linux-user.mak
+@@ -0,0 +1,3 @@
++# Default configuration for arm-linux-user
++
++CONFIG_GDBSTUB_XML=y
+diff --git a/linux-user/arm/syscall.h b/linux-user/arm/syscall.h
+index 003d424..8573ef3 100644
+--- a/linux-user/arm/syscall.h
++++ b/linux-user/arm/syscall.h
+@@ -1,4 +1,36 @@
+ 
++#ifdef TARGET_AARCH64
++
++struct target_pt_regs {
++    uint64_t        regs[31];
++    uint64_t        sp;
++    uint64_t        pc;
++    uint64_t        pstate;
++};
++
++#define ARM_cpsr	uregs[16]
++#define ARM_pc		uregs[15]
++#define ARM_lr		uregs[14]
++#define ARM_sp		uregs[13]
++#define ARM_ip		uregs[12]
++#define ARM_fp		uregs[11]
++#define ARM_r10		uregs[10]
++#define ARM_r9		uregs[9]
++#define ARM_r8		uregs[8]
++#define ARM_r7		uregs[7]
++#define ARM_r6		uregs[6]
++#define ARM_r5		uregs[5]
++#define ARM_r4		uregs[4]
++#define ARM_r3		uregs[3]
++#define ARM_r2		uregs[2]
++#define ARM_r1		uregs[1]
++#define ARM_r0		uregs[0]
++#define ARM_ORIG_r0	uregs[17]
++
++#define UNAME_MACHINE "aarch64"
++
++#else /* TARGET_AARCH64 */
++
+ /* this struct defines the way the registers are stored on the
+    stack during a system call. */
+ 
+@@ -25,6 +57,14 @@ struct target_pt_regs {
+ #define ARM_r0		uregs[0]
+ #define ARM_ORIG_r0	uregs[17]
+ 
++#if defined(TARGET_WORDS_BIGENDIAN)
++#define UNAME_MACHINE "armv5teb"
++#else
++#define UNAME_MACHINE "armv5tel"
++#endif
++
++#endif /* TARGET_AARCH64 */
++
+ #define ARM_SYSCALL_BASE	0x900000
+ #define ARM_THUMB_SYSCALL	0
+ 
+@@ -34,9 +74,3 @@ struct target_pt_regs {
+ 
+ #define ARM_NR_semihosting	  0x123456
+ #define ARM_NR_thumb_semihosting  0xAB
+-
+-#if defined(TARGET_WORDS_BIGENDIAN)
+-#define UNAME_MACHINE "armv5teb"
+-#else
+-#define UNAME_MACHINE "armv5tel"
+-#endif
+diff --git a/linux-user/elfload.c b/linux-user/elfload.c
+index 979b57c..f6be3d8 100644
+--- a/linux-user/elfload.c
++++ b/linux-user/elfload.c
+@@ -267,16 +267,26 @@ static void elf_core_copy_regs(target_elf_gregset_t *regs, const CPUX86State *en
+ 
+ #define ELF_START_MMAP 0x80000000
+ 
+-#define elf_check_arch(x) ( (x) == EM_ARM )
++#define elf_check_arch(x) ( (x) == ELF_MACHINE )
+ 
++#define ELF_ARCH        ELF_MACHINE
++
++#ifdef TARGET_AARCH64
++#define ELF_CLASS       ELFCLASS64
++#else
+ #define ELF_CLASS       ELFCLASS32
+-#define ELF_ARCH        EM_ARM
++#endif
+ 
+ static inline void init_thread(struct target_pt_regs *regs,
+                                struct image_info *infop)
+ {
+     abi_long stack = infop->start_stack;
+     memset(regs, 0, sizeof(*regs));
++
++#ifdef TARGET_AARCH64
++    regs->pc = infop->entry & ~0x3ULL;
++    regs->sp = stack;
++#else
+     regs->ARM_cpsr = 0x10;
+     if (infop->entry & 1)
+         regs->ARM_cpsr |= CPSR_T;
+@@ -290,6 +300,7 @@ static inline void init_thread(struct target_pt_regs *regs,
+     /* For uClinux PIC binaries.  */
+     /* XXX: Linux does this only on ARM with no MMU (do we care ?) */
+     regs->ARM_r10 = infop->start_data;
++#endif
+ }
+ 
+ #define ELF_NREG    18
+diff --git a/linux-user/main.c b/linux-user/main.c
+index 9db7770..6549fc4 100644
+--- a/linux-user/main.c
++++ b/linux-user/main.c
+@@ -3890,6 +3890,15 @@ int main(int argc, char **argv, char **envp)
+     cpu_x86_load_seg(env, R_FS, 0);
+     cpu_x86_load_seg(env, R_GS, 0);
+ #endif
++#elif defined(TARGET_AARCH64)
++    {
++        int i;
++        for(i = 0; i < 31; i++) {
++            env->xregs[i] = regs->regs[i];
++        }
++        env->pc = regs->pc;
++        env->sp = regs->sp;
++    }
+ #elif defined(TARGET_ARM)
+     {
+         int i;
+diff --git a/target-arm/cpu.h b/target-arm/cpu.h
+index 3a79dfa..0e9593f 100644
+--- a/target-arm/cpu.h
++++ b/target-arm/cpu.h
+@@ -288,7 +288,11 @@ int cpu_arm_handle_mmu_fault (CPUARMState *env, target_ulong address, int rw,
+ 
+ static inline void cpu_set_tls(CPUARMState *env, target_ulong newtls)
+ {
+-  env->cp15.c13_tls2 = newtls;
++    if (is_a64(env)) {
++        env->sr.tpidr_el0 = newtls;
++    } else {
++        env->cp15.c13_tls2 = newtls;
++    }
+ }
+ 
+ #define CPSR_M (0x1f)
+@@ -694,9 +698,17 @@ static inline int cpu_mmu_index (CPUARMState *env)
+ #if defined(CONFIG_USER_ONLY)
+ static inline void cpu_clone_regs(CPUARMState *env, target_ulong newsp)
+ {
+-    if (newsp)
+-        env->regs[13] = newsp;
+-    env->regs[0] = 0;
++    if (is_a64(env)) {
++        if (newsp) {
++            env->sp = newsp;
++        }
++        env->xregs[0] = 0;
++    } else {
++        if (newsp) {
++            env->regs[13] = newsp;
++        }
++        env->regs[0] = 0;
++    }
+ }
+ #endif
+ 
+-- 
+1.7.9.5
+
+

@@ -1,0 +1,112 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Richard Henderson <rth@twiddle.net>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, aurelien@aurel32.net
+Date: Fri, 5 Apr 2013 13:47:35 -0500
+Message-id: 1365187661-17023-8-git-send-email-rth@twiddle.net
+Subject: [PATCH 07/13] tcg-s390: Implement deposit opcodes
+
+Signed-off-by: Richard Henderson <rth@twiddle.net>
+---
+ tcg/s390/tcg-target.c | 24 ++++++++++++++++++++++++
+ tcg/s390/tcg-target.h |  8 ++++++--
+ 2 files changed, 30 insertions(+), 2 deletions(-)
+
+diff --git a/tcg/s390/tcg-target.c b/tcg/s390/tcg-target.c
+index dbe2fa6..673a568 100644
+--- a/tcg/s390/tcg-target.c
++++ b/tcg/s390/tcg-target.c
+@@ -125,6 +125,7 @@ typedef enum S390Opcode {
+     RIE_CLGIJ   = 0xec7d,
+     RIE_CLRJ    = 0xec77,
+     RIE_CRJ     = 0xec76,
++    RIE_RISBG   = 0xec55,
+ 
+     RRE_AGR     = 0xb908,
+     RRE_ALGR    = 0xb90a,
+@@ -1206,6 +1207,23 @@ static void tgen_movcond(TCGContext *s, TCGType type, TCGCond c, TCGReg dest,
+     }
+ }
+ 
++bool tcg_target_deposit_valid(int ofs, int len)
++{
++    return (facilities & FACILITY_GEN_INST_EXT) != 0;
++}
++
++static void tgen_deposit(TCGContext *s, TCGReg dest, TCGReg src,
++                         int ofs, int len)
++{
++    int lsb = (63 - ofs);
++    int msb = lsb - (len - 1);
++
++    /* Format RIE-f */
++    tcg_out16(s, (RIE_RISBG & 0xff00) | (dest << 4) | src);
++    tcg_out16(s, (msb << 8) | lsb);
++    tcg_out16(s, (ofs << 8) | (RIE_RISBG & 0xff));
++}
++
+ static void tgen_gotoi(TCGContext *s, int cc, tcg_target_long dest)
+ {
+     tcg_target_long off = (dest - (tcg_target_long)s->code_ptr) >> 1;
+@@ -2103,6 +2121,10 @@ static inline void tcg_out_op(TCGContext *s, TCGOpcode opc,
+         tcg_out_qemu_ld(s, args, LD_INT32);
+         break;
+ 
++    OP_32_64(deposit):
++        tgen_deposit(s, args[0], args[2], args[3], args[4]);
++        break;
++
+     default:
+         fprintf(stderr,"unimplemented opc 0x%x\n",opc);
+         tcg_abort();
+@@ -2161,6 +2183,7 @@ static const TCGTargetOpDef s390_op_defs[] = {
+     { INDEX_op_brcond_i32, { "r", "rWC" } },
+     { INDEX_op_setcond_i32, { "r", "r", "rWC" } },
+     { INDEX_op_movcond_i32, { "r", "r", "rWC", "r", "0" } },
++    { INDEX_op_deposit_i32, { "r", "0", "r" } },
+ 
+     { INDEX_op_qemu_ld8u, { "r", "L" } },
+     { INDEX_op_qemu_ld8s, { "r", "L" } },
+@@ -2228,6 +2251,7 @@ static const TCGTargetOpDef s390_op_defs[] = {
+     { INDEX_op_brcond_i64, { "r", "rC" } },
+     { INDEX_op_setcond_i64, { "r", "r", "rC" } },
+     { INDEX_op_movcond_i64, { "r", "r", "rC", "r", "0" } },
++    { INDEX_op_deposit_i64, { "r", "0", "r" } },
+ 
+     { INDEX_op_qemu_ld32u, { "r", "L" } },
+     { INDEX_op_qemu_ld32s, { "r", "L" } },
+diff --git a/tcg/s390/tcg-target.h b/tcg/s390/tcg-target.h
+index 5e1ac8b..42ca36c 100644
+--- a/tcg/s390/tcg-target.h
++++ b/tcg/s390/tcg-target.h
+@@ -63,7 +63,7 @@ typedef enum TCGReg {
+ #define TCG_TARGET_HAS_eqv_i32          0
+ #define TCG_TARGET_HAS_nand_i32         0
+ #define TCG_TARGET_HAS_nor_i32          0
+-#define TCG_TARGET_HAS_deposit_i32      0
++#define TCG_TARGET_HAS_deposit_i32      1
+ #define TCG_TARGET_HAS_movcond_i32      1
+ #define TCG_TARGET_HAS_add2_i32         1
+ #define TCG_TARGET_HAS_sub2_i32         1
+@@ -88,13 +88,17 @@ typedef enum TCGReg {
+ #define TCG_TARGET_HAS_eqv_i64          0
+ #define TCG_TARGET_HAS_nand_i64         0
+ #define TCG_TARGET_HAS_nor_i64          0
+-#define TCG_TARGET_HAS_deposit_i64      0
++#define TCG_TARGET_HAS_deposit_i64      1
+ #define TCG_TARGET_HAS_movcond_i64      1
+ #define TCG_TARGET_HAS_add2_i64         1
+ #define TCG_TARGET_HAS_sub2_i64         1
+ #define TCG_TARGET_HAS_mulu2_i64        1
+ #define TCG_TARGET_HAS_muls2_i64        0
+ 
++extern bool tcg_target_deposit_valid(int ofs, int len);
++#define TCG_TARGET_deposit_i32_valid  tcg_target_deposit_valid
++#define TCG_TARGET_deposit_i64_valid  tcg_target_deposit_valid
++
+ /* used for function call generation */
+ #define TCG_REG_CALL_STACK		TCG_REG_R15
+ #define TCG_TARGET_STACK_ALIGN		8
+-- 
+1.8.1.4
+

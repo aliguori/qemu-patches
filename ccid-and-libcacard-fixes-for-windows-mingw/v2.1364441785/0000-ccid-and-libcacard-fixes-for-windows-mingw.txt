@@ -1,0 +1,66 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Alon Levy <alevy@redhat.com>
+To: =?ISO-8859-1?Q?Marc-Andr=E9?= Lureau <marcandre.lureau@gmail.com>,
+ qemu-devel@nongnu.org
+Cc: =?ISO-8859-1?Q?Marc-Andr=E9?= Lureau <mlureau@redhat.com>,
+ mlureau@redhat.com, qemu-devel@nongnu.org
+Date: Wed, 27 Mar 2013 22:36:25 +0200
+Message-id: 1364416595-25830-1-git-send-email-alevy@redhat.com
+Subject: [PATCH 00/10] ccid and libcacard fixes for windows/mingw
+
+This series:
+1. fixes windows guests to show the ccid device
+2. changes libcacard to use glib
+3. makes libcacard build under mingw
+4. does some cleanups
+
+It contains a few patches already posted to the list (the two Jim Meyering patches) which were already acked.
+
+I'll make a pull request once this had some time to be reviewed.
+
+Tested with a fedora and windows 7 guest.
+
+The main non cleanup patches are:
+  hw/usb/dev-smartcard-reader: support windows guest
+  libcacard: correct T0 historical bytes size
+
+v2:
+ only resent patches that were not acked before.
+ did all the changes per Marc Andre's comments. Please look at the g_debug one, I'm not sure
+ about the ifdeffery there (not if it works, but if it looks ok).
+
+
+Alon Levy (10):
+  libcacard: change default ATR
+  ccid-card-passthru: add atr check
+  ccid-card-passthru, dev-smartcard-reader: add debug environment
+    variables
+  dev-smartcard-reader: define structs for CCID_Parameter internals
+  dev-smartcard-reader: change default protocol to T=0
+  dev-smartcard-reader: copy atr protocol to ccid parameters
+  libcacard/vreader: add debugging messages for apdu
+  libcacard: move atr setting from macro to function
+  dev-smartcard-reader: empty implementation for Mechanical (fail
+    correctly)
+  libcacard/cac: change big switch functions to single return point
+
+ Makefile.objs                 |   1 +
+ hw/ccid-card-passthru.c       |  61 ++++++++++++++++++++
+ hw/usb/dev-smartcard-reader.c | 130 ++++++++++++++++++++++++++++++++----------
+ include/qemu-common.h         |   5 ++
+ libcacard/cac.c               |  80 +++++++++++++++++---------
+ libcacard/cac.h               |   8 +++
+ libcacard/vcard_emul_nss.c    |  14 ++++-
+ libcacard/vcardt.c            |  40 +++++++++++++
+ libcacard/vcardt.h            |   5 --
+ libcacard/vcardt_internal.h   |   6 ++
+ libcacard/vreader.c           |  77 +++++++++++++++++++++++++
+ util/cutils.c                 |  23 ++++++++
+ 12 files changed, 384 insertions(+), 66 deletions(-)
+ create mode 100644 libcacard/vcardt.c
+ create mode 100644 libcacard/vcardt_internal.h
+
+-- 
+1.8.1.4
+
+

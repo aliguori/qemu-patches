@@ -1,0 +1,48 @@
+From patches Mon Sep 17 00:00:00 2001
+From: liguang <lig.fnst@cn.fujitsu.com>
+To: qemu-devel@nongnu.org
+Cc: liguang <lig.fnst@cn.fujitsu.com>
+Date: Thu, 11 Apr 2013 14:32:40 +0800
+Message-id: 1365661963-15396-13-git-send-email-lig.fnst@cn.fujitsu.com
+Subject: [PATCH 13/16] target-sh4/translate: minimally change
+ gen_intermediate_code_internal
+
+Signed-off-by: liguang <lig.fnst@cn.fujitsu.com>
+---
+ target-sh4/translate.c |   12 ++++++------
+ 1 files changed, 6 insertions(+), 6 deletions(-)
+
+diff --git a/target-sh4/translate.c b/target-sh4/translate.c
+index 14fdb8f..deea3bf 100644
+--- a/target-sh4/translate.c
++++ b/target-sh4/translate.c
+@@ -1891,9 +1891,9 @@ gen_intermediate_code_internal(CPUSH4State * env, TranslationBlock * tb,
+         if (search_pc) {
+             i = tcg_ctx.gen_opc_ptr - tcg_ctx.gen_opc_buf;
+             if (ii < i) {
+-                ii++;
+-                while (ii < i)
+-                    tcg_ctx.gen_opc_instr_start[ii++] = 0;
++                while (++ii < i) {
++                    tcg_ctx.gen_opc_instr_start[ii] = 0;
++                }
+             }
+             tcg_ctx.gen_opc_pc[ii] = ctx.pc;
+             gen_opc_hflags[ii] = ctx.flags;
+@@ -1949,9 +1949,9 @@ gen_intermediate_code_internal(CPUSH4State * env, TranslationBlock * tb,
+     *tcg_ctx.gen_opc_ptr = INDEX_op_end;
+     if (search_pc) {
+         i = tcg_ctx.gen_opc_ptr - tcg_ctx.gen_opc_buf;
+-        ii++;
+-        while (ii <= i)
+-            tcg_ctx.gen_opc_instr_start[ii++] = 0;
++        while (++ii <= i) {
++            tcg_ctx.gen_opc_instr_start[ii] = 0;
++        }
+     } else {
+         tb->size = ctx.pc - pc_start;
+         tb->icount = num_insns;
+-- 
+1.7.2.5
+
+

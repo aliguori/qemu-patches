@@ -1,0 +1,89 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: 
+Date: Tue,  2 Apr 2013 16:58:49 +0200
+Message-id: 1364914749-11141-16-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 15/35] hw: move I2C controllers to hw/i2c/,
+ configure via default-configs/
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ default-configs/arm-softmmu.mak | 1 +
+ hw/arm/Makefile.objs            | 5 ++---
+ hw/i2c/Makefile.objs            | 3 +++
+ hw/{ => i2c}/bitbang_i2c.c      | 0
+ hw/{ => i2c}/exynos4210_i2c.c   | 0
+ hw/{ => i2c}/omap_i2c.c         | 0
+ 6 files changed, 6 insertions(+), 3 deletions(-)
+ rename hw/{ => i2c}/bitbang_i2c.c (100%)
+ rename hw/{ => i2c}/exynos4210_i2c.c (100%)
+ rename hw/{ => i2c}/omap_i2c.c (100%)
+
+diff --git a/default-configs/arm-softmmu.mak b/default-configs/arm-softmmu.mak
+index a7dd44a..24b0d41 100644
+--- a/default-configs/arm-softmmu.mak
++++ b/default-configs/arm-softmmu.mak
+@@ -50,6 +50,7 @@ CONFIG_CADENCE=y
+ CONFIG_XGMAC=y
+ CONFIG_EXYNOS4=y
+ CONFIG_PXA2XX=y
++CONFIG_BITBANG_I2C=y
+ CONFIG_FRAMEBUFFER=y
+ CONFIG_MARVELL_88W8618=y
+ CONFIG_OMAP=y
+diff --git a/hw/arm/Makefile.objs b/hw/arm/Makefile.objs
+index 3efefe5..45bde58 100644
+--- a/hw/arm/Makefile.objs
++++ b/hw/arm/Makefile.objs
+@@ -6,20 +6,19 @@ obj-y += realview_gic.o arm_sysctl.o arm11mpcore.o a9mpcore.o
+ obj-y += exynos4210_gic.o exynos4210_combiner.o
+ obj-y += exynos4210_uart.o exynos4210_pwm.o
+ obj-y += exynos4210_pmu.o exynos4210_mct.o
+-obj-y += exynos4210_rtc.o exynos4210_i2c.o
++obj-y += exynos4210_rtc.o
+ obj-y += arm_mptimer.o a15mpcore.o
+ obj-y += armv7m_nvic.o
+ obj-y += pxa2xx_timer.o pxa2xx_dma.o
+ obj-y += pxa2xx_mmci.o pxa2xx_pcmcia.o pxa2xx_keypad.o
+ obj-y += zaurus.o
+-obj-y += omap_dma.o omap_clk.o omap_mmc.o omap_i2c.o \
++obj-y += omap_dma.o omap_clk.o omap_mmc.o \
+                 omap_gpio.o omap_intc.o omap_uart.o
+ obj-y += soc_dma.o omap_gptimer.o omap_synctimer.o \
+                 omap_gpmc.o omap_sdrc.o omap_spi.o omap_tap.o omap_l4.o
+ obj-y += tsc210x.o
+ obj-y += cbus.o tusb6010.o
+ obj-y += mst_fpga.o
+-obj-y += bitbang_i2c.o
+ obj-y += strongarm.o
+ obj-y += imx_serial.o imx_ccm.o imx_timer.o imx_avic.o
+ obj-$(CONFIG_KVM) += kvm/arm_gic.o
+diff --git a/hw/i2c/Makefile.objs b/hw/i2c/Makefile.objs
+index f6bd8fa..648278e 100644
+--- a/hw/i2c/Makefile.objs
++++ b/hw/i2c/Makefile.objs
+@@ -2,3 +2,6 @@ common-obj-y += core.o smbus.o smbus_eeprom.o
+ common-obj-$(CONFIG_VERSATILE_I2C) += versatile_i2c.o
+ common-obj-$(CONFIG_ACPI) += smbus_ich9.o
+ common-obj-$(CONFIG_APM) += pm_smbus.o
++common-obj-$(CONFIG_BITBANG_I2C) += bitbang_i2c.o
++common-obj-$(CONFIG_EXYNOS4) += exynos4210_i2c.o
++obj-$(CONFIG_OMAP) += omap_i2c.o
+diff --git a/hw/bitbang_i2c.c b/hw/i2c/bitbang_i2c.c
+similarity index 100%
+rename from hw/bitbang_i2c.c
+rename to hw/i2c/bitbang_i2c.c
+diff --git a/hw/exynos4210_i2c.c b/hw/i2c/exynos4210_i2c.c
+similarity index 100%
+rename from hw/exynos4210_i2c.c
+rename to hw/i2c/exynos4210_i2c.c
+diff --git a/hw/omap_i2c.c b/hw/i2c/omap_i2c.c
+similarity index 100%
+rename from hw/omap_i2c.c
+rename to hw/i2c/omap_i2c.c
+-- 
+1.8.1.4
+
+
+

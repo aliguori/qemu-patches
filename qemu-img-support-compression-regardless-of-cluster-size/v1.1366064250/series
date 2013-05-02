@@ -1,0 +1,5 @@
+0000-qemu-img-support-compression-regardless-of-cluster-size.txt
+0001-qcow2-allow-sub-cluster-compressed-write-to-last-cluster.patch
+0002-qcow-allow-sub-cluster-compressed-write-to-last-cluster.patch
+0003-qemu-img-do-not-zero-pad-the-compressed-write-buffer.patch
+0004-qemu-iotests-add-053-unaligned-compressed-image-size-test.patch

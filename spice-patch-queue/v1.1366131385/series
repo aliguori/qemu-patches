@@ -1,0 +1,10 @@
+0000-spice-patch-queue.txt
+0001-qxl-add-4k--8k-resolutions.patch
+0002-qxl-add-2000x2000-and-2048x2048-video-modes.patch
+0003-spice-32-bit-only-fix-surface-cmd-tracking-destruction.patch
+0004-virtio-console-Also-throttle-when-less-was-written-then-requested.patch
+0005-virtio-console-Remove-any-pending-watches-on-close.patch
+0006-spice-qemu-char-Remove-ifdef-ed-code-for-old-spice-server-compat.patch
+0007-spice-qemu-char-Add-watch-support.patch
+0008-spice-qemu-char-Remove-intermediate-buffer.patch
+0009-spice-qemu-char-vmc_write-Dont-write-more-bytes-then-were-asked-too.patch

@@ -1,0 +1,4 @@
+0000-PPC-PReP-Use-ElF-kernel-on-PReP.txt
+0001-PPC-PReP-Load-ELF-kernel.patch
+0002-PPC-PReP-Use-kernel-entry-to-set-nip-at-reset.patch
+0003-PPC-PReP-can-run-without-bios-image.patch

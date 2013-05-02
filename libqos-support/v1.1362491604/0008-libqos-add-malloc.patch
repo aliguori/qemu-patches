@@ -1,0 +1,148 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Anthony Liguori <aliguori@us.ibm.com>
+To: Anthony Liguori <aliguori@us.ibm.com>, Kevin Wolf <kwolf@redhat.com>,
+ qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>,
+ Stefan Hajnoczi <stefanha@redhat.com>, Kevin Wolf <kwolf@redhat.com>,
+ qemu-devel@nongnu.org
+Date: Tue, 5 Mar 2013 07:53:32 -0600
+Message-id: 1362491612-19226-9-git-send-email-aliguori@us.ibm.com
+Subject: [PATCH 8/8] libqos: add malloc
+
+Signed-off-by: Anthony Liguori <aliguori@us.ibm.com>
+---
+ tests/Makefile           |  1 +
+ tests/libqos/malloc-pc.c | 59 ++++++++++++++++++++++++++++++++++++++++++++++++
+ tests/libqos/malloc-pc.h |  8 +++++++
+ tests/libqos/malloc.h    | 26 +++++++++++++++++++++
+ 4 files changed, 94 insertions(+)
+ create mode 100644 tests/libqos/malloc-pc.c
+ create mode 100644 tests/libqos/malloc-pc.h
+ create mode 100644 tests/libqos/malloc.h
+
+diff --git a/tests/Makefile b/tests/Makefile
+index bfeee5e..37442bf 100644
+--- a/tests/Makefile
++++ b/tests/Makefile
+@@ -132,6 +132,7 @@ tests/test-mul64$(EXESUF): tests/test-mul64.o libqemuutil.a
+ 
+ libqos-obj-y = tests/libqos/pci.o tests/libqos/fw_cfg.o
+ libqos-pc-obj-y = $(libqos-obj-y) tests/libqos/pci-pc.o tests/libqos/fw_cfg-pc.o
++libqos-pc-obj-y += tests/libqos/malloc-pc.o
+ 
+ tests/rtc-test$(EXESUF): tests/rtc-test.o
+ tests/m48t59-test$(EXESUF): tests/m48t59-test.o
+diff --git a/tests/libqos/malloc-pc.c b/tests/libqos/malloc-pc.c
+new file mode 100644
+index 0000000..26868b7
+--- /dev/null
++++ b/tests/libqos/malloc-pc.c
+@@ -0,0 +1,59 @@
++#include "libqos/malloc-pc.h"
++#include "libqos/fw_cfg-pc.h"
++
++#define NO_QEMU_PROTOS
++#include "hw/fw_cfg.h"
++
++#include "qemu-common.h"
++#include <glib.h>
++
++#define PAGE_SIZE (4096)
++
++typedef struct PCAlloc
++{
++    QGuestAllocator alloc;
++
++    uint64_t start;
++    uint64_t end;
++} PCAlloc;
++
++static uint64_t pc_alloc(QGuestAllocator *allocator, size_t size)
++{
++    PCAlloc *s = container_of(allocator, PCAlloc, alloc);
++    uint64_t addr;
++
++
++    size += (PAGE_SIZE - 1);
++    size &= PAGE_SIZE;
++
++    g_assert_cmpint((s->start + size), <=, s->end);
++
++    addr = s->start;
++    s->start += size;
++
++    return addr;
++}
++
++static void pc_free(QGuestAllocator *allocator, uint64_t addr)
++{
++}
++
++QGuestAllocator *pc_alloc_init(void)
++{
++    PCAlloc *s = g_malloc0(sizeof(*s));
++    uint64_t ram_size;
++    QFWCFG *fw_cfg = pc_fw_cfg_init();
++
++    s->alloc.alloc = pc_alloc;
++    s->alloc.free = pc_free;
++
++    ram_size = qfw_cfg_get_u64(fw_cfg, FW_CFG_RAM_SIZE);
++
++    /* Start at 1MB */
++    s->start = 1 << 20;
++
++    /* Respect PCI hole */
++    s->end = MIN(ram_size, 0xE0000000);
++
++    return &s->alloc;
++}
+diff --git a/tests/libqos/malloc-pc.h b/tests/libqos/malloc-pc.h
+new file mode 100644
+index 0000000..31f19eb
+--- /dev/null
++++ b/tests/libqos/malloc-pc.h
+@@ -0,0 +1,8 @@
++#ifndef LIBQOS_MALLOC_PC_H
++#define LIBQOS_MALLOC_PC_H
++
++#include "libqos/malloc.h"
++
++QGuestAllocator *pc_alloc_init(void);
++
++#endif
+diff --git a/tests/libqos/malloc.h b/tests/libqos/malloc.h
+new file mode 100644
+index 0000000..5c06318
+--- /dev/null
++++ b/tests/libqos/malloc.h
+@@ -0,0 +1,26 @@
++#ifndef LIBQOS_MALLOC_H
++#define LIBQOS_MALLOC_H
++
++#include <stdint.h>
++#include <sys/types.h>
++
++typedef struct QGuestAllocator QGuestAllocator;
++
++struct QGuestAllocator
++{
++    uint64_t (*alloc)(QGuestAllocator *allocator, size_t size);
++    void (*free)(QGuestAllocator *allocator, uint64_t addr);
++};
++
++/* Always returns page aligned values */
++static inline uint64_t guest_alloc(QGuestAllocator *allocator, size_t size)
++{
++    return allocator->alloc(allocator, size);
++}
++
++static inline void guest_free(QGuestAllocator *allocator, uint64_t addr)
++{
++    allocator->alloc(allocator, addr);
++}
++
++#endif
+-- 
+1.8.0
+

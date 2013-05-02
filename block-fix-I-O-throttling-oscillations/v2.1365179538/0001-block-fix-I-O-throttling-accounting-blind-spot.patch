@@ -1,0 +1,121 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Stefan Hajnoczi <stefanha@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: =?UTF-8?q?Beno=C3=AEt=20Canet?= <benoit@irqsave.net>,
+ Zhi Yong Wu <wuzhy@cn.ibm.com>, Stefan Hajnoczi <stefanha@redhat.com>,
+ Kevin Wolf <kwolf@redhat.com>
+Date: Fri,  5 Apr 2013 11:32:19 +0200
+Message-id: 1365154342-10513-2-git-send-email-stefanha@redhat.com
+Subject: [PATCH 1/4] block: fix I/O throttling accounting blind spot
+
+I/O throttling relies on bdrv_acct_done() which is called when a request
+completes.  This leaves a blind spot since we only charge for completed
+requests, not submitted requests.
+
+For example, if there is 1 operation remaining in this time slice the
+guest could submit 3 operations and they will all be submitted
+successfully since they don't actually get accounted for until they
+complete.
+
+Originally we probably thought this is okay since the requests will be
+accounted when the time slice is extended.  In practice it causes
+fluctuations since the guest can exceed its I/O limit and it will be
+punished for this later on.
+
+Account for I/O upon submission so that I/O limits are enforced
+properly.
+
+Signed-off-by: Stefan Hajnoczi <stefanha@redhat.com>
+Tested-By: Benoit Canet <benoit@irqsave.net>
+---
+ block.c                   | 21 ++++++++++-----------
+ include/block/block_int.h |  2 +-
+ 2 files changed, 11 insertions(+), 12 deletions(-)
+
+diff --git a/block.c b/block.c
+index 0ae2e93..25976b5 100644
+--- a/block.c
++++ b/block.c
+@@ -141,7 +141,6 @@ void bdrv_io_limits_disable(BlockDriverState *bs)
+     bs->slice_start = 0;
+     bs->slice_end   = 0;
+     bs->slice_time  = 0;
+-    memset(&bs->io_base, 0, sizeof(bs->io_base));
+ }
+ 
+ static void bdrv_block_timer(void *opaque)
+@@ -1436,8 +1435,8 @@ static void bdrv_move_feature_fields(BlockDriverState *bs_dest,
+     bs_dest->slice_time         = bs_src->slice_time;
+     bs_dest->slice_start        = bs_src->slice_start;
+     bs_dest->slice_end          = bs_src->slice_end;
++    bs_dest->slice_submitted    = bs_src->slice_submitted;
+     bs_dest->io_limits          = bs_src->io_limits;
+-    bs_dest->io_base            = bs_src->io_base;
+     bs_dest->throttled_reqs     = bs_src->throttled_reqs;
+     bs_dest->block_timer        = bs_src->block_timer;
+     bs_dest->io_limits_enabled  = bs_src->io_limits_enabled;
+@@ -3768,9 +3767,9 @@ static bool bdrv_exceed_bps_limits(BlockDriverState *bs, int nb_sectors,
+     slice_time = bs->slice_end - bs->slice_start;
+     slice_time /= (NANOSECONDS_PER_SECOND);
+     bytes_limit = bps_limit * slice_time;
+-    bytes_base  = bs->nr_bytes[is_write] - bs->io_base.bytes[is_write];
++    bytes_base  = bs->slice_submitted.bytes[is_write];
+     if (bs->io_limits.bps[BLOCK_IO_LIMIT_TOTAL]) {
+-        bytes_base += bs->nr_bytes[!is_write] - bs->io_base.bytes[!is_write];
++        bytes_base += bs->slice_submitted.bytes[!is_write];
+     }
+ 
+     /* bytes_base: the bytes of data which have been read/written; and
+@@ -3828,9 +3827,9 @@ static bool bdrv_exceed_iops_limits(BlockDriverState *bs, bool is_write,
+     slice_time = bs->slice_end - bs->slice_start;
+     slice_time /= (NANOSECONDS_PER_SECOND);
+     ios_limit  = iops_limit * slice_time;
+-    ios_base   = bs->nr_ops[is_write] - bs->io_base.ios[is_write];
++    ios_base   = bs->slice_submitted.ios[is_write];
+     if (bs->io_limits.iops[BLOCK_IO_LIMIT_TOTAL]) {
+-        ios_base += bs->nr_ops[!is_write] - bs->io_base.ios[!is_write];
++        ios_base += bs->slice_submitted.ios[!is_write];
+     }
+ 
+     if (ios_base + 1 <= ios_limit) {
+@@ -3875,11 +3874,7 @@ static bool bdrv_exceed_io_limits(BlockDriverState *bs, int nb_sectors,
+         bs->slice_start = now;
+         bs->slice_end   = now + bs->slice_time;
+ 
+-        bs->io_base.bytes[is_write]  = bs->nr_bytes[is_write];
+-        bs->io_base.bytes[!is_write] = bs->nr_bytes[!is_write];
+-
+-        bs->io_base.ios[is_write]    = bs->nr_ops[is_write];
+-        bs->io_base.ios[!is_write]   = bs->nr_ops[!is_write];
++        memset(&bs->slice_submitted, 0, sizeof(bs->slice_submitted));
+     }
+ 
+     elapsed_time  = now - bs->slice_start;
+@@ -3907,6 +3902,10 @@ static bool bdrv_exceed_io_limits(BlockDriverState *bs, int nb_sectors,
+         *wait = 0;
+     }
+ 
++    bs->slice_submitted.bytes[is_write] += (int64_t)nb_sectors *
++                                           BDRV_SECTOR_SIZE;
++    bs->slice_submitted.ios[is_write]++;
++
+     return false;
+ }
+ 
+diff --git a/include/block/block_int.h b/include/block/block_int.h
+index 0986a2d..83941d8 100644
+--- a/include/block/block_int.h
++++ b/include/block/block_int.h
+@@ -256,7 +256,7 @@ struct BlockDriverState {
+     int64_t slice_start;
+     int64_t slice_end;
+     BlockIOLimit io_limits;
+-    BlockIOBaseValue  io_base;
++    BlockIOBaseValue slice_submitted;
+     CoQueue      throttled_reqs;
+     QEMUTimer    *block_timer;
+     bool         io_limits_enabled;
+-- 
+1.8.1.4
+
+

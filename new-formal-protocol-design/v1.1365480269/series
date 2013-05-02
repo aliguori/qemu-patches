@@ -1,0 +1,13 @@
+0000-new-formal-protocol-design.txt
+0001--configure-with-and-without---enable-rdma.patch
+0002-check-for-CONFIG_RDMA.patch
+0003-comprehensive-protocol-documentation.patch
+0004-introduce-qemu_ram_foreach_block.patch
+0005-core-RDMA-migration-logic-w--new-protocol.patch
+0006-connection-establishment-for-RDMA.patch
+0007-additional-savevmc-accessors-for-RDMA.patch
+0008-new-capabilities-added-and-check-for-QMP-string-rdma.patch
+0009-transmit-pcram-using-RDMA.patch
+0010-new-header-file-prototypes-for-savevmc.patch
+0011-update-schema-to-define-new-capabilities.patch
+0012-dont-set-nonblock-on-invalid-file-descriptor.patch

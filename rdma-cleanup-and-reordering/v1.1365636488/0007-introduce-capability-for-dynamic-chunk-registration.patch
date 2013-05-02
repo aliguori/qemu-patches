@@ -1,0 +1,60 @@
+From patches Mon Sep 17 00:00:00 2001
+From: mrhines@linux.vnet.ibm.com
+To: Eric Blake <eblake@redhat.com>, qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, mst@redhat.com,
+ qemu-devel@nongnu.org, Michael R Hines <mrhines@us.ibm.com>,
+ Bulent Abali <abali@us.ibm.com>, owasserm@redhat.com, pbonzini@redhat.com,
+ Gokul B Kandiraju <gokul@us.ibm.com>
+Date: Wed, 10 Apr 2013 18:28:15 -0400
+Message-id: 1365632901-15470-8-git-send-email-mrhines@linux.vnet.ibm.com
+Subject: [PATCH 07/13] introduce capability for dynamic chunk registration
+
+From: "Michael R. Hines" <mrhines@us.ibm.com>
+
+This capability allows you to disable dynamic chunk registration
+for better throughput on high-performance links.
+
+It is enabled by default.
+
+Signed-off-by: Michael R. Hines <mrhines@us.ibm.com>
+---
+ migration.c      |    9 +++++++++
+ qapi-schema.json |    2 +-
+ 2 files changed, 10 insertions(+), 1 deletion(-)
+
+diff --git a/migration.c b/migration.c
+index 3439629..404c19a 100644
+--- a/migration.c
++++ b/migration.c
+@@ -477,6 +477,15 @@ void qmp_migrate_set_downtime(double value, Error **errp)
+     max_downtime = (uint64_t)value;
+ }
+ 
++bool migrate_chunk_register_destination(void)
++{
++    MigrationState *s;
++
++    s = migrate_get_current();
++
++    return s->enabled_capabilities[MIGRATION_CAPABILITY_CHUNK_REGISTER_DESTINATION];
++}
++
+ int migrate_use_xbzrle(void)
+ {
+     MigrationState *s;
+diff --git a/qapi-schema.json b/qapi-schema.json
+index db542f6..7fe7e5c 100644
+--- a/qapi-schema.json
++++ b/qapi-schema.json
+@@ -602,7 +602,7 @@
+ # Since: 1.2
+ ##
+ { 'enum': 'MigrationCapability',
+-  'data': ['xbzrle'] }
++  'data': ['xbzrle', 'chunk_register_destination'] }
+ 
+ ##
+ # @MigrationCapabilityStatus
+-- 
+1.7.10.4
+

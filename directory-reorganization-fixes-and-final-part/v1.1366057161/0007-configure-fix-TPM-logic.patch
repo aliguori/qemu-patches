@@ -1,0 +1,123 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: Paolo Bonzini <pbonzini@redhat.com>, qemu-devel@nongnu.org,
+ Markus Armbruster <armbru@redhat.com>,
+ Peter Maydell <peter.maydell@linaro.org>
+Cc: qemu-devel@nongnu.org
+Date: Mon, 15 Apr 2013 15:19:28 +0200
+Message-id: 1366031973-7718-8-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 07/12] configure: fix TPM logic
+
+A non-native i386 or x86_64 emulator should not have TPM passthrough
+support, since the TPM is only present for those hosts.
+
+Reviewed-by: Andreas Färber <afaerber@suse.de>
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ configure                          | 24 ++++++++++++++++++------
+ default-configs/i386-softmmu.mak   |  3 +--
+ default-configs/x86_64-softmmu.mak |  3 +--
+ tpm/Makefile.objs                  |  4 +---
+ 4 files changed, 21 insertions(+), 13 deletions(-)
+
+diff --git a/configure b/configure
+index 258c82a..1c1e369 100755
+--- a/configure
++++ b/configure
+@@ -2337,6 +2337,15 @@ EOF
+ fi
+ 
+ ##########################################
++# TPM passthrough is only on x86 Linux
++
++if test "$targetos" = Linux && test "$cpu" = i386 -o "$cpu" = x86_64; then
++  tpm_passthrough=$tpm
++else
++  tpm_passthrough=no
++fi
++
++##########################################
+ # adjust virtio-blk-data-plane based on linux-aio
+ 
+ if test "$virtio_blk_data_plane" = "yes" -a \
+@@ -3436,6 +3445,7 @@ echo "virtio-blk-data-plane $virtio_blk_data_plane"
+ echo "gcov              $gcov_tool"
+ echo "gcov enabled      $gcov"
+ echo "TPM support       $tpm"
++echo "TPM passthrough   $tpm_passthrough"
+ 
+ if test "$sdl_too_old" = "yes"; then
+ echo "-> Your SDL version is too old - please upgrade to have SDL support"
+@@ -3811,6 +3821,14 @@ bsd)
+ ;;
+ esac
+ 
++# TPM passthrough support?
++if test "$tpm" = "yes"; then
++  echo 'CONFIG_TPM=$(CONFIG_SOFTMMU)' >> $config_host_mak
++  if test "$tpm_passthrough" = "yes"; then
++    echo "CONFIG_TPM_PASSTHROUGH=y" >> $config_host_mak
++  fi
++fi
++
+ # use default implementation for tracing backend-specific routines
+ trace_default=yes
+ echo "TRACE_BACKEND=$trace_backend" >> $config_host_mak
+@@ -4338,12 +4356,6 @@ if test "$gprof" = "yes" ; then
+   fi
+ fi
+ 
+-if test "$tpm" = "yes"; then
+-  if test "$target_softmmu" = "yes" ; then
+-    echo "CONFIG_TPM=y" >> $config_host_mak
+-  fi
+-fi
+-
+ if test "$ARCH" = "tci"; then
+   linker_script=""
+ else
+diff --git a/default-configs/i386-softmmu.mak b/default-configs/i386-softmmu.mak
+index 6d9d364..368a776 100644
+--- a/default-configs/i386-softmmu.mak
++++ b/default-configs/i386-softmmu.mak
+@@ -27,8 +27,7 @@ CONFIG_HPET=y
+ CONFIG_APPLESMC=y
+ CONFIG_I8259=y
+ CONFIG_PFLASH_CFI01=y
+-CONFIG_TPM_TIS=y
+-CONFIG_TPM_PASSTHROUGH=y
++CONFIG_TPM_TIS=$(CONFIG_TPM)
+ CONFIG_PCI_HOTPLUG=y
+ CONFIG_MC146818RTC=y
+ CONFIG_PAM=y
+diff --git a/default-configs/x86_64-softmmu.mak b/default-configs/x86_64-softmmu.mak
+index 3b06310..2711b83 100644
+--- a/default-configs/x86_64-softmmu.mak
++++ b/default-configs/x86_64-softmmu.mak
+@@ -27,8 +27,7 @@ CONFIG_HPET=y
+ CONFIG_APPLESMC=y
+ CONFIG_I8259=y
+ CONFIG_PFLASH_CFI01=y
+-CONFIG_TPM_TIS=y
+-CONFIG_TPM_PASSTHROUGH=y
++CONFIG_TPM_TIS=$(CONFIG_TPM)
+ CONFIG_PCI_HOTPLUG=y
+ CONFIG_MC146818RTC=y
+ CONFIG_PAM=y
+diff --git a/tpm/Makefile.objs b/tpm/Makefile.objs
+index 8676824..366e4a7 100644
+--- a/tpm/Makefile.objs
++++ b/tpm/Makefile.objs
+@@ -1,6 +1,4 @@
+ common-obj-y = tpm.o
+-ifeq ($(CONFIG_TPM),y)
+-common-obj-y += tpm_backend.o
++common-obj-$(CONFIG_TPM) += tpm_backend.o
+ common-obj-$(CONFIG_TPM_TIS) += tpm_tis.o
+ common-obj-$(CONFIG_TPM_PASSTHROUGH) += tpm_passthrough.o
+-endif
+-- 
+1.8.1.4
+
+
+

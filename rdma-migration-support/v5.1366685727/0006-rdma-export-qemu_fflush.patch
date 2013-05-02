@@ -1,0 +1,50 @@
+From patches Mon Sep 17 00:00:00 2001
+From: mrhines@linux.vnet.ibm.com
+To: quintela@redhat.com
+Cc: Anthony Liguori <aliguori@us.ibm.com>, qemu-devel@nongnu.org,
+ Michael R Hines <mrhines@us.ibm.com>, Bulent Abali <abali@us.ibm.com>,
+ owasserm@redhat.com, pbonzini@redhat.com, Gokul B Kandiraju <gokul@us.ibm.com>,
+ eblake@redhat.com
+Date: Mon, 22 Apr 2013 21:55:33 -0400
+Message-id: 1366682139-22122-7-git-send-email-mrhines@linux.vnet.ibm.com
+Subject: [PATCH 06/12] rdma: export qemu_fflush()
+
+From: "Michael R. Hines" <mrhines@us.ibm.com>
+
+RDMA uses this to flush the control channel before sending its
+own message to handle page registrations.
+
+Signed-off-by: Michael R. Hines <mrhines@us.ibm.com>
+---
+ include/migration/qemu-file.h |    1 +
+ savevm.c                      |    2 +-
+ 2 files changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/include/migration/qemu-file.h b/include/migration/qemu-file.h
+index c1d8b0f..1f12d5a 100644
+--- a/include/migration/qemu-file.h
++++ b/include/migration/qemu-file.h
+@@ -94,6 +94,7 @@ double qemu_get_mbps(void);
+ size_t qemu_get_max_size(QEMUFile *f, uint64_t transferred_bytes,
+                          uint64_t time_spent, uint64_t max_downtime);
+ bool qemu_file_mode_is_not_valid(const char *mode);
++void qemu_fflush(QEMUFile *f);
+ 
+ 
+ static inline void qemu_put_ubyte(QEMUFile *f, unsigned int v)
+diff --git a/savevm.c b/savevm.c
+index cafe6ac..15fe895 100644
+--- a/savevm.c
++++ b/savevm.c
+@@ -586,7 +586,7 @@ static inline bool qemu_file_is_writable(QEMUFile *f)
+  * If there is writev_buffer QEMUFileOps it uses it otherwise uses
+  * put_buffer ops.
+  */
+-static void qemu_fflush(QEMUFile *f)
++void qemu_fflush(QEMUFile *f)
+ {
+     ssize_t ret = 0;
+ 
+-- 
+1.7.10.4
+

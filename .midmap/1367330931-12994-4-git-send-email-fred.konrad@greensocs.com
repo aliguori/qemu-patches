@@ -1,0 +1,1 @@
+../virtio-fix-bus-command-line-compatibility/v2.1367356126/0003-scsi-add-bus_name-parameter-to-scsi_bus_new.patch

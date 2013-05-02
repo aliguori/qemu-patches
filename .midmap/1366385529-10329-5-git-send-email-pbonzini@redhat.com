@@ -1,0 +1,1 @@
+../another-round-of-qemu-char-fixes/v2.1366410725/0004-qemu-char-do-not-operate-on-sources-from-finalize-callbacks.patch

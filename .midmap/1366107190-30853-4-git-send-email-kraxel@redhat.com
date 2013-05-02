@@ -1,0 +1,1 @@
+../usb-patch-queue/v1.1366132383/0003-xhci-add-xhci_cap_write.patch

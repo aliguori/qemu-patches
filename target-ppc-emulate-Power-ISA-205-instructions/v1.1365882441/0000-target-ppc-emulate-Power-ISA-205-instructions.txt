@@ -1,0 +1,45 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Aurelien Jarno <aurelien@aurel32.net>
+To: Aurelien Jarno <aurelien@aurel32.net>, qemu-devel@nongnu.org
+Cc: Alexander Graf <agraf@suse.de>, Aurelien Jarno <aurelien@aurel32.net>,
+ qemu-ppc@nongnu.org, qemu-devel@nongnu.org
+Date: Sat, 13 Apr 2013 14:47:21 +0200
+Message-id: 1365857251-28173-1-git-send-email-aurelien@aurel32.net
+Subject: [PATCH 00/10] target-ppc: emulate Power ISA 2.05 instructions
+
+qemu-system-ppc64 -M pseries clamis to emulate a POWER7 CPU,
+corresponding to an ISA 2.06 compliant CPU, while QEMU emulates
+something like an ISA 2.04 CPU.
+
+Given that glibc and GCC start to use some instructions like cmpb and
+fcpsgn, this starts to be problematic.
+
+This patches series improves the PPC emulation by bringing it to an
+ISA 2.05 CPU (if we except DFP and VSX), at least from the
+non-privledged point of view.
+
+Aurelien Jarno (10):
+  target-ppc: optimize fabs, fnabs, fneg
+  disas: Disassemble all ppc insns for the guest
+  target-ppc: add instruction flags for Book I 2.05
+  target-ppc: emulate cmpb instruction
+  target-ppc: emulate prtyw and prtyd instructions
+  target-ppc: emulate fcpsgn instruction
+  target-ppc: emulate lfiwax instruction
+  target-ppc: emulate load doubleword pair instructions
+  target-ppc: emulate store doubleword pair instructions
+  target-ppc: add support for extended mtfsf/mtfsfi forms
+
+ disas.c                     |    1 +
+ target-ppc/cpu.h            |    4 +-
+ target-ppc/fpu_helper.c     |   48 ++------
+ target-ppc/helper.h         |    4 +-
+ target-ppc/int_helper.c     |   15 +++
+ target-ppc/translate.c      |  260 +++++++++++++++++++++++++++++++++++++++----
+ target-ppc/translate_init.c |    2 +-
+ 7 files changed, 268 insertions(+), 66 deletions(-)
+
+-- 
+1.7.10.4
+
+

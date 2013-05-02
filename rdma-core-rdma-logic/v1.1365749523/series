@@ -1,0 +1,7 @@
+0002-rdma-core-rdma-logic.patch
+0003-rdma-new-QEMUFileOps-hooks.patch
+0004-rdma-implement-new-QEMUFileOps-hooks.patch
+0005-rdma-introduce-capability-for-chunk-registration.patch
+0006-rdma-send-pcram.patch
+0007-rdma-print-out-throughput-while-debugging.patch
+0008-rdma-add-documentation.patch

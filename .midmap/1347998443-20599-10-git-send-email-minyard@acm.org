@@ -1,0 +1,1 @@
+../Add-an-IPMI-device-to-qemu/v4.1347998427/0009-IPMI-Add-a-PC-ISA-type-structure.patch

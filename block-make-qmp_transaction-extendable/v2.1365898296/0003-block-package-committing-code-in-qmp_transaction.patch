@@ -1,0 +1,61 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Wenchao Xia <xiawenc@linux.vnet.ibm.com>
+To: qemu-devel@nongnu.org
+Cc: kwolf@redhat.com, pbonzini@redhat.com,
+ Wenchao Xia <xiawenc@linux.vnet.ibm.com>, dietmar@proxmox.com,
+ stefanha@gmail.com
+Date: Sat, 13 Apr 2013 19:11:39 +0800
+Message-id: 1365851501-3037-4-git-send-email-xiawenc@linux.vnet.ibm.com
+Subject: [PATCH 3/5] block: package committing code in qmp_transaction()
+
+  The code is simply moved into a separate function.
+
+Signed-off-by: Wenchao Xia <xiawenc@linux.vnet.ibm.com>
+Reviewed-by: Eric Blake <eblake@redhat.com>
+---
+ blockdev.c |   20 +++++++++++++-------
+ 1 files changed, 13 insertions(+), 7 deletions(-)
+
+diff --git a/blockdev.c b/blockdev.c
+index 8d1faf8..38cb7d5 100644
+--- a/blockdev.c
++++ b/blockdev.c
+@@ -877,6 +877,18 @@ static int external_snapshot_prepare(BlockdevAction *action,
+     return -1;
+ }
+ 
++static void external_snapshot_commit(BlockdevAction *action,
++                                     BlkTransactionStates *states)
++{
++    /* This removes our old bs from the bdrv_states, and adds the new bs */
++    bdrv_append(states->new_bs, states->old_bs);
++    /* We don't need (or want) to use the transactional
++     * bdrv_reopen_multiple() across all the entries at once, because we
++     * don't want to abort all of them if one of them fails the reopen */
++    bdrv_reopen(states->new_bs, states->new_bs->open_flags & ~BDRV_O_RDWR,
++                NULL);
++}
++
+ /*
+  * 'Atomic' group snapshots.  The snapshots are taken as a set, and if any fail
+  *  then we do not pivot any of the devices in the group, and abandon the
+@@ -919,13 +931,7 @@ void qmp_transaction(BlockdevActionList *dev_list, Error **errp)
+     /* Now we are going to do the actual pivot.  Everything up to this point
+      * is reversible, but we are committed at this point */
+     QSIMPLEQ_FOREACH(states, &snap_bdrv_states, entry) {
+-        /* This removes our old bs from the bdrv_states, and adds the new bs */
+-        bdrv_append(states->new_bs, states->old_bs);
+-        /* We don't need (or want) to use the transactional
+-         * bdrv_reopen_multiple() across all the entries at once, because we
+-         * don't want to abort all of them if one of them fails the reopen */
+-        bdrv_reopen(states->new_bs, states->new_bs->open_flags & ~BDRV_O_RDWR,
+-                    NULL);
++        external_snapshot_commit(NULL, states);
+     }
+ 
+     /* success */
+-- 
+1.7.1
+
+
+

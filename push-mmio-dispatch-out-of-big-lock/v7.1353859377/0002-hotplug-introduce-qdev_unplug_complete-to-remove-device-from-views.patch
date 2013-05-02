@@ -1,0 +1,92 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Liu Ping Fan <qemulist@gmail.com>
+To: qemu-devel@nongnu.org
+Cc: Paolo Bonzini <pbonzini@redhat.com>, gleb@redhat.com,
+ Anthony Liguori <anthony@codemonkey.ws>, Stefan Hajnoczi <stefanha@gmail.com>,
+ Marcelo Tosatti <mtosatti@redhat.com>,
+ Peter Maydell <peter.maydell@linaro.org>, Jan Kiszka <jan.kiszka@siemens.com>
+Date: Sun, 25 Nov 2012 10:02:59 +0800
+Message-id: 1353808984-22368-3-git-send-email-qemulist@gmail.com
+Subject: [PATCH 2/7] hotplug: introduce qdev_unplug_complete() to remove
+ device from views
+
+From: Liu Ping Fan <pingfank@linux.vnet.ibm.com>
+
+When device unplug has been ack by guest, we first remove it from memory
+to prevent incoming access from dispatcher. Then we isolate it from
+device composition tree
+
+Signed-off-by: Liu Ping Fan <pingfank@linux.vnet.ibm.com>
+---
+ hw/qdev.c |   26 ++++++++++++++++++++++++++
+ hw/qdev.h |    3 ++-
+ 2 files changed, 28 insertions(+), 1 deletions(-)
+
+diff --git a/hw/qdev.c b/hw/qdev.c
+index 9b9aba3..681e133 100644
+--- a/hw/qdev.c
++++ b/hw/qdev.c
+@@ -98,6 +98,14 @@ void qdev_set_parent_bus(DeviceState *dev, BusState *bus)
+     bus_add_child(bus, dev);
+ }
+ 
++static void qdev_unset_parent(DeviceState *dev)
++{
++    BusState *b = dev->parent_bus;
++
++    object_unparent(OBJECT(dev));
++    bus_remove_child(b, dev);
++}
++
+ /* Create a new device.  This only initializes the device state structure
+    and allows properties to be set.  qdev_init should be called to
+    initialize the actual device emulation.  */
+@@ -187,6 +195,24 @@ void qdev_set_legacy_instance_id(DeviceState *dev, int alias_id,
+     dev->alias_required_for_version = required_for_version;
+ }
+ 
++static int qdev_unmap(DeviceState *dev)
++{
++    DeviceClass *dc =  DEVICE_GET_CLASS(dev);
++    if (dc->unmap) {
++        dc->unmap(dev);
++    }
++    return 0;
++}
++
++void qdev_unplug_complete(DeviceState *dev, Error **errp)
++{
++    /* isolate from mem view */
++    qdev_unmap(dev);
++    /* isolate from device tree */
++    qdev_unset_parent(dev);
++    object_unref(OBJECT(dev));
++}
++
+ void qdev_unplug(DeviceState *dev, Error **errp)
+ {
+     DeviceClass *dc = DEVICE_GET_CLASS(dev);
+diff --git a/hw/qdev.h b/hw/qdev.h
+index c6ac636..71eb9ca 100644
+--- a/hw/qdev.h
++++ b/hw/qdev.h
+@@ -47,7 +47,7 @@ typedef struct DeviceClass {
+ 
+     /* callbacks */
+     void (*reset)(DeviceState *dev);
+-
++    void (*unmap)(DeviceState *dev);
+     /* device state */
+     const VMStateDescription *vmsd;
+ 
+@@ -160,6 +160,7 @@ void qdev_init_nofail(DeviceState *dev);
+ void qdev_set_legacy_instance_id(DeviceState *dev, int alias_id,
+                                  int required_for_version);
+ void qdev_unplug(DeviceState *dev, Error **errp);
++void qdev_unplug_complete(DeviceState *dev, Error **errp);
+ void qdev_free(DeviceState *dev);
+ int qdev_simple_unplug_cb(DeviceState *dev);
+ void qdev_machine_creation_done(void);
+-- 
+1.7.4.4
+

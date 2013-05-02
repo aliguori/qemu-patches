@@ -1,0 +1,176 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Liu Ping Fan <qemulist@gmail.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <anthony@codemonkey.ws>,
+ Paolo Bonzini <pbonzini@redhat.com>, Jan Kiszka <jan.kiszka@siemens.com>,
+ Stefan Hajnoczi <stefanha@redhat.com>, mdroth <mdroth@linux.vnet.ibm.com>
+Date: Fri, 26 Apr 2013 10:47:24 +0800
+Message-id: 1366944455-14239-4-git-send-email-qemulist@gmail.com
+Subject: [PATCH 03/14] net: port tap onto GSource
+
+From: Liu Ping Fan <pingfank@linux.vnet.ibm.com>
+
+Signed-off-by: Liu Ping Fan <pingfank@linux.vnet.ibm.com>
+---
+ net/tap.c |   64 +++++++++++++++++++++++++++++++++++++++++++++++++++---------
+ 1 files changed, 54 insertions(+), 10 deletions(-)
+
+diff --git a/net/tap.c b/net/tap.c
+index daab350..5f4d59f 100644
+--- a/net/tap.c
++++ b/net/tap.c
+@@ -41,6 +41,7 @@
+ #include "qemu/error-report.h"
+ 
+ #include "net/tap.h"
++#include "util/event_gsource.h"
+ 
+ #include "hw/vhost_net.h"
+ 
+@@ -62,6 +63,7 @@ typedef struct TAPState {
+     bool enabled;
+     VHostNetState *vhost_net;
+     unsigned host_vnet_hdr_len;
++    EventGSource *nsrc;
+ } TAPState;
+ 
+ static int launch_script(const char *setup_script, const char *ifname, int fd);
+@@ -70,25 +72,48 @@ static int tap_can_send(void *opaque);
+ static void tap_send(void *opaque);
+ static void tap_writable(void *opaque);
+ 
+-static void tap_update_fd_handler(TAPState *s)
++static gushort readable(void *opaque)
+ {
+-    qemu_set_fd_handler2(s->fd,
+-                         s->read_poll && s->enabled ? tap_can_send : NULL,
+-                         s->read_poll && s->enabled ? tap_send     : NULL,
+-                         s->write_poll && s->enabled ? tap_writable : NULL,
+-                         s);
++    TAPState *s = opaque;
++
++    if (s->enabled && s->read_poll &&
++        tap_can_send(s)) {
++        return G_IO_IN;
++    }
++    return 0;
++}
++
++static gushort writable(void *opaque)
++{
++    TAPState *s = opaque;
++
++    if (s->enabled && s->write_poll) {
++        return G_IO_OUT;
++    }
++    return 0;
++}
++
++static gboolean tap_handler(gpointer data)
++{
++    EventGSource *nsrc = data;
++
++    if (nsrc->gfd.revents & G_IO_IN) {
++        tap_send(nsrc->opaque);
++    }
++    if (nsrc->gfd.revents & G_IO_OUT) {
++        tap_writable(nsrc->opaque);
++    }
++    return true;
+ }
+ 
+ static void tap_read_poll(TAPState *s, bool enable)
+ {
+     s->read_poll = enable;
+-    tap_update_fd_handler(s);
+ }
+ 
+ static void tap_write_poll(TAPState *s, bool enable)
+ {
+     s->write_poll = enable;
+-    tap_update_fd_handler(s);
+ }
+ 
+ static void tap_writable(void *opaque)
+@@ -291,6 +316,7 @@ static void tap_cleanup(NetClientState *nc)
+ 
+     tap_read_poll(s, false);
+     tap_write_poll(s, false);
++    event_source_release(s->nsrc);
+     close(s->fd);
+     s->fd = -1;
+ }
+@@ -300,6 +326,12 @@ static void tap_poll(NetClientState *nc, bool enable)
+     TAPState *s = DO_UPCAST(TAPState, nc, nc);
+     tap_read_poll(s, enable);
+     tap_write_poll(s, enable);
++
++    if (!enable) {
++        g_source_remove_poll(&s->nsrc->source, &s->nsrc->gfd);
++    } else {
++        g_source_add_poll(&s->nsrc->source, &s->nsrc->gfd);
++    }
+ }
+ 
+ int tap_get_fd(NetClientState *nc)
+@@ -309,6 +341,13 @@ int tap_get_fd(NetClientState *nc)
+     return s->fd;
+ }
+ 
++static void tap_bind_ctx(NetClientState *nc, GMainContext *ctx)
++{
++    TAPState *s = DO_UPCAST(TAPState, nc, nc);
++
++    g_source_attach(&s->nsrc->source, ctx);
++}
++
+ /* fd support */
+ 
+ static NetClientInfo net_tap_info = {
+@@ -319,6 +358,7 @@ static NetClientInfo net_tap_info = {
+     .receive_iov = tap_receive_iov,
+     .poll = tap_poll,
+     .cleanup = tap_cleanup,
++    .bind_ctx = tap_bind_ctx,
+ };
+ 
+ static TAPState *net_tap_fd_init(NetClientState *peer,
+@@ -596,6 +636,7 @@ static int net_init_tap_one(const NetdevTapOptions *tap, NetClientState *peer,
+                             int vnet_hdr, int fd)
+ {
+     TAPState *s;
++    EventGSource *nsrc;
+ 
+     s = net_tap_fd_init(peer, model, name, fd, vnet_hdr);
+     if (!s) {
+@@ -606,6 +647,11 @@ static int net_init_tap_one(const NetdevTapOptions *tap, NetClientState *peer,
+     if (tap_set_sndbuf(s->fd, tap) < 0) {
+         return -1;
+     }
++    nsrc = event_source_new(s->fd, tap_handler, s);
++    nsrc->readable = readable;
++    nsrc->writable = writable;
++    s->nsrc = nsrc;
++    s->nc.info->bind_ctx(&s->nc, NULL);
+ 
+     if (tap->has_fd || tap->has_fds) {
+         snprintf(s->nc.info_str, sizeof(s->nc.info_str), "fd=%d", fd);
+@@ -844,7 +890,6 @@ int tap_enable(NetClientState *nc)
+         ret = tap_fd_enable(s->fd);
+         if (ret == 0) {
+             s->enabled = true;
+-            tap_update_fd_handler(s);
+         }
+         return ret;
+     }
+@@ -862,7 +907,6 @@ int tap_disable(NetClientState *nc)
+         if (ret == 0) {
+             qemu_purge_queued_packets(nc);
+             s->enabled = false;
+-            tap_update_fd_handler(s);
+         }
+         return ret;
+     }
+-- 
+1.7.4.4
+

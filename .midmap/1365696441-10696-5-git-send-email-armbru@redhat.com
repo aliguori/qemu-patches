@@ -1,0 +1,1 @@
+../Fix-JSON-string-formatter/v1.1365721637/0004-qjson-to_json-case-QTYPE_QSTRING-is-buggy-rewrite.patch

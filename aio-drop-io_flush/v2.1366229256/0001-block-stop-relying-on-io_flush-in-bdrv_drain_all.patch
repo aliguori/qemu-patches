@@ -1,0 +1,139 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Stefan Hajnoczi <stefanha@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, Paolo Bonzini <pbonzini@redhat.com>,
+ Stefan Hajnoczi <stefanha@redhat.com>, pingfank@linux.vnet.ibm.com,
+ Kevin Wolf <kwolf@redhat.com>
+Date: Wed, 17 Apr 2013 15:07:37 +0200
+Message-id: 1366204073-8468-2-git-send-email-stefanha@redhat.com
+Subject: [PATCH 01/17] block: stop relying on io_flush() in bdrv_drain_all()
+
+If a block driver has no file descriptors to monitor but there are still
+active requests, it can return 1 from .io_flush().  This is used to spin
+during synchronous I/O.
+
+Stop relying on .io_flush() and instead check
+QLIST_EMPTY(&bs->tracked_requests) to decide whether there are active
+requests.
+
+This is the first step in removing .io_flush() so that event loops no
+longer need to have the concept of synchronous I/O.  Eventually we may
+be able to kill synchronous I/O completely by running everything in a
+coroutine, but that is future work.
+
+Note this patch moves bs->throttled_reqs initialization to bdrv_new() so
+that bdrv_requests_pending(bs) can safely access it.  In practice bs is
+g_malloc0() so the memory is already zeroed but it's safer to initialize
+the queue properly.
+
+In bdrv_delete() make sure to call bdrv_make_anon() *after* bdrv_close()
+so that the device is still seen by bdrv_drain_all() when iterating
+bdrv_states.
+
+Signed-off-by: Stefan Hajnoczi <stefanha@redhat.com>
+---
+ block.c | 47 ++++++++++++++++++++++++++++++++++-------------
+ 1 file changed, 34 insertions(+), 13 deletions(-)
+
+diff --git a/block.c b/block.c
+index 4ad663d..db08af5 100644
+--- a/block.c
++++ b/block.c
+@@ -151,7 +151,6 @@ static void bdrv_block_timer(void *opaque)
+ 
+ void bdrv_io_limits_enable(BlockDriverState *bs)
+ {
+-    qemu_co_queue_init(&bs->throttled_reqs);
+     bs->block_timer = qemu_new_timer_ns(vm_clock, bdrv_block_timer, bs);
+     bs->io_limits_enabled = true;
+ }
+@@ -308,6 +307,7 @@ BlockDriverState *bdrv_new(const char *device_name)
+     }
+     bdrv_iostatus_disable(bs);
+     notifier_list_init(&bs->close_notifiers);
++    qemu_co_queue_init(&bs->throttled_reqs);
+ 
+     return bs;
+ }
+@@ -1360,6 +1360,35 @@ void bdrv_close_all(void)
+     }
+ }
+ 
++/* Check if any requests are in-flight (including throttled requests) */
++static bool bdrv_requests_pending(BlockDriverState *bs)
++{
++    if (!QLIST_EMPTY(&bs->tracked_requests)) {
++        return true;
++    }
++    if (!qemu_co_queue_empty(&bs->throttled_reqs)) {
++        return true;
++    }
++    if (bs->file && bdrv_requests_pending(bs->file)) {
++        return true;
++    }
++    if (bs->backing_hd && bdrv_requests_pending(bs->backing_hd)) {
++        return true;
++    }
++    return false;
++}
++
++static bool bdrv_requests_pending_all(void)
++{
++    BlockDriverState *bs;
++    QTAILQ_FOREACH(bs, &bdrv_states, list) {
++        if (bdrv_requests_pending(bs)) {
++            return true;
++        }
++    }
++    return false;
++}
++
+ /*
+  * Wait for pending requests to complete across all BlockDriverStates
+  *
+@@ -1375,26 +1404,18 @@ void bdrv_close_all(void)
+ void bdrv_drain_all(void)
+ {
+     BlockDriverState *bs;
+-    bool busy;
+-
+-    do {
+-        busy = qemu_aio_wait();
+ 
++    while (bdrv_requests_pending_all()) {
+         /* FIXME: We do not have timer support here, so this is effectively
+          * a busy wait.
+          */
+         QTAILQ_FOREACH(bs, &bdrv_states, list) {
+             if (!qemu_co_queue_empty(&bs->throttled_reqs)) {
+                 qemu_co_queue_restart_all(&bs->throttled_reqs);
+-                busy = true;
+             }
+         }
+-    } while (busy);
+ 
+-    /* If requests are still pending there is a bug somewhere */
+-    QTAILQ_FOREACH(bs, &bdrv_states, list) {
+-        assert(QLIST_EMPTY(&bs->tracked_requests));
+-        assert(qemu_co_queue_empty(&bs->throttled_reqs));
++        qemu_aio_wait();
+     }
+ }
+ 
+@@ -1539,11 +1560,11 @@ void bdrv_delete(BlockDriverState *bs)
+     assert(!bs->job);
+     assert(!bs->in_use);
+ 
++    bdrv_close(bs);
++
+     /* remove from list, if necessary */
+     bdrv_make_anon(bs);
+ 
+-    bdrv_close(bs);
+-
+     assert(bs != bs_snapshots);
+     g_free(bs);
+ }
+-- 
+1.8.1.4
+

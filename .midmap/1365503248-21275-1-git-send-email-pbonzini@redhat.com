@@ -1,0 +1,1 @@
+../configure-move-vhost-net-to-config-hostmak/v1.1365528448/0001-configure-move-vhost-net-to-config-hostmak.patch

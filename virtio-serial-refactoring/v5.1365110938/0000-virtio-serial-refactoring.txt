@@ -1,0 +1,73 @@
+From patches Mon Sep 17 00:00:00 2001
+From: fred.konrad@greensocs.com
+To: Anthony Liguori <aliguori@us.ibm.com>,
+ Peter Maydell <peter.maydell@linaro.org>,
+ =?UTF-8?B?S09OUkFEIEZyw6lkw6lyaWM=?= <fred.konrad@greensocs.com>,
+ qemu-devel@nongnu.org, fred.konrad@greensocs.com
+Cc: Anthony Liguori <aliguori@us.ibm.com>, peter.maydell@linaro.org,
+ mark.burton@greensocs.com, qemu-devel@nongnu.org, cornelia.huck@de.ibm.com,
+ fred.konrad@greensocs.com
+Date: Thu, 4 Apr 2013 16:28:58 +0200
+Message-id: 1365085745-14385-1-git-send-email-fred.konrad@greensocs.com
+Subject: [PATCH 0/7] virtio-serial refactoring.
+
+From: KONRAD Frederic <fred.konrad@greensocs.com>
+
+This is the next part of virtio-refactoring.
+
+Basically it creates virtio-serial device which extends virtio-device.
+Then a virtio-serial can be connected on a virtio-bus.
+virtio-serial-pci, virtio-serial-s390 and virtio-serial-ccw are created too,
+they extend respectively virtio-pci, virtio-s390-device, virtio-ccw-device and
+have a virtio-serial.
+
+You can checkout my branch here:
+
+git://project.greensocs.com/qemu-virtio.git virtio-serial-v5
+
+Note that it is nearly the same series as virtio-blk and virtio-scsi
+refactoring.
+
+I made basic tests (with linux guests) on:
+ * qemu-system-i386
+
+Changes v4 -> v5:
+    * Fixed rebase issue with nvector and the clarifying comment.
+    * Changed property macro for s390 and ccw device too.
+
+Changes v3 -> v4:
+    * Removed serial configuration field ommited in VirtioCCWDevice structure.
+
+Changes v2 -> v3:
+    * Added CCW device.
+    * Rebased.
+
+Thanks,
+
+Fred
+
+KONRAD Frederic (7):
+  virtio-serial: add the virtio-serial device.
+  virtio-serial-pci: switch to the new API.
+  virtio-serial-s390: switch to the new API.
+  virtio-serial-ccw: switch to the new API.
+  virtio-serial: cleanup: init and exit functions.
+  virtio-serial: cleanup: use QOM casts.
+  virtio-serial: cleanup: remove qdev field.
+
+ hw/s390x/s390-virtio-bus.c |  31 +++++----
+ hw/s390x/s390-virtio-bus.h |  12 +++-
+ hw/s390x/virtio-ccw.c      |  29 +++++----
+ hw/s390x/virtio-ccw.h      |  12 +++-
+ hw/virtio-pci.c            | 131 +++++++++++++++++++------------------
+ hw/virtio-pci.h            |  14 +++-
+ hw/virtio-serial-bus.c     | 157 +++++++++++++++++++++++++++------------------
+ hw/virtio-serial.h         |  13 +++-
+ 8 files changed, 239 insertions(+), 160 deletions(-)
+
+Reviewed-by: Peter Maydell <peter.maydell@linaro.org>
+Reviewed-by: Cornelia Huck <cornelia.huck@de.ibm.com>
+Tested-by: Cornelia Huck <cornelia.huck@de.ibm.com>
+-- 
+1.7.11.7
+

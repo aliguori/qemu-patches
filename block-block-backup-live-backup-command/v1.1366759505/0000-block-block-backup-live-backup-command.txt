@@ -1,0 +1,83 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Stefan Hajnoczi <stefanha@redhat.com>
+To: Eric Blake <eblake@redhat.com>, Stefan Hajnoczi <stefanha@redhat.com>,
+ Wenchao Xia <xiawenc@linux.vnet.ibm.com>, qemu-devel@nongnu.org
+Cc: Paolo Bonzini <pbonzini@redhat.com>, Ian Main <imain@redhat.com>,
+ Fam Zheng <famz@redhat.com>, Kevin Wolf <kwolf@redhat.com>,
+ qemu-devel@nongnu.org, Stefan Hajnoczi <stefanha@redhat.com>,
+ dietmar@proxmox.com
+Date: Tue, 23 Apr 2013 18:25:05 +0200
+Message-id: 1366734308-11724-1-git-send-email-stefanha@redhat.com
+Subject: [PATCH 0/3] block: block-backup live backup command
+
+This series adds a new QMP command, block-backup, which takes a point-in-time
+snapshot of a block device.  The snapshot is copied out to a target block
+device.  A simple example is:
+
+  block-backup device=virtio0 format=qcow2 target=backup-20130401.qcow2
+
+The original block-backup blockjob was written by Dietmar Maurer
+<dietmar@proxmox.com>.  He is currently busy but I feel the feature is worth
+pushing into QEMU since there has been interest.  This is my version of his
+patch, plus the QMP command and qemu-iotests test case.
+
+How is this different from block-stream and drive-mirror?
+---------------------------------------------------------
+Both block-stream and drive-mirror do not provide immediate point-in-time
+snapshots.  Instead they copy data into a new file and then switch to it.  In
+other words, the point at which the "snapshot" is taken cannot be controlled
+directly.
+
+block-backup intercepts guest writes and saves data into the target block
+device before it is overwritten.  The target block device can be a raw image
+file, backing files are not used to implement this feature.
+
+How can block-backup be used?
+-----------------------------
+The simplest use-case is to copy a point-in-time snapshot to a local file.
+
+More advanced users may wish to make the target an NBD URL.  The NBD server
+listening on the other side can process the backup writes any way it wishes.  I
+previously posted an RFC series with a backup server that streamed Dietmar's
+VMA backup archive format.
+
+What's next for block-backup?
+-----------------------------
+The following enhancements are left for future patches:
+
+1. QMP 'transaction' support.  It is handy to atomically snapshot multiple
+   block devices.  We need qmp_transaction() support for this.  Wenchao Xia is
+   currently making qmp_transaction() extensible so new action types, like
+   block-backup, can be added.
+
+2. Sync modes like drive-mirror (top, full, none).  This makes it possible to
+   preserve the backing file chain.
+
+Dietmar Maurer (1):
+  block: add basic backup support to block driver
+
+Stefan Hajnoczi (2):
+  block: add block_backup QMP command
+  qemu-iotests: add 054 block-backup test case
+
+ block.c                    |  69 ++++++++++++-
+ block/Makefile.objs        |   1 +
+ block/backup.c             | 252 +++++++++++++++++++++++++++++++++++++++++++++
+ blockdev.c                 |  92 +++++++++++++++++
+ include/block/block.h      |   2 +
+ include/block/block_int.h  |  16 +++
+ include/block/blockjob.h   |  10 ++
+ qapi-schema.json           |  28 +++++
+ qmp-commands.hx            |   6 ++
+ tests/qemu-iotests/054     | 230 +++++++++++++++++++++++++++++++++++++++++
+ tests/qemu-iotests/054.out |   5 +
+ tests/qemu-iotests/group   |   1 +
+ 12 files changed, 707 insertions(+), 5 deletions(-)
+ create mode 100644 block/backup.c
+ create mode 100755 tests/qemu-iotests/054
+ create mode 100644 tests/qemu-iotests/054.out
+
+-- 
+1.8.1.4
+
+

@@ -1,0 +1,1 @@
+../spice-patch-queue/v1.1366131385/0003-spice-32-bit-only-fix-surface-cmd-tracking-destruction.patch

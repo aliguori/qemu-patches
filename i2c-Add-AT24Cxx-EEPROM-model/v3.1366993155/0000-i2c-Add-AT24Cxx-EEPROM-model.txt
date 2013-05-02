@@ -1,0 +1,47 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Jan Kiszka <jan.kiszka@siemens.com>
+To: Anthony Liguori <aliguori@us.ibm.com>, qemu-devel <qemu-devel@nongnu.org>
+Cc: Andreas Faerber <afaerber@suse.de>,
+ Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+Date: Fri, 26 Apr 2013 11:19:15 +0200
+Message-id: cover.1366967944.git.jan.kiszka@siemens.com
+Subject: [PATCH 0/2] i2c: Add AT24Cxx EEPROM model
+
+Changes in v3:
+ - rebased over current master
+ - addressed review comments by Andreas Färber and Peter Crosthwaite
+    - better QOM compliance
+    - table-driven device parametrization
+
+I also briefly looked into a libqos-based test case, but the omap
+wrapper just gives me
+
+  libi2c-omap.c:79:omap_i2c_send: assertion failed: ((data & OMAP_I2C_CON_STP) != 0)
+
+when sending an address word to the EEPROM.
+
+Jan Kiszka (2):
+  i2c: Introduce device address mask
+  Add AT24Cxx I2C EEPROM device model
+
+ hw/arm/pxa2xx.c        |    3 +-
+ hw/arm/tosa.c          |    2 +-
+ hw/arm/z2.c            |    2 +-
+ hw/audio/wm8750.c      |    2 +-
+ hw/display/ssd0303.c   |    2 +-
+ hw/gpio/max7310.c      |    2 +-
+ hw/i2c/core.c          |   14 ++-
+ hw/i2c/smbus.c         |    2 +-
+ hw/input/lm832x.c      |    2 +-
+ hw/misc/tmp105.c       |    2 +-
+ hw/nvram/Makefile.objs |    2 +-
+ hw/nvram/at24.c        |  347 ++++++++++++++++++++++++++++++++++++++++++++++++
+ hw/timer/ds1338.c      |    2 +-
+ hw/timer/twl92230.c    |    2 +-
+ include/hw/i2c/i2c.h   |    4 +-
+ 15 files changed, 373 insertions(+), 17 deletions(-)
+ create mode 100644 hw/nvram/at24.c
+
+-- 
+1.7.3.4
+

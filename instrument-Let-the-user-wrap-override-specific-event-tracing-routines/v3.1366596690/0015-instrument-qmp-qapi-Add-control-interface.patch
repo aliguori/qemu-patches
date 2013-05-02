@@ -1,0 +1,368 @@
+From patches Mon Sep 17 00:00:00 2001
+From: =?utf-8?q?Llu=C3=ADs_Vilanova_=3Cvilanova=40ac=2Eupc=2Eedu=3E?=
+To: qemu-devel@nongnu.org
+Cc: 
+Date: Sun, 21 Apr 2013 21:12:54 +0200
+Message-id: 20130421191254.8947.81470.stgit@fimbulvetr.bsc.es
+Subject: [PATCH 15/24] instrument: [qmp, qapi] Add control interface
+
+Add QMP commands to control (un)loading of dynamic instrumentation library.
+
+Signed-off-by: Lluís Vilanova <vilanova@ac.upc.edu>
+---
+ instrument/Makefile.objs    |    2 +
+ instrument/control.h        |    4 +
+ instrument/qapi-schema.json |  124 +++++++++++++++++++++++++++++++++++++++++++
+ instrument/qmp.c            |   78 +++++++++++++++++++++++++++
+ qmp-commands.hx             |   71 +++++++++++++++++++++++++
+ qmp.c                       |    4 +
+ 6 files changed, 283 insertions(+)
+ create mode 100644 instrument/qmp.c
+
+diff --git a/instrument/Makefile.objs b/instrument/Makefile.objs
+index e571c71..af1c96b 100644
+--- a/instrument/Makefile.objs
++++ b/instrument/Makefile.objs
+@@ -66,3 +66,5 @@ endif
+ # Control code
+ 
+ target-obj-y += control.o
++
++common-obj-$(CONFIG_SOFTMMU) += qmp.o
+diff --git a/instrument/control.h b/instrument/control.h
+index a6a648a..77d77ad 100644
+--- a/instrument/control.h
++++ b/instrument/control.h
+@@ -21,6 +21,8 @@
+  * @INSTR_LOAD_ERROR: Error with libdl (see dlerror).
+  *
+  * Error codes for instr_load().
++ *
++ * Warning: Keep in sync with #InstrLoadCode
+  */
+ typedef enum {
+     INSTR_LOAD_OK,
+@@ -36,6 +38,8 @@ typedef enum {
+  * @INSTR_UNLOAD_ERROR: Error with libdl (see dlerror).
+  *
+  * Error codes for instr_unload().
++ *
++ * Warning: Keep in sync with #InstrUnloadCode
+  */
+ typedef enum {
+     INSTR_UNLOAD_OK,
+diff --git a/instrument/qapi-schema.json b/instrument/qapi-schema.json
+index e450ddf..900160b 100644
+--- a/instrument/qapi-schema.json
++++ b/instrument/qapi-schema.json
+@@ -24,3 +24,127 @@
+ ##
+ { 'enum': 'InstrType',
+   'data': [ 'None', 'Static', 'Dynamic' ] }
++
++##
++# @InstrState
++#
++# Instrumentation state.
++#
++# Instrumentation is never active if @type is #None.
++#
++# Instrumentation is always active if @type is #Static.
++#
++# @type: The system's @InstrType.
++#
++# @active: Whether an instrumentation is loaded.
++#
++# @handles: List of handles for currently loaded instrumentation libraries.
++#
++# Since: 1.5
++##
++{ 'type': 'InstrState',
++  'data': { 'type': 'InstrType', 'active': 'bool' } }
++
++##
++# @instr-query:
++#
++# Returns the current instrumentation state.
++#
++# Since: 1.5
++##
++{ 'command': 'instr-query',
++  'returns': 'InstrState' }
++
++
++##
++# @InstrLoadCode
++#
++# Result code of an 'instr-load' command.
++#
++# @OK: Correctly loaded.
++#
++# @Unavailable: Service not available.
++#
++# @Error: Error with libdl (see 'msg').
++#
++# Since: 1.5
++##
++{ 'enum': 'InstrLoadCode'
++  'data': [ 'OK', 'Unavailable', 'Error' ] }
++
++##
++# @InstrLoadResult
++#
++# Result of an 'instr-load' command.
++#
++# @code: Result code.
++#
++# @msg: Additional error message.
++#
++# @handle: Instrumentation library identifier (undefined in case of error).
++#
++# Since: 1.5
++##
++{ 'type': 'InstrLoadResult'
++  'data': { 'code': 'InstrLoadCode', 'msg': 'str', 'handle': 'int' } }
++
++##
++# @instr-load:
++#
++# Load an instrumentation library.
++#
++# @path: path to the dynamic instrumentation library
++#
++# @args: arguments to the dynamic instrumentation library
++#
++# Since: 1.5
++##
++{ 'command': 'instr-load',
++  'data':    { 'path': 'str', '*args': ['String'] },
++  'returns': 'InstrLoadResult' }
++
++
++##
++# @InstrUnloadCode
++#
++# Result code of an 'instr-unload' command.
++#
++# @OK: Correctly unloaded.
++#
++# @Unavailable: Service not available.
++#
++# @Invalid: Invalid handle.
++#
++# @Error: Error with libdl (see 'msg').
++#
++# Since: 1.5
++##
++{ 'enum': 'InstrUnloadCode'
++  'data': [ 'OK', 'Unavailable', 'Invalid', 'Error' ] }
++
++##
++# @InstrUnloadResult
++#
++# Result of an 'instr-unload' command.
++#
++# @code: Result code.
++#
++# @msg: Additional error message.
++#
++# Since: 1.5
++##
++{ 'type': 'InstrUnloadResult'
++  'data': { 'code': 'InstrUnloadCode', 'msg': 'str' } }
++
++##
++# @instr-unload:
++#
++# Unload an instrumentation library.
++#
++# @handle: Instrumentation library identifier (see #InstrLoadResult).
++#
++# Since: 1.5
++##
++{ 'command': 'instr-unload',
++  'data': { 'handle': 'int' },
++  'returns': 'InstrUnloadResult' }
+diff --git a/instrument/qmp.c b/instrument/qmp.c
+new file mode 100644
+index 0000000..780c06e
+--- /dev/null
++++ b/instrument/qmp.c
+@@ -0,0 +1,78 @@
++/*
++ * QMP interface for dynamic trace instrumentation control commands.
++ *
++ * Copyright (C) 2012-2013 Lluís Vilanova <vilanova@ac.upc.edu>
++ *
++ * This work is licensed under the terms of the GNU GPL, version 2 or later.
++ * See the COPYING file in the top-level directory.
++ */
++
++#include "qemu-common.h"
++#include "qapi/qmp/qerror.h"
++#include "qmp-commands.h"
++
++#include <dlfcn.h>
++
++#include "instrument/control.h"
++
++
++
++InstrState *qmp_instr_query (Error **errp)
++{
++    InstrState *res = g_malloc0(sizeof(*res));
++    res->type = instr_type();
++    res->active = instr_active();
++    return res;
++}
++
++InstrLoadResult *qmp_instr_load(const char * path,
++                                bool have_args, StringList * args,
++                                Error **errp)
++{
++    int argc = 0;
++    const char **argv = NULL;
++
++    StringList *entry = have_args ? args : NULL;
++    while (entry != NULL) {
++        argv = realloc(argv, sizeof(*argv) * (argc + 1));
++        argv[argc] = entry->value->str;
++        argc++;
++        entry = entry->next;
++    }
++
++    InstrLoadResult *res = g_malloc0(sizeof(*res));
++    res->code = instr_load(path, argc, argv, &res->handle);
++    switch (res->code) {
++    case INSTR_LOAD_CODE_OK:
++    case INSTR_LOAD_CODE_UNAVAILABLE:
++        break;
++    case INSTR_LOAD_CODE_ERROR:
++        res->msg = dlerror();
++        break;
++    default:
++        fprintf(stderr, "Unknown instrumentation load code: %d", res->code);
++        exit(1);
++        break;
++    }
++    return res;
++}
++
++InstrUnloadResult *qmp_instr_unload(int64_t handle, Error **errp)
++{
++    InstrUnloadResult *res = g_malloc0(sizeof(*res));
++    res->code = instr_unload(handle);
++    switch (res->code) {
++    case INSTR_UNLOAD_OK:
++    case INSTR_UNLOAD_UNAVAILABLE:
++    case INSTR_UNLOAD_INVALID:
++        break;
++    case INSTR_UNLOAD_CODE_ERROR:
++        res->msg = dlerror();
++        break;
++    default:
++        fprintf(stderr, "Unknown instrumentation unload code: %d", res->code);
++        exit(1);
++        break;
++    }
++    return res;
++}
+diff --git a/qmp-commands.hx b/qmp-commands.hx
+index 1e0e11e..65873dd 100644
+--- a/qmp-commands.hx
++++ b/qmp-commands.hx
+@@ -1510,6 +1510,77 @@ Notes:
+     o Commands that prompt the user for data (eg. 'cont' when the block
+       device is encrypted) don't currently work
+ 
++instr-query
++-----------
++
++Query the instrumentation state.
++
++Arguments: None.
++
++Example:
++
++-> { "execute": "instr-query" }
++<- { "return": { "type": "Dynamic", "active": "None" } }
++
++EQMP
++
++    {
++        .name       = "instr-query",
++        .args_type  = "",
++        .mhandler.cmd_new = qmp_marshal_input_instr_query,
++    },
++
++
++SQMP
++
++instr-load
++----------
++
++Load a dynamic instrumentation library.
++
++Arguments:
++
++- path: path to the dynamic instrumentation library
++- args: arguments to the dynamic instrumentation library
++
++Example:
++
++-> { "execute": "instr-load", "arguments": { "path": "/tmp/libtrace-instrument.so" } }
++<- { "return": {} }
++
++EQMP
++
++    {
++        .name       = "instr-load",
++        .args_type  = "path:F,args:s?",
++        .mhandler.cmd_new = qmp_marshal_input_instr_load,
++    },
++
++
++SQMP
++
++instr-unload
++------------
++
++Unload the current dynamic instrumentation library.
++
++Arguments: None.
++
++Example:
++
++-> { "execute": "instr-unload" }
++<- { "return": {} }
++
++EQMP
++
++    {
++        .name       = "instr-unload",
++        .args_type  = "",
++        .mhandler.cmd_new = qmp_marshal_input_instr_unload,
++    },
++
++
++SQMP
+ 3. Query Commands
+ =================
+ 
+diff --git a/qmp.c b/qmp.c
+index 55b056b..72abe03 100644
+--- a/qmp.c
++++ b/qmp.c
+@@ -24,6 +24,10 @@
+ #include "hw/qdev.h"
+ #include "sysemu/blockdev.h"
+ #include "qom/qom-qobject.h"
++#if defined(TRACE_INSTRUMENT_DYNAMIC)
++#include "instrument/qi-qmp-commands.h"
++#endif
++
+ 
+ NameInfo *qmp_query_name(Error **errp)
+ {
+
+

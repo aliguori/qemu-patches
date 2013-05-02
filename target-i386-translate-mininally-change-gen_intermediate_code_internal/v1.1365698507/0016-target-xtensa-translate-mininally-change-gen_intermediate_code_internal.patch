@@ -1,0 +1,34 @@
+From patches Mon Sep 17 00:00:00 2001
+From: liguang <lig.fnst@cn.fujitsu.com>
+To: qemu-devel@nongnu.org
+Cc: liguang <lig.fnst@cn.fujitsu.com>
+Date: Thu, 11 Apr 2013 11:42:02 +0800
+Message-id: 1365651722-11241-16-git-send-email-lig.fnst@cn.fujitsu.com
+Subject: [PATCH 16/16] target-xtensa/translate: mininally change
+ gen_intermediate_code_internal
+
+Signed-off-by: liguang <lig.fnst@cn.fujitsu.com>
+---
+ target-xtensa/translate.c |    5 ++---
+ 1 files changed, 2 insertions(+), 3 deletions(-)
+
+diff --git a/target-xtensa/translate.c b/target-xtensa/translate.c
+index 06d68db..0b4c0bf 100644
+--- a/target-xtensa/translate.c
++++ b/target-xtensa/translate.c
+@@ -2927,9 +2927,8 @@ static void gen_intermediate_code_internal(
+         if (search_pc) {
+             j = tcg_ctx.gen_opc_ptr - tcg_ctx.gen_opc_buf;
+             if (lj < j) {
+-                lj++;
+-                while (lj < j) {
+-                    tcg_ctx.gen_opc_instr_start[lj++] = 0;
++                while (++lj < j) {
++                    tcg_ctx.gen_opc_instr_start[lj] = 0;
+                 }
+             }
+             tcg_ctx.gen_opc_pc[lj] = dc.pc;
+-- 
+1.7.2.5
+
+

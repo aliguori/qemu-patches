@@ -1,0 +1,45 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: av1474@comtv.ru
+Date: Thu, 18 Apr 2013 18:44:00 +0200
+Message-id: 1366303444-24620-5-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 4/8] audio: remove CONFIG_* symbols
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ configure | 9 ---------
+ 1 file changed, 9 deletions(-)
+
+diff --git a/configure b/configure
+index d24d6c6..62b5758 100755
+--- a/configure
++++ b/configure
+@@ -3678,10 +3678,6 @@ fi
+ if test "$cap_ng" = "yes" ; then
+   echo "CONFIG_LIBCAP=y" >> $config_host_mak
+ fi
+-for card in $audio_card_list; do
+-    def=CONFIG_`echo $card | LC_ALL=C tr '[a-z]' '[A-Z]'`
+-    echo "$def=y" >> $config_host_mak
+-done
+ echo "CONFIG_AUDIO_DRIVERS=$audio_drv_list" >> $config_host_mak
+ for drv in $audio_drv_list; do
+     def=CONFIG_`echo $drv | LC_ALL=C tr '[a-z]' '[A-Z]'`
+@@ -4359,11 +4355,6 @@ if test "$target_bsd_user" = "yes" ; then
+   echo "CONFIG_BSD_USER=y" >> $config_target_mak
+ fi
+ 
+-# the static way of configuring available audio cards requires this workaround
+-if test "$target_user_only" != "yes" && grep -q CONFIG_PCSPK $source_path/default-configs/$target.mak; then
+-  echo "CONFIG_PCSPK=y" >> $config_target_mak
+-fi
+-
+ # generate QEMU_CFLAGS/LDFLAGS for targets
+ 
+ cflags=""
+-- 
+1.8.1.4
+
+
+

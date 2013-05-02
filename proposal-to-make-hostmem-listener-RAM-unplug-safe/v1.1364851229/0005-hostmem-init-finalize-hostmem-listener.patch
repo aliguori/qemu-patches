@@ -1,0 +1,43 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Liu Ping Fan <qemulist@gmail.com>
+To: Liu Ping Fan <qemulist@gmail.com>, liu ping fan <qemulist@gmail.com>,
+ qemu-devel@nongnu.org, Paolo Bonzini <pbonzini@redhat.com>
+Cc: Anthony Liguori <aliguori@us.ibm.com>, Paolo Bonzini <pbonzini@redhat.com>,
+ Stefan Hajnoczi <stefanha@gmail.com>, qemu-devel@nongnu.org,
+ Marcelo Tosatti <mtosatti@redhat.com>,
+ Peter Maydell <peter.maydell@linaro.org>, Jan Kiszka <jan.kiszka@siemens.com>,
+ Vasilis Liaskovitis <vasilis.liaskovitis@profitbricks.com>
+Date: Mon, 1 Apr 2013 16:20:34 +0800
+Message-id: 1364804434-7980-6-git-send-email-qemulist@gmail.com
+Subject: [PATCH 5/5] hostmem: init/finalize hostmem listener
+
+From: Liu Ping Fan <pingfank@linux.vnet.ibm.com>
+
+Signed-off-by: Liu Ping Fan <pingfank@linux.vnet.ibm.com>
+---
+ vl.c |    2 ++
+ 1 files changed, 2 insertions(+), 0 deletions(-)
+
+diff --git a/vl.c b/vl.c
+index 7643f16..46a25cf 100644
+--- a/vl.c
++++ b/vl.c
+@@ -4157,6 +4157,7 @@ int main(int argc, char **argv, char **envp)
+     }
+ 
+     os_set_line_buffering();
++    hostmem_init();
+ 
+     qemu_init_cpu_loop();
+     qemu_mutex_lock_iothread();
+@@ -4174,6 +4175,7 @@ int main(int argc, char **argv, char **envp)
+ 
+     /* clean up network at qemu process termination */
+     atexit(&net_cleanup);
++    atexit(&hostmem_finalize);
+ 
+     if (net_init_clients() < 0) {
+         exit(1);
+-- 
+1.7.4.4
+

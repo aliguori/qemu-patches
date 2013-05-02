@@ -1,0 +1,180 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Wenchao Xia <xiawenc@linux.vnet.ibm.com>
+To: qemu-devel@nongnu.org
+Cc: kwolf@redhat.com, phrdina@redhat.com,
+ Wenchao Xia <xiawenc@linux.vnet.ibm.com>, stefanha@gmail.com,
+ armbru@redhat.com, lcapitulino@redhat.com, pbonzini@redhat.com
+Date: Fri, 26 Apr 2013 17:31:10 +0800
+Message-id: 1366968675-1451-3-git-send-email-xiawenc@linux.vnet.ibm.com
+Subject: [PATCH 2/7] block: move bdrv_snapshot_find() to block/snapshot.c
+
+This patch adds block/snapshot.c and then moves the function there.
+It also fixes small code style errors reported by check script.
+
+Signed-off-by: Wenchao Xia <xiawenc@linux.vnet.ibm.com>
+Reviewed-by: Eric Blake <eblake@redhat.com>
+Reviewed-by: Kevin Wolf <kwolf@redhat.com>
+---
+ block/Makefile.objs      |    1 +
+ block/snapshot.c         |   48 ++++++++++++++++++++++++++++++++++++++++++++++
+ include/block/snapshot.h |   37 +++++++++++++++++++++++++++++++++++
+ savevm.c                 |   23 +---------------------
+ 4 files changed, 87 insertions(+), 22 deletions(-)
+ create mode 100644 block/snapshot.c
+ create mode 100644 include/block/snapshot.h
+
+diff --git a/block/Makefile.objs b/block/Makefile.objs
+index 6c4b5bc..df55061 100644
+--- a/block/Makefile.objs
++++ b/block/Makefile.objs
+@@ -3,6 +3,7 @@ block-obj-y += qcow2.o qcow2-refcount.o qcow2-cluster.o qcow2-snapshot.o qcow2-c
+ block-obj-y += qed.o qed-gencb.o qed-l2-cache.o qed-table.o qed-cluster.o
+ block-obj-y += qed-check.o
+ block-obj-y += parallels.o blkdebug.o blkverify.o
++block-obj-y += snapshot.o
+ block-obj-$(CONFIG_WIN32) += raw-win32.o win32-aio.o
+ block-obj-$(CONFIG_POSIX) += raw-posix.o
+ block-obj-$(CONFIG_LINUX_AIO) += linux-aio.o
+diff --git a/block/snapshot.c b/block/snapshot.c
+new file mode 100644
+index 0000000..c47a899
+--- /dev/null
++++ b/block/snapshot.c
+@@ -0,0 +1,48 @@
++/*
++ * Block layer snapshot related functions
++ *
++ * Copyright (c) 2003-2008 Fabrice Bellard
++ *
++ * Permission is hereby granted, free of charge, to any person obtaining a copy
++ * of this software and associated documentation files (the "Software"), to deal
++ * in the Software without restriction, including without limitation the rights
++ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
++ * copies of the Software, and to permit persons to whom the Software is
++ * furnished to do so, subject to the following conditions:
++ *
++ * The above copyright notice and this permission notice shall be included in
++ * all copies or substantial portions of the Software.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
++ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
++ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
++ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
++ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
++ * THE SOFTWARE.
++ */
++
++#include "block/snapshot.h"
++
++int bdrv_snapshot_find(BlockDriverState *bs, QEMUSnapshotInfo *sn_info,
++                       const char *name)
++{
++    QEMUSnapshotInfo *sn_tab, *sn;
++    int nb_sns, i, ret;
++
++    ret = -ENOENT;
++    nb_sns = bdrv_snapshot_list(bs, &sn_tab);
++    if (nb_sns < 0) {
++        return ret;
++    }
++    for (i = 0; i < nb_sns; i++) {
++        sn = &sn_tab[i];
++        if (!strcmp(sn->id_str, name) || !strcmp(sn->name, name)) {
++            *sn_info = *sn;
++            ret = 0;
++            break;
++        }
++    }
++    g_free(sn_tab);
++    return ret;
++}
+diff --git a/include/block/snapshot.h b/include/block/snapshot.h
+new file mode 100644
+index 0000000..4ad070c
+--- /dev/null
++++ b/include/block/snapshot.h
+@@ -0,0 +1,37 @@
++/*
++ * Block layer snapshot related functions
++ *
++ * Copyright (c) 2003-2008 Fabrice Bellard
++ *
++ * Permission is hereby granted, free of charge, to any person obtaining a copy
++ * of this software and associated documentation files (the "Software"), to deal
++ * in the Software without restriction, including without limitation the rights
++ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
++ * copies of the Software, and to permit persons to whom the Software is
++ * furnished to do so, subject to the following conditions:
++ *
++ * The above copyright notice and this permission notice shall be included in
++ * all copies or substantial portions of the Software.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
++ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
++ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
++ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
++ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
++ * THE SOFTWARE.
++ */
++
++#ifndef SNAPSHOT_H
++#define SNAPSHOT_H
++
++#include "qemu-common.h"
++/*
++ * block.h is needed for QEMUSnapshotInfo, it can be removed when define is
++ * moved here.
++ */
++#include "block.h"
++
++int bdrv_snapshot_find(BlockDriverState *bs, QEMUSnapshotInfo *sn_info,
++                       const char *name);
++#endif
+diff --git a/savevm.c b/savevm.c
+index baa1a09..ab53a02 100644
+--- a/savevm.c
++++ b/savevm.c
+@@ -40,6 +40,7 @@
+ #include "trace.h"
+ #include "qemu/bitops.h"
+ #include "qemu/iov.h"
++#include "block/snapshot.h"
+ 
+ #define SELF_ANNOUNCE_ROUNDS 5
+ 
+@@ -2273,28 +2274,6 @@ static BlockDriverState *find_vmstate_bs(void)
+     return NULL;
+ }
+ 
+-static int bdrv_snapshot_find(BlockDriverState *bs, QEMUSnapshotInfo *sn_info,
+-                              const char *name)
+-{
+-    QEMUSnapshotInfo *sn_tab, *sn;
+-    int nb_sns, i, ret;
+-
+-    ret = -ENOENT;
+-    nb_sns = bdrv_snapshot_list(bs, &sn_tab);
+-    if (nb_sns < 0)
+-        return ret;
+-    for(i = 0; i < nb_sns; i++) {
+-        sn = &sn_tab[i];
+-        if (!strcmp(sn->id_str, name) || !strcmp(sn->name, name)) {
+-            *sn_info = *sn;
+-            ret = 0;
+-            break;
+-        }
+-    }
+-    g_free(sn_tab);
+-    return ret;
+-}
+-
+ /*
+  * Deletes snapshots of a given name in all opened images.
+  */
+-- 
+1.7.1
+
+
+

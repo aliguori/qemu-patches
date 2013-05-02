@@ -1,0 +1,536 @@
+From patches Mon Sep 17 00:00:00 2001
+From: =?utf-8?q?Llu=C3=ADs_Vilanova_=3Cvilanova=40ac=2Eupc=2Eedu=3E?=
+To: qemu-devel@nongnu.org
+Cc: 
+Date: Tue, 16 Apr 2013 15:49:56 +0200
+Message-id: 20130416134956.21588.17922.stgit@fimbulvetr.bsc.es
+Subject: [PATCH 01/23] instrument: Add documentation
+
+Signed-off-by: Lluís Vilanova <vilanova@ac.upc.edu>
+---
+ docs/instrumentation.txt |  496 ++++++++++++++++++++++++++++++++++++++++++++++
+ docs/tracing.txt         |    9 +
+ 2 files changed, 505 insertions(+)
+ create mode 100644 docs/instrumentation.txt
+
+diff --git a/docs/instrumentation.txt b/docs/instrumentation.txt
+new file mode 100644
+index 0000000..8b33d76
+--- /dev/null
++++ b/docs/instrumentation.txt
+@@ -0,0 +1,496 @@
++= Trace instrumentation =
++
++== Introduction ==
++
++This document describes how the events provided by the tracing infrastructure
++(described in the document "tracing.txt") can be extended with user-provided
++code.
++
++Instrumentation comes in two (three) flavours; dynamic and static (and none at
++all). Both provide means for you to associate code to specific tracing events
++that have the "instrument" property in the "trace-events" file.
++
++As opposed to using tracing backends that can dynamically load user-defined code
++into the tracing events (e.g., "dtrace"), trace instrumentation provides a
++well-defined API for the user-provided code to interact with QEMU.
++
++In the case of dynamic instrumentation, you can load and unload a shared object
++(a dynamic library) to establish your instrumentation callbacks. This mechanism
++provides a trade-off between performance and the simplicity of reusing the same
++QEMU binary for different instrumentation scenarios.
++
++In the case of static instrumentation, you must provide a static library that is
++compiled directly into QEMU. This mechanism can provide better performance, at
++the expense of having to recompile QEMU for each different instrumentation
++scenario.
++
++
++
++== Selecting the events to instrument ==
++
++You must declare which events to instrument before compiling QEMU.
++
++This can be done by adding the "instrument" property (and removing the "disable"
++property, if any) in the events listed in the "trace-events" file.
++
++In order to avoid modifying the QEMU sources, you can simply create a new
++trace-events file with your modifications:
++
++    cp /path/to/qemu-source/trace-events /tmp/trace-events
++    sed -i -e "s/qemu_vmalloc(/instrument qemu_vmalloc(/g" /tmp/trace-events
++
++Note: You must remove the "disable" property (if any) if you want to add the
++"instrument" property of an event, as these are mutually exclusive.
++
++
++== Pre-defined instrumentation callbacks ==
++
++If you are using dynamic auto-instrumentation (see 'QI_CTRL_INSTR_AUTO' below)
++or static instrumentation, your callbacks must follow a specific naming scheme:
++'qi_event_${event}'.
++
++Two other default callbacks are provided by QEMU:
++
++* 'qi_event_${event}_nop'
++
++  Does nothing.
++
++  This is the default callback for all instrumentable events when using dynamic
++  instrumentation.
++
++* 'qi_event_${event}_trace'
++
++  Call QEMU's tracing backend. That is, trace the event using whatever tracing
++  backend QEMU has been configured with.
++
++  See document "tracing.txt" to learn more about tracing events with QEMU (e.g.,
++  write events into a file or print them on the screen).
++
++All these callbacks are declared in the "qemu-instr/events.h" header.
++
++
++== Dynamic instrumentation ==
++
++Dynamic instrumentation is based on dynamically loadable libraries that can be
++loaded and unloaded from QEMU at any point in time. This also includes an API to
++dynamically set the per-event tracing instrumentation callback at any point in
++time.
++
++Being able to load and unload an instrumentation library provides a comfortable
++mechanism to test multiple instrumentation approaches without having to
++recompile or restart QEMU between instrumentation tests.
++
++Note: By default, events are set to use the 'qi_event_${event}_nop' callback.
++
++
++=== Example ===
++
++1. Select the events to instrument in file "trace-events" (see above).
++
++2. Build QEMU with dynamic trace intrumentation:
++
++    mkdir -p /tmp/qemu-build
++    cd /tmp/qemu-build
++    /path/to/qemu-source/configure              \
++        --with-trace-events=/tmp/trace-events   \
++        --with-trace-instrument=dynamic         \
++        --enable-trace-backend=stderr           \
++        --prefix=/tmp/qemu-install
++    make
++    make install
++
++3. Create the "Makefile" to build the instrumentation library:
++
++    mkdir -p /tmp/my-dinstrument
++    
++    cat > /tmp/my-dinstrument/Makefile <<EOF
++    QEMU_PATH=/tmp/qemu-install/
++    
++    CFLAGS += -O3
++    CFLAGS += -Werror -Wall
++    CFLAGS += -I$(QEMU_PATH)/include
++    
++    all: libtrace-instrument.la
++    
++    libtrace-instrument.la: instrument.lo
++            libtool --mode=link --tag=CC $(CC) -module -rpath /usr/local/lib -o $@ $^
++    
++    %.lo: %.c
++            libtool --mode=compile --tag=CC $(CC) $(CFLAGS) -c $^
++    
++    clean:
++            $(RM) -f *.o *.so *.lo
++            $(RM) -Rf .libs
++    EOF
++
++4. Create the necessary source code files to implement your event instrumentation:
++
++    cat > /tmp/my-dinstrument/instrument.c <<EOF
++    #include <stdio.h>
++    #include <assert.h>
++    
++    /* get event declarations */
++    #include <qemu-instr/events.h>
++    
++    /* enumerate events and manipulate their instrumentation callbacks */
++    #include <qemu-instr/control.h>
++    
++    /* manipulate the dynamic tracing state of events */
++    #include <qemu-instr/trace.h>
++    
++    /* define instrumentation callbacks during event execution:
++     * qi_event_${event}
++     */
++    
++    /* called every time QEMU traces event 'qemu_vmalloc' */
++    void qi_event_qemu_vmalloc(size_t size, void *ptr)
++    {
++        fprintf(stderr, "qemu_vmalloc! [instrument]\n");
++    
++        /* call the original tracing routine */
++        qi_event_qemu_vmalloc_trace(size, ptr);
++    
++        /* disable instrumentation and tracing after 10 calls */
++        static int c = 0;
++        if (c++ > 10) {
++            QIEvent *ev = qi_ctrl_event_id(QI_EVENT_QEMU_VMALLOC);
++            qi_ctrl_event_set(ev, QI_CTRL_INSTR_NOP);
++            qi_trace_event_set_state_dynamic(ev, false);
++        }
++    }
++    
++    
++    
++    /* mandatory initialization callback */
++    void qi_init(int argc, const char *argv)
++    {
++        int i;
++        fprintf(stderr, "init!\n");
++        fprintf(stderr, "    argc :: %d\n", argc);
++        for (i = 0; i < argc; i++) {
++            fprintf(stderr, "            -> %s\n", argv[i]);
++        }
++    
++        /* iterate on all trace events */
++        QIEvent *ev = NULL;
++        while ((ev = qi_ctrl_event_pattern("*", ev)) != NULL) {
++
++            /* auto-instrument all events instrumentable at execution time */
++            if (qi_ctrl_event_is_available(ev)) {
++    
++                printf("[exec] instrumenting '%s'\n",
++                       qi_ctrl_event_get_name(ev));
++    
++                /* auto-detect instrumentation routines */
++                bool instrumented = qi_ctrl_event_set(ev, QI_CTRL_INSTR_AUTO);
++                assert(instrumented);
++    
++                /* activate tracing for that event
++                 * (otherwise qi_event_${event}_trace does nothing when using
++                 * the 'stderr' backend)
++                 */
++                qi_trace_event_set_state_dynamic(ev, true);
++            }
++        }
++    }
++    
++    /* mandatory finalization callback */
++    void qi_fini(void)
++    {
++        fprintf(stderr, "fini!\n");
++    
++        /* ensure all tracing is disabled */
++        QIEvent *ev = NULL;
++        while ((ev = qi_ctrl_event_pattern("*", ev)) != NULL) {
++            qi_trace_event_set_state_dynamic(ev, false);
++        }
++    
++        /* instrumentation callbacks are automatically reset by QEMU */
++    }
++    EOF
++
++5. Compile the instrumentation library:
++
++    make -C /tmp/my-dinstrument
++
++6. Start QEMU with the instrumentation library:
++
++    /tmp/qemu-install/bin/qemu-system-x86_64 \
++        -instr file=/tmp/my-dinstrument/.libs/libtrace-instrument.so
++
++
++Alternatively, you can explicitly set which events and with which callback you
++want to instrument them:
++
++    /* ... */
++    void qi_init(int argc, const char *argv)
++    {
++        int i;
++        fprintf(stderr, "init!\n");
++        fprintf(stderr, "    argc :: %d\n", argc);
++        for (i = 0; i < argc; i++) {
++            fprintf(stderr, "            -> %s\n", argv[i]);
++        }
++    
++        QIEvent *ev;
++        bool instrumented;
++    
++        /* NOTE: the callbacks can be pointers to arbitrary routines;
++         *       there's no need to follow the 'qi_event_${event}' naming
++         *       scheme if you're not using QI_CTRL_INSTR_AUTO.
++         */
++    
++        ev = qi_ctrl_event_id(QI_EVENT_QEMU_VMALLOC);
++        assert(ev);
++        printf("[exec] instrumenting '%s'\n",
++               qi_ctrl_event_get_name(ev));
++        instrumented = qi_ctrl_event_set(ev, execute_qemu_vmalloc);
++        assert(instrumented);
++        qi_trace_event_set_state_dynamic(ev, true);
++    }
++    /* ... */
++
++
++
++== Static instrumentation ==
++
++Static instrumentation relies on you providing a directory that QEMU will
++compile on to produce a static library. The instrumentation library is compiled
++during the compilation of QEMU's target-dependant code, and the directory you
++provided will be present on the include path. This static library will then be
++linked into QEMU itself.
++
++This mechanism allows you to inline your own instrumentation code into the QEMU
++tracing routines. This requires the (partial) recompilation of QEMU whenever the
++instrumentation analysis code changes, and is thus intended for
++performance-critical event instrumentation analysis.
++
++For this reason, you can prototype your analysis using dynamic instrumentation
++before moving to static instrumentation.
++
++
++=== Example ===
++
++1. Select the events to instrument in file "trace-events" (see above).
++
++2. Create the "Makefile" to build the instrumentation library:
++
++    mkdir -p /tmp/my-sinstrument
++    
++    cat > /tmp/my-sinstrument/Makefile <<EOF
++    include $(BUILD_DIR)/config-host.mak
++    include $(BUILD_DIR)/$(TARGET_DIR)../config-target.mak
++    include $(SRC_PATH)/rules.mak
++    
++    vpath %.c /tmp/my-sinstrument
++    
++    libtrace-instrument.a: CFLAGS += -I$(SRC_PATH)/instrument
++    libtrace-instrument.a: CFLAGS += -I$(BUILD_DIR)/instrument
++    libtrace-instrument.a: instrument.o
++    
++    # Include automatically generated dependency files
++    -include $(wildcard *.d)
++    EOF
++
++3. Create the necessary source code files to implement the event instrumentation.
++
++   The same code on the dynamic instrumentation example can be used, eliminating
++   calls to 'qi_ctrl_event_set'.
++
++   See below for a description on how to reuse the same code to work with both
++   instrumentation types.
++
++4. Build QEMU with static trace intrumentation:
++
++    mkdir -p /tmp/qemu-build
++    cd /tmp/qemu-build
++    /path/to/qemu-source/configure                        \
++        --with-trace-events=/tmp/trace-events             \
++        --with-trace-instrument=static                    \
++        --with-trace-instrument-path=/tmp/my-sinstrument  \
++        --enable-trace-backend=stderr                     \
++        --prefix=/tmp/qemu-install
++    make
++    make install
++
++
++=== Performance optimizations ===
++
++You can create a few header files in the user-provided instrumentation path
++('--with-trace-instrument-path') to further optimize static instrumentation:
++
++* "events-pre.h"
++
++  Included before the code of the in-QEMU and tracing backend-specific header
++  ("trace.h").
++
++  This header can contain per-event defines to allow the user to provide an
++  inlined version of the instrumentation routine (see "events-post.h"):
++
++    #define QI_EVENT_${EVENT}_INLINE 1
++
++  Example:
++
++    #ifndef EVENTS_PRE_H
++    #define EVENTS_PRE_H
++    
++    #define QI_EVENT_QEMU_VMALLOC_INLINE 1
++    
++    #endif /* EVENTS_PRE_H */
++
++* "events-post.h"
++
++  Included after the code of the in-QEMU and tracing backend-specific header
++  ("trace.h").
++
++  This header can contain arbitrary user-provided code that will be inlined into
++  all QEMU files using tracing events. This includes inlined versions of the
++  instrumentation routines.
++
++  For example, inlining the fast-path of the instrumentation code:
++
++    #ifndef EVENTS_POST_H
++    #define EVENTS_POST_H
++    
++    #include <qemu-instr/events.h>
++
++    // file residing in "/tmp/my-sinstrument/my-header.h",
++    // which declares 'my_trace_qemu_vmalloc_slow'
++    #include "my-header.h"
++
++
++    // requires "#define QI_EVENT_QEMU_VMALLOC_INLINE 1" in "events-pre.h"
++    static inline void qi_event_qemu_vmalloc(size_t size, void *ptr)
++    {
++        if (/* ... performance-critical condition ... */) {
++            /* ... performance-critical code ... */
++        } else {
++            my_trace_qemu_vmalloc_slow(size, ptr);
++        }
++    }
++    
++    #endif /* EVENTS_POST_H */
++
++Note: All these headers are completely optional, and will only be used if they
++exist at compile time.
++
++
++
++== Loading and unloading instrumentation libraries ==
++
++QEMU starts with all instrumentation callbacks set to their default value, which
++corresponds to a call to 'qi_event_${event}_nop'.
++
++To load a dynamic instrumentation library, the user can either use the "-instr"
++command line argument, or the "instr-load" command available in the QEMU
++monitor, QAPI and QMP.
++
++Once loaded, QEMU will call the 'qi_init' routine in the instrumentation library.
++
++To unload a dynamic instrumentation library, the user can use the "instr-unload"
++command.
++
++When unloading, QEMU will call the 'qi_fini' routine in the instrumentation
++library, and immediately after restore all the instrumentation callbacks to
++their default value.
++
++In the case of static instrumentation, the commands "instr-load" and
++"instr-unload" are not available, and thus the instrumentation library is
++already loaded when QEMU starts, and is unloaded when QEMU exits.
++
++
++
++== Instrumentation API ==
++
++Both dynamic and static trace instrumentation libraries can interact with QEMU
++using the API provided in the headers found under the "qemu-instr" directory
++(installed alongside QEMU).
++
++
++=== Event enumeration ===
++
++Events can be obtained either by identifier or by name. Identifiers are values
++of the enumeration 'QIEventID' and follow the naming scheme 'QI_EVENT_${EVENT}'
++(e.g., 'QI_EVENT_QEMU_VMALLOC' for the "qemu_vmalloc" event).
++
++Identifiers, together with defines indicating if an event is enabled at
++compile-time ('QI_EVENT_${EVENT}_ENABLED') are located in the
++"qemu-instr/events-list.h" header.
++
++The interface to obtain and enumerate these events is located in the
++"qemu-instr/control.h" header.
++
++
++=== Event tracing ===
++
++You can interact with the state of QEMU's event tracing backend (see document
++"tracing.txt") through the API in the "qemu-instr/trace.h" header.
++
++
++=== Event instrumentation ===
++
++You can control the instrumentation callbacks of events through the API in the
++"qemu-instr/control.h" header.
++
++
++=== Instrumentation type discrimination ===
++
++The same source code for an instrumentation library can result in different code
++depending on the current instrumentation type (either dynamic or static):
++
++* "qemu-instr/config.h"
++
++  The define QI_TYPE_STATIC (QI_TYPE_DYNAMIC) will be available and set to 1 if
++  QEMU has been compiled with static (dynamic) instrumentation.
++
++* "qemu-instr/control.h"
++
++  Routine 'qi_ctrl_dynamic' can be used to discriminate if dynamic
++  instrumentation is available.
++
++  Similarly, routine 'qi_ctrl_event_is_available' indicates whether the given
++  event is available for instrumentation (both static and dynamic).
++
++With this, you can ensure the same code will work under both instrumentation
++types.
++
++Example initialization:
++
++    #if defined(QI_TYPE_DYNAMIC)
++    #include "events-post.h"
++    #endif
++    
++    void qi_init(int argc, const char *argv)
++    {
++        int i;
++        fprintf(stderr, "init!\n");
++        fprintf(stderr, "    argc :: %d\n", argc);
++        for (i = 0; i < argc; i++) {
++            fprintf(stderr, "            -> %s\n", argv[i]);
++        }
++    
++        QIEvent *ev = NULL;
++        while ((ev = qi_ctrl_event_pattern("*", ev)) != NULL) {
++
++            if (qi_ctrl_event_is_available(ev)) {
++
++                /* changing the callback will fail during static instrumentation */
++                if (qi_ctrl_dynamic()) {
++                    bool instrumented = qi_ctrl_event_set(ev, QI_CTRL_INSTR_AUTO);
++                    assert(instrumented);
++                }
++
++                qi_trace_event_set_state_dynamic(ev, true);
++            }
++        }
++    }
++
++Example "events-post.h":
++
++    #if defined(QI_TYPE_STATIC)
++    static inline
++    #endif
++    void qi_event_qemu_vmalloc(size_t size, void *ptr)
++    {
++        /* ... */
++    }
+diff --git a/docs/tracing.txt b/docs/tracing.txt
+index cf53c17..d33717b 100644
+--- a/docs/tracing.txt
++++ b/docs/tracing.txt
+@@ -255,3 +255,12 @@ guard such computations and avoid its compilation when the event is disabled:
+ You can check both if the event has been disabled and is dynamically enabled at
+ the same time using the 'trace_event_get_state' routine (see header
+ "trace/control.h" for more information).
++
++=== "instrument" ===
++
++When compiling QEMU with trace instrumentation enabled, the "instrument"
++property lets you provide your own implementation for that trace event. This
++implementation can override and/or wrap the backend-specific tracing code
++(regardless of the tracing backend).
++
++See the document "instrumentation.txt" for more information.
+
+

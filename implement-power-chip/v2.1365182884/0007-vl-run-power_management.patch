@@ -1,0 +1,34 @@
+From patches Mon Sep 17 00:00:00 2001
+From: liguang <lig.fnst@cn.fujitsu.com>
+To: Anthony Liguori <aliguori@us.ibm.com>, peter.maydell@linaro.org,
+ stefanha@gmail.com, qemu-devel@nongnu.org, pbonzini@redhat.com,
+ afaerber@suse.de
+Cc: liguang <lig.fnst@cn.fujitsu.com>
+Date: Fri, 5 Apr 2013 12:28:11 +0800
+Message-id: 1365136091-26148-8-git-send-email-lig.fnst@cn.fujitsu.com
+Subject: [PATCH 7/7] vl: run power_management
+
+run power_management temporarily,
+later, if this approach is accepted,
+will try to replace main_loop_should_exit()
+
+Signed-off-by: liguang <lig.fnst@cn.fujitsu.com>
+---
+ vl.c |    1 +
+ 1 files changed, 1 insertions(+), 0 deletions(-)
+
+diff --git a/vl.c b/vl.c
+index a14549e..731158a 100644
+--- a/vl.c
++++ b/vl.c
+@@ -2041,6 +2041,7 @@ static void main_loop(void)
+ #ifdef CONFIG_PROFILER
+         dev_time += profile_getclock() - ti;
+ #endif
++        power_management();
+     } while (!main_loop_should_exit());
+ }
+ 
+-- 
+1.7.2.5
+

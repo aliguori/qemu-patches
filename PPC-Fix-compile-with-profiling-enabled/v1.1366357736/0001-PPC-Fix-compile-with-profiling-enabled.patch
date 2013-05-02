@@ -1,0 +1,37 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Alexander Graf <agraf@suse.de>
+To: qemu-ppc@nongnu.org
+Cc: qemu-devel@nongnu.org
+Date: Fri, 19 Apr 2013 02:48:56 +0200
+Message-id: 1366332536-8712-1-git-send-email-agraf@suse.de
+Subject: [PATCH 1/1] PPC: Fix compile with profiling enabled
+
+When using profiling, we rely on profile_getclock() being available
+at our disposal. Somehow that function got moved from an indirect
+include we used to have in translate-init.c, so that we were now
+left not properly compiling anymore.
+
+Add an explicit include to timer.h which defines profile_getclock,
+so that we can compile again.
+
+Signed-off-by: Alexander Graf <agraf@suse.de>
+---
+ translate-all.c |    1 +
+ 1 files changed, 1 insertions(+), 0 deletions(-)
+
+diff --git a/translate-all.c b/translate-all.c
+index 08dd038..a18bf55 100644
+--- a/translate-all.c
++++ b/translate-all.c
+@@ -55,6 +55,7 @@
+ #else
+ #include "exec/address-spaces.h"
+ #endif
++#include "qemu/timer.h"
+ 
+ #include "exec/cputlb.h"
+ #include "translate-all.h"
+-- 
+1.6.0.2
+
+

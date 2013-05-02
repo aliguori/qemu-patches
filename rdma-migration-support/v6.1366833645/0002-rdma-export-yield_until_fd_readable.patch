@@ -1,0 +1,113 @@
+From patches Mon Sep 17 00:00:00 2001
+From: mrhines@linux.vnet.ibm.com
+To: quintela@redhat.com
+Cc: Anthony Liguori <aliguori@us.ibm.com>, qemu-devel@nongnu.org,
+ Michael R Hines <mrhines@us.ibm.com>, Bulent Abali <abali@us.ibm.com>,
+ owasserm@redhat.com, pbonzini@redhat.com, Gokul B Kandiraju <gokul@us.ibm.com>,
+ eblake@redhat.com
+Date: Wed, 24 Apr 2013 15:00:47 -0400
+Message-id: 1366830057-16964-3-git-send-email-mrhines@linux.vnet.ibm.com
+Subject: [PATCH 02/11] rdma: export yield_until_fd_readable()
+
+From: "Michael R. Hines" <mrhines@us.ibm.com>
+
+The RDMA event channel can be made non-blocking just like a TCP
+socket. Exporting this function allows us to yield so that the
+QEMU monitor remains available.
+
+Signed-off-by: Michael R. Hines <mrhines@us.ibm.com>
+---
+ include/block/coroutine.h |    6 +
+ qemu-coroutine-io.c       |   23 +
+ savevm.c                  |   28 -
+ 4 files changed, 29 insertions(+), 28 deletions(-)
+ create mode 100644 migration-rdma.c
+
+diff --git a/include/block/coroutine.h b/include/block/coroutine.h
+index a978162..377805a 100644
+--- a/include/block/coroutine.h
++++ b/include/block/coroutine.h
+@@ -209,4 +209,10 @@ void qemu_co_rwlock_unlock(CoRwlock *lock);
+  */
+ void coroutine_fn co_sleep_ns(QEMUClock *clock, int64_t ns);
+ 
++/**
++ * Yield until a file descriptor becomes readable
++ *
++ * Note that this function clobbers the handlers for the file descriptor.
++ */
++void coroutine_fn yield_until_fd_readable(int fd);
+ #endif /* QEMU_COROUTINE_H */
+diff --git a/qemu-coroutine-io.c b/qemu-coroutine-io.c
+index e8ad1a4..c4df35a 100644
+--- a/qemu-coroutine-io.c
++++ b/qemu-coroutine-io.c
+@@ -63,3 +63,26 @@ qemu_co_send_recv(int sockfd, void *buf, size_t bytes, bool do_send)
+     struct iovec iov = { .iov_base = buf, .iov_len = bytes };
+     return qemu_co_sendv_recvv(sockfd, &iov, 1, 0, bytes, do_send);
+ }
++
++typedef struct {
++    Coroutine *co;
++    int fd;
++} FDYieldUntilData;
++
++static void fd_coroutine_enter(void *opaque)
++{
++    FDYieldUntilData *data = opaque;
++    qemu_set_fd_handler(data->fd, NULL, NULL, NULL);
++    qemu_coroutine_enter(data->co, NULL);
++}
++
++void coroutine_fn yield_until_fd_readable(int fd)
++{
++    FDYieldUntilData data;
++
++    assert(qemu_in_coroutine());
++    data.co = qemu_coroutine_self();
++    data.fd = fd;
++    qemu_set_fd_handler(fd, fd_coroutine_enter, NULL, &data);
++    qemu_coroutine_yield();
++}
+diff --git a/savevm.c b/savevm.c
+index 31dcce9..4dbfa16 100644
+--- a/savevm.c
++++ b/savevm.c
+@@ -147,34 +147,6 @@ typedef struct QEMUFileSocket
+     QEMUFile *file;
+ } QEMUFileSocket;
+ 
+-typedef struct {
+-    Coroutine *co;
+-    int fd;
+-} FDYieldUntilData;
+-
+-static void fd_coroutine_enter(void *opaque)
+-{
+-    FDYieldUntilData *data = opaque;
+-    qemu_set_fd_handler(data->fd, NULL, NULL, NULL);
+-    qemu_coroutine_enter(data->co, NULL);
+-}
+-
+-/**
+- * Yield until a file descriptor becomes readable
+- *
+- * Note that this function clobbers the handlers for the file descriptor.
+- */
+-static void coroutine_fn yield_until_fd_readable(int fd)
+-{
+-    FDYieldUntilData data;
+-
+-    assert(qemu_in_coroutine());
+-    data.co = qemu_coroutine_self();
+-    data.fd = fd;
+-    qemu_set_fd_handler(fd, fd_coroutine_enter, NULL, &data);
+-    qemu_coroutine_yield();
+-}
+-
+ static ssize_t socket_writev_buffer(void *opaque, struct iovec *iov, int iovcnt,
+                                     int64_t pos)
+ {
+-- 
+1.7.10.4
+

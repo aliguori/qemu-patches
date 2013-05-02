@@ -1,0 +1,68 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Liu Ping Fan <qemulist@gmail.com>
+To: liu ping fan <qemulist@gmail.com>, qemu-devel@nongnu.org
+Cc: Paolo Bonzini <pbonzini@redhat.com>, gleb@redhat.com,
+ Anthony Liguori <anthony@codemonkey.ws>, Stefan Hajnoczi <stefanha@gmail.com>,
+ "qemu-devel@nongnu.org" <qemu-devel@nongnu.org>, Avi Kivity <avi@redhat.com>,
+ Marcelo Tosatti <mtosatti@redhat.com>,
+ Peter Maydell <peter.maydell@linaro.org>, Jan Kiszka <jan.kiszka@siemens.com>,
+ "gleb@redhat.com" <gleb@redhat.com>
+Date: Sun, 25 Nov 2012 10:02:57 +0800
+Message-id: 1353808984-22368-1-git-send-email-qemulist@gmail.com
+Subject: [PATCH 0/7] push mmio dispatch out of big lock
+
+From: Liu Ping Fan <pingfank@linux.vnet.ibm.com>
+
+v1:
+https://lists.gnu.org/archive/html/qemu-devel/2012-07/msg03312.html
+
+v2:
+http://lists.gnu.org/archive/html/qemu-devel/2012-08/msg01275.html
+
+v3:
+http://lists.nongnu.org/archive/html/qemu-devel/2012-09/msg01474.html
+
+v4:
+http://lists.gnu.org/archive/html/qemu-devel/2012-10/msg03857.html
+
+v5:
+https://lists.gnu.org/archive/html/qemu-devel/2012-10/msg04867.html
+
+v6:
+http://lists.gnu.org/archive/html/qemu-devel/2012-11/msg00542.html
+--
+changes v5->v6:
+ Apply fine-grain lock for all address space.
+ Introduce separated interface to allow mmio dispatcher called with/without big lock.
+
+changes v6->v7:
+ drop wrapper of gcc atomic builtin
+  
+
+Liu Ping Fan (7):
+  qom: apply atomic on object's refcount
+  hotplug: introduce qdev_unplug_complete() to remove device from views
+  pci: remove pci device from mem view when unplug
+  memory: introduce local lock for address space
+  memory: make mmio dispatch able to be out of biglock
+  memory: introduce tls context to trace nested mmio request issue
+  vcpu: push mmio dispatcher out of big lock
+
+ cpu-common.h      |    3 +
+ docs/memory.txt   |    4 +
+ exec.c            |  206 ++++++++++++++++++++++++++++++++++++++++++++++++-----
+ hw/acpi_piix4.c   |    2 +-
+ hw/pci.c          |   13 +++-
+ hw/pci.h          |    1 +
+ hw/qdev.c         |   26 +++++++
+ hw/qdev.h         |    3 +-
+ kvm-all.c         |    4 +-
+ memory-internal.h |    1 +
+ memory.c          |    1 +
+ memory.h          |    5 ++
+ qom/object.c      |    5 +-
+ 13 files changed, 250 insertions(+), 24 deletions(-)
+
+-- 
+1.7.4.4
+

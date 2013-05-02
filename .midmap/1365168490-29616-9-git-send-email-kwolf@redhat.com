@@ -1,0 +1,1 @@
+../Block-patches/v1.1365193682/0008-qcow2-Fix-L1-write-error-handling-in-qcow2_update_snapshot_refcount.patch

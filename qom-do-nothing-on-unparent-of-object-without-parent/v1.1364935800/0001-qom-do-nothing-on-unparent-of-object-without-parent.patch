@@ -1,0 +1,36 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: Paolo Bonzini <pbonzini@redhat.com>, qemu-devel@nongnu.org
+Cc: afaerber@suse.de, qemu-devel@nongnu.org
+Date: Tue,  2 Apr 2013 15:50:00 +0200
+Message-id: 1364910600-3418-1-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 1/1] qom: do nothing on unparent of object without parent
+
+Otherwise, device_unparent will fail to get a canonical path of
+the object.
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+Reviewed-by: Andreas Färber <afaerber@suse.de>
+---
+ qom/object.c | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/qom/object.c b/qom/object.c
+index 8818149..093502e 100644
+--- a/qom/object.c
++++ b/qom/object.c
+@@ -362,6 +362,10 @@ static void object_property_del_child(Object *obj, Object *child, Error **errp)
+ 
+ void object_unparent(Object *obj)
+ {
++    if (!obj->parent) {
++        return;
++    }
++
+     object_ref(obj);
+     if (obj->class->unparent) {
+         (obj->class->unparent)(obj);
+-- 
+1.8.1.4
+
+

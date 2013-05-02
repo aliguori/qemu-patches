@@ -1,0 +1,1 @@
+../S390-Enhance-s390-BIOS-to-enable-bootdevice-selection/v1.1367003567/0008-s390-ccwimg-Get-queue-config-from-host.patch

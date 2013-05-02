@@ -1,0 +1,109 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Laszlo Ersek <lersek@redhat.com>
+To: Anthony Liguori <aliguori@us.ibm.com>, kraxel@redhat.com,
+ qemu-devel@nongnu.org, mst@redhat.com
+Cc: 
+Date: Thu, 21 Mar 2013 00:23:19 +0100
+Message-id: 1363821803-3380-8-git-send-email-lersek@redhat.com
+Subject: [PATCH 07/11] like acpi_table_install(),
+ acpi_table_add() should propagate Errors
+
+
+Signed-off-by: Laszlo Ersek <lersek@redhat.com>
+---
+ hw/pc.h      |    2 +-
+ arch_init.c  |    9 +++++++--
+ hw/acpi.c    |    9 ++-------
+ hw/i386/pc.c |    8 ++++++--
+ 4 files changed, 16 insertions(+), 12 deletions(-)
+
+diff --git a/hw/pc.h b/hw/pc.h
+index 7aaba3c..b8574a2 100644
+--- a/hw/pc.h
++++ b/hw/pc.h
+@@ -113,7 +113,7 @@ extern char unsigned *acpi_tables;
+ extern size_t acpi_tables_len;
+ 
+ void acpi_bios_init(void);
+-int acpi_table_add(const QemuOpts *opts);
++void acpi_table_add(const QemuOpts *opts, Error **errp);
+ 
+ /* acpi_piix.c */
+ 
+diff --git a/arch_init.c b/arch_init.c
+index d6170f7..42e38d3 100644
+--- a/arch_init.c
++++ b/arch_init.c
+@@ -1108,8 +1108,13 @@ int qemu_uuid_parse(const char *str, uint8_t *uuid)
+ void do_acpitable_option(const QemuOpts *opts)
+ {
+ #ifdef TARGET_I386
+-    if (acpi_table_add(opts) < 0) {
+-        fprintf(stderr, "Wrong acpi table provided\n");
++    Error *err = NULL;
++
++    acpi_table_add(opts, &err);
++    if (err) {
++        fprintf(stderr, "Wrong acpi table provided: %s\n",
++                error_get_pretty(err));
++        error_free(err);
+         exit(1);
+     }
+ #endif
+diff --git a/hw/acpi.c b/hw/acpi.c
+index ce408da..e7a213c 100644
+--- a/hw/acpi.c
++++ b/hw/acpi.c
+@@ -229,7 +229,7 @@ static void acpi_table_install(const char unsigned *blob, size_t bloblen,
+                                       ACPI_TABLE_PFX_SIZE, acpi_payload_size);
+ }
+ 
+-int acpi_table_add(const QemuOpts *opts)
++void acpi_table_add(const QemuOpts *opts, Error **errp)
+ {
+     AcpiTableOptions *hdrs = NULL;
+     Error *err = NULL;
+@@ -306,12 +306,7 @@ out:
+         qapi_dealloc_visitor_cleanup(dv);
+     }
+ 
+-    if (err) {
+-        fprintf(stderr, "%s\n", error_get_pretty(err));
+-        error_free(err);
+-        return -1;
+-    }
+-    return 0;
++    error_propagate(errp, err);
+ }
+ 
+ static void acpi_notify_wakeup(Notifier *notifier, void *data)
+diff --git a/hw/i386/pc.c b/hw/i386/pc.c
+index bba19e4..c0a1bff 100644
+--- a/hw/i386/pc.c
++++ b/hw/i386/pc.c
+@@ -888,6 +888,7 @@ void pc_acpi_init(const char *default_dsdt)
+ {
+     char *filename = NULL, *arg = NULL;
+     QemuOpts *opts;
++    Error *err = NULL;
+ 
+     if (acpi_tables != NULL) {
+         /* manually set via -acpitable, leave it alone */
+@@ -906,8 +907,11 @@ void pc_acpi_init(const char *default_dsdt)
+     opts = qemu_opts_parse(qemu_find_opts("acpi"), arg, 0);
+     g_assert(opts != NULL);
+ 
+-    if (acpi_table_add(opts) != 0) {
+-        fprintf(stderr, "WARNING: failed to load %s\n", filename);
++    acpi_table_add(opts, &err);
++    if (err) {
++        fprintf(stderr, "WARNING: failed to load %s: %s\n", filename,
++                error_get_pretty(err));
++        error_free(err);
+     }
+     g_free(arg);
+     g_free(filename);
+-- 
+1.7.1
+
+

@@ -1,0 +1,44 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+To: qemu-devel@nongnu.org
+Cc: peter.maydell@linaro.org, mst@redhat.com,
+ "Peter A. G. Crosthwaite" <peter.crosthwaite@petalogix.com>,
+ blauwirbel@gmail.com, kraxel@redhat.com, edgar.iglesias@gmail.com
+Date: Fri,  5 Apr 2013 18:43:44 +1000
+Message-id: 37891325cb818306e68c6a2d3117552caa13a5ae.1365151096.git.peter.crosthwaite@xilinx.com
+Subject: [PATCH 5/5] xilinx_zynq: added devcfg to machine model
+
+From: Peter A. G. Crosthwaite <peter.crosthwaite@petalogix.com>
+
+Signed-off-by: Peter A. G. Crosthwaite <peter.crosthwaite@petalogix.com>
+---
+Changed since v1:
+Added manual parenting of devcfg node (evil but needed for early access
+to canonical path by devcfgs realize fn).
+
+ hw/arm/xilinx_zynq.c |    8 ++++++++
+ 1 files changed, 8 insertions(+), 0 deletions(-)
+
+diff --git a/hw/arm/xilinx_zynq.c b/hw/arm/xilinx_zynq.c
+index 6f36286..fb3a089 100644
+--- a/hw/arm/xilinx_zynq.c
++++ b/hw/arm/xilinx_zynq.c
+@@ -220,6 +220,14 @@ static void zynq_init(QEMUMachineInitArgs *args)
+         sysbus_connect_irq(busdev, n + 1, pic[dma_irqs[n] - IRQ_OFFSET]);
+     }
+ 
++    dev = qdev_create(NULL, "xlnx.ps7-dev-cfg");
++    object_property_add_child(qdev_get_machine(), "xilinx-devcfg", OBJECT(dev),
++                              NULL);
++    qdev_init_nofail(dev);
++    busdev = SYS_BUS_DEVICE(dev);
++    sysbus_connect_irq(busdev, 0, pic[40-IRQ_OFFSET]);
++    sysbus_mmio_map(busdev, 0, 0xF8007000);
++
+     zynq_binfo.ram_size = ram_size;
+     zynq_binfo.kernel_filename = kernel_filename;
+     zynq_binfo.kernel_cmdline = kernel_cmdline;
+-- 
+1.7.0.4
+
+

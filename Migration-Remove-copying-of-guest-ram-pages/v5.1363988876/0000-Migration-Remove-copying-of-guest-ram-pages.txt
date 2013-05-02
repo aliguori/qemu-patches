@@ -1,0 +1,67 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Orit Wasserman <owasserm@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: pbonzini@redhat.com, quintela@redhat.com, chegu_vinod@hp.com,
+ Orit Wasserman <owasserm@redhat.com>, mst@redhat.com
+Date: Fri, 22 Mar 2013 16:47:56 +0200
+Message-id: 1363963683-26157-1-git-send-email-owasserm@redhat.com
+Subject: [PATCH 0/7] Migration: Remove copying of guest ram pages
+
+In migration all data is copied to a static buffer in QEMUFile,
+this hurts our network bandwidth and CPU usage especially with large guests.
+We switched to iovec for storing different buffers to send (even a byte field is
+considered as a buffer) and use sendmsg to send the iovec.
+Adjacent iovecs are coalesced to create a bigger buffer instead of many small
+buffers.
+  
+Guest memory pages are not copied by calling a new function
+qemu_put_buffer_async.
+The page header data and device state data are still copied into the static
+buffer. This data consists of a lot of bytes and integer fields and the static
+buffer is used to store it during batching.
+
+git repository: git://github.com/oritwas/qemu.git sendv_v2
+
+Changes from v4:
+return ssize_t for writev_buffer ops.
+Fix other Eric's comments.
+Squash patch 8 (coalesce adjacent iovecs) into patch 4.
+
+Changes from v3:
+Use a variable for iov_size
+Change f->bytes_xfer +=1 to f->bytes_xfer++
+Remove unneeded "More optimized qemu_put_be64/32/16" patch
+Move code to the right patch
+Rename qemu_put_buffer_no_copy to qemu_put_buffer_async
+Use function for updating the iovec that detect adjacent iovecs and coalesce
+them.
+
+Change from v2:
+Always send data for the iovec even if writev_buffer is not implemented.
+Coalesce adjacent iovecs to create one big buffer from small adjacent buffer.
+
+Changes from v1:
+Use iov_send for socket.
+Make writev_buffer optional and if it is not implemented use put_buffer
+
+Future work: Make number of iovec changeable
+
+Orit Wasserman (7):
+  Add QemuFileWritevBuffer QemuFileOps
+  Add socket_writev_buffer function
+  Update bytes_xfer in qemu_put_byte
+  Store the data to send also in iovec
+  Use writev ops if available
+  Add qemu_put_buffer_async
+  Use qemu_put_buffer_async for guest memory pages
+
+ arch_init.c                   |   2 +-
+ include/migration/qemu-file.h |  12 +++++
+ savevm.c                      | 103 +++++++++++++++++++++++++++++++++++-------
+ 3 files changed, 100 insertions(+), 17 deletions(-)
+
+Reviewed-by: Eric Blake <eblake@redhat.com>
+-- 
+1.7.11.7
+
+

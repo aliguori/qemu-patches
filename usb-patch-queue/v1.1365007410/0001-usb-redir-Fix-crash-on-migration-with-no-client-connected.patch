@@ -1,0 +1,40 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Gerd Hoffmann <kraxel@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Hans de Goede <hdegoede@redhat.com>, Gerd Hoffmann <kraxel@redhat.com>
+Date: Wed,  3 Apr 2013 11:43:31 +0200
+Message-id: 1364982220-4755-2-git-send-email-kraxel@redhat.com
+Subject: [PATCH 01/10] usb-redir: Fix crash on migration with no client
+ connected
+
+From: Hans de Goede <hdegoede@redhat.com>
+
+If no client is connected on the src side, then we won't receive a
+parser during migrate, in this case usbredir_post_load() should be a nop,
+rather then to try to derefefence the NULL dev->parser pointer.
+
+Signed-off-by: Hans de Goede <hdegoede@redhat.com>
+Signed-off-by: Gerd Hoffmann <kraxel@redhat.com>
+---
+ hw/usb/redirect.c |    4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/hw/usb/redirect.c b/hw/usb/redirect.c
+index d02a7b9..cf66df1 100644
+--- a/hw/usb/redirect.c
++++ b/hw/usb/redirect.c
+@@ -1973,6 +1973,10 @@ static int usbredir_post_load(void *priv, int version_id)
+ {
+     USBRedirDevice *dev = priv;
+ 
++    if (dev->parser == NULL) {
++        return 0;
++    }
++
+     switch (dev->device_info.speed) {
+     case usb_redir_speed_low:
+         dev->dev.speed = USB_SPEED_LOW;
+-- 
+1.7.9.7
+
+

@@ -1,0 +1,1 @@
+../ccid-and-libcacard-fixes-for-windows-mingw/v3.1366671870/0022-dev-smartcard-reader-define-structs-for-CCID_Parameter-internals.patch

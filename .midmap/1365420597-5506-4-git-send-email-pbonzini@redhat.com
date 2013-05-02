@@ -1,0 +1,1 @@
+../QEMUFile-improvements-and-simplifications/v1.1365445793/0003-migration-drop-is_write-complications.patch

@@ -1,0 +1,79 @@
+From patches Mon Sep 17 00:00:00 2001
+From: fred.konrad@greensocs.com
+To: Anthony Liguori <aliguori@us.ibm.com>, qemu-devel@nongnu.org,
+ fred.konrad@greensocs.com
+Cc: cornelia.huck@de.ibm.com, peter.maydell@linaro.org,
+ mark.burton@greensocs.com, fred.konrad@greensocs.com
+Date: Wed, 24 Apr 2013 10:07:53 +0200
+Message-id: 1366790881-3026-1-git-send-email-fred.konrad@greensocs.com
+Subject: [PATCH 0/8] virtio-rng refactoring.
+
+From: KONRAD Frederic <fred.konrad@greensocs.com>
+
+Tested-by: Cornelia Huck <cornelia.huck@de.ibm.com>
+Acked-by: Amit Shah <amit.shah@redhat.com>
+
+There are no modifications, just rebased.
+
+This is the last backend of the refactoring (*and must be applied at last,
+because it would break virtio-9p*).
+
+Basically it creates virtio-rng-device which extends virtio-device.
+Then a virtio-rng-device can be connected on a virtio-bus.
+virtio-rng-pci, virtio-rng-s390, virtio-rng-ccw are created too, they extend
+respectively virtio-pci, virtio-s390-device, virtio-ccw-device and have a
+virtio-rng-device.
+
+When rng option is NULL, a default rng backend is created as before. But after
+this refactoring, this default-backend will be the child of virtio-rng-device
+instead of virtio-rng-*.
+
+You can checkout my branch here:
+
+git://project.greensocs.com/qemu-virtio.git virtio-rng-v4
+
+Note that it is nearly the same series as virtio-blk and virtio-scsi
+refactoring, and is rebased on top of virtio-9p-v4 I posted before.
+
+I made basic tests (with linux guests) on:
+ * qemu-system-i386
+
+Cornelia tested it on s390 and ccw.
+
+Changes v3 -> v4:
+    * Remove some QOM casts on opaque.
+    * Fix the commit message of the last patch.
+    * Rebased.
+Changes v2 -> v3:
+    * Added CCW device.
+    * Changes name: "virtio-rng" => "virtio-rng-device".
+    * Rebased.
+
+Thanks,
+
+Fred
+
+KONRAD Frederic (8):
+  virtio-rng: don't use pointer for configuration.
+  virtio-rng: add virtio-rng device.
+  virtio-rng-pci: switch to the new API.
+  virtio-rng-s390: switch to the new API.
+  virtio-rng-ccw: switch to the new API.
+  virtio-rng: cleanup: init and exit functions.
+  virtio-rng: cleanup: remove qdev field.
+  virtio-rng: cleanup: use QOM casts.
+
+ hw/s390x/s390-virtio-bus.c     |  39 ++++++-----
+ hw/s390x/s390-virtio-bus.h     |  12 +++-
+ hw/s390x/virtio-ccw.c          |  49 ++++++-------
+ hw/s390x/virtio-ccw.h          |  12 +++-
+ hw/virtio/virtio-pci.c         | 156 ++++++++++++++++-------------------------
+ hw/virtio/virtio-pci.h         |  14 +++-
+ hw/virtio/virtio-rng.c         | 116 +++++++++++++++++++++---------
+ include/hw/virtio/virtio-rng.h |  20 ++++--
+ include/hw/virtio/virtio.h     |   2 -
+ 9 files changed, 239 insertions(+), 181 deletions(-)
+
+-- 
+1.7.11.7
+

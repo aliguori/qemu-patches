@@ -1,0 +1,56 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Lei Li <lilei@linux.vnet.ibm.com>
+To: Lei Li <lilei@linux.vnet.ibm.com>, qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, lagarcia@br.ibm.com,
+ eblake@redhat.com, kraxel@redhat.com, Lei Li <lilei@linux.vnet.ibm.com>
+Date: Thu, 25 Apr 2013 13:29:08 +0800
+Message-id: 1366867752-11578-1-git-send-email-lilei@linux.vnet.ibm.com
+Subject: [PATCH 0/4] Support for LED state extension to Qemu VNC server
+
+Hi guys,
+
+This patch series tries to add support for LED state
+extension to Qemu VNC server. The proposal has been sent
+few days ago as link below:
+
+http://lists.gnu.org/archive/html/qemu-devel/2013-04/msg01421.html
+
+The previous version as link:
+
+http://lists.nongnu.org/archive/html/qemu-devel/2013-04/msg04773.html
+
+Pleae let me know if there is anything else need be improved.
+
+Thanks!
+
+
+Changes since v3:
+  - Add adjustment of turning off lock state sync logic in do_key_event()
+    when VNC_FEATURE_LED_STATE supported suggested by Gerd.
+  - Document improvement suggested by Eric.
+    
+Changes since v2:
+  - Address the comments from Anthony includes:
+    - Just send 1 instead of the actual width and height.
+    - Improve the document by adding the Pseudo-encoding number
+      and simplify the description of the LED state encoding.
+
+Changes since v1:
+  - Address the comments from Anthony includes:
+    - Use Pseudo-encoding for led state;
+    - Get rid of send_ext_leds_state_ack;
+    - Add document for the led state Pseudo-encoding.
+
+Lei Li (4):
+  vnc: Add SCROLL lock key to kbd_leds
+  vnc: Support for LED state extension
+  vnc: Adjust lock state sync logic with VNC_FEATURE_LED_STATE
+  doc: document the Pseudo-encoding of LED state
+
+ docs/vnc-ledstate-Pseudo-encoding.txt |   50 +++++++++++++++++++++++++++++
+ ui/vnc.c                              |   56 ++++++++++++++++++++++++++++++++-
+ ui/vnc.h                              |    3 ++
+ 3 files changed, 108 insertions(+), 1 deletions(-)
+ create mode 100644 docs/vnc-ledstate-Pseudo-encoding.txt
+
+Reviewed-by: Anthony Liguori <aliguori@us.ibm.com>

@@ -1,0 +1,60 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Stefan Hajnoczi <stefanha@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Markus Armbruster <armbru@redhat.com>,
+ Stefan Hajnoczi <stefanha@redhat.com>,
+ Michael Roth <mdroth@linux.vnet.ibm.com>,
+ Luiz Capitulino <lcapitulino@redhat.com>
+Date: Thu,  4 Apr 2013 16:18:29 +0200
+Message-id: 1365085111-17027-3-git-send-email-stefanha@redhat.com
+Subject: [PATCH 2/4] net: ensure "socket" backend uses non-blocking fds
+
+There are several code paths in net_init_socket() depending on how the
+socket is created: file descriptor passing, UDP multicast, TCP, or UDP.
+Some of these support both listen and connect.
+
+Not all code paths set the socket to non-blocking.  This patch addresses
+the file descriptor passing and UDP cases which were missing
+socket_set_nonblock(fd) calls.
+
+I considered moving socket_set_nonblock(fd) to a central location but it
+turns out the code paths are different enough to require non-blocking at
+different places.
+
+Signed-off-by: Stefan Hajnoczi <stefanha@redhat.com>
+(cherry picked from commit f05b707279dc7c29ab10d9d13dbf413df6ec22f1)
+
+Signed-off-by: Stefan Hajnoczi <stefanha@redhat.com>
+---
+ net/socket.c | 7 ++++++-
+ 1 file changed, 6 insertions(+), 1 deletion(-)
+
+diff --git a/net/socket.c b/net/socket.c
+index ea407c7..a2b94f4 100644
+--- a/net/socket.c
++++ b/net/socket.c
+@@ -672,6 +672,7 @@ static int net_socket_udp_init(NetClientState *peer,
+         closesocket(fd);
+         return -1;
+     }
++    qemu_set_nonblock(fd);
+ 
+     s = net_socket_fd_init(peer, model, name, fd, 0);
+     if (!s) {
+@@ -710,7 +711,11 @@ int net_init_socket(const NetClientOptions *opts, const char *name,
+         int fd;
+ 
+         fd = monitor_handle_fd_param(cur_mon, sock->fd);
+-        if (fd == -1 || !net_socket_fd_init(peer, "socket", name, fd, 1)) {
++        if (fd == -1) {
++            return -1;
++        }
++        qemu_set_nonblock(fd);
++        if (!net_socket_fd_init(peer, "socket", name, fd, 1)) {
+             return -1;
+         }
+         return 0;
+-- 
+1.8.1.4
+
+

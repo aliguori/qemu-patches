@@ -1,0 +1,8 @@
+0000-ppc-prep-add-IBM-RS-6000-43p-machine.txt
+0001-pci-add-MPC105-PCI-host-bridge-emulation.patch
+0002-qom-handle-registration-of-new-types-when-initializing-the-first-ones.patch
+0003-m48t59-move-ISA-ports-memory-regions-registration-to-QOM-constructor.patch
+0004-m48t59-register-a-QOM-type-for-each-nvram-type-we-support.patch
+0005-m48t59-add-a-Nvram-interface.patch
+0006-prep-add-IBM-RS-6000-7248-43p-machine-emulation.patch
+0007-prep-QOMify-System-I-O.patch

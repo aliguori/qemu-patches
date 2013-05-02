@@ -1,0 +1,51 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Rabin Vincent <rabin@rab.in>
+To: qemu-devel@nongnu.org, =?ISO-8859-1?Q?Andreas_F=E4rber?= <afaerber@suse.de>,
+ =?UTF-8?q?Andreas=20F=C3=A4rber?= <afaerber@suse.de>,
+ Rabin Vincent <rabin@rab.in>, Jens Freimann <jfrei@linux.vnet.ibm.com>,
+ Wen Congyang <wency@cn.fujitsu.com>
+Cc: Alexander Graf <agraf@suse.de>, qemu-devel <qemu-devel@nongnu.org>,
+ qemu-devel@nongnu.org, Igor Mammedov <imammedo@redhat.com>,
+ Peter Maydell <peter.maydell@linaro.org>, Rabin Vincent <rabin@rab.in>,
+ Jens Freimann <jfrei@linux.vnet.ibm.com>
+Date: Sun, 24 Mar 2013 18:27:15 +0100
+Message-id: 1364146041-27041-1-git-send-email-rabin@rab.in
+Subject: [PATCH 0/6] ARM dump-guest-memory support
+
+A second patchset to add dump-guest-memory support for ARM.
+
+This version of the patchset addresses the following comments from the
+previous posting, and also adds some more patches to the core dump code
+(patch #4 and #6):
+
+ - memset prstatus to 0 in x86_64_write_elf64_note()
+ - handle big endian in dump_write_elf_note()
+ - Save CPSR in ARM prstatus
+ - set correct ELF endianness for ARM BE 
+
+Rabin Vincent (6):
+  dump: create writable files
+  dump: extract out note helper
+  dump: extract out get note size function
+  dump: fix up memory mapping dependencies / stub
+  target-arm: add dump-guest-memory support
+  dump: fix memory region handling
+
+ Makefile.target          |    3 +-
+ configure                |    2 +-
+ dump.c                   |   88 ++++++++++++++++--
+ include/exec/memory.h    |    7 ++
+ include/sysemu/dump.h    |    6 ++
+ memory.c                 |   12 +++
+ memory_mapping-stub.c    |    5 --
+ memory_mapping.c         |    6 +-
+ target-arm/Makefile.objs |    2 +-
+ target-arm/arch_dump.c   |   61 +++++++++++++
+ target-i386/arch_dump.c  |  222 +++++++++++-----------------------------------
+ 11 files changed, 223 insertions(+), 191 deletions(-)
+ create mode 100644 target-arm/arch_dump.c
+
+-- 
+1.7.10.4
+
+

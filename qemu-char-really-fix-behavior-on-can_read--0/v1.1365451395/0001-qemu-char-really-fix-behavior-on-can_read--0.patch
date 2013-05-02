@@ -1,0 +1,90 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: Hans de Goede <hdegoede@redhat.com>, Paolo Bonzini <pbonzini@redhat.com>,
+ qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, amit.shah@redhat.com,
+ peter.crosthwaite@xilinx.com, qemu-devel@nongnu.org, aliguori@us.ibm.com
+Date: Mon, 8 Apr 2013 15:03:15 +0200
+Message-id: 1365426195-12596-1-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 1/1] qemu-char: really fix behavior on can_read = 0
+
+I misread the glib manual, g_source_remove does not let you re-attach
+the source later.  This behavior (called "blocking" the source in glib)
+is present in glib's source code, but private and not available outside
+glib; hence, we have to resort to re-creating the source every time.
+
+In fact, g_source_remove and g_source_destroy are the same thing,
+except g_source_destroy is O(1) while g_source_remove scans a potentially
+very long list of GSources in the current main loop.  Ugh.  Better
+use g_source_destroy explicitly, and leave "tags" to those dummies who
+cannot track their pointers' lifetimes.
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+Tested-by: Anthony Liguori <aliguori@us.ibm.com>
+---
+ qemu-char.c | 17 +++++++++++++----
+ 1 file changed, 13 insertions(+), 4 deletions(-)
+
+diff --git a/qemu-char.c b/qemu-char.c
+index dd410ce..eae17fc 100644
+--- a/qemu-char.c
++++ b/qemu-char.c
+@@ -596,9 +596,11 @@ typedef struct IOWatchPoll
+ {
+     GSource parent;
+ 
++    GIOChannel *channel;
+     GSource *src;
+ 
+     IOCanReadHandler *fd_can_read;
++    GSourceFunc fd_read;
+     void *opaque;
+ } IOWatchPoll;
+ 
+@@ -611,15 +613,19 @@ static gboolean io_watch_poll_prepare(GSource *source, gint *timeout_)
+ {
+     IOWatchPoll *iwp = io_watch_poll_from_source(source);
+     bool now_active = iwp->fd_can_read(iwp->opaque) > 0;
+-    bool was_active = g_source_get_context(iwp->src) != NULL;
++    bool was_active = iwp->src != NULL;
+     if (was_active == now_active) {
+         return FALSE;
+     }
+ 
+     if (now_active) {
++        iwp->src = g_io_create_watch(iwp->channel, G_IO_IN | G_IO_ERR | G_IO_HUP);
++        g_source_set_callback(iwp->src, iwp->fd_read, iwp->opaque, NULL);
+         g_source_attach(iwp->src, NULL);
+     } else {
+-        g_source_remove(g_source_get_id(iwp->src));
++        g_source_destroy(iwp->src);
++        g_source_unref(iwp->src);
++        iwp->src = NULL;
+     }
+     return FALSE;
+ }
+@@ -638,7 +644,9 @@ static gboolean io_watch_poll_dispatch(GSource *source, GSourceFunc callback,
+ static void io_watch_poll_finalize(GSource *source)
+ {
+     IOWatchPoll *iwp = io_watch_poll_from_source(source);
++    g_source_destroy(iwp->src);
+     g_source_unref(iwp->src);
++    iwp->src = NULL;
+ }
+ 
+ static GSourceFuncs io_watch_poll_funcs = {
+@@ -659,8 +667,9 @@ static guint io_add_watch_poll(GIOChannel *channel,
+     iwp = (IOWatchPoll *) g_source_new(&io_watch_poll_funcs, sizeof(IOWatchPoll));
+     iwp->fd_can_read = fd_can_read;
+     iwp->opaque = user_data;
+-    iwp->src = g_io_create_watch(channel, G_IO_IN | G_IO_ERR | G_IO_HUP);
+-    g_source_set_callback(iwp->src, (GSourceFunc)fd_read, user_data, NULL);
++    iwp->channel = channel;
++    iwp->fd_read = (GSourceFunc) fd_read;
++    iwp->src = NULL;
+ 
+     return g_source_attach(&iwp->parent, NULL);
+ }
+-- 
+1.8.1.4
+

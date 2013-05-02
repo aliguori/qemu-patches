@@ -1,0 +1,46 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Stefan Hajnoczi <stefanha@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>,
+ Stefan Hajnoczi <stefanha@redhat.com>
+Date: Fri, 5 Apr 2013 16:08:41 +0200
+Message-id: 1365170926-6361-1-git-send-email-stefanha@redhat.com
+Subject: [PATCH 0/5] Trivial patches for 28 March to 5 April 2013
+
+The following changes since commit d05ef160453e98546a4197496dc8a3cb2defac53:
+
+  Allow clock_gettime() monotonic clock to be utilized on more OS's (2013-04-04 20:22:45 -0500)
+
+are available in the git repository at:
+
+  git://github.com/stefanha/qemu.git trivial-patches
+
+for you to fetch changes up to f1922e36e267eae0c9d70e8660830e081878bdfc:
+
+  xilinx_zynq: Cleanup ssi_create_slave (2013-04-05 15:04:10 +0200)
+
+----------------------------------------------------------------
+Peter Crosthwaite (2):
+      petalogix_ml605_mmu: Cleanup ssi_create_slave()
+      xilinx_zynq: Cleanup ssi_create_slave
+
+Peter Maydell (1):
+      linux-user: Don't omit comma for strace of rt_sigaction()
+
+Richard Henderson (1):
+      target-s390: Fix SRNMT
+
+Stefan Berger (1):
+      test-visitor-serialization: Fix some memory leaks
+
+ hw/arm/xilinx_zynq.c                |  3 +--
+ hw/microblaze/petalogix_ml605_mmu.c |  3 +--
+ linux-user/strace.c                 |  2 +-
+ target-s390x/translate.c            |  1 +
+ tests/test-visitor-serialization.c  | 12 +++++++++++-
+ 5 files changed, 15 insertions(+), 6 deletions(-)
+
+
+-- 
+1.8.1.4
+

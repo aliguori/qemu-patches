@@ -1,0 +1,44 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Stefan Hajnoczi <stefanha@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>,
+ Stefan Hajnoczi <stefanha@redhat.com>, Stefan Weil <sw@weilnetz.de>
+Date: Fri, 19 Apr 2013 13:33:59 +0200
+Message-id: 1366371241-23430-7-git-send-email-stefanha@redhat.com
+Subject: [PATCH 6/8] block/ssh: Add missing gcc format attributes
+
+From: Stefan Weil <sw@weilnetz.de>
+
+Now gcc will check whether format string and variable arguments match.
+
+Signed-off-by: Stefan Weil <sw@weilnetz.de>
+Signed-off-by: Stefan Hajnoczi <stefanha@redhat.com>
+---
+ block/ssh.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/block/ssh.c b/block/ssh.c
+index 8f78e2e..b4e048c 100644
+--- a/block/ssh.c
++++ b/block/ssh.c
+@@ -109,7 +109,7 @@ static void ssh_state_free(BDRVSSHState *s)
+ /* Wrappers around error_report which make sure to dump as much
+  * information from libssh2 as possible.
+  */
+-static void
++static void GCC_FMT_ATTR(2, 3)
+ session_error_report(BDRVSSHState *s, const char *fs, ...)
+ {
+     va_list args;
+@@ -132,7 +132,7 @@ session_error_report(BDRVSSHState *s, const char *fs, ...)
+     error_printf("\n");
+ }
+ 
+-static void
++static void GCC_FMT_ATTR(2, 3)
+ sftp_error_report(BDRVSSHState *s, const char *fs, ...)
+ {
+     va_list args;
+-- 
+1.8.1.4
+

@@ -1,0 +1,164 @@
+From patches Mon Sep 17 00:00:00 2001
+From: mrhines@linux.vnet.ibm.com
+To: Paolo Bonzini <pbonzini@redhat.com>, Orit Wasserman <owasserm@redhat.com>,
+ qemu-devel@nongnu.org, mrhines@linux.vnet.ibm.com,
+ "Michael R. Hines" <mrhines@linux.vnet.ibm.com>
+Cc: Anthony Liguori <aliguori@us.ibm.com>, mst@redhat.com,
+ qemu-devel@nongnu.org, Michael R Hines <mrhines@us.ibm.com>,
+ Bulent Abali <abali@us.ibm.com>, owasserm@redhat.com, pbonzini@redhat.com,
+ Gokul B Kandiraju <gokul@us.ibm.com>
+Date: Wed, 10 Apr 2013 00:29:37 -0400
+Message-id: 1365568180-19593-5-git-send-email-mrhines@linux.vnet.ibm.com
+Subject: [PATCH 4/7] Introduce two new capabilities
+
+From: "Michael R. Hines" <mrhines@us.ibm.com>
+
+RDMA performs very slowly with zero-page checking.
+Without the ability to disable it, RDMA throughput and
+latency promises and high performance links cannot be
+fully realized.
+
+On the other hand, dynamic page registration support is also
+included in the RDMA protocol. This second capability also
+cannot be fully realized without the ability to enable zero
+page scanning.
+
+So, we have two new capabilities which work together:
+
+1. migrate_set_capability check_for_zero on|off (default on)
+2. migrate_set_capability chunk_register_destination on|off (default off)
+
+Signed-off-by: Michael R. Hines <mrhines@us.ibm.com>
+---
+ include/migration/qemu-file.h |   15 +++++++++++++++
+ migration.c                   |   33 +++++++++++++++++++++++++++++++--
+ qapi-schema.json              |    2 +-
+ 3 files changed, 47 insertions(+), 3 deletions(-)
+
+diff --git a/include/migration/qemu-file.h b/include/migration/qemu-file.h
+index 623c434..b6f3256 100644
+--- a/include/migration/qemu-file.h
++++ b/include/migration/qemu-file.h
+@@ -57,12 +57,15 @@ typedef int (QEMUFileGetFD)(void *opaque);
+ typedef ssize_t (QEMUFileWritevBufferFunc)(void *opaque, struct iovec *iov,
+                                            int iovcnt);
+ 
++typedef struct QEMURamControlOps QEMURamControlOps;
++
+ typedef struct QEMUFileOps {
+     QEMUFilePutBufferFunc *put_buffer;
+     QEMUFileGetBufferFunc *get_buffer;
+     QEMUFileCloseFunc *close;
+     QEMUFileGetFD *get_fd;
+     QEMUFileWritevBufferFunc *writev_buffer;
++    const QEMURamControlOps *ram_control;
+ } QEMUFileOps;
+ 
+ QEMUFile *qemu_fopen_ops(void *opaque, const QEMUFileOps *ops);
+@@ -80,6 +83,18 @@ void qemu_put_byte(QEMUFile *f, int v);
+  * The buffer should be available till it is sent asynchronously.
+  */
+ void qemu_put_buffer_async(QEMUFile *f, const uint8_t *buf, int size);
++void qemu_file_set_error(QEMUFile *f, int ret);
++
++void qemu_rdma_cleanup(void *opaque);
++int qemu_rdma_close(void *opaque);
++int qemu_rdma_get_fd(void *opaque);
++int qemu_rdma_get_buffer(void *opaque, uint8_t *buf, int64_t pos, int size);
++int qemu_rdma_put_buffer(void *opaque, const uint8_t *buf, 
++                            int64_t pos, int size);
++bool qemu_file_mode_is_not_valid(const char * mode);
++
++extern const QEMUFileOps rdma_read_ops;
++extern const QEMUFileOps rdma_write_ops;
+ 
+ static inline void qemu_put_ubyte(QEMUFile *f, unsigned int v)
+ {
+diff --git a/migration.c b/migration.c
+index 3b4b467..875cee3 100644
+--- a/migration.c
++++ b/migration.c
+@@ -66,6 +66,7 @@ MigrationState *migrate_get_current(void)
+         .state = MIG_STATE_SETUP,
+         .bandwidth_limit = MAX_THROTTLE,
+         .xbzrle_cache_size = DEFAULT_MIGRATE_CACHE_SIZE,
++        .enabled_capabilities[MIGRATION_CAPABILITY_CHECK_FOR_ZERO] = true,
+     };
+ 
+     return &current_migration;
+@@ -77,6 +78,10 @@ void qemu_start_incoming_migration(const char *uri, Error **errp)
+ 
+     if (strstart(uri, "tcp:", &p))
+         tcp_start_incoming_migration(p, errp);
++#ifdef CONFIG_RDMA
++    else if (strstart(uri, "rdma:", &p))
++        rdma_start_incoming_migration(p, errp);
++#endif
+ #if !defined(WIN32)
+     else if (strstart(uri, "exec:", &p))
+         exec_start_incoming_migration(p, errp);
+@@ -120,8 +125,10 @@ void process_incoming_migration(QEMUFile *f)
+     Coroutine *co = qemu_coroutine_create(process_incoming_migration_co);
+     int fd = qemu_get_fd(f);
+ 
+-    assert(fd != -1);
+-    qemu_set_nonblock(fd);
++    if(fd != -2) { /* rdma returns -2 */
++        assert(fd != -1);
++        qemu_set_nonblock(fd);
++    }
+     qemu_coroutine_enter(co, f);
+ }
+ 
+@@ -405,6 +412,10 @@ void qmp_migrate(const char *uri, bool has_blk, bool blk,
+ 
+     if (strstart(uri, "tcp:", &p)) {
+         tcp_start_outgoing_migration(s, p, &local_err);
++#ifdef CONFIG_RDMA
++    } else if (strstart(uri, "rdma:", &p)) {
++        rdma_start_outgoing_migration(s, p, &local_err);
++#endif
+ #if !defined(WIN32)
+     } else if (strstart(uri, "exec:", &p)) {
+         exec_start_outgoing_migration(s, p, &local_err);
+@@ -474,6 +485,24 @@ void qmp_migrate_set_downtime(double value, Error **errp)
+     max_downtime = (uint64_t)value;
+ }
+ 
++bool migrate_chunk_register_destination(void)
++{
++    MigrationState *s;
++
++    s = migrate_get_current();
++
++    return s->enabled_capabilities[MIGRATION_CAPABILITY_CHUNK_REGISTER_DESTINATION];
++}
++
++bool migrate_check_for_zero(void)
++{
++    MigrationState *s;
++
++    s = migrate_get_current();
++
++    return s->enabled_capabilities[MIGRATION_CAPABILITY_CHECK_FOR_ZERO];
++}
++
+ int migrate_use_xbzrle(void)
+ {
+     MigrationState *s;
+diff --git a/qapi-schema.json b/qapi-schema.json
+index db542f6..7ebcf99 100644
+--- a/qapi-schema.json
++++ b/qapi-schema.json
+@@ -602,7 +602,7 @@
+ # Since: 1.2
+ ##
+ { 'enum': 'MigrationCapability',
+-  'data': ['xbzrle'] }
++  'data': ['xbzrle', 'check_for_zero', 'chunk_register_destination'] }
+ 
+ ##
+ # @MigrationCapabilityStatus
+-- 
+1.7.10.4
+

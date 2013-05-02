@@ -1,0 +1,76 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Wenchao Xia <xiawenc@linux.vnet.ibm.com>
+To: qemu-devel@nongnu.org
+Cc: kwolf@redhat.com, phrdina@redhat.com,
+ Wenchao Xia <xiawenc@linux.vnet.ibm.com>, stefanha@gmail.com,
+ armbru@redhat.com, lcapitulino@redhat.com, pbonzini@redhat.com
+Date: Sat, 13 Apr 2013 16:56:40 +0800
+Message-id: 1365843407-16504-12-git-send-email-xiawenc@linux.vnet.ibm.com
+Subject: [PATCH 11/18] qmp: add recursive member in ImageInfo
+
+  New member *backing-image is added to reflect the backing chain
+status.
+
+Signed-off-by: Wenchao Xia <xiawenc@linux.vnet.ibm.com>
+---
+ block/qapi.c     |   18 +++++++++++++++++-
+ qapi-schema.json |    5 ++++-
+ 2 files changed, 21 insertions(+), 2 deletions(-)
+
+diff --git a/block/qapi.c b/block/qapi.c
+index 13c7860..2f33a05 100644
+--- a/block/qapi.c
++++ b/block/qapi.c
+@@ -135,7 +135,23 @@ int bdrv_query_snapshot_info_list(BlockDriverState *bs,
+     return 0;
+ }
+ 
+-/* return 0 on success, and @p_info will be set only on success. */
++/**
++ * bdrv_query_image_info:
++ * @bs: block device to examine
++ * @p_info: location to store image information
++ * @errp: location to store error information
++ *
++ * Store "flat" image inforation in @p_info.
++ *
++ * "Flat" means it does *not* query backing image information,
++ * i.e. (*pinfo)->has_backing_image will be set to false and
++ * (*pinfo)->backing_image to NULL even when the image does in fact have
++ * a backing image.
++ *
++ * On error, store error in @errp.
++ *
++ * Returns: 0 on success, -errno on error.
++ */
+ int bdrv_query_image_info(BlockDriverState *bs,
+                           ImageInfo **p_info,
+                           Error **errp)
+diff --git a/qapi-schema.json b/qapi-schema.json
+index 16d0b1f..955ff05 100644
+--- a/qapi-schema.json
++++ b/qapi-schema.json
+@@ -233,6 +233,8 @@
+ #
+ # @snapshots: #optional list of VM snapshots
+ #
++# @backing-image: #optional info of the backing image (since 1.5)
++#
+ # Since: 1.3
+ #
+ ##
+@@ -242,7 +244,8 @@
+            '*actual-size': 'int', 'virtual-size': 'int',
+            '*cluster-size': 'int', '*encrypted': 'bool',
+            '*backing-filename': 'str', '*full-backing-filename': 'str',
+-           '*backing-filename-format': 'str', '*snapshots': ['SnapshotInfo'] } }
++           '*backing-filename-format': 'str', '*snapshots': ['SnapshotInfo'],
++           '*backing-image': 'ImageInfo' } }
+ 
+ ##
+ # @ImageCheck:
+-- 
+1.7.1
+
+
+

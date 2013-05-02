@@ -1,0 +1,103 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Igor Mammedov <imammedo@redhat.com>
+To: Igor Mammedov <imammedo@redhat.com>, qemu-devel@nongnu.org
+Cc: peter.maydell@linaro.org, gleb@redhat.com, mst@redhat.com,
+ jan.kiszka@siemens.com, qemu-devel@nongnu.org, lcapitulino@redhat.com,
+ blauwirbel@gmail.com, kraxel@redhat.com, eblake@redhat.com,
+ Anthony Liguori <aliguori@us.ibm.com>, quintela@redhat.com, armbru@redhat.com,
+ yang.z.zhang@intel.com, ehabkost@redhat.com, stefano.stabellini@eu.citrix.com,
+ aderumier@odiso.com, anthony.perard@citrix.com, alex.williamson@redhat.com,
+ rth@twiddle.net, kwolf@redhat.com, claudio.fontana@huawei.com,
+ pbonzini@redhat.com, afaerber@suse.de
+Date: Tue, 23 Apr 2013 10:29:42 +0200
+Message-id: 1366705795-24732-9-git-send-email-imammedo@redhat.com
+Subject: [PATCH 08/21] exec: add qemu_for_each_cpu
+
+wrapper will help to remove open-coded loops
+
+Signed-off-by: Michael S. Tsirkin <mst@redhat.com>
+Signed-off-by: Igor Mammedov <imammedo@redhat.com>
+---
+Note:
+  Will be used by ACPI table generation and cpu_exists()
+---
+ cpus.c            |   13 +++++++------
+ exec.c            |   10 ++++++++++
+ include/qom/cpu.h |    8 ++++++++
+ 3 files changed, 25 insertions(+), 6 deletions(-)
+
+diff --git a/cpus.c b/cpus.c
+index 1d88761..5850151 100644
+--- a/cpus.c
++++ b/cpus.c
+@@ -812,6 +812,12 @@ static void *qemu_dummy_cpu_thread_fn(void *arg)
+ 
+ static void tcg_exec_all(void);
+ 
++static void signal_cpu_creation(CPUState *cpu, void *data)
++{
++    cpu->thread_id = qemu_get_thread_id();
++    cpu->created = true;
++}
++
+ static void *qemu_tcg_cpu_thread_fn(void *arg)
+ {
+     CPUState *cpu = arg;
+@@ -820,13 +826,8 @@ static void *qemu_tcg_cpu_thread_fn(void *arg)
+     qemu_tcg_init_cpu_signals();
+     qemu_thread_get_self(cpu->thread);
+ 
+-    /* signal CPU creation */
+     qemu_mutex_lock(&qemu_global_mutex);
+-    for (env = first_cpu; env != NULL; env = env->next_cpu) {
+-        cpu = ENV_GET_CPU(env);
+-        cpu->thread_id = qemu_get_thread_id();
+-        cpu->created = true;
+-    }
++    qemu_for_each_cpu(signal_cpu_creation, NULL);
+     qemu_cond_signal(&qemu_cpu_cond);
+ 
+     /* wait for initial kick-off after machine start */
+diff --git a/exec.c b/exec.c
+index fa1e0c3..19725db 100644
+--- a/exec.c
++++ b/exec.c
+@@ -265,6 +265,16 @@ CPUState *qemu_get_cpu(int index)
+     return env ? cpu : NULL;
+ }
+ 
++void qemu_for_each_cpu(void (*func)(CPUState *cpu, void *data), void *data)
++{
++    CPUArchState *env = first_cpu;
++
++    while (env) {
++        func(ENV_GET_CPU(env), data);
++        env = env->next_cpu;
++    }
++}
++
+ void cpu_exec_init(CPUArchState *env)
+ {
+     CPUState *cpu = ENV_GET_CPU(env);
+diff --git a/include/qom/cpu.h b/include/qom/cpu.h
+index 639b436..d4a21f4 100644
+--- a/include/qom/cpu.h
++++ b/include/qom/cpu.h
+@@ -215,6 +215,14 @@ bool cpu_is_stopped(CPUState *cpu);
+  */
+ void run_on_cpu(CPUState *cpu, void (*func)(void *data), void *data);
+ 
++/** qemu_for_each_cpu:
++ * @func: The function to be executed.
++ * @data: Data to pass to the function.
++ *
++ * Executes @func on all CPUs
++ */
++void qemu_for_each_cpu(void (*func)(CPUState *cpu, void *data), void *data);
++
+ /**
+  * qemu_get_cpu:
+  * @index: The CPUState@cpu_index value of the CPU to obtain.
+-- 
+1.7.1
+

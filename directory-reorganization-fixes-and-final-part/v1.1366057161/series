@@ -1,0 +1,13 @@
+0000-directory-reorganization-fixes-and-final-part.txt
+0001-arm-fix-location-of-some-include-files.patch
+0002-Add-linux-headers-to-QEMU_INCLUDES.patch
+0003-Fix-failure-to-create-q35-machine.patch
+0004-hw-Add-lost-ARM-core-again.patch
+0005-acpi-move-declarations-from-pch-to-acpih.patch
+0006-acpih-make-it-self-contained.patch
+0007-configure-fix-TPM-logic.patch
+0008-tpm-reorganize-headers-and-split-hardware-part.patch
+0009-sysemu-avoid-proliferation-of-include--subdirectories.patch
+0010-include-avoid-useless-includes-of-exec--headers.patch
+0011-memory-move-core-typedefs-to-qemu-typedefsh.patch
+0012-exec-remove-useless-declarations-from-memory-internalh.patch

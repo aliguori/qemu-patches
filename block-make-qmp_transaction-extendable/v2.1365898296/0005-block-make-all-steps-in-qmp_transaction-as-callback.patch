@@ -1,0 +1,173 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Wenchao Xia <xiawenc@linux.vnet.ibm.com>
+To: Kevin Wolf <kwolf@redhat.com>, Wenchao Xia <xiawenc@linux.vnet.ibm.com>,
+ qemu-devel@nongnu.org
+Cc: kwolf@redhat.com, Wenchao Xia <xiawenc@linux.vnet.ibm.com>,
+ stefanha@gmail.com, qemu-devel@nongnu.org, pbonzini@redhat.com,
+ dietmar@proxmox.com
+Date: Sat, 13 Apr 2013 19:11:41 +0800
+Message-id: 1365851501-3037-6-git-send-email-xiawenc@linux.vnet.ibm.com
+Subject: [PATCH 5/5] block: make all steps in qmp_transaction() as callback
+
+  Now qmp_transaction() can be extended with other operation,
+external snapshot or backing chain creation, is just one case it.
+
+Signed-off-by: Wenchao Xia <xiawenc@linux.vnet.ibm.com>
+---
+ blockdev.c |   68 +++++++++++++++++++++++++++++++++++++++++++++++++++--------
+ 1 files changed, 58 insertions(+), 10 deletions(-)
+
+diff --git a/blockdev.c b/blockdev.c
+index 3e69569..9f0acfb 100644
+--- a/blockdev.c
++++ b/blockdev.c
+@@ -779,14 +779,35 @@ void qmp_blockdev_snapshot_sync(const char *device, const char *snapshot_file,
+ 
+ 
+ /* New and old BlockDriverState structs for group snapshots */
++
++/* Only in prepare() it may fail, so roll back just need to take care
++   what is done in prepare(). */
++typedef struct BdrvActionOps {
++    /* Prepare the work, must NOT be NULL. */
++    int (*prepare)(BlockdevAction *action, void **p_opaque, Error **errp);
++    /* Commit the changes, can be NULL. */
++    void (*commit)(BlockdevAction *action, void *opaque);
++    /* Rollback the changes on fail, mut NOT be NULL. */
++    void (*rollback)(BlockdevAction *action, void *opaque);
++    /* Clean up resource in the end, can be NULL. */
++    void (*clean)(BlockdevAction *action, void *opaque);
++} BdrvActionOps;
++
+ typedef struct BlkTransactionStates {
+-    BlockDriverState *old_bs;
+-    BlockDriverState *new_bs;
++    BlockdevAction *action;
++    void *opaque;
++    const BdrvActionOps *ops;
+     QSIMPLEQ_ENTRY(BlkTransactionStates) entry;
+ } BlkTransactionStates;
+ 
++/* external snapshot private data */
++typedef struct ExternalSnapshotState {
++    BlockDriverState *old_bs;
++    BlockDriverState *new_bs;
++} ExternalSnapshotState;
++
+ static int external_snapshot_prepare(BlockdevAction *action,
+-                                     BlkTransactionStates *states,
++                                     void **p_opaque,
+                                      Error **errp)
+ {
+     BlockDriver *proto_drv;
+@@ -797,6 +818,7 @@ static int external_snapshot_prepare(BlockdevAction *action,
+     const char *new_image_file;
+     const char *format = "qcow2";
+     enum NewImageMode mode = NEW_IMAGE_MODE_ABSOLUTE_PATHS;
++    ExternalSnapshotState *states;
+ 
+     /* get parameters */
+     g_assert(action->kind == BLOCKDEV_ACTION_KIND_BLOCKDEV_SNAPSHOT_SYNC);
+@@ -817,6 +839,9 @@ static int external_snapshot_prepare(BlockdevAction *action,
+         goto fail;
+     }
+ 
++    *p_opaque = g_malloc0(sizeof(ExternalSnapshotState));
++    states = *p_opaque;
++
+     states->old_bs = bdrv_find(device);
+     if (!states->old_bs) {
+         error_set(errp, QERR_DEVICE_NOT_FOUND, device);
+@@ -878,8 +903,10 @@ static int external_snapshot_prepare(BlockdevAction *action,
+ }
+ 
+ static void external_snapshot_commit(BlockdevAction *action,
+-                                     BlkTransactionStates *states)
++                                     void *opaque)
+ {
++    ExternalSnapshotState *states = opaque;
++
+     /* This removes our old bs from the bdrv_states, and adds the new bs */
+     bdrv_append(states->new_bs, states->old_bs);
+     /* We don't need (or want) to use the transactional
+@@ -890,13 +917,27 @@ static void external_snapshot_commit(BlockdevAction *action,
+ }
+ 
+ static void external_snapshot_rollback(BlockdevAction *action,
+-                                       BlkTransactionStates *states)
++                                       void *opaque)
+ {
++    ExternalSnapshotState *states = opaque;
+     if (states->new_bs) {
+         bdrv_delete(states->new_bs);
+     }
+ }
+ 
++static void external_snapshot_clean(BlockdevAction *action,
++                                    void *opaque)
++{
++    g_free(opaque);
++}
++
++const BdrvActionOps external_snapshot_ops = {
++    .prepare = external_snapshot_prepare,
++    .commit = external_snapshot_commit,
++    .rollback = external_snapshot_rollback,
++    .clean = external_snapshot_clean,
++};
++
+ /*
+  * 'Atomic' group snapshots.  The snapshots are taken as a set, and if any fail
+  *  then we do not pivot any of the devices in the group, and abandon the
+@@ -923,23 +964,27 @@ void qmp_transaction(BlockdevActionList *dev_list, Error **errp)
+         states = g_malloc0(sizeof(BlkTransactionStates));
+         QSIMPLEQ_INSERT_TAIL(&snap_bdrv_states, states, entry);
+ 
++        states->action = dev_info;
+         switch (dev_info->kind) {
+         case BLOCKDEV_ACTION_KIND_BLOCKDEV_SNAPSHOT_SYNC:
+-            if (external_snapshot_prepare(dev_info, states, errp)) {
+-                goto delete_and_fail;
+-            }
++            states->ops = &external_snapshot_ops;
+             break;
+         default:
+             abort();
+         }
+ 
++        if (states->ops->prepare(states->action, &states->opaque, errp)) {
++            goto delete_and_fail;
++        }
+     }
+ 
+ 
+     /* Now we are going to do the actual pivot.  Everything up to this point
+      * is reversible, but we are committed at this point */
+     QSIMPLEQ_FOREACH(states, &snap_bdrv_states, entry) {
+-        external_snapshot_commit(NULL, states);
++        if (states->ops->commit) {
++            states->ops->commit(states->action, states->opaque);
++        }
+     }
+ 
+     /* success */
+@@ -951,10 +996,13 @@ delete_and_fail:
+     * the original bs for all images
+     */
+     QSIMPLEQ_FOREACH(states, &snap_bdrv_states, entry) {
+-        external_snapshot_rollback(NULL, states);
++        states->ops->rollback(states->action, states->opaque);
+     }
+ exit:
+     QSIMPLEQ_FOREACH_SAFE(states, &snap_bdrv_states, entry, next) {
++        if (states->ops->clean) {
++            states->ops->clean(states->action, states->opaque);
++        }
+         g_free(states);
+     }
+ }
+-- 
+1.7.1
+
+
+

@@ -1,0 +1,372 @@
+From patches Mon Sep 17 00:00:00 2001
+From: =?utf-8?q?Llu=C3=ADs_Vilanova_=3Cvilanova=40ac=2Eupc=2Eedu=3E?=
+To: qemu-devel@nongnu.org
+Cc: 
+Date: Tue, 26 Mar 2013 15:01:11 +0100
+Message-id: 20130326140111.4471.31951.stgit@fimbulvetr.bsc.es
+Subject: [PATCH 09/22] instrument: [dynamic] Call dynamically linked
+ user-provided routines
+
+Provides a mechanism to dynamically change the routine invoked by 'trace_*'.
+
+Signed-off-by: Lluís Vilanova <vilanova@ac.upc.edu>
+---
+ .gitignore                                 |    1 
+ Makefile                                   |    4 +
+ Makefile.objs                              |    5 ++
+ configure                                  |    8 ++-
+ instrument/Makefile.objs                   |   10 +++
+ libcacard/Makefile                         |    2 -
+ scripts/tracetool/__init__.py              |    1 
+ scripts/tracetool/backend/instr_dynamic.py |   87 ++++++++++++++++++++++++++++
+ scripts/tracetool/format/api_c.py          |   24 ++++++++
+ scripts/tracetool/format/events_c.py       |   34 +++++++++++
+ trace/event-internal.h                     |   10 +++
+ 11 files changed, 182 insertions(+), 4 deletions(-)
+ create mode 100644 scripts/tracetool/backend/instr_dynamic.py
+ create mode 100644 scripts/tracetool/format/api_c.py
+
+diff --git a/.gitignore b/.gitignore
+index 3c7d1a7..a46e490 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -9,6 +9,7 @@ trace/generated-tracers-dtrace.h
+ trace/generated-tracers-dtrace.dtrace
+ libcacard/trace/generated-tracers.c
+ instrument/generated-tracers.h
++instrument/generated-tracers.c
+ instrument/qemu-instr/events.h
+ *-timestamp
+ *-softmmu
+diff --git a/Makefile b/Makefile
+index ba313bd..6d49378 100644
+--- a/Makefile
++++ b/Makefile
+@@ -36,6 +36,9 @@ GENERATED_HEADERS += qmp-commands.h qapi-types.h qapi-visit.h
+ GENERATED_SOURCES += qmp-marshal.c qapi-types.c qapi-visit.c
+ 
+ GENERATED_HEADERS += instrument/generated-tracers.h
++ifdef CONFIG_TRACE_INSTRUMENT_DYNAMIC
++GENERATED_SOURCES += instrument/generated-tracers.c
++endif
+ GENERATED_HEADERS += instrument/qemu-instr/events.h
+ 
+ GENERATED_HEADERS += trace/generated-events.h
+@@ -227,6 +230,7 @@ clean:
+ 	@# May not be present in GENERATED_HEADERS
+ 	rm -f trace/generated-tracers-dtrace.dtrace*
+ 	rm -f trace/generated-tracers-dtrace.h*
++	rm -f instrument/generated-tracers.c*
+ 	rm -f $(foreach f,$(GENERATED_HEADERS),$(f) $(f)-timestamp)
+ 	rm -f $(foreach f,$(GENERATED_SOURCES),$(f) $(f)-timestamp)
+ 	rm -rf qapi-generated
+diff --git a/Makefile.objs b/Makefile.objs
+index a68cdac..12b67bf 100644
+--- a/Makefile.objs
++++ b/Makefile.objs
+@@ -98,6 +98,11 @@ common-obj-y += qom/
+ common-obj-y += disas/
+ 
+ ######################################################################
++# instrumentation
++
++util-obj-y += instrument/
++
++######################################################################
+ # guest agent
+ 
+ # FIXME: a few definitions from qapi-types.o/qapi-visit.o are needed
+diff --git a/configure b/configure
+index b57b28e..55c2fcc 100755
+--- a/configure
++++ b/configure
+@@ -1148,7 +1148,7 @@ echo "                           Available backends:" $($python "$source_path"/s
+ echo "  --with-trace-file=NAME   Full PATH,NAME of file to store traces"
+ echo "                           Default:trace-<pid>"
+ echo "  --with-trace-instrument=TYPE"
+-echo "                           Trace instrumentation type (none static; default: $trace_instrument)"
++echo "                           Trace instrumentation type (none static dynamic; default: $trace_instrument)"
+ echo "  --with-trace-instrument-path=PATH"
+ echo "                           Directory to build user-provided static trace event instrumentation library"
+ echo "  --disable-spice          disable spice"
+@@ -3072,7 +3072,7 @@ fi
+ ##########################################
+ # Check instrumentation type
+ case "$trace_instrument" in
+-none|static) ;;
++none|static|dynamic) ;;
+ *)       echo "Error: invalid trace instrumentation type: $trace_instrument"
+          exit 1
+          ;;
+@@ -3900,6 +3900,10 @@ if test "$trace_instrument" = "static"; then
+     echo "TRACETOOL_INSTR_STATIC=--instr-static-path \"\$(TRACE_INSTRUMENT_PATH)\"" >> $config_host_mak
+     QEMU_CFLAGS="-I\"$trace_instrument_path\" $QEMU_CFLAGS"
+ fi
++if test "$trace_instrument" = "dynamic"; then
++    echo "#define QI_TYPE_DYNAMIC 1" >> $config_qi
++    echo "CONFIG_TRACE_INSTRUMENT_DYNAMIC=y" >> $config_host_mak
++fi
+ ##########################################
+ 
+ echo "TOOLS=$tools" >> $config_host_mak
+diff --git a/instrument/Makefile.objs b/instrument/Makefile.objs
+index 4102b59..ce6cfe5 100644
+--- a/instrument/Makefile.objs
++++ b/instrument/Makefile.objs
+@@ -17,6 +17,16 @@ ifdef CONFIG_TRACE_INSTRUMENT_STATIC
+ .PHONY: $(obj)/generated-tracers.h-timestamp
+ endif
+ 
++$(obj)/generated-tracers.c: $(obj)/generated-tracers.c-timestamp
++$(obj)/generated-tracers.c-timestamp: $(TRACE_EVENTS) $(BUILD_DIR)/config-host.mak
++	$(call quiet-command,$(TRACETOOL) \
++		--format=api-c \
++		--backend=$(TRACE_INSTRUMENT_BACKEND) \
++		< $< > $@,"  GEN   $(patsubst %-timestamp,%,$@)")
++	@cmp -s $@ $(patsubst %-timestamp,%,$@) || cp $@ $(patsubst %-timestamp,%,$@)
++
++util-obj-$(CONFIG_TRACE_INSTRUMENT_DYNAMIC) += generated-tracers.o
++
+ 
+ ######################################################################
+ # User interface
+diff --git a/libcacard/Makefile b/libcacard/Makefile
+index 47827a0..4d91c3c 100644
+--- a/libcacard/Makefile
++++ b/libcacard/Makefile
+@@ -7,7 +7,7 @@ libcacard-obj-y = $(stub-obj-y) $(libcacard-y)
+ libcacard-obj-y += util/osdep.o util/cutils.o util/qemu-timer-common.o util/error.o
+ libcacard-obj-$(CONFIG_WIN32) += util/oslib-win32.o util/qemu-thread-win32.o
+ libcacard-obj-$(CONFIG_POSIX) += util/oslib-posix.o util/qemu-thread-posix.o
+-libcacard-obj-y += $(filter trace/%, $(util-obj-y))
++libcacard-obj-y += $(filter trace/%, $(util-obj-y)) $(filter instrument/%, $(util-obj-y))
+ 
+ libcacard-lobj-y=$(patsubst %.o,%.lo,$(libcacard-obj-y))
+ 
+diff --git a/scripts/tracetool/__init__.py b/scripts/tracetool/__init__.py
+index b98a0af..eb6a8a9 100644
+--- a/scripts/tracetool/__init__.py
++++ b/scripts/tracetool/__init__.py
+@@ -182,6 +182,7 @@ class Event(object):
+     QI_TRACE_INSTRUMENT     = "qi_event_%(name)s"
+     QI_TRACE_NOP            = "qi_event_%(name)s_nop"
+     QI_TRACE_BACKEND        = "qi_event_%(name)s_trace"
++    QI_TRACE_CB             = QI_TRACE_NOP
+ 
+     def api(self, fmt = None):
+         if fmt is None:
+diff --git a/scripts/tracetool/backend/instr_dynamic.py b/scripts/tracetool/backend/instr_dynamic.py
+new file mode 100644
+index 0000000..e8de5a6
+--- /dev/null
++++ b/scripts/tracetool/backend/instr_dynamic.py
+@@ -0,0 +1,87 @@
++#!/usr/bin/env python
++# -*- coding: utf-8 -*-
++
++"""
++Dynamic instrumentation proxy.
++"""
++
++__author__     = "Lluís Vilanova <vilanova@ac.upc.edu>"
++__copyright__  = "Copyright 2012, Lluís Vilanova <vilanova@ac.upc.edu>"
++__license__    = "GPL version 2 or (at your option) any later version"
++
++__maintainer__ = "Stefan Hajnoczi"
++__email__      = "stefanha@linux.vnet.ibm.com"
++
++
++from tracetool import out
++import tracetool.format.qemu_h
++
++
++def qemu_h(events):
++    for e in events:
++        if "instrument" not in e.properties:
++            continue
++
++        out('extern void * %(qi)s_cb;',
++            'static inline void %(qi)s(%(args)s)',
++            '{',
++            '    ((void (*)(%(argtypes)s))%(qi)s_cb)(%(argnames)s);',
++            '}',
++            qi = e.api(e.QI_TRACE_INSTRUMENT),
++            args = e.args,
++            argnames = ", ".join(e.args.names()),
++            argtypes = ", ".join(e.args.types()),
++            )
++
++    tracetool.format.qemu_h.process_common(events)
++
++
++
++def api_h(events):
++    out('#include <qemu-instr/visibility-internal.h>',
++        '',
++        )
++
++    for e in events:
++        if "instrument" not in e.properties:
++            continue
++
++        out('QI_VPUBLIC void %(qi)s(%(args)s);',
++            'void %(qi_nop)s(%(args)s);',
++            'void %(qi_backend)s(%(args)s);',
++            qi = e.api(e.QI_TRACE_INSTRUMENT),
++            qi_nop = e.api(e.QI_TRACE_NOP),
++            qi_backend = e.api(e.QI_TRACE_BACKEND),
++            args = e.args,
++            )
++
++def api_c(events):
++    out('#include "instrument/qemu-instr/events.h"',
++        '',
++        '#include "trace/generated-events.h"',
++        '#include "trace/generated-tracers.h"',
++        '',
++        )
++
++    for e in events:
++        if "instrument" not in e.properties:
++            continue
++
++        out('void %(qi_nop)s(%(args)s)',
++            '{',
++            '}',
++            '',
++            'void %(qi_backend)s(%(args)s)',
++            '{',
++            '    %(qemu_backend)s(%(argnames)s);',
++            '}',
++            '',
++            'void * %(qi)s_cb = %(qi_cb)s;',
++            qi = e.api(e.QI_TRACE_INSTRUMENT),
++            qi_nop = e.api(e.QI_TRACE_NOP),
++            qi_backend = e.api(e.QI_TRACE_BACKEND),
++            qi_cb = e.api(e.QI_TRACE_CB),
++            qemu_backend = e.api(e.QEMU_TRACE_BACKEND),
++            args = e.args,
++            argnames = ", ".join(e.args.names()),
++            )
+diff --git a/scripts/tracetool/format/api_c.py b/scripts/tracetool/format/api_c.py
+new file mode 100644
+index 0000000..49db0fc
+--- /dev/null
++++ b/scripts/tracetool/format/api_c.py
+@@ -0,0 +1,24 @@
++#!/usr/bin/env python
++# -*- coding: utf-8 -*-
++
++"""
++Generate .c for trace instrumentation clients.
++"""
++
++__author__     = "Lluís Vilanova <vilanova@ac.upc.edu>"
++__copyright__  = "Copyright 2012, Lluís Vilanova <vilanova@ac.upc.edu>"
++__license__    = "GPL version 2 or (at your option) any later version"
++
++__maintainer__ = "Stefan Hajnoczi"
++__email__      = "stefanha@linux.vnet.ibm.com"
++
++
++from tracetool import out
++
++
++def begin(events):
++    out('/* This file is autogenerated by tracetool, do not edit. */',
++        '',
++        '#include <stdlib.h>',
++        '',
++        )
+diff --git a/scripts/tracetool/format/events_c.py b/scripts/tracetool/format/events_c.py
+index d670ec8..73b080d 100644
+--- a/scripts/tracetool/format/events_c.py
++++ b/scripts/tracetool/format/events_c.py
+@@ -19,17 +19,49 @@ from tracetool import out
+ def begin(events):
+     out('/* This file is autogenerated by tracetool, do not edit. */',
+         '',
++        '#include "config-host.h"',
+         '#include "trace.h"',
+         '#include "trace/generated-events.h"',
+         '#include "trace/control.h"',
+         '',
+         )
+ 
++    # declarations
++    out('#if defined(CONFIG_TRACE_INSTRUMENT_DYNAMIC)')
++    for e in events:
++        if "instrument" in e.properties:
++            out('void %(nop)s(%(args)s);',
++                'void %(backend)s(%(args)s);',
++                nop = e.api(e.QI_TRACE_NOP),
++                backend = e.api(e.QI_TRACE_BACKEND),
++                args = e.args,
++                )
++    out('#endif',
++        '',
++        )
++
++    # event state
+     out('TraceEvent trace_events[TRACE_EVENT_COUNT] = {')
+ 
+     for e in events:
+-        out('    { .id = %(id)s, .name = \"%(name)s\", .sstate = %(sstate)s, .dstate = 0 },',
++        cb = cb_nop = cb_backend = "NULL"
++
++        if "instrument" in e.properties:
++            cb = "&%s_cb" % e.api(e.QI_TRACE_INSTRUMENT)
++            cb_nop = e.api(e.QI_TRACE_NOP)
++            cb_backend = e.api(e.QI_TRACE_BACKEND)
++
++        out('    { .id = %(id)s, .name = \"%(name)s\", .sstate = %(sstate)s, .dstate = 0,',
++            '#if defined(CONFIG_TRACE_INSTRUMENT_DYNAMIC)',
++            '      .instr_cb = %(cb)s,',
++            '      .instr_cb_nop = %(cb_nop)s,',
++            '      .instr_cb_backend = %(cb_backend)s,',
++            '#endif',
++            '    },',
+             id = "TRACE_" + e.name.upper(),
++            cb = cb,
++            cb_nop = cb_nop,
++            cb_backend = cb_backend,
+             name = e.name,
+             sstate = "TRACE_%s_ENABLED" % e.name.upper(),
+             )
+diff --git a/trace/event-internal.h b/trace/event-internal.h
+index b2310d9..fb5629b 100644
+--- a/trace/event-internal.h
++++ b/trace/event-internal.h
+@@ -11,6 +11,7 @@
+ #define TRACE__EVENT_INTERNAL_H
+ 
+ #include "trace/generated-events.h"
++#include "config-host.h"
+ 
+ 
+ /**
+@@ -19,6 +20,9 @@
+  * @name: Event name.
+  * @sstate: Static tracing state.
+  * @dstate: Dynamic tracing state.
++ * @instr_cb: Instrumentation callback pointer.
++ * @instr_cb_nop: Instrumentation callback pointer to no-operation.
++ * @instr_cb_backend: Instrumentation callback pointer to tracing backend.
+  *
+  * Opaque generic description of a tracing event.
+  */
+@@ -27,6 +31,12 @@ typedef struct TraceEvent {
+     const char * name;
+     const bool sstate;
+     bool dstate;
++
++#if defined(CONFIG_TRACE_INSTRUMENT_DYNAMIC)
++    void **instr_cb;
++    void *instr_cb_nop;
++    void *instr_cb_backend;
++#endif
+ } TraceEvent;
+ 
+ 
+
+

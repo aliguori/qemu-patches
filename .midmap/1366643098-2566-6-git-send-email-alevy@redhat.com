@@ -1,0 +1,1 @@
+../ccid-and-libcacard-fixes-for-windows-mingw/v3.1366671870/0005-libcacard-use-system-config-directory-for-nss-db-on-win32.patch

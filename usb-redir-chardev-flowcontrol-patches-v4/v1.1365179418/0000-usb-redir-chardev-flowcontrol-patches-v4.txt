@@ -1,0 +1,48 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Hans de Goede <hdegoede@redhat.com>
+To: Gerd Hoffmann <kraxel@redhat.com>
+Cc: qemu-devel@nongnu.org
+Date: Fri,  5 Apr 2013 11:30:18 +0200
+Message-id: 1365154225-9443-1-git-send-email-hdegoede@redhat.com
+Subject: [PATCH 0/7] usb-redir chardev flowcontrol patches v4
+
+Hi Gerd,
+
+Here is v4 of the series adding watch support to the spicevmc chardev
+backend. This version resolved all outstanding discussions about this
+patch-set, can you please include these in your next spice pull-req to
+Anthony?
+
+Note this also includes a few virtio-consoled bugfixes which were found
+during the development of this series.
+
+Changes in v2:
+-Address Amit's review of "[PATCH 2/8] virtio-console: Remove any pending
+watches on close"
+-Drop 2 spice-qemu-char cleanup patches as Gerd has added them to his v5
+-series
+-Add a (forward ported) patch from Alon Levy to fix a long standing
+ spice-qemu-char migration issue in a way which should be acceptable
+-upstream
+
+Changes in v3:
+-Rebased on top of latest master (some trivial manual conflict resolution)
+-Dropped Alon's patch for the spice-qemu-char migration issue, this is fixed
+ differently in another series which is already par of the latest master
+-Add a new patch:
+  usb-serial: Remove double call to qemu_chr_add_handlers( NULL )
+-Fixed a checkpatch issue in:
+  usb-redir: Add flow control support
+
+Changes in v4:
+-Rebased on top of latest master (some trivial manual conflict resolution)
+-Address Amit's review of "[PATCH 1/7] virtio-console: Also throttle when
+ less was written then requested"
+-Drop patches included in the usb.79 pull-req
+-Add a new patch: "[PATCH 6/7] spice-qemu-char: vmc_write: Don't write more
+ bytes then requested"
+
+Thanks & Regards,
+
+Hans
+

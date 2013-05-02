@@ -1,0 +1,85 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Anton Blanchard <anton@samba.org>
+To: Anton Blanchard <anton@samba.org>, qemu-ppc@nongnu.org,
+ qemu-devel@nongnu.org
+Cc: qemu-ppc@nongnu.org, agraf@suse.de, qemu-devel@nongnu.org
+Date: Wed, 1 May 2013 20:43:59 +1000
+Message-id: 20130501204359.58d02661@kryten
+Subject: [PATCH 1/2] target-ppc: Fix invalid SPR read/write warnings
+
+
+Invalid and privileged SPR warnings currently print the wrong
+address. While fixing that, also make it clear that we are
+printing both the decimal and hexadecimal SPR number.
+
+Before:
+
+  Trying to read invalid spr 896 380 at 0000000000000714
+
+After:
+
+  Trying to read invalid spr 896 (0x380) at 0000000000000710
+
+Signed-off-by: Anton Blanchard <anton@au1.ibm.com>
+---
+
+Index: b/target-ppc/translate.c
+===================================================================
+--- a/target-ppc/translate.c
++++ b/target-ppc/translate.c
+@@ -4005,19 +4005,19 @@ static inline void gen_op_mfspr(DisasCon
+              * allowing userland application to read the PVR
+              */
+             if (sprn != SPR_PVR) {
+-                qemu_log("Trying to read privileged spr %d %03x at "
+-                         TARGET_FMT_lx "\n", sprn, sprn, ctx->nip);
+-                printf("Trying to read privileged spr %d %03x at "
+-                       TARGET_FMT_lx "\n", sprn, sprn, ctx->nip);
++                qemu_log("Trying to read privileged spr %d (0x%03x) at "
++                         TARGET_FMT_lx "\n", sprn, sprn, ctx->nip - 4);
++                printf("Trying to read privileged spr %d (0x%03x) at "
++                       TARGET_FMT_lx "\n", sprn, sprn, ctx->nip - 4);
+             }
+             gen_inval_exception(ctx, POWERPC_EXCP_PRIV_REG);
+         }
+     } else {
+         /* Not defined */
+-        qemu_log("Trying to read invalid spr %d %03x at "
+-                    TARGET_FMT_lx "\n", sprn, sprn, ctx->nip);
+-        printf("Trying to read invalid spr %d %03x at " TARGET_FMT_lx "\n",
+-               sprn, sprn, ctx->nip);
++        qemu_log("Trying to read invalid spr %d (0x%03x) at "
++                 TARGET_FMT_lx "\n", sprn, sprn, ctx->nip - 4);
++        printf("Trying to read invalid spr %d (0x%03x) at "
++               TARGET_FMT_lx "\n", sprn, sprn, ctx->nip - 4);
+         gen_inval_exception(ctx, POWERPC_EXCP_INVAL_SPR);
+     }
+ }
+@@ -4150,18 +4150,18 @@ static void gen_mtspr(DisasContext *ctx)
+             (*write_cb)(ctx, sprn, rS(ctx->opcode));
+         } else {
+             /* Privilege exception */
+-            qemu_log("Trying to write privileged spr %d %03x at "
+-                     TARGET_FMT_lx "\n", sprn, sprn, ctx->nip);
+-            printf("Trying to write privileged spr %d %03x at " TARGET_FMT_lx
+-                   "\n", sprn, sprn, ctx->nip);
++            qemu_log("Trying to write privileged spr %d (0x%03x) at "
++                     TARGET_FMT_lx "\n", sprn, sprn, ctx->nip - 4);
++            printf("Trying to write privileged spr %d (0x%03x) at "
++                   TARGET_FMT_lx "\n", sprn, sprn, ctx->nip - 4);
+             gen_inval_exception(ctx, POWERPC_EXCP_PRIV_REG);
+         }
+     } else {
+         /* Not defined */
+-        qemu_log("Trying to write invalid spr %d %03x at "
+-                 TARGET_FMT_lx "\n", sprn, sprn, ctx->nip);
+-        printf("Trying to write invalid spr %d %03x at " TARGET_FMT_lx "\n",
+-               sprn, sprn, ctx->nip);
++        qemu_log("Trying to write invalid spr %d (0x%03x) at "
++                 TARGET_FMT_lx "\n", sprn, sprn, ctx->nip - 4);
++        printf("Trying to write invalid spr %d (0x%03x) at "
++               TARGET_FMT_lx "\n", sprn, sprn, ctx->nip - 4);
+         gen_inval_exception(ctx, POWERPC_EXCP_INVAL_SPR);
+     }
+ }
+

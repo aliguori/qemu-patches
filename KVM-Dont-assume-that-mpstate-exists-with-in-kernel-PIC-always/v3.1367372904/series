@@ -1,0 +1,9 @@
+0001-KVM-Dont-assume-that-mpstate-exists-with-in-kernel-PIC-always.patch
+0002-KVM-PPC-Add-dummy-kvm_arch_init_irq_routing.patch
+0003-linux-headers-update-to-kvm-next.patch
+0004-KVM-Export-kvm_init_irq_routing.patch
+0005-KVM-MSI-Swap-payload-to-native-endianness.patch
+0006-openpic-factor-out-some-common-defines-into-openpich.patch
+0007-PPC-e500-factor-out-mpic-init-code.patch
+0008-kvm-openpic-in-kernel-mpic-support.patch
+0009-KVM-PIC-Only-commit-irq-routing-when-necessary.patch

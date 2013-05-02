@@ -1,0 +1,17 @@
+0000-target-i386-CPU-hot-add-with-cpu-add-QMP-command.txt
+0001-cpu-make-kvm-stubo-a-part-of-CPU-library.patch
+0002-cpu-call-cpu_synchronize_post_init-from-CPUClassrealize-if-hotplugged.patch
+0003-introduce-resume_vcpu-for-single-CPU.patch
+0004-cpu-resume-CPU-from-CPUClasscpu_common_realizefn-when-it-is-hot-plugged.patch
+0005-introduce-CPU-hot-plug-notifier.patch
+0006-target-i386-pc-update-rtc_cmos-on-CPU-hot-plug.patch
+0007-cpu-introduce-get_arch_id-method-and-override-it-for-target-i386.patch
+0008-cpu-add-helper-cpu_exists-to-check-if-CPU-with-specified-id-exists.patch
+0009-acpi_piix4-add-infrastructure-to-send-CPU-hot-plug-GPE-to-guest.patch
+0010-target-i386-introduce-apic-id-property.patch
+0011-introduce-ICC-bus-device-bridge.patch
+0012-target-i386-cpu-attach-ICC-bus-to-CPU-on-its-creation.patch
+0013-target-i386-replace-MSI_SPACE_SIZE-with-APIC_SPACE_SIZE.patch
+0014-target-i386-move-APIC-to-ICC-bus.patch
+0015-target-i386-move-IOAPIC-to-ICC-bus.patch
+0016-add-cpu-add-qmp-command-and-implement-CPU-hot-add-for-target-i386.patch

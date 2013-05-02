@@ -1,0 +1,82 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Scott Wood <scottwood@freescale.com>
+To: Alexander Graf <agraf@suse.de>
+Cc: qemu-ppc@nongnu.org, qemu-devel@nongnu.org
+Date: Tue, 30 Apr 2013 20:48:28 -0500
+Message-id: 1367372912-23519-5-git-send-email-scottwood@freescale.com
+Subject: [PATCH 5/9] KVM: MSI: Swap payload to native endianness
+
+From: Alexander Graf <agraf@suse.de>
+
+The usual MSI injection mechanism writes msi.data into memory using an
+le32 wrapper. So on big endian guests, this swaps msg.data into the
+expected byte order.
+
+For irqfd however, we don't swap the payload right now, rendering
+in-kernel MPIC emulation broken on PowerPC.
+
+Swap msg.data to the correct endianness whenever we touch it.
+
+Signed-off-by: Alexander Graf <agraf@suse.de>
+---
+>From Scott: This patch makes me wonder why we have four different open
+coded instances of putting information from MSIMessage into struct
+kvm_irq_routing_msi...
+---
+ kvm-all.c |   10 +++++-----
+ 1 file changed, 5 insertions(+), 5 deletions(-)
+
+diff --git a/kvm-all.c b/kvm-all.c
+index 296ed0c..7e74939 100644
+--- a/kvm-all.c
++++ b/kvm-all.c
+@@ -1103,7 +1103,7 @@ static KVMMSIRoute *kvm_lookup_msi_route(KVMState *s, MSIMessage msg)
+     QTAILQ_FOREACH(route, &s->msi_hashtab[hash], entry) {
+         if (route->kroute.u.msi.address_lo == (uint32_t)msg.address &&
+             route->kroute.u.msi.address_hi == (msg.address >> 32) &&
+-            route->kroute.u.msi.data == msg.data) {
++            route->kroute.u.msi.data == le32_to_cpu(msg.data)) {
+             return route;
+         }
+     }
+@@ -1118,7 +1118,7 @@ int kvm_irqchip_send_msi(KVMState *s, MSIMessage msg)
+     if (s->direct_msi) {
+         msi.address_lo = (uint32_t)msg.address;
+         msi.address_hi = msg.address >> 32;
+-        msi.data = msg.data;
++        msi.data = le32_to_cpu(msg.data);
+         msi.flags = 0;
+         memset(msi.pad, 0, sizeof(msi.pad));
+ 
+@@ -1140,7 +1140,7 @@ int kvm_irqchip_send_msi(KVMState *s, MSIMessage msg)
+         route->kroute.flags = 0;
+         route->kroute.u.msi.address_lo = (uint32_t)msg.address;
+         route->kroute.u.msi.address_hi = msg.address >> 32;
+-        route->kroute.u.msi.data = msg.data;
++        route->kroute.u.msi.data = le32_to_cpu(msg.data);
+ 
+         kvm_add_routing_entry(s, &route->kroute);
+ 
+@@ -1172,7 +1172,7 @@ int kvm_irqchip_add_msi_route(KVMState *s, MSIMessage msg)
+     kroute.flags = 0;
+     kroute.u.msi.address_lo = (uint32_t)msg.address;
+     kroute.u.msi.address_hi = msg.address >> 32;
+-    kroute.u.msi.data = msg.data;
++    kroute.u.msi.data = le32_to_cpu(msg.data);
+ 
+     kvm_add_routing_entry(s, &kroute);
+ 
+@@ -1192,7 +1192,7 @@ int kvm_irqchip_update_msi_route(KVMState *s, int virq, MSIMessage msg)
+     kroute.flags = 0;
+     kroute.u.msi.address_lo = (uint32_t)msg.address;
+     kroute.u.msi.address_hi = msg.address >> 32;
+-    kroute.u.msi.data = msg.data;
++    kroute.u.msi.data = le32_to_cpu(msg.data);
+ 
+     return kvm_update_routing_entry(s, &kroute);
+ }
+-- 
+1.7.10.4
+
+
+

@@ -1,0 +1,41 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Kevin Wolf <kwolf@redhat.com>
+To: anthony@codemonkey.ws
+Cc: kwolf@redhat.com, qemu-devel@nongnu.org
+Date: Fri,  5 Apr 2013 19:02:38 +0200
+Message-id: 1365181358-16466-1-git-send-email-kwolf@redhat.com
+Subject: [PATCH 0/7] Block patches
+
+The following changes since commit d05ef160453e98546a4197496dc8a3cb2defac53:
+
+  Allow clock_gettime() monotonic clock to be utilized on more OS's (2013-04-04 20:22:45 -0500)
+
+are available in the git repository at:
+
+  git://repo.or.cz/qemu/kevin.git for-anthony
+
+for you to fetch changes up to c2b6ff51e4a3ad1f7ec5dbc94970e9778b31d718:
+
+  qcow2: Fix L1 write error handling in qcow2_update_snapshot_refcount (2013-04-05 18:58:05 +0200)
+
+----------------------------------------------------------------
+Kevin Wolf (3):
+      usb-storage: Forward serial number to scsi-disk
+      qcow2: Return real error in qcow2_update_snapshot_refcount
+      qcow2: Fix L1 write error handling in qcow2_update_snapshot_refcount
+
+Stefan Hajnoczi (4):
+      block: fix I/O throttling accounting blind spot
+      block: keep I/O throttling slice time constant
+      block: drop duplicated slice extension code
+      block: clean up I/O throttling wait_time code
+
+ block.c                   | 49 +++++++++++++++++++++--------------------------
+ block/qcow2-refcount.c    | 25 ++++++++++++------------
+ blockdev.c                |  1 -
+ hw/pci/pci-hotplug.c      |  2 +-
+ hw/scsi-bus.c             |  8 ++++++--
+ hw/scsi.h                 |  3 ++-
+ hw/usb/dev-storage.c      |  2 +-
+ include/block/block_int.h |  3 +--
+ 8 files changed, 46 insertions(+), 47 deletions(-)

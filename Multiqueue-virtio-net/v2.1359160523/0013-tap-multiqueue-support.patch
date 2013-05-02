@@ -1,0 +1,430 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Jason Wang <jasowang@redhat.com>
+To: aliguori@us.ibm.com, shajnocz@redhat.com, qemu-devel@nongnu.org,
+ mst@redhat.com
+Cc: krkumar2@in.ibm.com, kvm@vger.kernel.org, mprivozn@redhat.com,
+ rusty@rustcorp.com.au, Jason Wang <jasowang@redhat.com>,
+ gaowanlong@cn.fujitsu.com, jwhan@filewood.snu.ac.kr, shiyer@redhat.com
+Date: Fri, 25 Jan 2013 18:35:36 +0800
+Message-id: 1359110143-42984-14-git-send-email-jasowang@redhat.com
+Subject: [PATCH 13/20] tap: multiqueue support
+
+Recently, linux support multiqueue tap which could let userspace call TUNSETIFF
+for a signle device many times to create multiple file descriptors as
+independent queues. User could also enable/disabe a specific queue through
+TUNSETQUEUE.
+
+The patch adds the generic infrastructure to create multiqueue taps. To achieve
+this a new parameter "queues" were introduced to specify how many queues were
+expected to be created for tap by qemu itself. Alternatively, management could
+also pass multiple pre-created tap file descriptors separated with ':' through a
+new parameter fds like -netdev tap,id=hn0,fds="X:Y:..:Z". Multiple vhost file
+descriptors could also be passed in this way.
+
+Each TAPState were still associated to a tap fd, which mean multiple TAPStates
+were created when user needs multiqueue taps. Since each TAPState contains one
+NetClientState, with the multiqueue nic support, an N peers of NetClientState
+were built up.
+
+A new parameter, mq_required were introduce in tap_open() to create multiqueue
+tap fds.
+
+Signed-off-by: Jason Wang <jasowang@redhat.com>
+---
+ include/net/tap.h |    1 -
+ net/tap-aix.c     |    3 +-
+ net/tap-bsd.c     |    3 +-
+ net/tap-haiku.c   |    3 +-
+ net/tap-linux.c   |    4 +-
+ net/tap-solaris.c |    3 +-
+ net/tap.c         |  158 +++++++++++++++++++++++++++++++++++++++++------------
+ net/tap_int.h     |    3 +-
+ qapi-schema.json  |    5 +-
+ 9 files changed, 139 insertions(+), 44 deletions(-)
+
+diff --git a/include/net/tap.h b/include/net/tap.h
+index c523ff0..0caf8c4 100644
+--- a/include/net/tap.h
++++ b/include/net/tap.h
+@@ -37,7 +37,6 @@ void tap_set_offload(NetClientState *nc, int csum, int tso4, int tso6, int ecn,
+ void tap_set_vnet_hdr_len(NetClientState *nc, int len);
+ int tap_enable(NetClientState *nc);
+ int tap_disable(NetClientState *nc);
+-int tap_get_ifname(NetClientState *nc, char *ifname);
+ 
+ int tap_get_fd(NetClientState *nc);
+ 
+diff --git a/net/tap-aix.c b/net/tap-aix.c
+index e760e9a..804d164 100644
+--- a/net/tap-aix.c
++++ b/net/tap-aix.c
+@@ -25,7 +25,8 @@
+ #include "tap_int.h"
+ #include <stdio.h>
+ 
+-int tap_open(char *ifname, int ifname_size, int *vnet_hdr, int vnet_hdr_required)
++int tap_open(char *ifname, int ifname_size, int *vnet_hdr,
++             int vnet_hdr_required, int mq_required)
+ {
+     fprintf(stderr, "no tap on AIX\n");
+     return -1;
+diff --git a/net/tap-bsd.c b/net/tap-bsd.c
+index 4f22109..bcdb268 100644
+--- a/net/tap-bsd.c
++++ b/net/tap-bsd.c
+@@ -33,7 +33,8 @@
+ #include <net/if_tap.h>
+ #endif
+ 
+-int tap_open(char *ifname, int ifname_size, int *vnet_hdr, int vnet_hdr_required)
++int tap_open(char *ifname, int ifname_size, int *vnet_hdr,
++             int vnet_hdr_required, int mq_required)
+ {
+     int fd;
+ #ifdef TAPGIFNAME
+diff --git a/net/tap-haiku.c b/net/tap-haiku.c
+index b3b5fbb..e5ce436 100644
+--- a/net/tap-haiku.c
++++ b/net/tap-haiku.c
+@@ -25,7 +25,8 @@
+ #include "tap_int.h"
+ #include <stdio.h>
+ 
+-int tap_open(char *ifname, int ifname_size, int *vnet_hdr, int vnet_hdr_required)
++int tap_open(char *ifname, int ifname_size, int *vnet_hdr,
++             int vnet_hdr_required, int mq_required)
+ {
+     fprintf(stderr, "no tap on Haiku\n");
+     return -1;
+diff --git a/net/tap-linux.c b/net/tap-linux.c
+index 6827c2a..a1a6128 100644
+--- a/net/tap-linux.c
++++ b/net/tap-linux.c
+@@ -36,12 +36,12 @@
+ 
+ #define PATH_NET_TUN "/dev/net/tun"
+ 
+-int tap_open(char *ifname, int ifname_size, int *vnet_hdr, int vnet_hdr_required)
++int tap_open(char *ifname, int ifname_size, int *vnet_hdr,
++             int vnet_hdr_required, int mq_required)
+ {
+     struct ifreq ifr;
+     int fd, ret;
+     int len = sizeof(struct virtio_net_hdr);
+-    int mq_required = 0;
+ 
+     TFR(fd = open(PATH_NET_TUN, O_RDWR));
+     if (fd < 0) {
+diff --git a/net/tap-solaris.c b/net/tap-solaris.c
+index 214d95e..9c7278f 100644
+--- a/net/tap-solaris.c
++++ b/net/tap-solaris.c
+@@ -173,7 +173,8 @@ static int tap_alloc(char *dev, size_t dev_size)
+     return tap_fd;
+ }
+ 
+-int tap_open(char *ifname, int ifname_size, int *vnet_hdr, int vnet_hdr_required)
++int tap_open(char *ifname, int ifname_size, int *vnet_hdr,
++             int vnet_hdr_required, int mq_required)
+ {
+     char  dev[10]="";
+     int fd;
+diff --git a/net/tap.c b/net/tap.c
+index 95e557b..072e166 100644
+--- a/net/tap.c
++++ b/net/tap.c
+@@ -560,17 +560,10 @@ int net_init_bridge(const NetClientOptions *opts, const char *name,
+ 
+ static int net_tap_init(const NetdevTapOptions *tap, int *vnet_hdr,
+                         const char *setup_script, char *ifname,
+-                        size_t ifname_sz)
++                        size_t ifname_sz, int mq_required)
+ {
+     int fd, vnet_hdr_required;
+ 
+-    if (tap->has_ifname) {
+-        pstrcpy(ifname, ifname_sz, tap->ifname);
+-    } else {
+-        assert(ifname_sz > 0);
+-        ifname[0] = '\0';
+-    }
+-
+     if (tap->has_vnet_hdr) {
+         *vnet_hdr = tap->vnet_hdr;
+         vnet_hdr_required = *vnet_hdr;
+@@ -579,7 +572,8 @@ static int net_tap_init(const NetdevTapOptions *tap, int *vnet_hdr,
+         vnet_hdr_required = 0;
+     }
+ 
+-    TFR(fd = tap_open(ifname, ifname_sz, vnet_hdr, vnet_hdr_required));
++    TFR(fd = tap_open(ifname, ifname_sz, vnet_hdr, vnet_hdr_required,
++                      mq_required));
+     if (fd < 0) {
+         return -1;
+     }
+@@ -595,6 +589,8 @@ static int net_tap_init(const NetdevTapOptions *tap, int *vnet_hdr,
+     return fd;
+ }
+ 
++#define MAX_TAP_QUEUES 1024
++
+ static int net_init_tap_one(const NetdevTapOptions *tap, NetClientState *peer,
+                             const char *model, const char *name,
+                             const char *ifname, const char *script,
+@@ -613,17 +609,12 @@ static int net_init_tap_one(const NetdevTapOptions *tap, NetClientState *peer,
+         return -1;
+     }
+ 
+-    if (tap->has_fd) {
++    if (tap->has_fd || tap->has_fds) {
+         snprintf(s->nc.info_str, sizeof(s->nc.info_str), "fd=%d", fd);
+     } else if (tap->has_helper) {
+         snprintf(s->nc.info_str, sizeof(s->nc.info_str), "helper=%s",
+                  tap->helper);
+     } else {
+-        const char *downscript;
+-
+-        downscript = tap->has_downscript ? tap->downscript :
+-            DEFAULT_NETWORK_DOWN_SCRIPT;
+-
+         snprintf(s->nc.info_str, sizeof(s->nc.info_str),
+                  "ifname=%s,script=%s,downscript=%s", ifname, script,
+                  downscript);
+@@ -654,7 +645,7 @@ static int net_init_tap_one(const NetdevTapOptions *tap, NetClientState *peer,
+             error_report("vhost-net requested but could not be initialized");
+             return -1;
+         }
+-    } else if (tap->has_vhostfd) {
++    } else if (tap->has_vhostfd || tap->has_vhostfds) {
+         error_report("vhostfd= is not valid without vhost");
+         return -1;
+     }
+@@ -662,27 +653,54 @@ static int net_init_tap_one(const NetdevTapOptions *tap, NetClientState *peer,
+     return 0;
+ }
+ 
++static int get_fds(char *str, char *fds[], int max)
++{
++    char *ptr = str, *this;
++    size_t len = strlen(str);
++    int i = 0;
++
++    while (i < max && ptr < str + len) {
++        this = strchr(ptr, ':');
++
++        if (this == NULL) {
++            fds[i] = g_strdup(ptr);
++        } else {
++            fds[i] = g_strndup(ptr, this - ptr);
++        }
++
++        i++;
++        if (this == NULL) {
++            break;
++        } else {
++            ptr = this + 1;
++        }
++    }
++
++    return i;
++}
++
+ int net_init_tap(const NetClientOptions *opts, const char *name,
+                  NetClientState *peer)
+ {
+     const NetdevTapOptions *tap;
+-
+-    int fd, vnet_hdr = 0;
+-    const char *model;
+-
++    int fd, vnet_hdr = 0, i = 0, queues;
+     /* for the no-fd, no-helper case */
+     const char *script = NULL; /* suppress wrong "uninit'd use" gcc warning */
+     const char *downscript = NULL;
++    const char *vhostfdname;
+     char ifname[128];
+ 
+     assert(opts->kind == NET_CLIENT_OPTIONS_KIND_TAP);
+     tap = opts->tap;
++    queues = tap->has_queues ? tap->queues : 1;
++    vhostfdname = tap->has_vhostfd ? tap->vhostfd : NULL;
+ 
+     if (tap->has_fd) {
+         if (tap->has_ifname || tap->has_script || tap->has_downscript ||
+-            tap->has_vnet_hdr || tap->has_helper) {
++            tap->has_vnet_hdr || tap->has_helper || tap->has_queues ||
++            tap->has_fds) {
+             error_report("ifname=, script=, downscript=, vnet_hdr=, "
+-                         "and helper= are invalid with fd=");
++                         "helper=, queues=, and fds= are invalid with fd=");
+             return -1;
+         }
+ 
+@@ -695,13 +713,61 @@ int net_init_tap(const NetClientOptions *opts, const char *name,
+ 
+         vnet_hdr = tap_probe_vnet_hdr(fd);
+ 
+-        model = "tap";
++        if (net_init_tap_one(tap, peer, "tap", NULL, NULL,
++                             script, downscript,
++                             vhostfdname, vnet_hdr, fd)) {
++            return -1;
++        }
++    } else if (tap->has_fds) {
++        char *fds[MAX_TAP_QUEUES];
++        char *vhost_fds[MAX_TAP_QUEUES];
++        int nfds, nvhosts;
++
++        if (tap->has_ifname || tap->has_script || tap->has_downscript ||
++            tap->has_vnet_hdr || tap->has_helper || tap->has_queues ||
++            tap->has_fd) {
++            error_report("ifname=, script=, downscript=, vnet_hdr=, "
++                         "helper=, queues=, and fd= are invalid with fds=");
++            return -1;
++        }
++
++        nfds = get_fds(tap->fds, fds, MAX_TAP_QUEUES);
++        if (tap->has_vhostfds) {
++            nvhosts = get_fds(tap->vhostfds, vhost_fds, MAX_TAP_QUEUES);
++            if (nfds != nvhosts) {
++                error_report("The number of fds passed does not match the "
++                             "number of vhostfds passed");
++                return -1;
++            }
++        }
++
++        for (i = 0; i < nfds; i++) {
++            fd = monitor_handle_fd_param(cur_mon, fds[i]);
++            if (fd == -1) {
++                return -1;
++            }
++
++            fcntl(fd, F_SETFL, O_NONBLOCK);
+ 
++            if (i == 0) {
++                vnet_hdr = tap_probe_vnet_hdr(fd);
++            } else if (vnet_hdr != tap_probe_vnet_hdr(fd)) {
++                error_report("vnet_hdr not consistent across given tap fds");
++                return -1;
++            }
++
++            if (net_init_tap_one(tap, peer, "tap", name, ifname,
++                                 script, downscript,
++                                 tap->has_vhostfds ? vhost_fds[i] : NULL,
++                                 vnet_hdr, fd)) {
++                return -1;
++            }
++        }
+     } else if (tap->has_helper) {
+         if (tap->has_ifname || tap->has_script || tap->has_downscript ||
+-            tap->has_vnet_hdr) {
++            tap->has_vnet_hdr || tap->has_queues || tap->has_fds) {
+             error_report("ifname=, script=, downscript=, and vnet_hdr= "
+-                         "are invalid with helper=");
++                         "queues=, and fds= are invalid with helper=");
+             return -1;
+         }
+ 
+@@ -711,26 +777,48 @@ int net_init_tap(const NetClientOptions *opts, const char *name,
+         }
+ 
+         fcntl(fd, F_SETFL, O_NONBLOCK);
+-
+         vnet_hdr = tap_probe_vnet_hdr(fd);
+ 
+-        model = "bridge";
+-
++        if (net_init_tap_one(tap, peer, "bridge", name, ifname,
++                             script, downscript, vhostfdname,
++                             vnet_hdr, fd)) {
++            return -1;
++        }
+     } else {
+         script = tap->has_script ? tap->script : DEFAULT_NETWORK_SCRIPT;
+         downscript = tap->has_downscript ? tap->downscript :
+             DEFAULT_NETWORK_DOWN_SCRIPT;
+-        fd = net_tap_init(tap, &vnet_hdr, script, ifname, sizeof ifname);
+-        if (fd == -1) {
+-            return -1;
++
++        if (tap->has_ifname) {
++            pstrcpy(ifname, sizeof ifname, tap->ifname);
++        } else {
++            ifname[0] = '\0';
+         }
+ 
+-        model = "tap";
++        for (i = 0; i < queues; i++) {
++            fd = net_tap_init(tap, &vnet_hdr, i >= 1 ? "no" : script,
++                              ifname, sizeof ifname, queues > 1);
++            if (fd == -1) {
++                return -1;
++            }
++
++            if (queues > 1 && i == 0 && !tap->has_ifname) {
++                if (tap_fd_get_ifname(fd, ifname)) {
++                    error_report("Fail to get ifname");
++                    return -1;
++                }
++            }
++
++            if (net_init_tap_one(tap, peer, "tap", name, ifname,
++                                 i >= 1 ? "no" : script,
++                                 i >= 1 ? "no" : downscript,
++                                 vhostfdname, vnet_hdr, fd)) {
++                return -1;
++            }
++        }
+     }
+ 
+-    return net_init_tap_one(tap, peer, model, name, ifname, script,
+-                            downscript, tap->has_vhostfd ? tap->vhostfd : NULL,
+-                            vnet_hdr, fd);
++    return 0;
+ }
+ 
+ VHostNetState *tap_get_vhost_net(NetClientState *nc)
+diff --git a/net/tap_int.h b/net/tap_int.h
+index 125f83d..86bb224 100644
+--- a/net/tap_int.h
++++ b/net/tap_int.h
+@@ -32,7 +32,8 @@
+ #define DEFAULT_NETWORK_SCRIPT "/etc/qemu-ifup"
+ #define DEFAULT_NETWORK_DOWN_SCRIPT "/etc/qemu-ifdown"
+ 
+-int tap_open(char *ifname, int ifname_size, int *vnet_hdr, int vnet_hdr_required);
++int tap_open(char *ifname, int ifname_size, int *vnet_hdr,
++             int vnet_hdr_required, int mq_required);
+ 
+ ssize_t tap_read_packet(int tapfd, uint8_t *buf, int maxlen);
+ 
+diff --git a/qapi-schema.json b/qapi-schema.json
+index 6d7252b..4737800 100644
+--- a/qapi-schema.json
++++ b/qapi-schema.json
+@@ -2466,6 +2466,7 @@
+   'data': {
+     '*ifname':     'str',
+     '*fd':         'str',
++    '*fds':        'str',
+     '*script':     'str',
+     '*downscript': 'str',
+     '*helper':     'str',
+@@ -2473,7 +2474,9 @@
+     '*vnet_hdr':   'bool',
+     '*vhost':      'bool',
+     '*vhostfd':    'str',
+-    '*vhostforce': 'bool' } }
++    '*vhostfds':   'str',
++    '*vhostforce': 'bool',
++    '*queues':     'uint32'} }
+ 
+ ##
+ # @NetdevSocketOptions
+-- 
+1.7.1
+
+--
+To unsubscribe from this list: send the line "unsubscribe kvm" in
+the body of a message to majordomo@vger.kernel.org
+More majordomo info at  http://vger.kernel.org/majordomo-info.html

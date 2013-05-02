@@ -1,0 +1,90 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Scott Wood <scottwood@freescale.com>
+To: Jan Kiszka <jan.kiszka@siemens.com>, Alexander Graf <agraf@suse.de>,
+ Scott Wood <scottwood@freescale.com>
+Cc: qemu-devel@nongnu.org, Scott Wood <scottwood@freescale.com>,
+ qemu-ppc@nongnu.org, qemu-devel qemu-devel <qemu-devel@nongnu.org>,
+ "qemu-ppc@nongnu.org list:PowerPC" <qemu-ppc@nongnu.org>,
+ Jan Kiszka <jan.kiszka@siemens.com>
+Date: Thu, 14 Feb 2013 00:32:00 -0600
+Message-id: 1360823521-32306-6-git-send-email-scottwood@freescale.com
+Subject: [PATCH 5/6] kvm: export result of irqchip config check
+
+This allows platform code to register in-kernel irqchips that
+don't use the legacy KVM_CAP_IRQCHIP/KVM_CREATE_IRQCHIP interface.
+
+Signed-off-by: Scott Wood <scottwood@freescale.com>
+---
+ include/sysemu/kvm.h |   10 ++++++++++
+ kvm-all.c            |   11 +++++++++--
+ 2 files changed, 19 insertions(+), 2 deletions(-)
+
+diff --git a/include/sysemu/kvm.h b/include/sysemu/kvm.h
+index f2d97b5..b9a8701 100644
+--- a/include/sysemu/kvm.h
++++ b/include/sysemu/kvm.h
+@@ -45,6 +45,7 @@ extern bool kvm_async_interrupts_allowed;
+ extern bool kvm_irqfds_allowed;
+ extern bool kvm_msi_via_irqfd_allowed;
+ extern bool kvm_gsi_routing_allowed;
++extern bool kvm_irqchip_wanted;
+ 
+ #if defined CONFIG_KVM || !defined NEED_CPU_H
+ #define kvm_enabled()           (kvm_allowed)
+@@ -97,6 +98,14 @@ extern bool kvm_gsi_routing_allowed;
+  */
+ #define kvm_gsi_routing_enabled() (kvm_gsi_routing_allowed)
+ 
++/**
++ * kvm_irqchip_wanted
++ *
++ * Returns: true if the user requested that an in-kernel IRQ chip be
++ * used, regardless of whether support has been detected.
++ */
++#define kvm_irqchip_wanted() (kvm_irqchip_wanted)
++
+ #else
+ #define kvm_enabled()           (0)
+ #define kvm_irqchip_in_kernel() (false)
+@@ -104,6 +113,7 @@ extern bool kvm_gsi_routing_allowed;
+ #define kvm_irqfds_enabled() (false)
+ #define kvm_msi_via_irqfd_enabled() (false)
+ #define kvm_gsi_routing_allowed() (false)
++#define kvm_irqchip_wanted() (false)
+ #endif
+ 
+ struct kvm_run;
+diff --git a/kvm-all.c b/kvm-all.c
+index 04ec2d5..13a628d 100644
+--- a/kvm-all.c
++++ b/kvm-all.c
+@@ -109,6 +109,7 @@ bool kvm_async_interrupts_allowed;
+ bool kvm_irqfds_allowed;
+ bool kvm_msi_via_irqfd_allowed;
+ bool kvm_gsi_routing_allowed;
++bool kvm_irqchip_wanted;
+ 
+ static const KVMCapabilityInfo kvm_required_capabilites[] = {
+     KVM_CAP_INFO(USER_MEMORY),
+@@ -1205,8 +1206,14 @@ static int kvm_irqchip_create(KVMState *s)
+ 
+     if (QTAILQ_EMPTY(&list->head) ||
+         !qemu_opt_get_bool(QTAILQ_FIRST(&list->head),
+-                           "kernel_irqchip", true) ||
+-        !kvm_check_extension(s, KVM_CAP_IRQCHIP)) {
++                           "kernel_irqchip", true)) {
++        return 0;
++    }
++
++    kvm_irqchip_wanted = true;
++
++    /* Platform code may have a different way of enabling an IRQ chip */
++    if (!kvm_check_extension(s, KVM_CAP_IRQCHIP)) {
+         return 0;
+     }
+ 
+-- 
+1.7.9.5
+
+
+

@@ -1,0 +1,106 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Wenchao Xia <xiawenc@linux.vnet.ibm.com>
+To: qemu-devel@nongnu.org
+Cc: kwolf@redhat.com, Wenchao Xia <xiawenc@linux.vnet.ibm.com>,
+ stefanha@gmail.com, armbru@redhat.com, lcapitulino@redhat.com,
+ pbonzini@redhat.com
+Date: Tue,  2 Apr 2013 19:47:27 +0800
+Message-id: 1364903250-10429-15-git-send-email-xiawenc@linux.vnet.ibm.com
+Subject: [PATCH 14/17] hmp: add function hmp_info_snapshots()
+
+  This function will simply call qmp interface qmp_query_snapshots()
+added in last commit and then dump information in monitor console.
+  To get snapshot info, Now qemu and qemu-img both call block layer
+function bdrv_query_snapshot_info_list() in their calling path, and
+then they just translate the qmp object got to strings in stdout or
+monitor console.
+
+Signed-off-by: Wenchao Xia <xiawenc@linux.vnet.ibm.com>
+---
+ hmp.c |   48 ++++++++++++++++++++++++++++++++++++++++++++++++
+ hmp.h |    1 +
+ 2 files changed, 49 insertions(+), 0 deletions(-)
+
+diff --git a/hmp.c b/hmp.c
+index dbe9b90..89e1aaf 100644
+--- a/hmp.c
++++ b/hmp.c
+@@ -22,6 +22,7 @@
+ #include "qemu/sockets.h"
+ #include "monitor/monitor.h"
+ #include "ui/console.h"
++#include "block/qapi.h"
+ 
+ static void hmp_handle_error(Monitor *mon, Error **errp)
+ {
+@@ -653,6 +654,53 @@ void hmp_info_tpm(Monitor *mon, const QDict *qdict)
+     qapi_free_TPMInfoList(info_list);
+ }
+ 
++/* assume list is valid */
++static void monitor_dump_snapshotinfolist(Monitor *mon, SnapshotInfoList *list)
++{
++    SnapshotInfoList *elem;
++    GString *buf = g_string_sized_new(1024);
++
++    bdrv_snapshot_dump(buf, NULL);
++    g_string_append_printf(buf, "\n");
++
++    for (elem = list; elem; elem = elem->next) {
++        QEMUSnapshotInfo sn = {
++            .vm_state_size = elem->value->vm_state_size,
++            .date_sec = elem->value->date_sec,
++            .date_nsec = elem->value->date_nsec,
++            .vm_clock_nsec = elem->value->vm_clock_sec * 1000000000ULL +
++                             elem->value->vm_clock_nsec,
++        };
++        pstrcpy(sn.id_str, sizeof(sn.id_str), elem->value->id);
++        pstrcpy(sn.name, sizeof(sn.name), elem->value->name);
++        bdrv_snapshot_dump(buf, &sn);
++        g_string_append_printf(buf, "\n");
++    }
++
++    monitor_printf(mon, "%s", buf->str);
++    g_string_free(buf, true);
++}
++
++void hmp_info_snapshots(Monitor *mon, const QDict *qdict)
++{
++    Error *err = NULL;
++    SnapshotInfoList *list;
++
++    list = qmp_query_snapshots(&err);
++    if (error_is_set(&err)) {
++        hmp_handle_error(mon, &err);
++        return;
++    }
++
++    if (list == NULL) {
++        monitor_printf(mon, "There is no suitable snapshot available\n");
++        return;
++    }
++
++    monitor_dump_snapshotinfolist(mon, list);
++    qapi_free_SnapshotInfoList(list);
++}
++
+ void hmp_quit(Monitor *mon, const QDict *qdict)
+ {
+     monitor_suspend(mon);
+diff --git a/hmp.h b/hmp.h
+index 80e8b41..1172c47 100644
+--- a/hmp.h
++++ b/hmp.h
+@@ -37,6 +37,7 @@ void hmp_info_balloon(Monitor *mon, const QDict *qdict);
+ void hmp_info_pci(Monitor *mon, const QDict *qdict);
+ void hmp_info_block_jobs(Monitor *mon, const QDict *qdict);
+ void hmp_info_tpm(Monitor *mon, const QDict *qdict);
++void hmp_info_snapshots(Monitor *mon, const QDict *qdict);
+ void hmp_quit(Monitor *mon, const QDict *qdict);
+ void hmp_stop(Monitor *mon, const QDict *qdict);
+ void hmp_system_reset(Monitor *mon, const QDict *qdict);
+-- 
+1.7.1
+
+
+

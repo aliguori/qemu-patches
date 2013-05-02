@@ -1,0 +1,66 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Sergey Fedorov <s.fedorov@samsung.com>
+To: Paolo Bonzini <pbonzini@redhat.com>, Fedorov Sergey <s.fedorov@samsung.com>,
+ Stefan Hajnoczi <stefanha@gmail.com>, qemu-devel@nongnu.org,
+ Stefan Hajnoczi <stefanha@redhat.com>, Sergey Fedorov <s.fedorov@samsung.com>
+Cc: Anthony Liguori <aliguori@us.ibm.com>, aliguori@us.ibm.com,
+ Stefan Hajnoczi <stefanha@gmail.com>, qemu-devel@nongnu.org,
+ stefanha@redhat.com, Stefan Hajnoczi <stefanha@redhat.com>,
+ a.basov@samsung.com, Sergey Fedorov <s.fedorov@samsung.com>
+Date: Thu, 18 Apr 2013 15:31:55 +0400
+Message-id: 1366284715-10107-1-git-send-email-s.fedorov@samsung.com
+Subject: [PATCH 1/1] net/hub: remove can_receive handler
+
+Network hub should always receive incoming packets. Then forward them to
+the appropriate port queue and let the qemu_send_packet() do the right
+things. If the destination queue cannot receive the packet it will be
+appended to the queue. When the receiver call
+qemu_flush_queued_packets() later the queue will be really flushed and
+no packets will be stalled in the sender network queue.
+
+Signed-off-by: Sergey Fedorov <s.fedorov@samsung.com>
+---
+ net/hub.c |   20 --------------------
+ 1 file changed, 20 deletions(-)
+
+diff --git a/net/hub.c b/net/hub.c
+index df32074..552e970 100644
+--- a/net/hub.c
++++ b/net/hub.c
+@@ -87,25 +87,6 @@ static NetHub *net_hub_new(int id)
+     return hub;
+ }
+ 
+-static int net_hub_port_can_receive(NetClientState *nc)
+-{
+-    NetHubPort *port;
+-    NetHubPort *src_port = DO_UPCAST(NetHubPort, nc, nc);
+-    NetHub *hub = src_port->hub;
+-
+-    QLIST_FOREACH(port, &hub->ports, next) {
+-        if (port == src_port) {
+-            continue;
+-        }
+-
+-        if (qemu_can_send_packet(&port->nc)) {
+-            return 1;
+-        }
+-    }
+-
+-    return 0;
+-}
+-
+ static ssize_t net_hub_port_receive(NetClientState *nc,
+                                     const uint8_t *buf, size_t len)
+ {
+@@ -132,7 +113,6 @@ static void net_hub_port_cleanup(NetClientState *nc)
+ static NetClientInfo net_hub_port_info = {
+     .type = NET_CLIENT_OPTIONS_KIND_HUBPORT,
+     .size = sizeof(NetHubPort),
+-    .can_receive = net_hub_port_can_receive,
+     .receive = net_hub_port_receive,
+     .receive_iov = net_hub_port_receive_iov,
+     .cleanup = net_hub_port_cleanup,
+-- 
+1.7.9.5
+

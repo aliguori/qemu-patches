@@ -1,0 +1,380 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Gerd Hoffmann <kraxel@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, Gerd Hoffmann <kraxel@redhat.com>
+Date: Tue, 16 Apr 2013 11:39:26 +0200
+Message-id: 1366105178-26744-13-git-send-email-kraxel@redhat.com
+Subject: [PATCH 12/24] console: rename vga_hw_*, add QemuConsole param
+
+Add QemuConsole parameter to vga_hw_*, so the interface allows to update
+non-active consoles (the actual code can't handle this yet, see next
+patch).  Passing NULL is allowed and updates the active console, like
+the functions do today.
+
+While touching all vga_hw_* calls anyway rename that to the functions to
+hardware-neutral graphics_hw_*
+
+Signed-off-by: Gerd Hoffmann <kraxel@redhat.com>
+---
+ hw/display/cirrus_vga.c |    2 +-
+ hw/display/qxl.c        |    2 +-
+ hw/display/vga.c        |    2 +-
+ hw/display/vga_int.h    |    8 ++++----
+ include/ui/console.h    |   22 ++++++++++-----------
+ ui/console.c            |   49 +++++++++++++++++++++++++++++------------------
+ ui/curses.c             |    4 ++--
+ ui/gtk.c                |    2 +-
+ ui/sdl.c                |   18 ++++++++---------
+ ui/spice-display.c      |    2 +-
+ ui/vnc.c                |   12 ++++++------
+ 11 files changed, 67 insertions(+), 56 deletions(-)
+
+diff --git a/hw/display/cirrus_vga.c b/hw/display/cirrus_vga.c
+index bf2181a..514bc33 100644
+--- a/hw/display/cirrus_vga.c
++++ b/hw/display/cirrus_vga.c
+@@ -720,7 +720,7 @@ static void cirrus_do_copy(CirrusVGAState *s, int dst, int src, int w, int h)
+     /* we have to flush all pending changes so that the copy
+        is generated at the appropriate moment in time */
+     if (notify)
+-	vga_hw_update();
++        graphic_hw_update(s->vga.con);
+ 
+     (*s->cirrus_rop) (s, s->vga.vram_ptr +
+ 		      (s->cirrus_blt_dstaddr & s->cirrus_addr_mask),
+diff --git a/hw/display/qxl.c b/hw/display/qxl.c
+index 930b7cf..247209d 100644
+--- a/hw/display/qxl.c
++++ b/hw/display/qxl.c
+@@ -1074,7 +1074,7 @@ static void qxl_enter_vga_mode(PCIQXLDevice *d)
+     qemu_spice_create_host_primary(&d->ssd);
+     d->mode = QXL_MODE_VGA;
+     vga_dirty_log_start(&d->vga);
+-    vga_hw_update();
++    graphic_hw_update(d->vga.con);
+ }
+ 
+ static void qxl_exit_vga_mode(PCIQXLDevice *d)
+diff --git a/hw/display/vga.c b/hw/display/vga.c
+index c1b67bb..e37e898 100644
+--- a/hw/display/vga.c
++++ b/hw/display/vga.c
+@@ -2452,6 +2452,6 @@ static void vga_screen_dump(void *opaque, const char *filename, bool cswitch,
+     if (cswitch) {
+         vga_invalidate_display(s);
+     }
+-    vga_hw_update();
++    graphic_hw_update(s->con);
+     ppm_save(filename, surface, errp);
+ }
+diff --git a/hw/display/vga_int.h b/hw/display/vga_int.h
+index 260f7d6..1b8f670 100644
+--- a/hw/display/vga_int.h
++++ b/hw/display/vga_int.h
+@@ -152,10 +152,10 @@ typedef struct VGACommonState {
+     uint32_t cursor_offset;
+     unsigned int (*rgb_to_pixel)(unsigned int r,
+                                  unsigned int g, unsigned b);
+-    vga_hw_update_ptr update;
+-    vga_hw_invalidate_ptr invalidate;
+-    vga_hw_screen_dump_ptr screen_dump;
+-    vga_hw_text_update_ptr text_update;
++    graphic_hw_update_ptr update;
++    graphic_hw_invalidate_ptr invalidate;
++    graphic_hw_screen_dump_ptr screen_dump;
++    graphic_hw_text_update_ptr text_update;
+     bool full_update_text;
+     bool full_update_gfx;
+     /* hardware mouse cursor support */
+diff --git a/include/ui/console.h b/include/ui/console.h
+index 3725dae..9c585c0 100644
+--- a/include/ui/console.h
++++ b/include/ui/console.h
+@@ -278,21 +278,21 @@ static inline void console_write_ch(console_ch_t *dest, uint32_t ch)
+     *dest = ch;
+ }
+ 
+-typedef void (*vga_hw_update_ptr)(void *);
+-typedef void (*vga_hw_invalidate_ptr)(void *);
+-typedef void (*vga_hw_screen_dump_ptr)(void *, const char *, bool cswitch,
++typedef void (*graphic_hw_update_ptr)(void *);
++typedef void (*graphic_hw_invalidate_ptr)(void *);
++typedef void (*graphic_hw_screen_dump_ptr)(void *, const char *, bool cswitch,
+                                        Error **errp);
+-typedef void (*vga_hw_text_update_ptr)(void *, console_ch_t *);
++typedef void (*graphic_hw_text_update_ptr)(void *, console_ch_t *);
+ 
+-QemuConsole *graphic_console_init(vga_hw_update_ptr update,
+-                                  vga_hw_invalidate_ptr invalidate,
+-                                  vga_hw_screen_dump_ptr screen_dump,
+-                                  vga_hw_text_update_ptr text_update,
++QemuConsole *graphic_console_init(graphic_hw_update_ptr update,
++                                  graphic_hw_invalidate_ptr invalidate,
++                                  graphic_hw_screen_dump_ptr screen_dump,
++                                  graphic_hw_text_update_ptr text_update,
+                                   void *opaque);
+ 
+-void vga_hw_update(void);
+-void vga_hw_invalidate(void);
+-void vga_hw_text_update(console_ch_t *chardata);
++void graphic_hw_update(QemuConsole *con);
++void graphic_hw_invalidate(QemuConsole *con);
++void graphic_hw_text_update(QemuConsole *con, console_ch_t *chardata);
+ 
+ int is_graphic_console(void);
+ int is_fixedsize_console(void);
+diff --git a/ui/console.c b/ui/console.c
+index e100593..dccc618 100644
+--- a/ui/console.c
++++ b/ui/console.c
+@@ -118,10 +118,10 @@ struct QemuConsole {
+     DisplayState *ds;
+ 
+     /* Graphic console state.  */
+-    vga_hw_update_ptr hw_update;
+-    vga_hw_invalidate_ptr hw_invalidate;
+-    vga_hw_screen_dump_ptr hw_screen_dump;
+-    vga_hw_text_update_ptr hw_text_update;
++    graphic_hw_update_ptr hw_update;
++    graphic_hw_invalidate_ptr hw_invalidate;
++    graphic_hw_screen_dump_ptr hw_screen_dump;
++    graphic_hw_text_update_ptr hw_text_update;
+     void *hw;
+     int g_width, g_height;
+ 
+@@ -165,16 +165,24 @@ static int nb_consoles = 0;
+ 
+ static void text_console_do_init(CharDriverState *chr, DisplayState *ds);
+ 
+-void vga_hw_update(void)
++void graphic_hw_update(QemuConsole *con)
+ {
+-    if (active_console && active_console->hw_update)
+-        active_console->hw_update(active_console->hw);
++    if (!con) {
++        con = active_console;
++    }
++    if (con && con->hw_update) {
++        con->hw_update(con->hw);
++    }
+ }
+ 
+-void vga_hw_invalidate(void)
++void graphic_hw_invalidate(QemuConsole *con)
+ {
+-    if (active_console && active_console->hw_invalidate)
+-        active_console->hw_invalidate(active_console->hw);
++    if (!con) {
++        con = active_console;
++    }
++    if (con && con->hw_invalidate) {
++        con->hw_invalidate(con->hw);
++    }
+ }
+ 
+ void qmp_screendump(const char *filename, Error **errp)
+@@ -201,10 +209,13 @@ void qmp_screendump(const char *filename, Error **errp)
+     }
+ }
+ 
+-void vga_hw_text_update(console_ch_t *chardata)
++void graphic_hw_text_update(QemuConsole *con, console_ch_t *chardata)
+ {
+-    if (active_console && active_console->hw_text_update)
+-        active_console->hw_text_update(active_console->hw, chardata);
++    if (!con) {
++        con = active_console;
++    }
++    if (con && con->hw_text_update)
++        con->hw_text_update(con->hw, chardata);
+ }
+ 
+ static void vga_fill_rect(QemuConsole *con,
+@@ -932,7 +943,7 @@ void console_select(unsigned int index)
+             qemu_mod_timer(s->cursor_timer,
+                    qemu_get_clock_ms(rt_clock) + CONSOLE_CURSOR_PERIOD / 2);
+         }
+-        vga_hw_invalidate();
++        graphic_hw_invalidate(s);
+     }
+ }
+ 
+@@ -1359,10 +1370,10 @@ DisplayState *init_displaystate(void)
+     return display_state;
+ }
+ 
+-QemuConsole *graphic_console_init(vga_hw_update_ptr update,
+-                                  vga_hw_invalidate_ptr invalidate,
+-                                  vga_hw_screen_dump_ptr screen_dump,
+-                                  vga_hw_text_update_ptr text_update,
++QemuConsole *graphic_console_init(graphic_hw_update_ptr update,
++                                  graphic_hw_invalidate_ptr invalidate,
++                                  graphic_hw_screen_dump_ptr screen_dump,
++                                  graphic_hw_text_update_ptr text_update,
+                                   void *opaque)
+ {
+     int width = 640;
+@@ -1407,7 +1418,7 @@ static void text_console_update_cursor(void *opaque)
+     QemuConsole *s = opaque;
+ 
+     s->cursor_visible_phase = !s->cursor_visible_phase;
+-    vga_hw_invalidate();
++    graphic_hw_invalidate(s);
+     qemu_mod_timer(s->cursor_timer,
+                    qemu_get_clock_ms(rt_clock) + CONSOLE_CURSOR_PERIOD / 2);
+ }
+diff --git a/ui/curses.c b/ui/curses.c
+index ff82307..ed9e65c 100644
+--- a/ui/curses.c
++++ b/ui/curses.c
+@@ -166,11 +166,11 @@ static void curses_refresh(DisplayChangeListener *dcl)
+         clear();
+         refresh();
+         curses_calc_pad();
+-        vga_hw_invalidate();
++        graphic_hw_invalidate(NULL);
+         invalidate = 0;
+     }
+ 
+-    vga_hw_text_update(screen);
++    graphic_hw_text_update(NULL, screen);
+ 
+     nextchr = ERR;
+     while (1) {
+diff --git a/ui/gtk.c b/ui/gtk.c
+index 1e105e2..d0e444c 100644
+--- a/ui/gtk.c
++++ b/ui/gtk.c
+@@ -327,7 +327,7 @@ static void gd_update(DisplayChangeListener *dcl,
+ 
+ static void gd_refresh(DisplayChangeListener *dcl)
+ {
+-    vga_hw_update();
++    graphic_hw_update(NULL);
+ }
+ 
+ static void gd_switch(DisplayChangeListener *dcl,
+diff --git a/ui/sdl.c b/ui/sdl.c
+index 8da0534..ede31dc 100644
+--- a/ui/sdl.c
++++ b/ui/sdl.c
+@@ -492,8 +492,8 @@ static void toggle_full_screen(void)
+             sdl_grab_end();
+         }
+     }
+-    vga_hw_invalidate();
+-    vga_hw_update();
++    graphic_hw_invalidate(NULL);
++    graphic_hw_update(NULL);
+ }
+ 
+ static void handle_keydown(SDL_Event *ev)
+@@ -522,8 +522,8 @@ static void handle_keydown(SDL_Event *ev)
+             if (scaling_active) {
+                 scaling_active = 0;
+                 sdl_switch(dcl, NULL);
+-                vga_hw_invalidate();
+-                vga_hw_update();
++                graphic_hw_invalidate(NULL);
++                graphic_hw_update(NULL);
+             }
+             gui_keysym = 1;
+             break;
+@@ -556,8 +556,8 @@ static void handle_keydown(SDL_Event *ev)
+                     surface_width(surface);
+ 
+                 sdl_scale(width, height);
+-                vga_hw_invalidate();
+-                vga_hw_update();
++                graphic_hw_invalidate(NULL);
++                graphic_hw_update(NULL);
+                 gui_keysym = 1;
+             }
+         default:
+@@ -770,7 +770,7 @@ static void sdl_refresh(DisplayChangeListener *dcl)
+         sdl_update_caption();
+     }
+ 
+-    vga_hw_update();
++    graphic_hw_update(NULL);
+     SDL_EnableUNICODE(!is_graphic_console());
+ 
+     while (SDL_PollEvent(ev)) {
+@@ -802,8 +802,8 @@ static void sdl_refresh(DisplayChangeListener *dcl)
+             break;
+         case SDL_VIDEORESIZE:
+             sdl_scale(ev->resize.w, ev->resize.h);
+-            vga_hw_invalidate();
+-            vga_hw_update();
++            graphic_hw_invalidate(NULL);
++            graphic_hw_update(NULL);
+             break;
+         default:
+             break;
+diff --git a/ui/spice-display.c b/ui/spice-display.c
+index eaab19d..2c01674 100644
+--- a/ui/spice-display.c
++++ b/ui/spice-display.c
+@@ -414,7 +414,7 @@ void qemu_spice_cursor_refresh_unlocked(SimpleSpiceDisplay *ssd)
+ void qemu_spice_display_refresh(SimpleSpiceDisplay *ssd)
+ {
+     dprint(3, "%s:\n", __func__);
+-    vga_hw_update();
++    graphic_hw_update(ssd->con);
+ 
+     qemu_mutex_lock(&ssd->lock);
+     if (QTAILQ_EMPTY(&ssd->updates) && ssd->ds) {
+diff --git a/ui/vnc.c b/ui/vnc.c
+index 5ddb696..bc787cc 100644
+--- a/ui/vnc.c
++++ b/ui/vnc.c
+@@ -1956,8 +1956,8 @@ static void set_pixel_format(VncState *vs,
+ 
+     set_pixel_conversion(vs);
+ 
+-    vga_hw_invalidate();
+-    vga_hw_update();
++    graphic_hw_invalidate(NULL);
++    graphic_hw_update(NULL);
+ }
+ 
+ static void pixel_format_message (VncState *vs) {
+@@ -2653,7 +2653,7 @@ static void vnc_refresh(void *opaque)
+     VncState *vs, *vn;
+     int has_dirty, rects = 0;
+ 
+-    vga_hw_update();
++    graphic_hw_update(NULL);
+ 
+     if (vnc_trylock_display(vd)) {
+         vd->timer_interval = VNC_REFRESH_INTERVAL_BASE;
+@@ -2692,7 +2692,7 @@ static void vnc_init_timer(VncDisplay *vd)
+     vd->timer_interval = VNC_REFRESH_INTERVAL_BASE;
+     if (vd->timer == NULL && !QTAILQ_EMPTY(&vd->clients)) {
+         vd->timer = qemu_new_timer_ms(rt_clock, vnc_refresh, vd);
+-        vga_hw_update();
++        graphic_hw_update(NULL);
+         vnc_refresh(vd);
+     }
+ }
+@@ -2775,7 +2775,7 @@ void vnc_init_state(VncState *vs)
+ 
+     QTAILQ_INSERT_HEAD(&vd->clients, vs, next);
+ 
+-    vga_hw_update();
++    graphic_hw_update(NULL);
+ 
+     vnc_write(vs, "RFB 003.008\n", 12);
+     vnc_flush(vs);
+@@ -2800,7 +2800,7 @@ static void vnc_listen_read(void *opaque, bool websocket)
+     int csock;
+ 
+     /* Catch-up */
+-    vga_hw_update();
++    graphic_hw_update(NULL);
+ #ifdef CONFIG_VNC_WS
+     if (websocket) {
+         csock = qemu_accept(vs->lwebsock, (struct sockaddr *)&addr, &addrlen);
+-- 
+1.7.9.7
+

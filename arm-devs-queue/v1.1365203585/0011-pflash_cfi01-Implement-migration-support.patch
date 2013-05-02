@@ -1,0 +1,79 @@
+From patches Mon Sep 17 00:00:00 2001
+From: "Peter Maydell" <peter.maydell@linaro.org>
+To: Anthony Liguori <aliguori@us.ibm.com>, Blue Swirl <blauwirbel@gmail.com>
+Cc: Paul Brook <paul@codesourcery.com>, qemu-devel@nongnu.org
+Date: Fri,  5 Apr 2013 18:13:16 +0100
+Message-id: 1365181999-15387-12-git-send-email-peter.maydell@linaro.org
+Subject: [PATCH 11/14] pflash_cfi01: Implement migration support
+
+Add a vmstate to pflash_cfi01, so that it can be live migrated.
+
+Signed-off-by: Peter Maydell <peter.maydell@linaro.org>
+Message-id: 1363717469-30980-3-git-send-email-peter.maydell@linaro.org
+---
+ hw/pflash_cfi01.c |   20 +++++++++++++++++---
+ 1 file changed, 17 insertions(+), 3 deletions(-)
+
+diff --git a/hw/pflash_cfi01.c b/hw/pflash_cfi01.c
+index 20d10b3..646dc79 100644
+--- a/hw/pflash_cfi01.c
++++ b/hw/pflash_cfi01.c
+@@ -67,7 +67,7 @@ struct pflash_t {
+     uint64_t sector_len;
+     uint8_t width;
+     uint8_t be;
+-    int wcycle; /* if 0, the flash is read normally */
++    uint8_t wcycle; /* if 0, the flash is read normally */
+     int ro;
+     uint8_t cmd;
+     uint8_t status;
+@@ -77,7 +77,7 @@ struct pflash_t {
+     uint16_t ident3;
+     uint8_t cfi_len;
+     uint8_t cfi_table[0x52];
+-    hwaddr counter;
++    uint64_t counter;
+     unsigned int writeblock_size;
+     QEMUTimer *timer;
+     MemoryRegion mem;
+@@ -85,6 +85,19 @@ struct pflash_t {
+     void *storage;
+ };
+ 
++static const VMStateDescription vmstate_pflash = {
++    .name = "pflash_cfi01",
++    .version_id = 1,
++    .minimum_version_id = 1,
++    .fields = (VMStateField[]) {
++        VMSTATE_UINT8(wcycle, pflash_t),
++        VMSTATE_UINT8(cmd, pflash_t),
++        VMSTATE_UINT8(status, pflash_t),
++        VMSTATE_UINT64(counter, pflash_t),
++        VMSTATE_END_OF_LIST()
++    }
++};
++
+ static void pflash_timer (void *opaque)
+ {
+     pflash_t *pfl = opaque;
+@@ -223,7 +236,7 @@ static inline void pflash_data_write(pflash_t *pfl, hwaddr offset,
+     uint8_t *p = pfl->storage;
+ 
+     DPRINTF("%s: block write offset " TARGET_FMT_plx
+-            " value %x counter " TARGET_FMT_plx "\n",
++            " value %x counter %016" PRIx64 "\n",
+             __func__, offset, value, pfl->counter);
+     switch (width) {
+     case 1:
+@@ -701,6 +714,7 @@ static void pflash_cfi01_class_init(ObjectClass *klass, void *data)
+ 
+     k->init = pflash_cfi01_init;
+     dc->props = pflash_cfi01_properties;
++    dc->vmsd = &vmstate_pflash;
+ }
+ 
+ 
+-- 
+1.7.9.5
+
+

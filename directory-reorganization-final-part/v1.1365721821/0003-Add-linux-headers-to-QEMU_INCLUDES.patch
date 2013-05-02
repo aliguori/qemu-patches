@@ -1,0 +1,48 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: peter.maydell@linaro.org, Jan Kiszka <jan.kiszka@siemens.com>,
+ mst@redhat.com
+Date: Thu, 11 Apr 2013 18:10:24 +0200
+Message-id: 1365696633-30727-4-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 03/12] Add linux-headers to QEMU_INCLUDES
+
+From: Jan Kiszka <jan.kiszka@siemens.com>
+
+virtio/dataplane/vring.c requires the Linux headers and is built for all
+targets. So we need to add the corresponding include to QEMU_INCLUDES to
+avoid that outdated distribution headers are used.
+
+Signed-off-by: Jan Kiszka <jan.kiszka@siemens.com>
+---
+ configure | 5 +----
+ 1 file changed, 1 insertion(+), 4 deletions(-)
+
+diff --git a/configure b/configure
+index 1ed939a..ee07f07 100755
+--- a/configure
++++ b/configure
+@@ -544,6 +544,7 @@ Haiku)
+   if [ "$cpu" = "i386" -o "$cpu" = "x86_64" ] ; then
+     audio_possible_drivers="$audio_possible_drivers fmod"
+   fi
++  QEMU_INCLUDES="-I\$(SRC_PATH)/linux-headers $QEMU_INCLUDES"
+ ;;
+ esac
+ 
+@@ -4230,10 +4231,6 @@ else
+ fi
+ includes="-I\$(SRC_PATH)/tcg $includes"
+ 
+-if test "$linux" = "yes" ; then
+-  includes="-I\$(SRC_PATH)/linux-headers $includes"
+-fi
+-
+ for i in $ARCH $TARGET_BASE_ARCH ; do
+   case "$i" in
+   alpha)
+-- 
+1.8.1.4
+
+
+

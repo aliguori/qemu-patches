@@ -1,0 +1,69 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Pavel Hrdina <phrdina@redhat.com>
+To: qemu-devel@nongnu.org, Pavel Hrdina <phrdina@redhat.com>
+Cc: qemu-devel@nongnu.org, phrdina@redhat.com, armbru@redhat.com,
+ lcapitulino@redhat.com
+Date: Fri, 29 Mar 2013 15:12:33 +0100
+Message-id: 526c35ec91fa726b6788453392a66ded5be91230.1364565637.git.phrdina@redhat.com
+Subject: [PATCH 06/11] savevm: add error parameter to qemu_savevm_state()
+
+Signed-off-by: Pavel Hrdina <phrdina@redhat.com>
+Reviewed-by: Eric Blake <eblake@redhat.com>
+---
+ savevm.c | 12 ++++++------
+ 1 file changed, 6 insertions(+), 6 deletions(-)
+
+diff --git a/savevm.c b/savevm.c
+index 7598934..3c1ac9e 100644
+--- a/savevm.c
++++ b/savevm.c
+@@ -1910,7 +1910,7 @@ void qemu_savevm_state_cancel(void)
+     }
+ }
+ 
+-static int qemu_savevm_state(QEMUFile *f)
++static int qemu_savevm_state(QEMUFile *f, Error **errp)
+ {
+     int ret;
+     MigrationParams params = {
+@@ -1918,23 +1918,23 @@ static int qemu_savevm_state(QEMUFile *f)
+         .shared = 0
+     };
+ 
+-    if (qemu_savevm_state_blocked(NULL)) {
++    if (qemu_savevm_state_blocked(errp)) {
+         return -EINVAL;
+     }
+ 
+     qemu_mutex_unlock_iothread();
+-    qemu_savevm_state_begin(f, &params, NULL);
++    qemu_savevm_state_begin(f, &params, errp);
+     qemu_mutex_lock_iothread();
+ 
+     while (qemu_file_get_error(f) == 0) {
+-        if (qemu_savevm_state_iterate(f, NULL) > 0) {
++        if (qemu_savevm_state_iterate(f, errp) > 0) {
+             break;
+         }
+     }
+ 
+     ret = qemu_file_get_error(f);
+     if (ret == 0) {
+-        qemu_savevm_state_complete(f, NULL);
++        qemu_savevm_state_complete(f, errp);
+         ret = qemu_file_get_error(f);
+     }
+     if (ret != 0) {
+@@ -2321,7 +2321,7 @@ void do_savevm(Monitor *mon, const QDict *qdict)
+         monitor_printf(mon, "Could not open VM state file\n");
+         goto the_end;
+     }
+-    ret = qemu_savevm_state(f);
++    ret = qemu_savevm_state(f, NULL);
+     vm_state_size = qemu_ftell(f);
+     qemu_fclose(f);
+     if (ret < 0) {
+-- 
+1.8.1.4
+
+

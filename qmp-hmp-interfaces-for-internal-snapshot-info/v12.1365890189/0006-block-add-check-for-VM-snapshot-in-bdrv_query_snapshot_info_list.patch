@@ -1,0 +1,121 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Wenchao Xia <xiawenc@linux.vnet.ibm.com>
+To: Eric Blake <eblake@redhat.com>, qemu-devel@nongnu.org
+Cc: kwolf@redhat.com, phrdina@redhat.com,
+ Wenchao Xia <xiawenc@linux.vnet.ibm.com>, qemu-devel@nongnu.org,
+ stefanha@gmail.com, armbru@redhat.com, lcapitulino@redhat.com,
+ pbonzini@redhat.com
+Date: Sat, 13 Apr 2013 16:56:35 +0800
+Message-id: 1365843407-16504-7-git-send-email-xiawenc@linux.vnet.ibm.com
+Subject: [PATCH 06/18] block: add check for VM snapshot in
+ bdrv_query_snapshot_info_list()
+
+  This patch adds a parameter to tell whether return valid snapshots
+for whole VM only.
+  Note that the snapshot check logic is copied from do_info_snapshots(),
+which is different with load_vmstate() and will be changed in next patch.
+
+Signed-off-by: Wenchao Xia <xiawenc@linux.vnet.ibm.com>
+Reviewed-by: Eric Blake <eblake@redhat.com>
+Reviewed-by: Kevin Wolf <kwolf@redhat.com>
+---
+ block/qapi.c         |   39 +++++++++++++++++++++++++++++++++++++--
+ include/block/qapi.h |    1 +
+ qemu-img.c           |    2 +-
+ 3 files changed, 39 insertions(+), 3 deletions(-)
+
+diff --git a/block/qapi.c b/block/qapi.c
+index 9bfa547..97c5cd4 100644
+--- a/block/qapi.c
++++ b/block/qapi.c
+@@ -23,15 +23,48 @@
+  */
+ 
+ #include "block/qapi.h"
++#include "block/snapshot.h"
+ #include "block/block_int.h"
+ 
+ /*
++ * check whether the snapshot is valid for whole vm.
++ *
++ * @sn: snapshot info to be checked.
++ * @bs: where @sn was found.
++ *
++ * return true if the snapshot is consistent for the VM.
++ */
++static bool snapshot_valid_for_vm(const QEMUSnapshotInfo *sn,
++                                  BlockDriverState *bs)
++{
++    BlockDriverState *bs1 = NULL;
++    QEMUSnapshotInfo s, *sn_info = &s;
++    int ret;
++
++    /* Check logic is connected with load_vmstate():
++       Only check the devices that can snapshot, other devices that can't
++       take snapshot, for example, readonly ones, will be ignored in
++       load_vmstate(). */
++    while ((bs1 = bdrv_next(bs1))) {
++        if (bs1 != bs && bdrv_can_snapshot(bs1)) {
++            ret = bdrv_snapshot_find(bs1, sn_info, sn->id_str, NULL);
++            if (ret < 0) {
++                return false;
++            }
++        }
++    }
++    return true;
++}
++
++/*
+  * Returns 0 on success, with *p_list either set to describe snapshot
+  * information, or NULL because there are no snapshots.  Returns -errno on
+- * error, with *p_list untouched.
++ * error, with *p_list untouched. If @vm_snapshot is true, limit the results
++ * to snapshots valid for the whole VM.
+  */
+ int bdrv_query_snapshot_info_list(BlockDriverState *bs,
+                                   SnapshotInfoList **p_list,
++                                  bool vm_snapshot,
+                                   Error **errp)
+ {
+     int i, sn_count;
+@@ -60,7 +93,9 @@ int bdrv_query_snapshot_info_list(BlockDriverState *bs,
+     }
+ 
+     for (i = 0; i < sn_count; i++) {
+-
++        if (vm_snapshot && !snapshot_valid_for_vm(&sn_tab[i], bs)) {
++            continue;
++        }
+         info = g_new0(SnapshotInfo, 1);
+         info->id            = g_strdup(sn_tab[i].id_str);
+         info->name          = g_strdup(sn_tab[i].name);
+diff --git a/include/block/qapi.h b/include/block/qapi.h
+index 91dc41b..fe66053 100644
+--- a/include/block/qapi.h
++++ b/include/block/qapi.h
+@@ -30,6 +30,7 @@
+ 
+ int bdrv_query_snapshot_info_list(BlockDriverState *bs,
+                                   SnapshotInfoList **p_list,
++                                  bool vm_snapshot,
+                                   Error **errp);
+ void bdrv_collect_image_info(BlockDriverState *bs,
+                              ImageInfo *info,
+diff --git a/qemu-img.c b/qemu-img.c
+index 472b264..f537014 100644
+--- a/qemu-img.c
++++ b/qemu-img.c
+@@ -1735,7 +1735,7 @@ static ImageInfoList *collect_image_info_list(const char *filename,
+ 
+         info = g_new0(ImageInfo, 1);
+         bdrv_collect_image_info(bs, info, filename);
+-        bdrv_query_snapshot_info_list(bs, &info->snapshots, NULL);
++        bdrv_query_snapshot_info_list(bs, &info->snapshots, false, NULL);
+         if (info->snapshots) {
+             info->has_snapshots = true;
+         }
+-- 
+1.7.1
+
+
+

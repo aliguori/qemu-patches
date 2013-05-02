@@ -1,0 +1,136 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Igor Mammedov <imammedo@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, ehabkost@redhat.com,
+ claudio.fontana@huawei.com, aderumier@odiso.com, lcapitulino@redhat.com,
+ jfrei@linux.vnet.ibm.com, yang.z.zhang@intel.com, pbonzini@redhat.com,
+ eblake@redhat.com, afaerber@suse.de, lig.fnst@cn.fujitsu.com, rth@twiddle.net
+Date: Thu, 11 Apr 2013 16:51:39 +0200
+Message-id: 1365691918-30594-1-git-send-email-imammedo@redhat.com
+Subject: [PATCH 00/19] target-i386: CPU hot-add with cpu-add QMP command
+
+Implements alternative way for hot-adding CPU using cpu-add QMP command,
+wich could be useful until it would be possible to add CPUs via device_add.
+
+All patches except the last are also applicable to device_add aprroach.
+
+To hot-add CPU use following command from qmp-shell:
+ cpu-add id=[APIC ID]
+
+Available APIC IDs could be looked up at following QOM path:
+/machine/icc-bridge/cpu[0..N]
+where number in brackets is APIC ID
+Usage examples and limitations on proposed cpu-add implementation
+will be documented at http://wiki.qemu.org/Features/CPUHotplug
+
+git tree for testing: https://github.com/imammedo/qemu/tree/cpu_add.v3
+
+based on qom-cpu tree
+
+v2->v3:
+  * use local error & propagate_error() instead of operating on
+    passed in errp in several places
+  * replace CPUClass.get_firmware_id() with CPUClass.get_arch_id()
+  * leave IOAPIC creation to board and just set bus to icc-bus
+  * include kvm-stub.o in cpu libary if no KVM is configured
+  * create resume_vcpu() stub and include it in libqemustub,
+    and use it directly instead of CPU method
+  * acpi_piix4: s/cpu_add_notifier/cpu_added_notifier/
+
+v1->v2:
+  * generalize cpu sync to KVM, resume and hot-plug notification and
+    invoke them form CPUClass, to make available to all targets.
+  * introduce cpu_exists() and CPUClass.get_firmware_id() and use
+    the last one in acpi_piix to make code target independent.
+  * move IOAPIC to ICC bus, it was suggested and easy to convert.
+  * leave kvmvapic as SysBusDevice, it doesn't affect hot-plug and
+    created only once for all APIC instances. I haven't found yet
+    good/clean enough way to convert it to ICCDevice. May be follow-up
+    though.
+  * split one big ICC patch into several, one per converted device
+  * add cpu_hot_add hook to machine and implement it for target-i386,
+    instead of adding stabs. Could be used by other targets to
+    implement cpu-add.
+  * pre-allocate links<CPU> for all possible CPUs and make them available
+    at /machine/icc-bridge/cpu[0..N] QOM path, so users could find out
+    possible/free CPU IDs to use in cpu-add command.
+
+CC: pbonzini@redhat.com
+CC: afaerber@suse.de
+CC: ehabkost@redhat.com
+
+Igor Mammedov (19):
+  target-i386: split out CPU creation and features parsing into
+    cpu_x86_create()
+  cpu: Pass CPUState to *cpu_synchronize_post*()
+  cpu: make kvm-stub.o a part of CPU library
+  cpu: call cpu_synchronize_post_init() from CPUClass.realize() if
+    hotplugged
+  cpu: resume CPU from CPUClass.cpu_common_realizefn() when it is
+    hot-plugged
+  introduce CPU hot-plug notifier
+  rtc: update rtc_cmos on CPU hot-plug
+  cpu: introduce get_arch_id() method and override it for target-i386
+  cpu: add helper cpu_exists(), to check if CPU with specified id exists
+  acpi_piix4: add infrastructure to send CPU hot-plug GPE to guest
+  target-i386: introduce apic-id property
+  introduce ICC bus/device/bridge
+  target-i386: cpu: attach ICC bus to CPU on its creation
+  target-i386: replace MSI_SPACE_SIZE with APIC_SPACE_SIZE
+  target-i386: move APIC to ICC bus
+  target-i386: move IOAPIC to ICC bus
+  qdev: set device's parent before calling realize() down inheritance
+    chain.
+  target-i386: expose all possible CPUs as /machine/icc-bridge/cpu[0..N]
+    links
+  add cpu-add qmp command and implement CPU hot-add for target-i386
+
+ Makefile.target                    |  13 ++--
+ cpus.c                             |  15 ++--
+ default-configs/i386-softmmu.mak   |   1 +
+ default-configs/x86_64-softmmu.mak |   1 +
+ hw/acpi/piix4.c                    | 114 +++++++++++++++++++++++++++-
+ hw/core/qdev.c                     |   8 +-
+ hw/cpu/Makefile.objs               |   1 +
+ hw/cpu/icc_bus.c                   | 150 +++++++++++++++++++++++++++++++++++++
+ hw/i386/kvm/apic.c                 |   2 +-
+ hw/i386/kvm/ioapic.c               |   2 +-
+ hw/i386/kvmvapic.c                 |   1 +
+ hw/i386/pc.c                       |  74 ++++++++++++++++--
+ hw/i386/pc_piix.c                  |   7 ++
+ hw/i386/pc_q35.c                   |   7 ++
+ hw/intc/apic.c                     |   2 +-
+ hw/intc/apic_common.c              |  17 +++--
+ hw/intc/ioapic_common.c            |  15 +++-
+ hw/timer/mc146818rtc.c             |  12 +++
+ hw/xen/xen_apic.c                  |   2 +-
+ include/exec/memory.h              |  10 +++
+ include/hw/boards.h                |   3 +
+ include/hw/i386/apic_internal.h    |   8 +-
+ include/hw/i386/icc_bus.h          |  55 ++++++++++++++
+ include/hw/i386/ioapic_internal.h  |   6 +-
+ include/hw/pci/msi.h               |   2 +
+ include/qom/cpu.h                  |  12 +++
+ include/sysemu/cpus.h              |   3 +
+ include/sysemu/kvm.h               |  30 ++++----
+ include/sysemu/sysemu.h            |   3 +
+ kvm-all.c                          |   9 +--
+ kvm-stub.c                         |   7 +-
+ memory.c                           |  11 +++
+ qapi-schema.json                   |  11 +++
+ qmp-commands.hx                    |  23 ++++++
+ qmp.c                              |  10 +++
+ qom/cpu.c                          |  45 +++++++++++
+ stubs/Makefile.objs                |   1 +
+ stubs/resume_vcpu.c                |   6 ++
+ target-i386/cpu.c                  |  93 +++++++++++++++++++----
+ target-i386/cpu.h                  |   2 +
+ vl.c                               |   7 +-
+ 41 files changed, 717 insertions(+), 84 deletions(-)
+ create mode 100644 hw/cpu/icc_bus.c
+ create mode 100644 include/hw/i386/icc_bus.h
+ create mode 100644 stubs/resume_vcpu.c
+
+-- 
+1.8.2
+

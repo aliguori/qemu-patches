@@ -1,0 +1,61 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Gerd Hoffmann <kraxel@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, Gerd Hoffmann <kraxel@redhat.com>
+Date: Thu, 25 Apr 2013 09:56:12 +0200
+Message-id: 1366876575-23958-4-git-send-email-kraxel@redhat.com
+Subject: [PATCH 3/6] console: add qemu_console_lookup_by_device
+
+Look up the QemuConsole for a given device, using the new link.
+
+Signed-off-by: Gerd Hoffmann <kraxel@redhat.com>
+---
+ include/ui/console.h |    1 +
+ ui/console.c         |   19 +++++++++++++++++++
+ 2 files changed, 20 insertions(+)
+
+diff --git a/include/ui/console.h b/include/ui/console.h
+index 22670d8..c74e791 100644
+--- a/include/ui/console.h
++++ b/include/ui/console.h
+@@ -300,6 +300,7 @@ void graphic_hw_invalidate(QemuConsole *con);
+ void graphic_hw_text_update(QemuConsole *con, console_ch_t *chardata);
+ 
+ QemuConsole *qemu_console_lookup_by_index(unsigned int index);
++QemuConsole *qemu_console_lookup_by_device(DeviceState *dev);
+ bool qemu_console_is_visible(QemuConsole *con);
+ bool qemu_console_is_graphic(QemuConsole *con);
+ bool qemu_console_is_fixedsize(QemuConsole *con);
+diff --git a/ui/console.c b/ui/console.c
+index 4102e8c..e3ab985 100644
+--- a/ui/console.c
++++ b/ui/console.c
+@@ -1596,6 +1596,25 @@ QemuConsole *qemu_console_lookup_by_index(unsigned int index)
+     return consoles[index];
+ }
+ 
++QemuConsole *qemu_console_lookup_by_device(DeviceState *dev)
++{
++    Error *local_err = NULL;
++    Object *obj;
++    int i;
++
++    for (i = 0; i < nb_consoles; i++) {
++        if (!consoles[i]) {
++            continue;
++        }
++        obj = object_property_get_link(OBJECT(consoles[i]),
++                                       "device", &local_err);
++        if (DEVICE(obj) == dev) {
++            return consoles[i];
++        }
++    }
++    return NULL;
++}
++
+ bool qemu_console_is_visible(QemuConsole *con)
+ {
+     return (con == active_console) || (con->dcls > 0);
+-- 
+1.7.9.7
+

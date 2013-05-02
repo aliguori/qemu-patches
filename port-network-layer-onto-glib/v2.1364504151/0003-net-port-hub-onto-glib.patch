@@ -1,0 +1,189 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Liu Ping Fan <qemulist@gmail.com>
+To: Liu Ping Fan <qemulist@gmail.com>, Stefan Hajnoczi <stefanha@gmail.com>,
+ qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, Paolo Bonzini <pbonzini@redhat.com>,
+ Stefan Hajnoczi <stefanha@gmail.com>, mdroth <mdroth@linux.vnet.ibm.com>,
+ qemu-devel@nongnu.org
+Date: Thu, 28 Mar 2013 15:55:54 +0800
+Message-id: 1364457355-4119-4-git-send-email-qemulist@gmail.com
+Subject: [PATCH 3/4] net: port hub onto glib
+
+From: Liu Ping Fan <pingfank@linux.vnet.ibm.com>
+
+Attach each hubport with a GSource. Currently the GSource is attached
+to default main context, and the hub still run on iothread, but in
+future, after making the whole layer thread-safe, we will admit ports
+to run on different thread.
+
+Signed-off-by: Liu Ping Fan <pingfank@linux.vnet.ibm.com>
+---
+ hw/qdev-properties-system.c |    1 +
+ include/net/queue.h         |   14 ++++++++++++++
+ net/hub.c                   |   34 ++++++++++++++++++++++++++++++++--
+ net/net.c                   |    1 +
+ net/queue.c                 |    4 ++--
+ 5 files changed, 50 insertions(+), 4 deletions(-)
+
+diff --git a/hw/qdev-properties-system.c b/hw/qdev-properties-system.c
+index ce3af22..bb2448d 100644
+--- a/hw/qdev-properties-system.c
++++ b/hw/qdev-properties-system.c
+@@ -307,6 +307,7 @@ static void set_vlan(Object *obj, Visitor *v, void *opaque,
+                   name, prop->info->name);
+         return;
+     }
++    hubport->info->bind_ctx(hubport, NULL);
+     *ptr = hubport;
+ }
+ 
+diff --git a/include/net/queue.h b/include/net/queue.h
+index fc02b33..f60e57f 100644
+--- a/include/net/queue.h
++++ b/include/net/queue.h
+@@ -38,6 +38,20 @@ NetQueue *qemu_new_net_queue(void *opaque);
+ 
+ void qemu_del_net_queue(NetQueue *queue);
+ 
++void qemu_net_queue_append(NetQueue *queue,
++                                  NetClientState *sender,
++                                  unsigned flags,
++                                  const uint8_t *buf,
++                                  size_t size,
++                                  NetPacketSent *sent_cb);
++
++void qemu_net_queue_append_iov(NetQueue *queue,
++                                      NetClientState *sender,
++                                      unsigned flags,
++                                      const struct iovec *iov,
++                                      int iovcnt,
++                                      NetPacketSent *sent_cb);
++
+ ssize_t qemu_net_queue_send(NetQueue *queue,
+                             NetClientState *sender,
+                             unsigned flags,
+diff --git a/net/hub.c b/net/hub.c
+index df32074..594fab7 100644
+--- a/net/hub.c
++++ b/net/hub.c
+@@ -31,6 +31,7 @@ typedef struct NetHubPort {
+     QLIST_ENTRY(NetHubPort) next;
+     NetHub *hub;
+     int id;
++    EventNotifier e;
+ } NetHubPort;
+ 
+ struct NetHub {
+@@ -52,7 +53,9 @@ static ssize_t net_hub_receive(NetHub *hub, NetHubPort *source_port,
+             continue;
+         }
+ 
+-        qemu_send_packet(&port->nc, buf, len);
++        qemu_net_queue_append(port->nc.peer->send_queue, &port->nc,
++                        QEMU_NET_PACKET_FLAG_NONE, buf, len, NULL);
++        event_notifier_set(&port->e);
+     }
+     return len;
+ }
+@@ -68,7 +71,9 @@ static ssize_t net_hub_receive_iov(NetHub *hub, NetHubPort *source_port,
+             continue;
+         }
+ 
+-        qemu_sendv_packet(&port->nc, iov, iovcnt);
++        qemu_net_queue_append_iov(port->nc.peer->send_queue, &port->nc,
++                        QEMU_NET_PACKET_FLAG_NONE, iov, iovcnt, NULL);
++        event_notifier_set(&port->e);
+     }
+     return len;
+ }
+@@ -129,6 +134,11 @@ static void net_hub_port_cleanup(NetClientState *nc)
+     QLIST_REMOVE(port, next);
+ }
+ 
++static void net_hub_port_bind(NetClientState *nc, GMainContext *ctx)
++{
++    g_source_attach(&nc->nsrc[0]->source, ctx);
++}
++
+ static NetClientInfo net_hub_port_info = {
+     .type = NET_CLIENT_OPTIONS_KIND_HUBPORT,
+     .size = sizeof(NetHubPort),
+@@ -136,14 +146,29 @@ static NetClientInfo net_hub_port_info = {
+     .receive = net_hub_port_receive,
+     .receive_iov = net_hub_port_receive_iov,
+     .cleanup = net_hub_port_cleanup,
++    .bind_ctx = net_hub_port_bind,
+ };
+ 
++static gboolean hub_port_handler(gpointer data)
++{
++    NetClientSource *nsrc = (NetClientSource *)data;
++    NetHubPort *port = (NetHubPort *)nsrc->opaque;
++
++    if (nsrc->gfd.revents & G_IO_IN) {
++        event_notifier_test_and_clear(&port->e);
++        qemu_net_queue_flush(port->nc.peer->send_queue);
++        return true;
++    }
++    return false;
++}
++
+ static NetHubPort *net_hub_port_new(NetHub *hub, const char *name)
+ {
+     NetClientState *nc;
+     NetHubPort *port;
+     int id = hub->num_ports++;
+     char default_name[128];
++    NetClientSource *nsrc;
+ 
+     if (!name) {
+         snprintf(default_name, sizeof(default_name),
+@@ -155,6 +180,11 @@ static NetHubPort *net_hub_port_new(NetHub *hub, const char *name)
+     port = DO_UPCAST(NetHubPort, nc, nc);
+     port->id = id;
+     port->hub = hub;
++    event_notifier_init(&port->e, 0);
++    nsrc = (NetClientSource *)g_source_new(&net_gsource_funcs,
++                sizeof(NetClientSource));
++    net_init_gsource(nc, 0, nsrc, event_notifier_get_fd(&port->e), G_IO_IN,
++                NULL, NULL, hub_port_handler, port);
+ 
+     QLIST_INSERT_HEAD(&hub->ports, port, next);
+ 
+diff --git a/net/net.c b/net/net.c
+index abe8fef..b5caa39 100644
+--- a/net/net.c
++++ b/net/net.c
+@@ -877,6 +877,7 @@ static int net_client_init1(const void *object, int is_netdev, Error **errp)
+             (opts->kind != NET_CLIENT_OPTIONS_KIND_NIC ||
+              !opts->nic->has_netdev)) {
+             peer = net_hub_add_port(u.net->has_vlan ? u.net->vlan : 0, NULL);
++            peer->info->bind_ctx(peer, NULL);
+         }
+ 
+         if (net_client_init_fun[opts->kind](opts, name, peer) < 0) {
+diff --git a/net/queue.c b/net/queue.c
+index 859d02a..67959f8 100644
+--- a/net/queue.c
++++ b/net/queue.c
+@@ -87,7 +87,7 @@ void qemu_del_net_queue(NetQueue *queue)
+     g_free(queue);
+ }
+ 
+-static void qemu_net_queue_append(NetQueue *queue,
++void qemu_net_queue_append(NetQueue *queue,
+                                   NetClientState *sender,
+                                   unsigned flags,
+                                   const uint8_t *buf,
+@@ -110,7 +110,7 @@ static void qemu_net_queue_append(NetQueue *queue,
+     QTAILQ_INSERT_TAIL(&queue->packets, packet, entry);
+ }
+ 
+-static void qemu_net_queue_append_iov(NetQueue *queue,
++void qemu_net_queue_append_iov(NetQueue *queue,
+                                       NetClientState *sender,
+                                       unsigned flags,
+                                       const struct iovec *iov,
+-- 
+1.7.4.4
+

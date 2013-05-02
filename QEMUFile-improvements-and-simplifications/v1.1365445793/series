@@ -1,0 +1,5 @@
+0000-QEMUFile-improvements-and-simplifications.txt
+0001-migration-set-f-is_write-and-flush-in-add_to_iovec.patch
+0002-migration-use-a-single-I-O-operation-when-writev_buffer-is-not-defined.patch
+0003-migration-drop-is_write-complications.patch
+0004-migration-simplify-writev-vs-non-writev-logic.patch

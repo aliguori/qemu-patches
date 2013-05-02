@@ -1,0 +1,1 @@
+../ppc-prep-add-IBM-RS-6000-43p-machine/v1.1367550537/0004-m48t59-register-a-QOM-type-for-each-nvram-type-we-support.patch

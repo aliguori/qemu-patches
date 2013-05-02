@@ -1,0 +1,1 @@
+../arm-devs-queue/v1.1366405036/0006-versatile_pci-Put-the-host-bridge-PCI-device-at-slot-29.patch

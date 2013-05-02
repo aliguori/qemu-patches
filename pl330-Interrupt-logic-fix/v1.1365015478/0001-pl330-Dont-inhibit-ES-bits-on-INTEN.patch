@@ -1,0 +1,39 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+To: peter.maydell@linaro.org, qemu-devel@nongnu.org,
+ Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+Cc: qemu-devel@nongnu.org, Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+Date: Wed,  3 Apr 2013 13:59:29 +1000
+Message-id: 5ddb09d6c9f21e0293b9a3f82476c6cc8665757f.1364961415.git.peter.crosthwaite@xilinx.com
+Subject: [PATCH 1/1] pl330: Dont inhibit ES bits on INTEN
+
+This if-else logic inhibits setting of the event status (ES) bits
+when interrupts are enabled. This is incorrect. ES should be set
+regardless on INTEN state. INTEN only inhibits the signalling of
+events to PL330 threads, not setting of the ES register.
+
+Signed-off-by: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+---
+
+ hw/pl330.c |    3 +--
+ 1 files changed, 1 insertions(+), 2 deletions(-)
+
+diff --git a/hw/pl330.c b/hw/pl330.c
+index 1a04773..60aa4a8 100644
+--- a/hw/pl330.c
++++ b/hw/pl330.c
+@@ -870,9 +870,8 @@ static void pl330_dmasev(PL330Chan *ch, uint8_t opcode, uint8_t *args, int len)
+         ch->parent->int_status |= (1 << ev_id);
+         DB_PRINT("event interrupt raised %d\n", ev_id);
+         qemu_irq_raise(ch->parent->irq[ev_id]);
+-    } else {
+-        ch->parent->ev_status |= (1 << ev_id);
+     }
++    ch->parent->ev_status |= (1 << ev_id);
+ }
+ 
+ static void pl330_dmast(PL330Chan *ch, uint8_t opcode, uint8_t *args, int len)
+-- 
+1.7.0.4
+
+

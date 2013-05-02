@@ -1,0 +1,1 @@
+../Fix-versatile_pci/v4.1365284665/0011-hw-versatile_pci-Drop-unnecessary-vpb_pci_config_addr.patch

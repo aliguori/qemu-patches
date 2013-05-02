@@ -1,0 +1,35 @@
+From patches Mon Sep 17 00:00:00 2001
+From: liguang <lig.fnst@cn.fujitsu.com>
+To: qemu-devel@nongnu.org
+Cc: liguang <lig.fnst@cn.fujitsu.com>
+Date: Thu, 11 Apr 2013 11:41:50 +0800
+Message-id: 1365651722-11241-4-git-send-email-lig.fnst@cn.fujitsu.com
+Subject: [PATCH 04/16] target-mips/translate: mininally change
+ gen_intermediate_code_internal
+
+Signed-off-by: liguang <lig.fnst@cn.fujitsu.com>
+---
+ target-mips/translate.c |    6 +++---
+ 1 files changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/target-mips/translate.c b/target-mips/translate.c
+index b7f8203..099d89f 100644
+--- a/target-mips/translate.c
++++ b/target-mips/translate.c
+@@ -15595,9 +15595,9 @@ gen_intermediate_code_internal (CPUMIPSState *env, TranslationBlock *tb,
+         if (search_pc) {
+             j = tcg_ctx.gen_opc_ptr - tcg_ctx.gen_opc_buf;
+             if (lj < j) {
+-                lj++;
+-                while (lj < j)
+-                    tcg_ctx.gen_opc_instr_start[lj++] = 0;
++                while (++lj < j) {
++                    tcg_ctx.gen_opc_instr_start[lj] = 0;
++                }
+             }
+             tcg_ctx.gen_opc_pc[lj] = ctx.pc;
+             gen_opc_hflags[lj] = ctx.hflags & MIPS_HFLAG_BMASK;
+-- 
+1.7.2.5
+
+

@@ -1,0 +1,1 @@
+../win32-fix-compilation-again/v1.1367451015/0001-win32-fix-compilation-again.patch

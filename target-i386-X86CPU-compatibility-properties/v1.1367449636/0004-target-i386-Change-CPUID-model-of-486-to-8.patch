@@ -1,0 +1,57 @@
+From patches Mon Sep 17 00:00:00 2001
+From: =?utf-8?q?Andreas_F=C3=A4rber_=3Cafaerber=40suse=2Ede=3E?=
+To: qemu-devel@nongnu.org, Andreas =?iso-8859-1?Q?F=E4rber?= <afaerber@suse.de>
+Cc: ehabkost@redhat.com, "H. Peter Anvin" <hpa@zytor.com>,
+ qemu-devel@nongnu.org, =?UTF-8?q?Andreas=20F=C3=A4rber?= <afaerber@suse.de>,
+ anthony@codemonkey.ws, pbonzini@redhat.com, imammedo@redhat.com
+Date: Wed,  1 May 2013 18:07:20 +0200
+Message-id: 1367424440-16687-5-git-send-email-afaerber@suse.de
+Subject: [PATCH 4/4] target-i386: Change CPUID model of 486 to 8
+
+This changes the model number of 486 to 8 (DX4) which matches the
+feature set presented, and actually has the CPUID instruction.
+
+This adds a compatibility property, to keep model=0 on pc-*-1.4 and older.
+
+Signed-off-by: H. Peter Anvin <hpa@zytor.com>
+Cc: Eduardo Habkost <ehabkost@redhat.com>
+[AF: Add compat_props entry]
+Signed-off-by: Andreas Färber <afaerber@suse.de>
+Reviewed-by: Eduardo Habkost <ehabkost@redhat.com>
+Tested-by: Eduardo Habkost <ehabkost@redhat.com>
+---
+ include/hw/i386/pc.h | 4 ++++
+ target-i386/cpu.c    | 2 +-
+ 2 files changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/include/hw/i386/pc.h b/include/hw/i386/pc.h
+index 41869e5..417afe4 100644
+--- a/include/hw/i386/pc.h
++++ b/include/hw/i386/pc.h
+@@ -242,6 +242,10 @@ int e820_add_entry(uint64_t, uint64_t, uint32_t);
+             .driver   = "pc-sysfw",\
+             .property = "rom_only",\
+             .value    = stringify(0),\
++        },{\
++            .driver   = "486-" TYPE_X86_CPU,\
++            .property = "model",\
++            .value    = stringify(0),\
+         }
+ 
+ #endif
+diff --git a/target-i386/cpu.c b/target-i386/cpu.c
+index 8a9563b..f7d4d9b 100644
+--- a/target-i386/cpu.c
++++ b/target-i386/cpu.c
+@@ -550,7 +550,7 @@ static x86_def_t builtin_x86_defs[] = {
+         .level = 1,
+         .vendor = CPUID_VENDOR_INTEL,
+         .family = 4,
+-        .model = 0,
++        .model = 8,
+         .stepping = 0,
+         .features = I486_FEATURES,
+         .xlevel = 0,
+-- 
+1.8.1.4
+

@@ -1,0 +1,38 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Felipe Franciosi <felipe.franciosi@citrix.com>
+To: qemu-devel@nongnu.org, Felipe Franciosi <felipe.franciosi@citrix.com>
+Cc: Felipe Franciosi <felipe.franciosi@citrix.com>,
+ Stefano Stabellini <Stefano.Stabellini@eu.citrix.com>,
+ "xen-devel@lists.xen.org" <xen-devel@lists.xen.org>,
+ "qemu-devel@nongnu.org" <qemu-devel@nongnu.org>, xen-devel@lists.xen.org,
+ Stefano Stabellini <stefano.stabellini@eu.citrix.com>,
+ Ian Jackson <Ian.Jackson@eu.citrix.com>
+Date: Wed, 3 Apr 2013 15:01:10 +0100
+Message-id: 1364997672-29579-1-git-send-email-felipe.franciosi@citrix.com
+Subject: [PATCH 0/2] Allow xen guests to plug disks of 1 TiB or more
+
+This series fixes an issue where disks of 1 TiB or more cannot be added
+to a xen guest. The problem lies in the xen backend driver using a 32 bit
+integer xenstore interface to write the number of sectors corresponding
+to the file or device that represents the virtual disk.
+
+The first patch adds 64 bit integer write functions to the xenstore
+interface. The second patch fixes the xen backend driver to use this new
+function, allowing for more than 2147483647 sectors.
+
+Thanks,
+Felipe
+
+Felipe Franciosi (2):
+  Introduce 64 bit integer write interface to xenstore
+  Allow xen guests to plug disks of 1 TiB or more
+
+ hw/xen_backend.c |   15 ++++++++++++++-
+ hw/xen_backend.h |    2 ++
+ hw/xen_disk.c    |    4 ++--
+ 3 files changed, 18 insertions(+), 3 deletions(-)
+
+-- 
+1.7.10.4
+
+

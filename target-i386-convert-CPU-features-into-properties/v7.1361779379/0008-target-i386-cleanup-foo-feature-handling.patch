@@ -1,0 +1,56 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Igor Mammedov <imammedo@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: ehabkost@redhat.com, afaerber@suse.de
+Date: Mon, 25 Feb 2013 02:03:07 +0100
+Message-id: 1361754189-29809-9-git-send-email-imammedo@redhat.com
+Subject: [PATCH 08/10] target-i386: cleanup 'foo' feature handling'
+
+features check, enforce, hv_relaxed and hv_vapic are treated as boolean set to 'on'
+when passed from command line, so it's not neccessary to handle each of them
+separetly. Collapse them to one catch-all branch which will treat
+any feature in format 'foo' as boolean set to 'on'.
+
+PS:
+Any unknown feature will be rejected by CPU property setter so there is no
+need to check for unknown feature in cpu_x86_parse_featurestr(), therefore
+it's replaced by above mentioned catch-all handler.
+
+Signed-off-by: Igor Mammedov <imammedo@redhat.com>
+Reviewed-by: Eduardo Habkost <ehabkost@redhat.com>
+---
+v2:
+  * use feat2prop() to perform name convertion for hv_vapic and hv_relaxed
+---
+ target-i386/cpu.c |   13 ++-----------
+ 1 files changed, 2 insertions(+), 11 deletions(-)
+
+diff --git a/target-i386/cpu.c b/target-i386/cpu.c
+index 6826224..1073bdc 100644
+--- a/target-i386/cpu.c
++++ b/target-i386/cpu.c
+@@ -1485,18 +1485,9 @@ static void cpu_x86_parse_featurestr(X86CPU *cpu, char *features, Error **errp)
+                 error_setg(errp, "unrecognized feature %s", featurestr);
+                 goto out;
+             }
+-        } else if (!strcmp(featurestr, "check")) {
+-            object_property_parse(OBJECT(cpu), "on", featurestr, errp);
+-        } else if (!strcmp(featurestr, "enforce")) {
+-            object_property_parse(OBJECT(cpu), "on", featurestr, errp);
+-        } else if (!strcmp(featurestr, "hv_relaxed")) {
+-            object_property_parse(OBJECT(cpu), "on", "hv-relaxed", errp);
+-        } else if (!strcmp(featurestr, "hv_vapic")) {
+-            object_property_parse(OBJECT(cpu), "on", "hv-vapic", errp);
+         } else {
+-            error_setg(errp, "feature string `%s' not in format (+feature|"
+-                       "-feature|feature=xyz)", featurestr);
+-            goto out;
++            feat2prop(featurestr);
++            object_property_parse(OBJECT(cpu), "on", featurestr, errp);
+         }
+         if (error_is_set(errp)) {
+             goto out;
+-- 
+1.7.1
+
+

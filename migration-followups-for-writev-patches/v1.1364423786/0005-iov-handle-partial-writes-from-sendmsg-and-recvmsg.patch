@@ -1,0 +1,148 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: Paolo Bonzini <pbonzini@redhat.com>, qemu-devel@nongnu.org
+Cc: owasserm@redhat.com, qemu-devel@nongnu.org, quintela@redhat.com
+Date: Wed, 27 Mar 2013 17:36:31 +0100
+Message-id: 1364402192-18169-6-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 5/6] iov: handle partial writes from sendmsg and recvmsg
+
+Partial writes can still happen in sendmsg and recvmsg, if a
+signal is received in the middle of a write.  To handle this,
+retry the operation with a new offset/bytes pair.
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+Reviewed-by: Juan Quintela <quintela@redhat.com>
+---
+        I suggest using "git show -b" to review this one...
+
+ util/iov.c | 102 +++++++++++++++++++++++++++++++++----------------------------
+ 1 file changed, 55 insertions(+), 47 deletions(-)
+
+diff --git a/util/iov.c b/util/iov.c
+index f14ff0b..0ecfc4c 100644
+--- a/util/iov.c
++++ b/util/iov.c
+@@ -144,63 +144,71 @@ ssize_t iov_send_recv(int sockfd, struct iovec *iov, unsigned iov_cnt,
+                       size_t offset, size_t bytes,
+                       bool do_send)
+ {
++    ssize_t total = 0;
+     ssize_t ret;
+     size_t orig_len, tail;
+     unsigned niov;
+ 
+-    if (bytes == 0) {
+-        /* Catch the do-nothing case early, as otherwise we will pass an
+-         * empty iovec to sendmsg/recvmsg(), and not all implementations
+-         * accept this.
+-         */
+-        return 0;
+-    }
+-
+-    /* Find the start position, skipping `offset' bytes:
+-     * first, skip all full-sized vector elements, */
+-    for (niov = 0; niov < iov_cnt && offset >= iov[niov].iov_len; ++niov) {
+-        offset -= iov[niov].iov_len;
+-    }
++    while (bytes > 0) {
++        /* Find the start position, skipping `offset' bytes:
++         * first, skip all full-sized vector elements, */
++        for (niov = 0; niov < iov_cnt && offset >= iov[niov].iov_len; ++niov) {
++            offset -= iov[niov].iov_len;
++        }
+ 
+-    /* niov == iov_cnt would only be valid if bytes == 0, which
+-     * we already ruled out above.  */
+-    assert(niov < iov_cnt);
+-    iov += niov;
+-    iov_cnt -= niov;
+-
+-    if (offset) {
+-        /* second, skip `offset' bytes from the (now) first element,
+-         * undo it on exit */
+-        iov[0].iov_base += offset;
+-        iov[0].iov_len -= offset;
+-    }
+-    /* Find the end position skipping `bytes' bytes: */
+-    /* first, skip all full-sized elements */
+-    tail = bytes;
+-    for (niov = 0; niov < iov_cnt && iov[niov].iov_len <= tail; ++niov) {
+-        tail -= iov[niov].iov_len;
+-    }
+-    if (tail) {
+-        /* second, fixup the last element, and remember the original
+-         * length */
++        /* niov == iov_cnt would only be valid if bytes == 0, which
++         * we already ruled out in the loop condition.  */
+         assert(niov < iov_cnt);
+-        assert(iov[niov].iov_len > tail);
+-        orig_len = iov[niov].iov_len;
+-        iov[niov++].iov_len = tail;
+-    }
++        iov += niov;
++        iov_cnt -= niov;
++
++        if (offset) {
++            /* second, skip `offset' bytes from the (now) first element,
++             * undo it on exit */
++            iov[0].iov_base += offset;
++            iov[0].iov_len -= offset;
++        }
++        /* Find the end position skipping `bytes' bytes: */
++        /* first, skip all full-sized elements */
++        tail = bytes;
++        for (niov = 0; niov < iov_cnt && iov[niov].iov_len <= tail; ++niov) {
++            tail -= iov[niov].iov_len;
++        }
++        if (tail) {
++            /* second, fixup the last element, and remember the original
++             * length */
++            assert(niov < iov_cnt);
++            assert(iov[niov].iov_len > tail);
++            orig_len = iov[niov].iov_len;
++            iov[niov++].iov_len = tail;
++        }
+ 
+-    ret = do_send_recv(sockfd, iov, niov, do_send);
++        ret = do_send_recv(sockfd, iov, niov, do_send);
+ 
+-    /* Undo the changes above */
+-    if (tail) {
+-        iov[niov-1].iov_len = orig_len;
+-    }
+-    if (offset) {
+-        iov[0].iov_base -= offset;
+-        iov[0].iov_len += offset;
++        /* Undo the changes above before checking for errors */
++        if (tail) {
++            iov[niov-1].iov_len = orig_len;
++        }
++        if (offset) {
++            iov[0].iov_base -= offset;
++            iov[0].iov_len += offset;
++        }
++
++        if (ret < 0) {
++            assert(errno != EINTR);
++            if (errno == EAGAIN && total > 0) {
++                return total;
++            }
++            return -1;
++        }
++
++        /* Prepare for the next iteration */
++        offset += ret;
++        total += ret;
++        bytes -= ret;
+     }
+ 
+-    return ret;
++    return total;
+ }
+ 
+ 
+-- 
+1.8.1.4
+
+
+

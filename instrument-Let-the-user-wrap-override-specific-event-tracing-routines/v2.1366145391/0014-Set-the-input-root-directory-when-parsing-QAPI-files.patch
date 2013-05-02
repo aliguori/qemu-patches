@@ -1,0 +1,42 @@
+From patches Mon Sep 17 00:00:00 2001
+From: =?utf-8?q?Llu=C3=ADs_Vilanova_=3Cvilanova=40ac=2Eupc=2Eedu=3E?=
+To: qemu-devel@nongnu.org
+Cc: 
+Date: Tue, 16 Apr 2013 15:51:10 +0200
+Message-id: 20130416135109.21588.40292.stgit@fimbulvetr.bsc.es
+Subject: [PATCH 14/23] Set the input root directory when parsing QAPI files
+
+Signed-off-by: Lluís Vilanova <vilanova@ac.upc.edu>
+---
+ Makefile |   12 +++++++++---
+ 1 file changed, 9 insertions(+), 3 deletions(-)
+
+diff --git a/Makefile b/Makefile
+index cf938be..8280273 100644
+--- a/Makefile
++++ b/Makefile
+@@ -211,13 +211,19 @@ $(SRC_PATH)/qga/qapi-schema.json $(SRC_PATH)/scripts/qapi-commands.py $(qapi-py)
+ 
+ qapi-types.c qapi-types.h :\
+ $(SRC_PATH)/qapi-schema.json $(SRC_PATH)/scripts/qapi-types.py $(qapi-py)
+-	$(call quiet-command,$(PYTHON) $(SRC_PATH)/scripts/qapi-types.py $(gen-out-type) -o "." < $<, "  GEN   $@")
++	$(call quiet-command,$(PYTHON) $(SRC_PATH)/scripts/qapi-types.py \
++		$(gen-out-type) -o "." -i "$(SRC_PATH)" \
++		< $<, "  GEN   $@")
+ qapi-visit.c qapi-visit.h :\
+ $(SRC_PATH)/qapi-schema.json $(SRC_PATH)/scripts/qapi-visit.py $(qapi-py)
+-	$(call quiet-command,$(PYTHON) $(SRC_PATH)/scripts/qapi-visit.py $(gen-out-type) -o "."  < $<, "  GEN   $@")
++	$(call quiet-command,$(PYTHON) $(SRC_PATH)/scripts/qapi-visit.py \
++		$(gen-out-type) -o "." -i "$(SRC_PATH)" \
++		< $<, "  GEN   $@")
+ qmp-commands.h qmp-marshal.c :\
+ $(SRC_PATH)/qapi-schema.json $(SRC_PATH)/scripts/qapi-commands.py $(qapi-py)
+-	$(call quiet-command,$(PYTHON) $(SRC_PATH)/scripts/qapi-commands.py $(gen-out-type) -m -o "." < $<, "  GEN   $@")
++	$(call quiet-command,$(PYTHON) $(SRC_PATH)/scripts/qapi-commands.py \
++		$(gen-out-type) -m -o "." -i "$(SRC_PATH)" \
++		< $<, "  GEN   $@")
+ 
+ QGALIB_GEN=$(addprefix qga/qapi-generated/, qga-qapi-types.h qga-qapi-visit.h qga-qmp-commands.h)
+ $(qga-obj-y) qemu-ga.o: $(QGALIB_GEN)
+
+

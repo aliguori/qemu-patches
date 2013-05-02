@@ -1,0 +1,29 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Gerd Hoffmann <kraxel@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Gerd Hoffmann <kraxel@redhat.com>
+Date: Wed,  3 Apr 2013 11:43:36 +0200
+Message-id: 1364982220-4755-7-git-send-email-kraxel@redhat.com
+Subject: [PATCH 06/10] xhci: zap unused name field
+
+Signed-off-by: Gerd Hoffmann <kraxel@redhat.com>
+---
+ hw/usb/hcd-xhci.c |    1 -
+ 1 file changed, 1 deletion(-)
+
+diff --git a/hw/usb/hcd-xhci.c b/hw/usb/hcd-xhci.c
+index 5ea1fe7..efd4b0d 100644
+--- a/hw/usb/hcd-xhci.c
++++ b/hw/usb/hcd-xhci.c
+@@ -452,7 +452,6 @@ struct XHCIState {
+     MemoryRegion mem_oper;
+     MemoryRegion mem_runtime;
+     MemoryRegion mem_doorbell;
+-    const char *name;
+     unsigned int devaddr;
+ 
+     /* properties */
+-- 
+1.7.9.7
+
+

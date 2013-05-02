@@ -1,0 +1,4 @@
+0000-virtio-vhost-Add-checks-for-uninitialized-VQs.txt
+0001-virtio-add-API-to-check-that-ring-is-setup.patch
+0002-virtio-pci-Add-virtio_queue_valid-checks-ahead-of-virtio_queue_get_num.patch
+0003-vhost-Skip-uninitialized-VQs-in-vhost_virtqueue_startstop.patch

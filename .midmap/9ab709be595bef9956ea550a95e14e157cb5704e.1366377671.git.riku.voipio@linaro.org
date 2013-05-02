@@ -1,0 +1,1 @@
+../linux-user-pending-patches/v1.1366408793/0002-linux-user-fix-undefined-shift-in-copy_to_user_fdset.patch

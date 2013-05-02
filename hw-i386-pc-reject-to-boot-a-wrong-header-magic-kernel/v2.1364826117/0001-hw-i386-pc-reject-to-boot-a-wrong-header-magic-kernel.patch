@@ -1,0 +1,44 @@
+From patches Mon Sep 17 00:00:00 2001
+From: liguang <lig.fnst@cn.fujitsu.com>
+To: qemu-trivial@nongnu.org, stefanha@gmail.com,
+ Stefan Hajnoczi <stefanha@gmail.com>, qemu-devel@nongnu.org,
+ liguang <lig.fnst@cn.fujitsu.com>
+Cc: qemu-trivial@nongnu.org, qemu-devel@nongnu.org,
+ liguang <lig.fnst@cn.fujitsu.com>
+Date: Mon, 1 Apr 2013 09:21:57 +0800
+Message-id: 1364779317-3963-1-git-send-email-lig.fnst@cn.fujitsu.com
+Subject: [PATCH 1/1] hw/i386/pc: reject to boot a wrong header magic kernel
+
+if head magic is missing or wrong unexpectedly, we'd
+better to reject booting.
+e.g.
+I make a mistake to boot a vmlinuz for MIPS(which
+I think it's for x86) like this:
+qemu-system-x86_64 -kernel vmlinuz -initrd demord
+then qemu report:
+"qemu: linux kernel too old to load a ram disk"
+that's misleading.
+
+Signed-off-by: liguang <lig.fnst@cn.fujitsu.com>
+---
+ hw/i386/pc.c |    3 +++
+ 1 files changed, 3 insertions(+), 0 deletions(-)
+
+diff --git a/hw/i386/pc.c b/hw/i386/pc.c
+index b1e06fa..bfbb5fe 100644
+--- a/hw/i386/pc.c
++++ b/hw/i386/pc.c
+@@ -683,6 +683,9 @@ static void load_linux(void *fw_cfg,
+         if (load_multiboot(fw_cfg, f, kernel_filename, initrd_filename,
+                            kernel_cmdline, kernel_size, header)) {
+             return;
++        } else {
++            fprintf(stderr, "not a valid multiboot image!\n");
++            exit(1);
+         }
+         protocol = 0;
+     }
+-- 
+1.7.2.5
+
+

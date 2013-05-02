@@ -1,0 +1,144 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Dong Xu Wang <wdongxu@linux.vnet.ibm.com>
+To: qemu-devel@nongnu.org
+Cc: kwol@redhat.com, wdongxu@cn.ibm.com,
+ Dong Xu Wang <wdongxu@linux.vnet.ibm.com>, stefanha@redhat.com
+Date: Wed, 10 Apr 2013 16:11:53 +0800
+Message-id: 1365581513-3475-7-git-send-email-wdongxu@linux.vnet.ibm.com
+Subject: [PATCH 6/6] qemu-iotests: add add-cow iotests support
+
+This patch will use qemu-iotests to test add-cow file format.
+
+Signed-off-by: Dong Xu Wang <wdongxu@linux.vnet.ibm.com>
+---
+v17-v18:
+1) add 037 and 038 tests.
+
+ tests/qemu-iotests/017       |  2 +-
+ tests/qemu-iotests/020       |  2 +-
+ tests/qemu-iotests/037       |  2 +-
+ tests/qemu-iotests/038       |  2 +-
+ tests/qemu-iotests/common    |  6 ++++++
+ tests/qemu-iotests/common.rc | 15 ++++++++++++++-
+ 6 files changed, 24 insertions(+), 5 deletions(-)
+
+diff --git a/tests/qemu-iotests/017 b/tests/qemu-iotests/017
+index 66951eb..d31432f 100755
+--- a/tests/qemu-iotests/017
++++ b/tests/qemu-iotests/017
+@@ -40,7 +40,7 @@ trap "_cleanup; exit \$status" 0 1 2 3 15
+ . ./common.pattern
+ 
+ # Any format supporting backing files
+-_supported_fmt qcow qcow2 vmdk qed
++_supported_fmt qcow qcow2 vmdk qed add-cow
+ _supported_proto generic
+ _supported_os Linux
+ 
+diff --git a/tests/qemu-iotests/020 b/tests/qemu-iotests/020
+index 2fb0ff8..3dbb495 100755
+--- a/tests/qemu-iotests/020
++++ b/tests/qemu-iotests/020
+@@ -42,7 +42,7 @@ trap "_cleanup; exit \$status" 0 1 2 3 15
+ . ./common.pattern
+ 
+ # Any format supporting backing files
+-_supported_fmt qcow qcow2 vmdk qed
++_supported_fmt qcow qcow2 vmdk qed add-cow
+ _supported_proto generic
+ _supported_os Linux
+ 
+diff --git a/tests/qemu-iotests/037 b/tests/qemu-iotests/037
+index c11460b..683e73d 100755
+--- a/tests/qemu-iotests/037
++++ b/tests/qemu-iotests/037
+@@ -38,7 +38,7 @@ trap "_cleanup; exit \$status" 0 1 2 3 15
+ . ./common.rc
+ . ./common.filter
+ 
+-_supported_fmt qcow qcow2 vmdk qed
++_supported_fmt qcow qcow2 vmdk qed add-cow
+ _supported_proto generic
+ _supported_os Linux
+ 
+diff --git a/tests/qemu-iotests/038 b/tests/qemu-iotests/038
+index 36125ea..10bacfb 100755
+--- a/tests/qemu-iotests/038
++++ b/tests/qemu-iotests/038
+@@ -38,7 +38,7 @@ trap "_cleanup; exit \$status" 0 1 2 3 15
+ . ./common.rc
+ . ./common.filter
+ 
+-_supported_fmt qcow2 qed
++_supported_fmt qcow2 qed add-cow
+ _supported_proto generic
+ _supported_os Linux
+ 
+diff --git a/tests/qemu-iotests/common b/tests/qemu-iotests/common
+index b3aad89..9f651bf 100644
+--- a/tests/qemu-iotests/common
++++ b/tests/qemu-iotests/common
+@@ -128,6 +128,7 @@ common options
+ check options
+     -raw                test raw (default)
+     -cow                test cow
++    -add-cow            test add-cow
+     -qcow               test qcow
+     -qcow2              test qcow2
+     -qed                test qed
+@@ -164,6 +165,11 @@ testlist options
+ 	    xpand=false
+ 	    ;;
+ 
++    -add-cow)
++        IMGFMT=add-cow
++        xpand=false
++        ;;
++
+ 	-qcow)
+ 	    IMGFMT=qcow
+ 	    xpand=false
+diff --git a/tests/qemu-iotests/common.rc b/tests/qemu-iotests/common.rc
+index e522d61..45e676c 100644
+--- a/tests/qemu-iotests/common.rc
++++ b/tests/qemu-iotests/common.rc
+@@ -107,6 +107,16 @@ _make_test_img()
+     fi
+     if [ \( "$IMGFMT" = "qcow2" -o "$IMGFMT" = "qed" \) -a -n "$CLUSTER_SIZE" ]; then
+         optstr=$(_optstr_add "$optstr" "cluster_size=$CLUSTER_SIZE")
++    elif [ "$IMGFMT" = "add-cow" ]; then
++        local IMG="$TEST_IMG"".raw"
++        if [ "$1" = "-b" ]; then
++            IMG="$IMG"".b"
++            $QEMU_IMG create -f raw $IMG $image_size>/dev/null
++            extra_img_options="-o image_file=$IMG $extra_img_options"
++        else
++            $QEMU_IMG create -f raw $IMG $image_size>/dev/null
++            extra_img_options="-o image_file=$IMG"
++        fi
+     fi
+ 
+     if [ -n "$optstr" ]; then
+@@ -124,7 +134,8 @@ _make_test_img()
+             -e "s# compat='[^']*'##g" \
+             -e "s# compat6=\\(on\\|off\\)##g" \
+             -e "s# static=\\(on\\|off\\)##g" \
+-            -e "s# lazy_refcounts=\\(on\\|off\\)##g"
++            -e "s# lazy_refcounts=\\(on\\|off\\)##g" \
++            -e "s# image_file='[^']*'##g"
+ 
+     # Start an NBD server on the image file, which is what we'll be talking to
+     if [ $IMGPROTO = "nbd" ]; then
+@@ -146,6 +157,8 @@ _cleanup_test_img()
+             rm -f $TEST_DIR/t.$IMGFMT
+             rm -f $TEST_DIR/t.$IMGFMT.orig
+             rm -f $TEST_DIR/t.$IMGFMT.base
++            rm -f $TEST_DIR/t.$IMGFMT.raw
++            rm -f $TEST_DIR/t.$IMGFMT.raw.b
+             ;;
+ 
+         rbd)
+-- 
+1.7.11.7
+
+

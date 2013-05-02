@@ -1,0 +1,1 @@
+../ui-cocoam-Fix-compiler-and-runtime-warnings-on-108/v2.1364268690/0003-ui-cocoam-Avoid-deprecated-NSOpenPanel-filename-method.patch

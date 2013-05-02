@@ -1,0 +1,1 @@
+../SCSI-patches-for-2012-08-27/v1.1343426547/0015-scsi-disk-fix-changeable-values-for-MODE_PAGE_R_W_ERROR.patch

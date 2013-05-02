@@ -1,0 +1,14 @@
+0000-tcg-s390-updates.txt
+0001-tcg-s390-Fix-movi.patch
+0002-tcg-s390-Properly-allocate-a-stack-frame.patch
+0003-tcg-s390-Remove-useless-preprocessor-conditions.patch
+0004-tcg-s390-Implement-add2-sub2-opcodes.patch
+0005-tcg-s390-Implement-mulu2_i64-opcode.patch
+0006-tcg-s390-Implement-movcond-opcodes.patch
+0007-tcg-s390-Implement-deposit-opcodes.patch
+0008-tcg-s390-Remove-constraint-letters-for-and.patch
+0009-tcg-s390-Use-risbgz-for-andi.patch
+0010-tcg-s390-Cleanup-argument-shuffling-fixme-in-softmmu-code.patch
+0011-tcg-s390-Use-load-address-for-addition.patch
+0012-tcg-s390-Use-all-20-bits-of-the-offset-in-tcg_out_mem.patch
+0013-tcg-s390-Fix-merge-error-in-tgen_brcond.patch

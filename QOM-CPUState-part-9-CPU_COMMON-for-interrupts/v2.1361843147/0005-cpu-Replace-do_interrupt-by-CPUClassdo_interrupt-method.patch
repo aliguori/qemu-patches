@@ -1,0 +1,1181 @@
+From patches Mon Sep 17 00:00:00 2001
+From: =?utf-8?q?Andreas_F=C3=A4rber_=3Cafaerber=40suse=2Ede=3E?=
+To: qemu-devel@nongnu.org
+Cc: Blue Swirl <blauwirbel@gmail.com>, Michael Walle <michael@walle.cc>,
+ Paul Brook <paul@codesourcery.com>, Alexander Graf <agraf@suse.de>,
+ Guan Xuetao <gxt@mprc.pku.edu.cn>, Aurelien Jarno <aurelien@aurel32.net>,
+ Richard Henderson <rth@twiddle.net>,
+ =?UTF-8?q?Andreas=20F=C3=A4rber?= <afaerber@suse.de>,
+ "Edgar E. Iglesias" <edgar.iglesias@gmail.com>,
+ "open list:PowerPC" <qemu-ppc@nongnu.org>,
+ Peter Maydell <peter.maydell@linaro.org>, Max Filippov <jcmvbkbc@gmail.com>
+Date: Mon, 25 Feb 2013 19:45:52 +0100
+Message-id: 1361817954-8984-6-git-send-email-afaerber@suse.de
+Subject: [PATCH 5/7] cpu: Replace do_interrupt() by CPUClass::do_interrupt
+ method
+
+This removes a global per-target function and thus takes us one step
+closer to compiling multiple targets into one executable.
+
+It will also allow to override the interrupt handling for certain CPU
+families.
+
+Signed-off-by: Andreas Färber <afaerber@suse.de>
+---
+ cpu-exec.c                  |   36 ++++++++++++++++++++----------------
+ include/qom/cpu.h           |    2 ++
+ target-alpha/cpu-qom.h      |    2 ++
+ target-alpha/cpu.c          |    1 +
+ target-alpha/cpu.h          |    1 -
+ target-alpha/helper.c       |    4 +++-
+ target-arm/cpu-qom.h        |    2 ++
+ target-arm/cpu.c            |    1 +
+ target-arm/cpu.h            |    1 -
+ target-arm/helper.c         |   11 +++++++----
+ target-cris/cpu-qom.h       |    2 ++
+ target-cris/cpu.c           |    1 +
+ target-cris/cpu.h           |    1 -
+ target-cris/helper.c        |   10 +++++++---
+ target-i386/cpu-qom.h       |    6 ++++++
+ target-i386/cpu.c           |    1 +
+ target-i386/cpu.h           |    3 +--
+ target-i386/seg_helper.c    |    5 ++++-
+ target-lm32/cpu-qom.h       |    2 ++
+ target-lm32/cpu.c           |    1 +
+ target-lm32/cpu.h           |    1 -
+ target-lm32/helper.c        |    5 ++++-
+ target-m68k/cpu-qom.h       |    2 ++
+ target-m68k/cpu.c           |    1 +
+ target-m68k/cpu.h           |    1 -
+ target-m68k/op_helper.c     |   10 ++++++++--
+ target-microblaze/cpu-qom.h |    2 ++
+ target-microblaze/cpu.c     |    1 +
+ target-microblaze/cpu.h     |    1 -
+ target-microblaze/helper.c  |    9 +++++++--
+ target-mips/cpu-qom.h       |    2 ++
+ target-mips/cpu.c           |    2 ++
+ target-mips/cpu.h           |    1 -
+ target-mips/helper.c        |    5 +++--
+ target-openrisc/cpu.c       |    1 +
+ target-openrisc/cpu.h       |    2 +-
+ target-openrisc/interrupt.c |    4 +++-
+ target-ppc/cpu-qom.h        |    2 ++
+ target-ppc/cpu.h            |    1 -
+ target-ppc/excp_helper.c    |   10 +++++++---
+ target-ppc/translate_init.c |    1 +
+ target-s390x/cpu-qom.h      |    2 ++
+ target-s390x/cpu.c          |    1 +
+ target-s390x/cpu.h          |    1 -
+ target-s390x/helper.c       |   12 +++++++-----
+ target-sh4/cpu-qom.h        |    2 ++
+ target-sh4/cpu.c            |    1 +
+ target-sh4/cpu.h            |    1 -
+ target-sh4/helper.c         |   12 ++++++++----
+ target-sparc/cpu-qom.h      |    2 ++
+ target-sparc/cpu.c          |    2 ++
+ target-sparc/cpu.h          |    1 -
+ target-sparc/int32_helper.c |    4 +++-
+ target-sparc/int64_helper.c |    4 +++-
+ target-unicore32/cpu-qom.h  |    2 ++
+ target-unicore32/cpu.c      |    1 +
+ target-unicore32/cpu.h      |    1 -
+ target-unicore32/helper.c   |    5 ++++-
+ target-unicore32/softmmu.c  |    5 +++--
+ target-xtensa/cpu-qom.h     |    2 ++
+ target-xtensa/cpu.c         |    1 +
+ target-xtensa/cpu.h         |    1 -
+ target-xtensa/helper.c      |    5 ++++-
+ 63 Dateien geändert, 158 Zeilen hinzugefügt(+), 67 Zeilen entfernt(-)
+
+diff --git a/cpu-exec.c b/cpu-exec.c
+index f1da4e4..376b1bb 100644
+--- a/cpu-exec.c
++++ b/cpu-exec.c
+@@ -183,6 +183,10 @@ volatile sig_atomic_t exit_request;
+ int cpu_exec(CPUArchState *env)
+ {
+     CPUState *cpu = ENV_GET_CPU(env);
++#if !(defined(CONFIG_USER_ONLY) && \
++      (defined(TARGET_M68K) || defined(TARGET_PPC) || defined(TARGET_S390X)))
++    CPUClass *cc = CPU_GET_CLASS(cpu);
++#endif
+     int ret, interrupt_request;
+     TranslationBlock *tb;
+     uint8_t *tc_ptr;
+@@ -250,12 +254,12 @@ int cpu_exec(CPUArchState *env)
+                        which will be handled outside the cpu execution
+                        loop */
+ #if defined(TARGET_I386)
+-                    do_interrupt(env);
++                    cc->do_interrupt(cpu);
+ #endif
+                     ret = env->exception_index;
+                     break;
+ #else
+-                    do_interrupt(env);
++                    cc->do_interrupt(cpu);
+                     env->exception_index = -1;
+ #endif
+                 }
+@@ -365,7 +369,7 @@ int cpu_exec(CPUArchState *env)
+                     if ((interrupt_request & CPU_INTERRUPT_HARD)
+                         && (env->ie & IE_IE)) {
+                         env->exception_index = EXCP_IRQ;
+-                        do_interrupt(env);
++                        cc->do_interrupt(cpu);
+                         next_tb = 0;
+                     }
+ #elif defined(TARGET_MICROBLAZE)
+@@ -374,7 +378,7 @@ int cpu_exec(CPUArchState *env)
+                         && !(env->sregs[SR_MSR] & (MSR_EIP | MSR_BIP))
+                         && !(env->iflags & (D_FLAG | IMM_FLAG))) {
+                         env->exception_index = EXCP_IRQ;
+-                        do_interrupt(env);
++                        cc->do_interrupt(cpu);
+                         next_tb = 0;
+                     }
+ #elif defined(TARGET_MIPS)
+@@ -383,7 +387,7 @@ int cpu_exec(CPUArchState *env)
+                         /* Raise it */
+                         env->exception_index = EXCP_EXT_INTERRUPT;
+                         env->error_code = 0;
+-                        do_interrupt(env);
++                        cc->do_interrupt(cpu);
+                         next_tb = 0;
+                     }
+ #elif defined(TARGET_OPENRISC)
+@@ -399,7 +403,7 @@ int cpu_exec(CPUArchState *env)
+                         }
+                         if (idx >= 0) {
+                             env->exception_index = idx;
+-                            do_interrupt(env);
++                            cc->do_interrupt(cpu);
+                             next_tb = 0;
+                         }
+                     }
+@@ -414,7 +418,7 @@ int cpu_exec(CPUArchState *env)
+                                   cpu_pil_allowed(env, pil)) ||
+                                   type != TT_EXTINT) {
+                                 env->exception_index = env->interrupt_index;
+-                                do_interrupt(env);
++                                cc->do_interrupt(cpu);
+                                 next_tb = 0;
+                             }
+                         }
+@@ -423,7 +427,7 @@ int cpu_exec(CPUArchState *env)
+                     if (interrupt_request & CPU_INTERRUPT_FIQ
+                         && !(env->uncached_cpsr & CPSR_F)) {
+                         env->exception_index = EXCP_FIQ;
+-                        do_interrupt(env);
++                        cc->do_interrupt(cpu);
+                         next_tb = 0;
+                     }
+                     /* ARMv7-M interrupt return works by loading a magic value
+@@ -439,19 +443,19 @@ int cpu_exec(CPUArchState *env)
+                         && ((IS_M(env) && env->regs[15] < 0xfffffff0)
+                             || !(env->uncached_cpsr & CPSR_I))) {
+                         env->exception_index = EXCP_IRQ;
+-                        do_interrupt(env);
++                        cc->do_interrupt(cpu);
+                         next_tb = 0;
+                     }
+ #elif defined(TARGET_UNICORE32)
+                     if (interrupt_request & CPU_INTERRUPT_HARD
+                         && !(env->uncached_asr & ASR_I)) {
+                         env->exception_index = UC32_EXCP_INTR;
+-                        do_interrupt(env);
++                        cc->do_interrupt(cpu);
+                         next_tb = 0;
+                     }
+ #elif defined(TARGET_SH4)
+                     if (interrupt_request & CPU_INTERRUPT_HARD) {
+-                        do_interrupt(env);
++                        cc->do_interrupt(cpu);
+                         next_tb = 0;
+                     }
+ #elif defined(TARGET_ALPHA)
+@@ -482,7 +486,7 @@ int cpu_exec(CPUArchState *env)
+                         if (idx >= 0) {
+                             env->exception_index = idx;
+                             env->error_code = 0;
+-                            do_interrupt(env);
++                            cc->do_interrupt(cpu);
+                             next_tb = 0;
+                         }
+                     }
+@@ -491,7 +495,7 @@ int cpu_exec(CPUArchState *env)
+                         && (env->pregs[PR_CCS] & I_FLAG)
+                         && !env->locked_irq) {
+                         env->exception_index = EXCP_IRQ;
+-                        do_interrupt(env);
++                        cc->do_interrupt(cpu);
+                         next_tb = 0;
+                     }
+                     if (interrupt_request & CPU_INTERRUPT_NMI) {
+@@ -503,7 +507,7 @@ int cpu_exec(CPUArchState *env)
+                         }
+                         if ((env->pregs[PR_CCS] & m_flag_archval)) {
+                             env->exception_index = EXCP_NMI;
+-                            do_interrupt(env);
++                            cc->do_interrupt(cpu);
+                             next_tb = 0;
+                         }
+                     }
+@@ -523,13 +527,13 @@ int cpu_exec(CPUArchState *env)
+ #elif defined(TARGET_S390X) && !defined(CONFIG_USER_ONLY)
+                     if ((interrupt_request & CPU_INTERRUPT_HARD) &&
+                         (env->psw.mask & PSW_MASK_EXT)) {
+-                        do_interrupt(env);
++                        cc->do_interrupt(cpu);
+                         next_tb = 0;
+                     }
+ #elif defined(TARGET_XTENSA)
+                     if (interrupt_request & CPU_INTERRUPT_HARD) {
+                         env->exception_index = EXC_IRQ;
+-                        do_interrupt(env);
++                        cc->do_interrupt(cpu);
+                         next_tb = 0;
+                     }
+ #endif
+diff --git a/include/qom/cpu.h b/include/qom/cpu.h
+index 1d085f2..46b0fb2 100644
+--- a/include/qom/cpu.h
++++ b/include/qom/cpu.h
+@@ -44,6 +44,7 @@ typedef struct CPUState CPUState;
+  * @class_by_name: Callback to map -cpu command line model name to an
+  * instantiatable CPU type.
+  * @reset: Callback to reset the #CPUState to its initial state.
++ * @do_interrupt: Callback for interrupt handling.
+  * @vmsd: State description for migration.
+  *
+  * Represents a CPU family or model.
+@@ -56,6 +57,7 @@ typedef struct CPUClass {
+     ObjectClass *(*class_by_name)(const char *cpu_model);
+ 
+     void (*reset)(CPUState *cpu);
++    void (*do_interrupt)(CPUState *cpu);
+ 
+     const struct VMStateDescription *vmsd;
+ } CPUClass;
+diff --git a/target-alpha/cpu-qom.h b/target-alpha/cpu-qom.h
+index 252bd14..32ee286 100644
+--- a/target-alpha/cpu-qom.h
++++ b/target-alpha/cpu-qom.h
+@@ -74,4 +74,6 @@ static inline AlphaCPU *alpha_env_get_cpu(CPUAlphaState *env)
+ 
+ #define ENV_OFFSET offsetof(AlphaCPU, env)
+ 
++void alpha_cpu_do_interrupt(CPUState *cpu);
++
+ #endif
+diff --git a/target-alpha/cpu.c b/target-alpha/cpu.c
+index cec9989..cad1716 100644
+--- a/target-alpha/cpu.c
++++ b/target-alpha/cpu.c
+@@ -263,6 +263,7 @@ static void alpha_cpu_class_init(ObjectClass *oc, void *data)
+     dc->realize = alpha_cpu_realizefn;
+ 
+     cc->class_by_name = alpha_cpu_class_by_name;
++    cc->do_interrupt = alpha_cpu_do_interrupt;
+ }
+ 
+ static const TypeInfo alpha_cpu_type_info = {
+diff --git a/target-alpha/cpu.h b/target-alpha/cpu.h
+index 90f78ac..2156a1e 100644
+--- a/target-alpha/cpu.h
++++ b/target-alpha/cpu.h
+@@ -449,7 +449,6 @@ int cpu_alpha_signal_handler(int host_signum, void *pinfo,
+ int cpu_alpha_handle_mmu_fault (CPUAlphaState *env, uint64_t address, int rw,
+                                 int mmu_idx);
+ #define cpu_handle_mmu_fault cpu_alpha_handle_mmu_fault
+-void do_interrupt (CPUAlphaState *env);
+ void do_restore_state(CPUAlphaState *, uintptr_t retaddr);
+ void QEMU_NORETURN dynamic_excp(CPUAlphaState *, uintptr_t, int, int);
+ void QEMU_NORETURN arith_excp(CPUAlphaState *, uintptr_t, int, uint64_t);
+diff --git a/target-alpha/helper.c b/target-alpha/helper.c
+index 22c9c6e..5741ec2 100644
+--- a/target-alpha/helper.c
++++ b/target-alpha/helper.c
+@@ -345,8 +345,10 @@ int cpu_alpha_handle_mmu_fault(CPUAlphaState *env, target_ulong addr, int rw,
+ }
+ #endif /* USER_ONLY */
+ 
+-void do_interrupt (CPUAlphaState *env)
++void alpha_cpu_do_interrupt(CPUState *cs)
+ {
++    AlphaCPU *cpu = ALPHA_CPU(cs);
++    CPUAlphaState *env = &cpu->env;
+     int i = env->exception_index;
+ 
+     if (qemu_loglevel_mask(CPU_LOG_INT)) {
+diff --git a/target-arm/cpu-qom.h b/target-arm/cpu-qom.h
+index 7539727..eeecc92 100644
+--- a/target-arm/cpu-qom.h
++++ b/target-arm/cpu-qom.h
+@@ -113,4 +113,6 @@ static inline ARMCPU *arm_env_get_cpu(CPUARMState *env)
+ 
+ void register_cp_regs_for_features(ARMCPU *cpu);
+ 
++void arm_cpu_do_interrupt(CPUState *cpu);
++
+ #endif
+diff --git a/target-arm/cpu.c b/target-arm/cpu.c
+index 5dfcb74..aeaa3b7 100644
+--- a/target-arm/cpu.c
++++ b/target-arm/cpu.c
+@@ -802,6 +802,7 @@ static void arm_cpu_class_init(ObjectClass *oc, void *data)
+     cc->reset = arm_cpu_reset;
+ 
+     cc->class_by_name = arm_cpu_class_by_name;
++    cc->do_interrupt = arm_cpu_do_interrupt;
+ }
+ 
+ static void cpu_register(const ARMCPUInfo *info)
+diff --git a/target-arm/cpu.h b/target-arm/cpu.h
+index 7c47467..971a2d8 100644
+--- a/target-arm/cpu.h
++++ b/target-arm/cpu.h
+@@ -236,7 +236,6 @@ ARMCPU *cpu_arm_init(const char *cpu_model);
+ void arm_translate_init(void);
+ void arm_cpu_register_gdb_regs_for_features(ARMCPU *cpu);
+ int cpu_arm_exec(CPUARMState *s);
+-void do_interrupt(CPUARMState *);
+ void switch_mode(CPUARMState *, int);
+ uint32_t do_arm_semihosting(CPUARMState *env);
+ 
+diff --git a/target-arm/helper.c b/target-arm/helper.c
+index c5a1bc0..c7627f8 100644
+--- a/target-arm/helper.c
++++ b/target-arm/helper.c
+@@ -1567,8 +1567,11 @@ uint32_t HELPER(rbit)(uint32_t x)
+ 
+ #if defined(CONFIG_USER_ONLY)
+ 
+-void do_interrupt (CPUARMState *env)
++void arm_cpu_do_interrupt(CPUState *cs)
+ {
++    ARMCPU *cpu = ARM_CPU(cs);
++    CPUARMState *env = &cpu->env;
++
+     env->exception_index = -1;
+ }
+ 
+@@ -1800,9 +1803,10 @@ static void do_interrupt_v7m(CPUARMState *env)
+ }
+ 
+ /* Handle a CPU exception.  */
+-void do_interrupt(CPUARMState *env)
++void arm_cpu_do_interrupt(CPUState *cs)
+ {
+-    CPUState *cs;
++    ARMCPU *cpu = ARM_CPU(cs);
++    CPUARMState *env = &cpu->env;
+     uint32_t addr;
+     uint32_t mask;
+     int new_mode;
+@@ -1909,7 +1913,6 @@ void do_interrupt(CPUARMState *env)
+     }
+     env->regs[14] = env->regs[15] + offset;
+     env->regs[15] = addr;
+-    cs = CPU(arm_env_get_cpu(env));
+     cs->interrupt_request |= CPU_INTERRUPT_EXITTB;
+ }
+ 
+diff --git a/target-cris/cpu-qom.h b/target-cris/cpu-qom.h
+index 11e5286..deea1d8 100644
+--- a/target-cris/cpu-qom.h
++++ b/target-cris/cpu-qom.h
+@@ -73,4 +73,6 @@ static inline CRISCPU *cris_env_get_cpu(CPUCRISState *env)
+ 
+ #define ENV_OFFSET offsetof(CRISCPU, env)
+ 
++void cris_cpu_do_interrupt(CPUState *cpu);
++
+ #endif
+diff --git a/target-cris/cpu.c b/target-cris/cpu.c
+index 7974be3..95cbf39 100644
+--- a/target-cris/cpu.c
++++ b/target-cris/cpu.c
+@@ -243,6 +243,7 @@ static void cris_cpu_class_init(ObjectClass *oc, void *data)
+     cc->reset = cris_cpu_reset;
+ 
+     cc->class_by_name = cris_cpu_class_by_name;
++    cc->do_interrupt = cris_cpu_do_interrupt;
+ }
+ 
+ static const TypeInfo cris_cpu_type_info = {
+diff --git a/target-cris/cpu.h b/target-cris/cpu.h
+index 2fc7c5c..dbd7d36 100644
+--- a/target-cris/cpu.h
++++ b/target-cris/cpu.h
+@@ -175,7 +175,6 @@ typedef struct CPUCRISState {
+ 
+ CRISCPU *cpu_cris_init(const char *cpu_model);
+ int cpu_cris_exec(CPUCRISState *s);
+-void do_interrupt(CPUCRISState *env);
+ /* you can call this signal handler from your SIGBUS and SIGSEGV
+    signal handlers to inform the virtual CPU of exceptions. non zero
+    is returned if the signal was handled by the virtual CPU.  */
+diff --git a/target-cris/helper.c b/target-cris/helper.c
+index 885f67f..e1ef7bc 100644
+--- a/target-cris/helper.c
++++ b/target-cris/helper.c
+@@ -36,8 +36,11 @@
+ 
+ #if defined(CONFIG_USER_ONLY)
+ 
+-void do_interrupt(CPUCRISState *env)
++void cris_cpu_do_interrupt(CPUState *cs)
+ {
++    CRISCPU *cpu = CRIS_CPU(cs);
++    CPUCRISState *env = &cpu->env;
++
+     env->exception_index = -1;
+     env->pregs[PR_ERP] = env->pc;
+ }
+@@ -162,9 +165,10 @@ static void do_interruptv10(CPUCRISState *env)
+                   env->pregs[PR_ERP]);
+ }
+ 
+-void do_interrupt(CPUCRISState *env)
++void cris_cpu_do_interrupt(CPUState *cs)
+ {
+-    D(CPUState *cs = CPU(cris_env_get_cpu(env)));
++    CRISCPU *cpu = CRIS_CPU(cs);
++    CPUCRISState *env = &cpu->env;
+     int ex_vec = -1;
+ 
+     if (env->pregs[PR_VR] < 32) {
+diff --git a/target-i386/cpu-qom.h b/target-i386/cpu-qom.h
+index 83c5318..08f9eb6 100644
+--- a/target-i386/cpu-qom.h
++++ b/target-i386/cpu-qom.h
+@@ -80,4 +80,10 @@ static inline X86CPU *x86_env_get_cpu(CPUX86State *env)
+ extern const struct VMStateDescription vmstate_x86_cpu;
+ #endif
+ 
++/**
++ * x86_cpu_do_interrupt:
++ * @cpu: vCPU the interrupt is to be handled by.
++ */
++void x86_cpu_do_interrupt(CPUState *cpu);
++
+ #endif
+diff --git a/target-i386/cpu.c b/target-i386/cpu.c
+index 57ba84f..b947946 100644
+--- a/target-i386/cpu.c
++++ b/target-i386/cpu.c
+@@ -2250,6 +2250,7 @@ static void x86_cpu_common_class_init(ObjectClass *oc, void *data)
+     xcc->parent_reset = cc->reset;
+     cc->reset = x86_cpu_reset;
+ 
++    cc->do_interrupt = x86_cpu_do_interrupt;
+     cpu_class_set_vmsd(cc, &vmstate_x86_cpu);
+ }
+ 
+diff --git a/target-i386/cpu.h b/target-i386/cpu.h
+index bf6e210..48f41ca 100644
+--- a/target-i386/cpu.h
++++ b/target-i386/cpu.h
+@@ -1252,8 +1252,7 @@ void cpu_svm_check_intercept_param(CPUX86State *env1, uint32_t type,
+                                    uint64_t param);
+ void cpu_vmexit(CPUX86State *nenv, uint32_t exit_code, uint64_t exit_info_1);
+ 
+-/* op_helper.c */
+-void do_interrupt(CPUX86State *env);
++/* seg_helper.c */
+ void do_interrupt_x86_hardirq(CPUX86State *env, int intno, int is_hw);
+ 
+ void do_smm_enter(CPUX86State *env1);
+diff --git a/target-i386/seg_helper.c b/target-i386/seg_helper.c
+index 3247dee..906e4f3 100644
+--- a/target-i386/seg_helper.c
++++ b/target-i386/seg_helper.c
+@@ -1231,8 +1231,11 @@ static void do_interrupt_all(CPUX86State *env, int intno, int is_int,
+ #endif
+ }
+ 
+-void do_interrupt(CPUX86State *env)
++void x86_cpu_do_interrupt(CPUState *cs)
+ {
++    X86CPU *cpu = X86_CPU(cs);
++    CPUX86State *env = &cpu->env;
++
+ #if defined(CONFIG_USER_ONLY)
+     /* if user mode only, we simulate a fake exception
+        which will be handled outside the cpu execution
+diff --git a/target-lm32/cpu-qom.h b/target-lm32/cpu-qom.h
+index e00cca6..9571860 100644
+--- a/target-lm32/cpu-qom.h
++++ b/target-lm32/cpu-qom.h
+@@ -75,4 +75,6 @@ static inline LM32CPU *lm32_env_get_cpu(CPULM32State *env)
+ extern const struct VMStateDescription vmstate_lm32_cpu;
+ #endif
+ 
++void lm32_cpu_do_interrupt(CPUState *cpu);
++
+ #endif
+diff --git a/target-lm32/cpu.c b/target-lm32/cpu.c
+index 3199102..bbb7fbf 100644
+--- a/target-lm32/cpu.c
++++ b/target-lm32/cpu.c
+@@ -84,6 +84,7 @@ static void lm32_cpu_class_init(ObjectClass *oc, void *data)
+     lcc->parent_reset = cc->reset;
+     cc->reset = lm32_cpu_reset;
+ 
++    cc->do_interrupt = lm32_cpu_do_interrupt;
+     cpu_class_set_vmsd(cc, &vmstate_lm32_cpu);
+ }
+ 
+diff --git a/target-lm32/cpu.h b/target-lm32/cpu.h
+index 3d3181b..fd50b53 100644
+--- a/target-lm32/cpu.h
++++ b/target-lm32/cpu.h
+@@ -189,7 +189,6 @@ struct CPULM32State {
+ LM32CPU *cpu_lm32_init(const char *cpu_model);
+ void cpu_lm32_list(FILE *f, fprintf_function cpu_fprintf);
+ int cpu_lm32_exec(CPULM32State *s);
+-void do_interrupt(CPULM32State *env);
+ /* you can call this signal handler from your SIGBUS and SIGSEGV
+    signal handlers to inform the virtual CPU of exceptions. non zero
+    is returned if the signal was handled by the virtual CPU.  */
+diff --git a/target-lm32/helper.c b/target-lm32/helper.c
+index 47ae7e7..a0a8399 100644
+--- a/target-lm32/helper.c
++++ b/target-lm32/helper.c
+@@ -42,8 +42,11 @@ hwaddr cpu_get_phys_page_debug(CPULM32State *env, target_ulong addr)
+     return addr & TARGET_PAGE_MASK;
+ }
+ 
+-void do_interrupt(CPULM32State *env)
++void lm32_cpu_do_interrupt(CPUState *cs)
+ {
++    LM32CPU *cpu = LM32_CPU(cs);
++    CPULM32State *env = &cpu->env;
++
+     qemu_log_mask(CPU_LOG_INT,
+             "exception at pc=%x type=%x\n", env->pc, env->exception_index);
+ 
+diff --git a/target-m68k/cpu-qom.h b/target-m68k/cpu-qom.h
+index f4c33b2..846aa74 100644
+--- a/target-m68k/cpu-qom.h
++++ b/target-m68k/cpu-qom.h
+@@ -70,4 +70,6 @@ static inline M68kCPU *m68k_env_get_cpu(CPUM68KState *env)
+ 
+ #define ENV_OFFSET offsetof(M68kCPU, env)
+ 
++void m68k_cpu_do_interrupt(CPUState *cpu);
++
+ #endif
+diff --git a/target-m68k/cpu.c b/target-m68k/cpu.c
+index f5a1098..3c65b4e 100644
+--- a/target-m68k/cpu.c
++++ b/target-m68k/cpu.c
+@@ -186,6 +186,7 @@ static void m68k_cpu_class_init(ObjectClass *c, void *data)
+     cc->reset = m68k_cpu_reset;
+ 
+     cc->class_by_name = m68k_cpu_class_by_name;
++    cc->do_interrupt = m68k_cpu_do_interrupt;
+     dc->vmsd = &vmstate_m68k_cpu;
+ }
+ 
+diff --git a/target-m68k/cpu.h b/target-m68k/cpu.h
+index bb2fbd6..c90c40c 100644
+--- a/target-m68k/cpu.h
++++ b/target-m68k/cpu.h
+@@ -119,7 +119,6 @@ void m68k_tcg_init(void);
+ void m68k_cpu_init_gdb(M68kCPU *cpu);
+ M68kCPU *cpu_m68k_init(const char *cpu_model);
+ int cpu_m68k_exec(CPUM68KState *s);
+-void do_interrupt(CPUM68KState *env1);
+ void do_interrupt_m68k_hardirq(CPUM68KState *env1);
+ /* you can call this signal handler from your SIGBUS and SIGSEGV
+    signal handlers to inform the virtual CPU of exceptions. non zero
+diff --git a/target-m68k/op_helper.c b/target-m68k/op_helper.c
+index e11f34b..30f7d8b 100644
+--- a/target-m68k/op_helper.c
++++ b/target-m68k/op_helper.c
+@@ -21,8 +21,11 @@
+ 
+ #if defined(CONFIG_USER_ONLY)
+ 
+-void do_interrupt(CPUM68KState *env)
++void m68k_cpu_do_interrupt(CPUState *cs)
+ {
++    M68kCPU *cpu = M68K_CPU(cs);
++    CPUM68KState *env = &cpu->env;
++
+     env->exception_index = -1;
+ }
+ 
+@@ -149,8 +152,11 @@ static void do_interrupt_all(CPUM68KState *env, int is_hw)
+     env->pc = cpu_ldl_kernel(env, env->vbr + vector);
+ }
+ 
+-void do_interrupt(CPUM68KState *env)
++void m68k_cpu_do_interrupt(CPUState *cs)
+ {
++    M68kCPU *cpu = M68K_CPU(cs);
++    CPUM68KState *env = &cpu->env;
++
+     do_interrupt_all(env, 0);
+ }
+ 
+diff --git a/target-microblaze/cpu-qom.h b/target-microblaze/cpu-qom.h
+index a0248a5..aa51cf6 100644
+--- a/target-microblaze/cpu-qom.h
++++ b/target-microblaze/cpu-qom.h
+@@ -70,4 +70,6 @@ static inline MicroBlazeCPU *mb_env_get_cpu(CPUMBState *env)
+ 
+ #define ENV_OFFSET offsetof(MicroBlazeCPU, env)
+ 
++void mb_cpu_do_interrupt(CPUState *cs);
++
+ #endif
+diff --git a/target-microblaze/cpu.c b/target-microblaze/cpu.c
+index 81359db..0f4293d 100644
+--- a/target-microblaze/cpu.c
++++ b/target-microblaze/cpu.c
+@@ -131,6 +131,7 @@ static void mb_cpu_class_init(ObjectClass *oc, void *data)
+     mcc->parent_reset = cc->reset;
+     cc->reset = mb_cpu_reset;
+ 
++    cc->do_interrupt = mb_cpu_do_interrupt;
+     dc->vmsd = &vmstate_mb_cpu;
+ }
+ 
+diff --git a/target-microblaze/cpu.h b/target-microblaze/cpu.h
+index 7548aa9..1813939 100644
+--- a/target-microblaze/cpu.h
++++ b/target-microblaze/cpu.h
+@@ -275,7 +275,6 @@ struct CPUMBState {
+ void mb_tcg_init(void);
+ MicroBlazeCPU *cpu_mb_init(const char *cpu_model);
+ int cpu_mb_exec(CPUMBState *s);
+-void do_interrupt(CPUMBState *env);
+ /* you can call this signal handler from your SIGBUS and SIGSEGV
+    signal handlers to inform the virtual CPU of exceptions. non zero
+    is returned if the signal was handled by the virtual CPU.  */
+diff --git a/target-microblaze/helper.c b/target-microblaze/helper.c
+index 97aedc5..a0416d0 100644
+--- a/target-microblaze/helper.c
++++ b/target-microblaze/helper.c
+@@ -26,8 +26,11 @@
+ 
+ #if defined(CONFIG_USER_ONLY)
+ 
+-void do_interrupt (CPUMBState *env)
++void mb_cpu_do_interrupt(CPUState *cs)
+ {
++    MicroBlazeCPU *cpu = MICROBLAZE_CPU(cs);
++    CPUMBState *env = &cpu->env;
++
+     env->exception_index = -1;
+     env->res_addr = RES_ADDR_NONE;
+     env->regs[14] = env->sregs[SR_PC];
+@@ -109,8 +112,10 @@ int cpu_mb_handle_mmu_fault (CPUMBState *env, target_ulong address, int rw,
+     return r;
+ }
+ 
+-void do_interrupt(CPUMBState *env)
++void mb_cpu_do_interrupt(CPUState *cs)
+ {
++    MicroBlazeCPU *cpu = MICROBLAZE_CPU(cs);
++    CPUMBState *env = &cpu->env;
+     uint32_t t;
+ 
+     /* IMM flag cannot propagate across a branch and into the dslot.  */
+diff --git a/target-mips/cpu-qom.h b/target-mips/cpu-qom.h
+index c6bcddf..32e3cad 100644
+--- a/target-mips/cpu-qom.h
++++ b/target-mips/cpu-qom.h
+@@ -74,4 +74,6 @@ static inline MIPSCPU *mips_env_get_cpu(CPUMIPSState *env)
+ 
+ #define ENV_OFFSET offsetof(MIPSCPU, env)
+ 
++void mips_cpu_do_interrupt(CPUState *cpu);
++
+ #endif
+diff --git a/target-mips/cpu.c b/target-mips/cpu.c
+index 4d62031..5315f7b 100644
+--- a/target-mips/cpu.c
++++ b/target-mips/cpu.c
+@@ -78,6 +78,8 @@ static void mips_cpu_class_init(ObjectClass *c, void *data)
+ 
+     mcc->parent_reset = cc->reset;
+     cc->reset = mips_cpu_reset;
++
++    cc->do_interrupt = mips_cpu_do_interrupt;
+ }
+ 
+ static const TypeInfo mips_cpu_type_info = {
+diff --git a/target-mips/cpu.h b/target-mips/cpu.h
+index 7434099..c6d055d 100644
+--- a/target-mips/cpu.h
++++ b/target-mips/cpu.h
+@@ -660,7 +660,6 @@ void cpu_mips_soft_irq(CPUMIPSState *env, int irq, int level);
+ int cpu_mips_handle_mmu_fault (CPUMIPSState *env, target_ulong address, int rw,
+                                int mmu_idx);
+ #define cpu_handle_mmu_fault cpu_mips_handle_mmu_fault
+-void do_interrupt (CPUMIPSState *env);
+ #if !defined(CONFIG_USER_ONLY)
+ void r4k_invalidate_tlb (CPUMIPSState *env, int idx, int use_extra);
+ hwaddr cpu_mips_translate_address (CPUMIPSState *env, target_ulong address,
+diff --git a/target-mips/helper.c b/target-mips/helper.c
+index e877b8d..3a54acf 100644
+--- a/target-mips/helper.c
++++ b/target-mips/helper.c
+@@ -396,10 +396,11 @@ static void set_hflags_for_handler (CPUMIPSState *env)
+ }
+ #endif
+ 
+-void do_interrupt (CPUMIPSState *env)
++void mips_cpu_do_interrupt(CPUState *cs)
+ {
++    MIPSCPU *cpu = MIPS_CPU(cs);
++    CPUMIPSState *env = &cpu->env;
+ #if !defined(CONFIG_USER_ONLY)
+-    MIPSCPU *cpu = mips_env_get_cpu(env);
+     target_ulong offset;
+     int cause = -1;
+     const char *name;
+diff --git a/target-openrisc/cpu.c b/target-openrisc/cpu.c
+index 72d5e8d..ffe14f3 100644
+--- a/target-openrisc/cpu.c
++++ b/target-openrisc/cpu.c
+@@ -148,6 +148,7 @@ static void openrisc_cpu_class_init(ObjectClass *oc, void *data)
+     cc->reset = openrisc_cpu_reset;
+ 
+     cc->class_by_name = openrisc_cpu_class_by_name;
++    cc->do_interrupt = openrisc_cpu_do_interrupt;
+ }
+ 
+ static void cpu_register(const OpenRISCCPUInfo *info)
+diff --git a/target-openrisc/cpu.h b/target-openrisc/cpu.h
+index 64370a3..b9c55ba 100644
+--- a/target-openrisc/cpu.h
++++ b/target-openrisc/cpu.h
+@@ -346,7 +346,7 @@ OpenRISCCPU *cpu_openrisc_init(const char *cpu_model);
+ 
+ void cpu_openrisc_list(FILE *f, fprintf_function cpu_fprintf);
+ int cpu_openrisc_exec(CPUOpenRISCState *s);
+-void do_interrupt(CPUOpenRISCState *env);
++void openrisc_cpu_do_interrupt(CPUState *cpu);
+ void openrisc_translate_init(void);
+ int cpu_openrisc_handle_mmu_fault(CPUOpenRISCState *env,
+                                   target_ulong address,
+diff --git a/target-openrisc/interrupt.c b/target-openrisc/interrupt.c
+index 7f2c025..16ef4b3 100644
+--- a/target-openrisc/interrupt.c
++++ b/target-openrisc/interrupt.c
+@@ -25,8 +25,10 @@
+ #include "hw/loader.h"
+ #endif
+ 
+-void do_interrupt(CPUOpenRISCState *env)
++void openrisc_cpu_do_interrupt(CPUState *cs)
+ {
++    OpenRISCCPU *cpu = OPENRISC_CPU(cs);
++    CPUOpenRISCState *env = &cpu->env;
+ #ifndef CONFIG_USER_ONLY
+     if (env->flags & D_FLAG) { /* Delay Slot insn */
+         env->flags &= ~D_FLAG;
+diff --git a/target-ppc/cpu-qom.h b/target-ppc/cpu-qom.h
+index 4e8ceca..40d19f5 100644
+--- a/target-ppc/cpu-qom.h
++++ b/target-ppc/cpu-qom.h
+@@ -82,4 +82,6 @@ static inline PowerPCCPU *ppc_env_get_cpu(CPUPPCState *env)
+ 
+ PowerPCCPUClass *ppc_cpu_class_by_pvr(uint32_t pvr);
+ 
++void ppc_cpu_do_interrupt(CPUState *cpu);
++
+ #endif
+diff --git a/target-ppc/cpu.h b/target-ppc/cpu.h
+index f45d7a0..4604a28 100644
+--- a/target-ppc/cpu.h
++++ b/target-ppc/cpu.h
+@@ -1147,7 +1147,6 @@ int cpu_ppc_signal_handler (int host_signum, void *pinfo,
+ int cpu_ppc_handle_mmu_fault (CPUPPCState *env, target_ulong address, int rw,
+                               int mmu_idx);
+ #define cpu_handle_mmu_fault cpu_ppc_handle_mmu_fault
+-void do_interrupt (CPUPPCState *env);
+ void ppc_hw_interrupt (CPUPPCState *env);
+ 
+ #if !defined(CONFIG_USER_ONLY)
+diff --git a/target-ppc/excp_helper.c b/target-ppc/excp_helper.c
+index d176734..4a0fc6d 100644
+--- a/target-ppc/excp_helper.c
++++ b/target-ppc/excp_helper.c
+@@ -38,8 +38,11 @@ void (*cpu_ppc_hypercall)(PowerPCCPU *);
+ /*****************************************************************************/
+ /* Exception processing */
+ #if defined(CONFIG_USER_ONLY)
+-void do_interrupt(CPUPPCState *env)
++void ppc_cpu_do_interrupt(CPUState *cs)
+ {
++    PowerPCCPU *cpu = POWERPC_CPU(cs);
++    CPUPPCState *env = &cpu->env;
++
+     env->exception_index = POWERPC_EXCP_NONE;
+     env->error_code = 0;
+ }
+@@ -654,9 +657,10 @@ static inline void powerpc_excp(PowerPCCPU *cpu, int excp_model, int excp)
+     }
+ }
+ 
+-void do_interrupt(CPUPPCState *env)
++void ppc_cpu_do_interrupt(CPUState *cs)
+ {
+-    PowerPCCPU *cpu = ppc_env_get_cpu(env);
++    PowerPCCPU *cpu = POWERPC_CPU(cs);
++    CPUPPCState *env = &cpu->env;
+ 
+     powerpc_excp(cpu, env->excp_model, env->exception_index);
+ }
+diff --git a/target-ppc/translate_init.c b/target-ppc/translate_init.c
+index f5fc9b1..cf158f1 100644
+--- a/target-ppc/translate_init.c
++++ b/target-ppc/translate_init.c
+@@ -10587,6 +10587,7 @@ static void ppc_cpu_class_init(ObjectClass *oc, void *data)
+     cc->reset = ppc_cpu_reset;
+ 
+     cc->class_by_name = ppc_cpu_class_by_name;
++    cc->do_interrupt = ppc_cpu_do_interrupt;
+ }
+ 
+ static const TypeInfo ppc_cpu_type_info = {
+diff --git a/target-s390x/cpu-qom.h b/target-s390x/cpu-qom.h
+index f6e5145..34d45c2 100644
+--- a/target-s390x/cpu-qom.h
++++ b/target-s390x/cpu-qom.h
+@@ -71,4 +71,6 @@ static inline S390CPU *s390_env_get_cpu(CPUS390XState *env)
+ 
+ #define ENV_OFFSET offsetof(S390CPU, env)
+ 
++void s390_cpu_do_interrupt(CPUState *cpu);
++
+ #endif
+diff --git a/target-s390x/cpu.c b/target-s390x/cpu.c
+index 738a0ad..23fe51f 100644
+--- a/target-s390x/cpu.c
++++ b/target-s390x/cpu.c
+@@ -169,6 +169,7 @@ static void s390_cpu_class_init(ObjectClass *oc, void *data)
+     scc->parent_reset = cc->reset;
+     cc->reset = s390_cpu_reset;
+ 
++    cc->do_interrupt = s390_cpu_do_interrupt;
+     dc->vmsd = &vmstate_s390_cpu;
+ }
+ 
+diff --git a/target-s390x/cpu.h b/target-s390x/cpu.h
+index 35fd376..3c0e518 100644
+--- a/target-s390x/cpu.h
++++ b/target-s390x/cpu.h
+@@ -315,7 +315,6 @@ static inline int get_ilen(uint8_t opc)
+ S390CPU *cpu_s390x_init(const char *cpu_model);
+ void s390x_translate_init(void);
+ int cpu_s390x_exec(CPUS390XState *s);
+-void do_interrupt (CPUS390XState *env);
+ 
+ /* you can call this signal handler from your SIGBUS and SIGSEGV
+    signal handlers to inform the virtual CPU of exceptions. non zero
+diff --git a/target-s390x/helper.c b/target-s390x/helper.c
+index 2cb8dc8..b425054 100644
+--- a/target-s390x/helper.c
++++ b/target-s390x/helper.c
+@@ -86,8 +86,11 @@ S390CPU *cpu_s390x_init(const char *cpu_model)
+ 
+ #if defined(CONFIG_USER_ONLY)
+ 
+-void do_interrupt(CPUS390XState *env)
++void s390_cpu_do_interrupt(CPUState *cs)
+ {
++    S390CPU *cpu = S390_CPU(cs);
++    CPUS390XState *env = &cpu->env;
++
+     env->exception_index = -1;
+ }
+ 
+@@ -737,10 +740,10 @@ static void do_mchk_interrupt(CPUS390XState *env)
+     load_psw(env, mask, addr);
+ }
+ 
+-void do_interrupt(CPUS390XState *env)
++void s390_cpu_do_interrupt(CPUState *cs)
+ {
+-    S390CPU *cpu = s390_env_get_cpu(env);
+-    CPUState *cs;
++    S390CPU *cpu = S390_CPU(cs);
++    CPUS390XState *env = &cpu->env;
+ 
+     qemu_log_mask(CPU_LOG_INT, "%s: %d at pc=%" PRIx64 "\n",
+                   __func__, env->exception_index, env->psw.addr);
+@@ -799,7 +802,6 @@ void do_interrupt(CPUS390XState *env)
+     env->exception_index = -1;
+ 
+     if (!env->pending_int) {
+-        cs = CPU(s390_env_get_cpu(env));
+         cs->interrupt_request &= ~CPU_INTERRUPT_HARD;
+     }
+ }
+diff --git a/target-sh4/cpu-qom.h b/target-sh4/cpu-qom.h
+index 29628c8..f8c80d3 100644
+--- a/target-sh4/cpu-qom.h
++++ b/target-sh4/cpu-qom.h
+@@ -83,4 +83,6 @@ static inline SuperHCPU *sh_env_get_cpu(CPUSH4State *env)
+ 
+ #define ENV_OFFSET offsetof(SuperHCPU, env)
+ 
++void superh_cpu_do_interrupt(CPUState *cpu);
++
+ #endif
+diff --git a/target-sh4/cpu.c b/target-sh4/cpu.c
+index 5251aa0..898aecd 100644
+--- a/target-sh4/cpu.c
++++ b/target-sh4/cpu.c
+@@ -273,6 +273,7 @@ static void superh_cpu_class_init(ObjectClass *oc, void *data)
+     cc->reset = superh_cpu_reset;
+ 
+     cc->class_by_name = superh_cpu_class_by_name;
++    cc->do_interrupt = superh_cpu_do_interrupt;
+     dc->vmsd = &vmstate_sh_cpu;
+ }
+ 
+diff --git a/target-sh4/cpu.h b/target-sh4/cpu.h
+index 4966355..fd7da92 100644
+--- a/target-sh4/cpu.h
++++ b/target-sh4/cpu.h
+@@ -196,7 +196,6 @@ int cpu_sh4_signal_handler(int host_signum, void *pinfo,
+ int cpu_sh4_handle_mmu_fault(CPUSH4State * env, target_ulong address, int rw,
+                              int mmu_idx);
+ #define cpu_handle_mmu_fault cpu_sh4_handle_mmu_fault
+-void do_interrupt(CPUSH4State * env);
+ 
+ void sh4_cpu_list(FILE *f, fprintf_function cpu_fprintf);
+ #if !defined(CONFIG_USER_ONLY)
+diff --git a/target-sh4/helper.c b/target-sh4/helper.c
+index fd4efee..0a9cb3a 100644
+--- a/target-sh4/helper.c
++++ b/target-sh4/helper.c
+@@ -31,9 +31,12 @@
+ 
+ #if defined(CONFIG_USER_ONLY)
+ 
+-void do_interrupt (CPUSH4State *env)
++void superh_cpu_do_interrupt(CPUState *cs)
+ {
+-  env->exception_index = -1;
++    SuperHCPU *cpu = SUPERH_CPU(cs);
++    CPUSH4State *env = &cpu->env;
++
++    env->exception_index = -1;
+ }
+ 
+ int cpu_sh4_handle_mmu_fault(CPUSH4State * env, target_ulong address, int rw,
+@@ -78,9 +81,10 @@ int cpu_sh4_is_cached(CPUSH4State * env, target_ulong addr)
+ #define MMU_DADDR_ERROR_READ     (-12)
+ #define MMU_DADDR_ERROR_WRITE    (-13)
+ 
+-void do_interrupt(CPUSH4State *env)
++void superh_cpu_do_interrupt(CPUState *cs)
+ {
+-    CPUState *cs = CPU(sh_env_get_cpu(env));
++    SuperHCPU *cpu = SUPERH_CPU(cs);
++    CPUSH4State *env = &cpu->env;
+     int do_irq = cs->interrupt_request & CPU_INTERRUPT_HARD;
+     int do_exp, irq_vector = env->exception_index;
+ 
+diff --git a/target-sparc/cpu-qom.h b/target-sparc/cpu-qom.h
+index efeeca0..d4fe89e 100644
+--- a/target-sparc/cpu-qom.h
++++ b/target-sparc/cpu-qom.h
+@@ -75,4 +75,6 @@ static inline SPARCCPU *sparc_env_get_cpu(CPUSPARCState *env)
+ 
+ #define ENV_OFFSET offsetof(SPARCCPU, env)
+ 
++void sparc_cpu_do_interrupt(CPUState *cpu);
++
+ #endif
+diff --git a/target-sparc/cpu.c b/target-sparc/cpu.c
+index 50def61..ab1adfd 100644
+--- a/target-sparc/cpu.c
++++ b/target-sparc/cpu.c
+@@ -891,6 +891,8 @@ static void sparc_cpu_class_init(ObjectClass *oc, void *data)
+ 
+     scc->parent_reset = cc->reset;
+     cc->reset = sparc_cpu_reset;
++
++    cc->do_interrupt = sparc_cpu_do_interrupt;
+ }
+ 
+ static const TypeInfo sparc_cpu_type_info = {
+diff --git a/target-sparc/cpu.h b/target-sparc/cpu.h
+index 8a2f8df..6fa7778 100644
+--- a/target-sparc/cpu.h
++++ b/target-sparc/cpu.h
+@@ -553,7 +553,6 @@ int cpu_cwp_dec(CPUSPARCState *env1, int cwp);
+ void cpu_set_cwp(CPUSPARCState *env1, int new_cwp);
+ 
+ /* int_helper.c */
+-void do_interrupt(CPUSPARCState *env);
+ void leon3_irq_manager(CPUSPARCState *env, void *irq_manager, int intno);
+ 
+ /* sun4m.c, sun4u.c */
+diff --git a/target-sparc/int32_helper.c b/target-sparc/int32_helper.c
+index c35f522..7221460 100644
+--- a/target-sparc/int32_helper.c
++++ b/target-sparc/int32_helper.c
+@@ -58,8 +58,10 @@ static const char * const excp_names[0x80] = {
+ };
+ #endif
+ 
+-void do_interrupt(CPUSPARCState *env)
++void sparc_cpu_do_interrupt(CPUState *cs)
+ {
++    SPARCCPU *cpu = SPARC_CPU(cs);
++    CPUSPARCState *env = &cpu->env;
+     int cwp, intno = env->exception_index;
+ 
+     /* Compute PSR before exposing state.  */
+diff --git a/target-sparc/int64_helper.c b/target-sparc/int64_helper.c
+index df37aa1..f411884 100644
+--- a/target-sparc/int64_helper.c
++++ b/target-sparc/int64_helper.c
+@@ -59,8 +59,10 @@ static const char * const excp_names[0x80] = {
+ };
+ #endif
+ 
+-void do_interrupt(CPUSPARCState *env)
++void sparc_cpu_do_interrupt(CPUState *cs)
+ {
++    SPARCCPU *cpu = SPARC_CPU(cs);
++    CPUSPARCState *env = &cpu->env;
+     int intno = env->exception_index;
+     trap_state *tsptr;
+ 
+diff --git a/target-unicore32/cpu-qom.h b/target-unicore32/cpu-qom.h
+index c6590bd..ba4dee4 100644
+--- a/target-unicore32/cpu-qom.h
++++ b/target-unicore32/cpu-qom.h
+@@ -60,4 +60,6 @@ static inline UniCore32CPU *uc32_env_get_cpu(CPUUniCore32State *env)
+ 
+ #define ENV_OFFSET offsetof(UniCore32CPU, env)
+ 
++void uc32_cpu_do_interrupt(CPUState *cpu);
++
+ #endif
+diff --git a/target-unicore32/cpu.c b/target-unicore32/cpu.c
+index b7024c8..66a1a74 100644
+--- a/target-unicore32/cpu.c
++++ b/target-unicore32/cpu.c
+@@ -132,6 +132,7 @@ static void uc32_cpu_class_init(ObjectClass *oc, void *data)
+     dc->realize = uc32_cpu_realizefn;
+ 
+     cc->class_by_name = uc32_cpu_class_by_name;
++    cc->do_interrupt = uc32_cpu_do_interrupt;
+     dc->vmsd = &vmstate_uc32_cpu;
+ }
+ 
+diff --git a/target-unicore32/cpu.h b/target-unicore32/cpu.h
+index 58f1f20..5b2b9d1 100644
+--- a/target-unicore32/cpu.h
++++ b/target-unicore32/cpu.h
+@@ -176,7 +176,6 @@ static inline void cpu_get_tb_cpu_state(CPUUniCore32State *env, target_ulong *pc
+ }
+ 
+ void uc32_translate_init(void);
+-void do_interrupt(CPUUniCore32State *);
+ void switch_mode(CPUUniCore32State *, int);
+ 
+ static inline bool cpu_has_work(CPUState *cpu)
+diff --git a/target-unicore32/helper.c b/target-unicore32/helper.c
+index 7eeb9bc..61eb2c3 100644
+--- a/target-unicore32/helper.c
++++ b/target-unicore32/helper.c
+@@ -242,8 +242,11 @@ void switch_mode(CPUUniCore32State *env, int mode)
+     }
+ }
+ 
+-void do_interrupt(CPUUniCore32State *env)
++void uc32_cpu_do_interrupt(CPUState *cs)
+ {
++    UniCore32CPU *cpu = UNICORE32_CPU(cs);
++    CPUUniCore32State *env = &cpu->env;
++
+     cpu_abort(env, "NO interrupt in user mode\n");
+ }
+ 
+diff --git a/target-unicore32/softmmu.c b/target-unicore32/softmmu.c
+index 1c4c7f5..eadaeb1 100644
+--- a/target-unicore32/softmmu.c
++++ b/target-unicore32/softmmu.c
+@@ -72,9 +72,10 @@ void switch_mode(CPUUniCore32State *env, int mode)
+ }
+ 
+ /* Handle a CPU exception.  */
+-void do_interrupt(CPUUniCore32State *env)
++void uc32_cpu_do_interrupt(CPUState *cs)
+ {
+-    CPUState *cs = CPU(uc32_env_get_cpu(env));
++    UniCore32CPU *cpu = UNICORE32_CPU(cs);
++    CPUUniCore32State *env = &cpu->env;
+     uint32_t addr;
+     int new_mode;
+ 
+diff --git a/target-xtensa/cpu-qom.h b/target-xtensa/cpu-qom.h
+index c78136b..af0ce28 100644
+--- a/target-xtensa/cpu-qom.h
++++ b/target-xtensa/cpu-qom.h
+@@ -80,4 +80,6 @@ static inline XtensaCPU *xtensa_env_get_cpu(const CPUXtensaState *env)
+ 
+ #define ENV_OFFSET offsetof(XtensaCPU, env)
+ 
++void xtensa_cpu_do_interrupt(CPUState *cpu);
++
+ #endif
+diff --git a/target-xtensa/cpu.c b/target-xtensa/cpu.c
+index 785e56d..6e93dd8 100644
+--- a/target-xtensa/cpu.c
++++ b/target-xtensa/cpu.c
+@@ -101,6 +101,7 @@ static void xtensa_cpu_class_init(ObjectClass *oc, void *data)
+     xcc->parent_reset = cc->reset;
+     cc->reset = xtensa_cpu_reset;
+ 
++    cc->do_interrupt = xtensa_cpu_do_interrupt;
+     dc->vmsd = &vmstate_xtensa_cpu;
+ }
+ 
+diff --git a/target-xtensa/cpu.h b/target-xtensa/cpu.h
+index dece224..6c9fc35 100644
+--- a/target-xtensa/cpu.h
++++ b/target-xtensa/cpu.h
+@@ -388,7 +388,6 @@ void xtensa_translate_init(void);
+ void xtensa_breakpoint_handler(CPUXtensaState *env);
+ int cpu_xtensa_exec(CPUXtensaState *s);
+ void xtensa_register_core(XtensaConfigList *node);
+-void do_interrupt(CPUXtensaState *s);
+ void check_interrupts(CPUXtensaState *s);
+ void xtensa_irq_init(CPUXtensaState *env);
+ void *xtensa_get_extint(CPUXtensaState *env, unsigned extint);
+diff --git a/target-xtensa/helper.c b/target-xtensa/helper.c
+index a8a6493..6f613c66 100644
+--- a/target-xtensa/helper.c
++++ b/target-xtensa/helper.c
+@@ -178,8 +178,11 @@ static void handle_interrupt(CPUXtensaState *env)
+     }
+ }
+ 
+-void do_interrupt(CPUXtensaState *env)
++void xtensa_cpu_do_interrupt(CPUState *cs)
+ {
++    XtensaCPU *cpu = XTENSA_CPU(cs);
++    CPUXtensaState *env = &cpu->env;
++
+     if (env->exception_index == EXC_IRQ) {
+         qemu_log_mask(CPU_LOG_INT,
+                 "%s(EXC_IRQ) level = %d, cintlevel = %d, "
+-- 
+1.7.10.4
+
+

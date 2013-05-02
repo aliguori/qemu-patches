@@ -1,0 +1,47 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Alexey Kardashevskiy <aik@ozlabs.ru>
+To: David Gibson <david@gibson.dropbear.id.au>,
+ Alex Williamson <alex.williamson@redhat.com>,
+ Alexey Kardashevskiy <aik@ozlabs.ru>
+Cc: David Gibson <david@gibson.dropbear.id.au>, qemu-ppc@nongnu.org,
+ Alexey Kardashevskiy <aik@ozlabs.ru>, qemu-devel@nongnu.org
+Date: Mon, 22 Apr 2013 18:02:34 +1000
+Message-id: 1366617757-6604-1-git-send-email-aik@ozlabs.ru
+Subject: [PATCH 0/3] vfio on ppc64
+
+Yes, we are still tuning this stuff for us :)
+
+Changes:
+
+* new "spapr-pci-vfio-host-bridge" device is introduced
+(inherits from spapr-pci-host-bridge);
+
+* device#1->group->container->device#2,.. creation scheme is changed to
+group->container->devices scheme (on ppc64);
+
+* removed vfio_iommu_spapr_tce_dma_map/vfio_iommu_spapr_tce_dma_unmap
+as they are not really necessary now and it does not look like we will
+need them in the nearest future.
+
+Comments?
+
+
+Alexey Kardashevskiy (3):
+  vfio: make some of VFIO API public
+  vfio: add support for spapr platform (powerpc64 server)
+  spapr vfio: add spapr-pci-vfio-host-bridge to support vfio
+
+ hw/misc/vfio.c              |   94 ++++++++++++++++++++--
+ hw/ppc/spapr_iommu.c        |  151 +++++++++++++++++++++++++++--------
+ hw/ppc/spapr_pci.c          |  186 +++++++++++++++++++++++++++++++++++++++++--
+ include/hw/misc/vfio.h      |   20 +++++
+ include/hw/pci-host/spapr.h |   12 +++
+ include/hw/ppc/spapr.h      |    3 +
+ trace-events                |    4 +
+ 7 files changed, 422 insertions(+), 48 deletions(-)
+ create mode 100644 include/hw/misc/vfio.h
+
+-- 
+1.7.10.4
+
+

@@ -1,0 +1,42 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Alexander Graf <agraf@suse.de>
+To: qemu-ppc@nongnu.org
+Cc: Blue Swirl <blauwirbel@gmail.com>, Aurelien Jarno <aurelien@aurel32.net>,
+ qemu-devel@nongnu.org
+Date: Fri, 26 Apr 2013 20:21:29 +0200
+Message-id: 1367000509-8833-11-git-send-email-agraf@suse.de
+Subject: [PATCH 10/30] PPC: mac newworld: fix cpu NIP reset value
+
+On -M mac99, we can run 970 CPUs. However, these CPUs define the initial
+instruction pointer they start execution at as part of their bootup protocol,
+so effectively it's up to the board to decide where they start.
+
+This went unnoticed, because they used to boot at the same location our flash
+was mapped to, but due to the recent reset changes our 970 CPUs want to reset
+to 0x100 now, which is always a 0 instruction.
+
+Set the initial IP to something reasonable for -M mac99.
+
+Signed-off-by: Alexander Graf <agraf@suse.de>
+Reviewed-by: Fabien Chouteau <chouteau@adacore.com>
+---
+ hw/ppc/mac_newworld.c |    2 ++
+ 1 files changed, 2 insertions(+), 0 deletions(-)
+
+diff --git a/hw/ppc/mac_newworld.c b/hw/ppc/mac_newworld.c
+index 4a9b883..ce44e95 100644
+--- a/hw/ppc/mac_newworld.c
++++ b/hw/ppc/mac_newworld.c
+@@ -126,6 +126,8 @@ static void ppc_core99_reset(void *opaque)
+     PowerPCCPU *cpu = opaque;
+ 
+     cpu_reset(CPU(cpu));
++    /* 970 CPUs want to get their initial IP as part of their boot protocol */
++    cpu->env.nip = PROM_ADDR + 0x100;
+ }
+ 
+ /* PowerPC Mac99 hardware initialisation */
+-- 
+1.6.0.2
+
+

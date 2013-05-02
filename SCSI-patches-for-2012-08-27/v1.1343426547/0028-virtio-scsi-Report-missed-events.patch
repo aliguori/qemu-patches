@@ -1,0 +1,110 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: 
+Date: Fri, 27 Jul 2012 17:02:55 +0200
+Message-id: 1343401379-19495-29-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 28/32] virtio-scsi: Report missed events
+
+When an event is reported but no buffers are present in the event vq,
+we can set a flag and report a dummy event as soon as one is added.
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ hw/virtio-scsi.c |   54 ++++++++++++++++++++++++++++++++++++------------------
+ 1 file changed, 36 insertions(+), 18 deletions(-)
+
+diff --git a/hw/virtio-scsi.c b/hw/virtio-scsi.c
+index 4f02195..d5c5984 100644
+--- a/hw/virtio-scsi.c
++++ b/hw/virtio-scsi.c
+@@ -141,6 +141,7 @@ typedef struct {
+     uint32_t sense_size;
+     uint32_t cdb_size;
+     int resetting;
++    bool events_dropped;
+     VirtQueue *ctrl_vq;
+     VirtQueue *event_vq;
+     VirtQueue *cmd_vqs[0];
+@@ -416,10 +417,6 @@ static void virtio_scsi_handle_ctrl(VirtIODevice *vdev, VirtQueue *vq)
+     }
+ }
+ 
+-static void virtio_scsi_handle_event(VirtIODevice *vdev, VirtQueue *vq)
+-{
+-}
+-
+ static void virtio_scsi_command_complete(SCSIRequest *r, uint32_t status,
+                                          size_t resid)
+ {
+@@ -594,22 +591,34 @@ static void virtio_scsi_push_event(VirtIOSCSI *s, SCSIDevice *dev,
+ {
+     VirtIOSCSIReq *req = virtio_scsi_pop_req(s, s->event_vq);
+     VirtIOSCSIEvent *evt;
++    int in_size;
+ 
+-    if (req) {
+-        int in_size;
+-        if (req->elem.out_num || req->elem.in_num != 1) {
+-            virtio_scsi_bad_req();
+-        }
++    if (!req) {
++        s->events_dropped = true;
++        return;
++    }
+ 
+-        in_size = req->elem.in_sg[0].iov_len;
+-        if (in_size < sizeof(VirtIOSCSIEvent)) {
+-            virtio_scsi_bad_req();
+-        }
++    if (req->elem.out_num || req->elem.in_num != 1) {
++        virtio_scsi_bad_req();
++    }
+ 
+-        evt = req->resp.event;
+-        memset(evt, 0, sizeof(VirtIOSCSIEvent));
+-        evt->event = event;
+-        evt->reason = reason;
++    if (s->events_dropped) {
++        event |= VIRTIO_SCSI_T_EVENTS_MISSED;
++        s->events_dropped = false;
++    }
++
++    in_size = req->elem.in_sg[0].iov_len;
++    if (in_size < sizeof(VirtIOSCSIEvent)) {
++        virtio_scsi_bad_req();
++    }
++
++    evt = req->resp.event;
++    memset(evt, 0, sizeof(VirtIOSCSIEvent));
++    evt->event = event;
++    evt->reason = reason;
++    if (!dev) {
++        assert(event == VIRTIO_SCSI_T_NO_EVENT);
++    } else {
+         evt->lun[0] = 1;
+         evt->lun[1] = dev->id;
+ 
+@@ -618,7 +627,16 @@ static void virtio_scsi_push_event(VirtIOSCSI *s, SCSIDevice *dev,
+             evt->lun[2] = (dev->lun >> 8) | 0x40;
+         }
+         evt->lun[3] = dev->lun & 0xFF;
+-        virtio_scsi_complete_req(req);
++    }
++    virtio_scsi_complete_req(req);
++}
++
++static void virtio_scsi_handle_event(VirtIODevice *vdev, VirtQueue *vq)
++{
++    VirtIOSCSI *s = (VirtIOSCSI *)vdev;
++
++    if (s->events_dropped) {
++        virtio_scsi_push_event(s, NULL, VIRTIO_SCSI_T_NO_EVENT, 0);
+     }
+ }
+ 
+-- 
+1.7.10.4
+
+
+

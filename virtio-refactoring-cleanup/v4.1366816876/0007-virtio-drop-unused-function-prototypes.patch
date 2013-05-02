@@ -1,0 +1,44 @@
+From patches Mon Sep 17 00:00:00 2001
+From: fred.konrad@greensocs.com
+To: Anthony Liguori <aliguori@us.ibm.com>, qemu-devel@nongnu.org
+Cc: cornelia.huck@de.ibm.com, peter.maydell@linaro.org,
+ mark.burton@greensocs.com, fred.konrad@greensocs.com
+Date: Wed, 24 Apr 2013 10:21:23 +0200
+Message-id: 1366791683-5350-8-git-send-email-fred.konrad@greensocs.com
+Subject: [PATCH 7/7] virtio: drop unused function prototypes.
+
+From: KONRAD Frederic <fred.konrad@greensocs.com>
+
+This removes the unused prototypes in virtio.h.
+
+Signed-off-by: KONRAD Frederic <fred.konrad@greensocs.com>
+---
+ include/hw/virtio/virtio.h | 10 ----------
+ 1 file changed, 10 deletions(-)
+
+diff --git a/include/hw/virtio/virtio.h b/include/hw/virtio/virtio.h
+index 0f240c7..ae7a4c4 100644
+--- a/include/hw/virtio/virtio.h
++++ b/include/hw/virtio/virtio.h
+@@ -210,18 +210,8 @@ VirtIODevice *virtio_net_init(DeviceState *dev, NICConf *conf,
+                               struct virtio_net_conf *net,
+                               uint32_t host_features);
+ typedef struct virtio_serial_conf virtio_serial_conf;
+-VirtIODevice *virtio_serial_init(DeviceState *dev, virtio_serial_conf *serial);
+ typedef struct VirtIOSCSIConf VirtIOSCSIConf;
+-VirtIODevice *virtio_scsi_init(DeviceState *dev, VirtIOSCSIConf *conf);
+ typedef struct VirtIORNGConf VirtIORNGConf;
+-#ifdef CONFIG_VIRTFS
+-VirtIODevice *virtio_9p_init(DeviceState *dev, V9fsConf *conf);
+-#endif
+-
+-
+-void virtio_net_exit(VirtIODevice *vdev);
+-void virtio_serial_exit(VirtIODevice *vdev);
+-void virtio_scsi_exit(VirtIODevice *vdev);
+ 
+ #define DEFINE_VIRTIO_COMMON_FEATURES(_state, _field) \
+ 	DEFINE_PROP_BIT("indirect_desc", _state, _field, \
+-- 
+1.7.11.7
+

@@ -1,0 +1,87 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Hans de Goede <hdegoede@redhat.com>
+To: Gerd Hoffmann <kraxel@redhat.com>
+Cc: Hans de Goede <hdegoede@redhat.com>, qemu-devel@nongnu.org
+Date: Fri,  5 Apr 2013 11:30:20 +0200
+Message-id: 1365154225-9443-3-git-send-email-hdegoede@redhat.com
+Subject: [PATCH 2/7] virtio-console: Remove any pending watches on close
+
+Signed-off-by: Hans de Goede <hdegoede@redhat.com>
+---
+ hw/virtio-console.c | 24 ++++++++++++++++++++++--
+ 1 file changed, 22 insertions(+), 2 deletions(-)
+
+diff --git a/hw/virtio-console.c b/hw/virtio-console.c
+index 61f9ff5..908ec17 100644
+--- a/hw/virtio-console.c
++++ b/hw/virtio-console.c
+@@ -18,6 +18,7 @@
+ typedef struct VirtConsole {
+     VirtIOSerialPort port;
+     CharDriverState *chr;
++    guint watch;
+ } VirtConsole;
+ 
+ /*
+@@ -29,6 +30,7 @@ static gboolean chr_write_unblocked(GIOChannel *chan, GIOCondition cond,
+ {
+     VirtConsole *vcon = opaque;
+ 
++    vcon->watch = 0;
+     virtio_serial_throttle_port(&vcon->port, false);
+     return FALSE;
+ }
+@@ -61,8 +63,10 @@ static ssize_t flush_buf(VirtIOSerialPort *port,
+             ret = 0;
+         if (!k->is_console) {
+             virtio_serial_throttle_port(port, true);
+-            qemu_chr_fe_add_watch(vcon->chr, G_IO_OUT, chr_write_unblocked,
+-                                  vcon);
++            if (!vcon->watch) {
++                vcon->watch = qemu_chr_fe_add_watch(vcon->chr, G_IO_OUT,
++                                                    chr_write_unblocked, vcon);
++            }
+         }
+     }
+     return ret;
+@@ -106,6 +110,10 @@ static void chr_event(void *opaque, int event)
+         virtio_serial_open(&vcon->port);
+         break;
+     case CHR_EVENT_CLOSED:
++        if (vcon->watch) {
++            g_source_remove(vcon->watch);
++            vcon->watch = 0;
++        }
+         virtio_serial_close(&vcon->port);
+         break;
+     }
+@@ -130,6 +138,17 @@ static int virtconsole_initfn(VirtIOSerialPort *port)
+     return 0;
+ }
+ 
++static int virtconsole_exitfn(VirtIOSerialPort *port)
++{
++    VirtConsole *vcon = DO_UPCAST(VirtConsole, port, port);
++
++    if (vcon->watch) {
++        g_source_remove(vcon->watch);
++    }
++
++    return 0;
++}
++
+ static Property virtconsole_properties[] = {
+     DEFINE_PROP_CHR("chardev", VirtConsole, chr),
+     DEFINE_PROP_END_OF_LIST(),
+@@ -142,6 +161,7 @@ static void virtconsole_class_init(ObjectClass *klass, void *data)
+ 
+     k->is_console = true;
+     k->init = virtconsole_initfn;
++    k->exit = virtconsole_exitfn;
+     k->have_data = flush_buf;
+     k->set_guest_connected = set_guest_connected;
+     dc->props = virtconsole_properties;
+-- 
+1.8.1.4
+
+

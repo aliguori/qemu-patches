@@ -1,0 +1,130 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Laszlo Ersek <lersek@redhat.com>
+To: Laszlo Ersek <lersek@redhat.com>, Anthony Liguori <anthony@codemonkey.ws>,
+ qemu-devel@nongnu.org, mst@redhat.com
+Cc: qemu-devel@nongnu.org, mst@redhat.com
+Date: Thu, 18 Apr 2013 22:22:21 +0200
+Message-id: 1366316544-1428-5-git-send-email-lersek@redhat.com
+Subject: [PATCH 4/7] hw/acpi: export default ACPI headers using the type just
+ introduced
+
+This enables reuse when preparing per-table fw_cfg blobs later.
+
+Signed-off-by: Laszlo Ersek <lersek@redhat.com>
+Acked-by: Michael S. Tsirkin <mst@redhat.com>
+---
+ include/hw/acpi/acpi.h |    2 ++
+ hw/acpi/core.c         |   39 ++++++++++++++++++++++++---------------
+ 2 files changed, 26 insertions(+), 15 deletions(-)
+
+diff --git a/include/hw/acpi/acpi.h b/include/hw/acpi/acpi.h
+index 0e26f63..bc7e107 100644
+--- a/include/hw/acpi/acpi.h
++++ b/include/hw/acpi/acpi.h
+@@ -178,4 +178,6 @@ typedef struct acpi_table_std_header {
+     char asl_compiler_id[4];  /* ASL compiler vendor ID */
+     uint32_t asl_compiler_revision; /* ASL compiler revision number */
+ } QEMU_PACKED AcpiTableStdHdr;
++
++extern const AcpiTableStdHdr acpi_dfl_hdr;
+ #endif /* !QEMU_HW_ACPI_H */
+diff --git a/hw/acpi/core.c b/hw/acpi/core.c
+index d348f81..36a4d03 100644
+--- a/hw/acpi/core.c
++++ b/hw/acpi/core.c
+@@ -37,11 +37,20 @@ struct acpi_table_header {
+ /* size of the extra prefix */
+ #define ACPI_TABLE_PFX_SIZE offsetof(struct acpi_table_header, std)
+ 
+-static const char unsigned dfl_hdr[sizeof(AcpiTableStdHdr)] =
+-    "QEMU\0\0\0\0\1\0"       /* sig (4), len(4), revno (1), csum (1) */
+-    "QEMUQEQEMUQEMU\1\0\0\0" /* OEM id (6), table (8), revno (4) */
+-    "QEMU\1\0\0\0"           /* ASL compiler ID (4), version (4) */
+-    ;
++const AcpiTableStdHdr acpi_dfl_hdr = {
++    .sig = "QEMU",
++    .revision = 1,
++    .oem_id = "QEMUQE",
++    .oem_table_id = "QEMUQEMU",
++    .asl_compiler_id = "QEMU",
++#ifdef HOST_WORDS_BIGENDIAN
++    .oem_revision = 0x01000000,
++    .asl_compiler_revision = 0x01000000
++#else
++    .oem_revision = 1,
++    .asl_compiler_revision = 1
++#endif
++};
+ 
+ char unsigned *acpi_tables;
+ size_t acpi_tables_len;
+@@ -74,8 +83,8 @@ static int acpi_checksum(const uint8_t *data, int len)
+ /* Install a copy of the ACPI table specified in @blob.
+  *
+  * If @has_header is set, @blob starts with the System Description Table Header
+- * structure. Otherwise, "dfl_hdr" is prepended. In any case, each header field
+- * is optionally overwritten from @hdrs.
++ * structure. Otherwise, "acpi_dfl_hdr" is prepended. In any case, each header
++ * field is optionally overwritten from @hdrs.
+  *
+  * It is valid to call this function with
+  * (@blob == NULL && @bloblen == 0 && !@has_header).
+@@ -105,13 +114,13 @@ static void acpi_table_install(const char unsigned *blob, size_t bloblen,
+     if (has_header) {
+         /*   _length             | ACPI header in blob | blob body
+          *   ^^^^^^^^^^^^^^^^^^^   ^^^^^^^^^^^^^^^^^^^   ^^^^^^^^^
+-         *   ACPI_TABLE_PFX_SIZE     sizeof dfl_hdr      body_size
++         *   ACPI_TABLE_PFX_SIZE   sizeof acpi_dfl_hdr   body_size
+          *                           == body_start
+          *
+          *                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+          *                           acpi_payload_size == bloblen
+          */
+-        body_start = sizeof dfl_hdr;
++        body_start = sizeof acpi_dfl_hdr;
+ 
+         if (bloblen < body_start) {
+             error_setg(errp, "ACPI table claiming to have header is too "
+@@ -123,17 +132,17 @@ static void acpi_table_install(const char unsigned *blob, size_t bloblen,
+     } else {
+         /*   _length             | ACPI header in template | blob body
+          *   ^^^^^^^^^^^^^^^^^^^   ^^^^^^^^^^^^^^^^^^^^^^^   ^^^^^^^^^^
+-         *   ACPI_TABLE_PFX_SIZE       sizeof dfl_hdr        body_size
++         *   ACPI_TABLE_PFX_SIZE     sizeof acpi_dfl_hdr     body_size
+          *                                                   == bloblen
+          *
+          *                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+          *                                  acpi_payload_size
+          */
+         body_start = 0;
+-        hdr_src = dfl_hdr;
++        hdr_src = (const char unsigned *)&acpi_dfl_hdr;
+     }
+     body_size = bloblen - body_start;
+-    acpi_payload_size = sizeof dfl_hdr + body_size;
++    acpi_payload_size = sizeof acpi_dfl_hdr + body_size;
+ 
+     if (acpi_payload_size > UINT16_MAX) {
+         error_setg(errp, "ACPI table too big, requested: %zu, max: %u",
+@@ -149,13 +158,13 @@ static void acpi_table_install(const char unsigned *blob, size_t bloblen,
+ 
+     acpi_tables = g_realloc(acpi_tables, acpi_tables_len +
+                                          ACPI_TABLE_PFX_SIZE +
+-                                         sizeof dfl_hdr + body_size);
++                                         sizeof acpi_dfl_hdr + body_size);
+ 
+     ext_hdr = (struct acpi_table_header *)(acpi_tables + acpi_tables_len);
+     acpi_tables_len += ACPI_TABLE_PFX_SIZE;
+ 
+-    memcpy(acpi_tables + acpi_tables_len, hdr_src, sizeof dfl_hdr);
+-    acpi_tables_len += sizeof dfl_hdr;
++    memcpy(acpi_tables + acpi_tables_len, hdr_src, sizeof acpi_dfl_hdr);
++    acpi_tables_len += sizeof acpi_dfl_hdr;
+ 
+     if (blob != NULL) {
+         memcpy(acpi_tables + acpi_tables_len, blob + body_start, body_size);
+-- 
+1.7.1
+
+
+

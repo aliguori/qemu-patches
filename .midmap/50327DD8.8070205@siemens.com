@@ -1,0 +1,1 @@
+../Drop-redundant-resume_all_vcpus-from-main/v1.1345511496/0001-Drop-redundant-resume_all_vcpus-from-main.patch

@@ -1,0 +1,46 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Aurelien Jarno <aurelien@aurel32.net>
+To: Aurelien Jarno <aurelien@aurel32.net>, qemu-devel@nongnu.org
+Cc: Paolo Bonzini <pbonzini@redhat.com>, Aurelien Jarno <aurelien@aurel32.net>,
+ "Michael S. Tsirkin" <mst@redhat.com>, Richard Henderson <rth@twiddle.net>,
+ qemu-devel@nongnu.org
+Date: Sun, 21 Apr 2013 00:48:43 +0200
+Message-id: 1366498123-21182-1-git-send-email-aurelien@aurel32.net
+Subject: [PATCH 1/1] tcg: fix deposit_i64 op on 32-bit targets
+
+On 32-bit TCG targets, when emulating deposit_i64 with a mov_i32 +
+deposit_i32, care should be taken to not overwrite the low part of
+the second argument before the deposit when it is the same the
+destination.
+
+This fixes the shld instruction in qemu-system-x86_64, which in turns
+fixes booting "system rescue CD version 2.8.0" on this target.
+
+Reported-by: Michael S. Tsirkin <mst@redhat.com>
+Cc: Richard Henderson <rth@twiddle.net>
+Cc: Paolo Bonzini <pbonzini@redhat.com>
+Signed-off-by: Aurelien Jarno <aurelien@aurel32.net>
+Reviewed-by: Richard Henderson <rth@twiddle.net>
+---
+ tcg/tcg-op.h |    2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/tcg/tcg-op.h b/tcg/tcg-op.h
+index d70b2eb..94f6043 100644
+--- a/tcg/tcg-op.h
++++ b/tcg/tcg-op.h
+@@ -2188,9 +2188,9 @@ static inline void tcg_gen_deposit_i64(TCGv_i64 ret, TCGv_i64 arg1,
+ 
+ #if TCG_TARGET_REG_BITS == 32
+     if (ofs >= 32) {
+-        tcg_gen_mov_i32(TCGV_LOW(ret), TCGV_LOW(arg1));
+         tcg_gen_deposit_i32(TCGV_HIGH(ret), TCGV_HIGH(arg1),
+                             TCGV_LOW(arg2), ofs - 32, len);
++        tcg_gen_mov_i32(TCGV_LOW(ret), TCGV_LOW(arg1));
+         return;
+     }
+     if (ofs + len <= 32) {
+-- 
+1.7.10.4
+
+

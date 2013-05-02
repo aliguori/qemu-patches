@@ -1,0 +1,314 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Laszlo Ersek <lersek@redhat.com>
+To: qemu-devel@nongnu.org, mst@redhat.com
+Cc: 
+Date: Tue, 16 Apr 2013 02:24:14 +0200
+Message-id: 1366071854-8917-8-git-send-email-lersek@redhat.com
+Subject: [PATCH 7/7] hw/i386: build ACPI MADT (APIC) for fw_cfg clients
+
+This patch reuses some code from SeaBIOS, which was originally under
+LGPLv2 and then relicensed to GPLv3 or LGPLv3, in QEMU under GPLv2+. This
+relicensing has been acked by all contributors that had contributed to the
+code since the v2->v3 relicense. ACKs approving the v2+ relicensing are
+listed below. The list might include ACKs from people not holding
+copyright on any parts of the reused code, but it's better to err on the
+side of caution and include them.
+
+Affected SeaBIOS files (GPLv2+ license headers added)
+<http://thread.gmane.org/gmane.comp.bios.coreboot.seabios/5949>:
+
+ src/acpi-dsdt-cpu-hotplug.dsl    |   15 +++++++++++++++
+ src/acpi-dsdt-dbug.dsl           |   15 +++++++++++++++
+ src/acpi-dsdt-hpet.dsl           |   15 +++++++++++++++
+ src/acpi-dsdt-isa.dsl            |   15 +++++++++++++++
+ src/acpi-dsdt-pci-crs.dsl        |   15 +++++++++++++++
+ src/acpi.c                       |   14 +++++++++++++-
+ src/acpi.h                       |   14 ++++++++++++++
+ src/ssdt-misc.dsl                |   15 +++++++++++++++
+ src/ssdt-pcihp.dsl               |   15 +++++++++++++++
+ src/ssdt-proc.dsl                |   15 +++++++++++++++
+ tools/acpi_extract.py            |   13 ++++++++++++-
+ tools/acpi_extract_preprocess.py |   13 ++++++++++++-
+ 12 files changed, 171 insertions(+), 3 deletions(-)
+
+Each one of the listed people agreed to the following:
+
+> If you allow the use of your contribution in QEMU under the
+> terms of GPLv2 or later as proposed by this patch,
+> please respond to this mail including the line:
+>
+> Acked-by: Name <email address>
+
+  Acked-by: Gerd Hoffmann <kraxel@redhat.com>
+  Acked-by: Jan Kiszka <jan.kiszka@siemens.com>
+  Acked-by: Jason Baron <jbaron@akamai.com>
+  Acked-by: David Woodhouse <David.Woodhouse@intel.com>
+  Acked-by: Gleb Natapov <gleb@redhat.com>
+  Acked-by: Marcelo Tosatti <mtosatti@redhat.com>
+  Acked-by: Dave Frodin <dave.frodin@se-eng.com>
+  Acked-by: Paolo Bonzini <pbonzini@redhat.com>
+  Acked-by: Kevin O'Connor <kevin@koconnor.net>
+  Acked-by: Laszlo Ersek <lersek@redhat.com>
+  Acked-by: Kenji Kaneshige <kaneshige.kenji@jp.fujitsu.com>
+  Acked-by: Isaku Yamahata <yamahata@valinux.co.jp>
+  Acked-by: Magnus Christensson <magnus.christensson@intel.com>
+  Acked-by: Hu Tao <hutao@cn.fujitsu.com>
+  Acked-by: Eduardo Habkost <ehabkost@redhat.com>
+
+The patch incorporates ideas/suggestions from Michael Tsirkin's prototype
+code:
+- "hw/i386/pc.c" is too big, create new file "hw/i386/acpi.c" with
+  i386-specific ACPI table stuff,
+- separate preparation of individual tables from their installation as
+  fw_cfg files,
+- install these fw_cfg files inside pc_memory_init(), which is shared by
+  piix4/q35,
+- add the above licensing-related block to the commit message.
+
+Signed-off-by: Laszlo Ersek <lersek@redhat.com>
+---
+ hw/i386/acpi.h        |    9 +++
+ hw/i386/acpi.c        |  159 +++++++++++++++++++++++++++++++++++++++++++++++++
+ hw/i386/pc.c          |   16 +++++
+ hw/i386/Makefile.objs |    1 +
+ 4 files changed, 185 insertions(+), 0 deletions(-)
+ create mode 100644 hw/i386/acpi.h
+ create mode 100644 hw/i386/acpi.c
+
+diff --git a/hw/i386/acpi.h b/hw/i386/acpi.h
+new file mode 100644
+index 0000000..94f9ad3
+--- /dev/null
++++ b/hw/i386/acpi.h
+@@ -0,0 +1,9 @@
++#ifndef QEMU_HW_I386_ACPI_H
++#define QEMU_HW_I386_ACPI_H
++
++#include <stddef.h>
++
++void acpi_build_madt(unsigned char **out_blob, size_t *out_blob_size,
++                     unsigned num_lapic);
++
++#endif
+diff --git a/hw/i386/acpi.c b/hw/i386/acpi.c
+new file mode 100644
+index 0000000..179cdf5
+--- /dev/null
++++ b/hw/i386/acpi.c
+@@ -0,0 +1,159 @@
++/*
++ * Copyright (c) 2013 Red Hat Inc.
++ * Copyright (C) 2008-2010  Kevin O'Connor <kevin@koconnor.net>
++ * Copyright (C) 2006 Fabrice Bellard
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License as published by
++ * the Free Software Foundation; either version 2 of the License, or
++ * (at your option) any later version.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License along
++ * with this program; if not, see <http://www.gnu.org/licenses/>.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
++ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
++ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
++ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
++ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
++ * THE SOFTWARE.
++ */
++
++#include "hw/acpi/acpi.h"
++#include "hw/i386/acpi.h"
++#include "kvm_i386.h"
++#include "sysemu/sysemu.h"
++
++static void acpi_table_fill_hdr(AcpiTableStdHdr *std_hdr, size_t blob_size,
++                                const char *sig)
++{
++    g_assert(blob_size >= sizeof *std_hdr);
++
++    *std_hdr = acpi_dfl_hdr;
++    strncpy(std_hdr->sig, sig, sizeof std_hdr->sig);
++    strncpy(std_hdr->oem_id, "QEMU  ", sizeof std_hdr->oem_id);
++    strncpy(std_hdr->oem_table_id + 4, sig, sizeof std_hdr->oem_table_id - 4);
++    std_hdr->length = cpu_to_le32(blob_size);
++    std_hdr->checksum = acpi_checksum((uint8_t *)std_hdr, blob_size);
++}
++
++void acpi_build_madt(unsigned char **out_blob, size_t *out_blob_size,
++                     unsigned num_lapic)
++{
++    typedef struct {
++        uint8_t    type;
++        uint8_t    length;
++    } QEMU_PACKED AcpiSubHdr;
++
++    AcpiTableStdHdr *std_hdr;
++    struct {
++        uint32_t   lapic_addr; /* Local Interrupt Controller Address */
++        uint32_t   flags;      /* Multiple APIC flags */
++    } QEMU_PACKED *madt;
++    struct {
++        AcpiSubHdr hdr;
++        uint8_t    processor_id; /* ACPI Processor ID */
++        uint8_t    apic_id;      /* APIC ID */
++        uint32_t   flags;        /* LOcal APIC flags */
++    } QEMU_PACKED *lapic;
++    struct {
++        AcpiSubHdr hdr;
++        uint8_t    io_apic_id;   /* The I/O APIC's ID */
++        uint8_t    reserved;     /* constant zero */
++        uint32_t   io_apic_addr; /* 32-bit physical address to access */
++        uint32_t   gsi_base;     /* interrupt inputs start here */
++    } QEMU_PACKED *io_apic;
++    struct {
++        AcpiSubHdr hdr;
++        uint8_t    bus;    /* constant zero: ISA */
++        uint8_t    source; /* this bus-relative interrupt source... */
++        uint32_t   gsi;    /* ... will signal this global system interrupt */
++        uint16_t   flags;  /* MPS INTI Flags: Polarity, Trigger Mode */
++    } QEMU_PACKED *int_src_ovr;
++    struct {
++        AcpiSubHdr hdr;
++        uint8_t    processor_id; /* ACPI Processor ID */
++        uint16_t   flags;        /* MPS INTI Flags: Polarity, Trigger Mode */
++        uint8_t    lint;         /* LAPIC interrupt input for NMI */
++    } QEMU_PACKED *lapic_nmi;
++
++    static const uint8_t pci_isa_irq[] = { 5, 9, 10, 11 };
++
++    unsigned num_int_src_ovr, i;
++    size_t blob_size;
++    char unsigned *blob;
++
++    num_int_src_ovr = sizeof pci_isa_irq + kvm_allows_irq0_override();
++
++    blob_size = (sizeof *std_hdr)     * 1               +
++                (sizeof *madt)        * 1               +
++                (sizeof *lapic)       * num_lapic       +
++                (sizeof *io_apic)     * 1               +
++                (sizeof *int_src_ovr) * num_int_src_ovr +
++                (sizeof *lapic_nmi)   * 1;
++    blob      = g_malloc(blob_size);
++
++    std_hdr     = (void *)blob;
++    madt        = (void *)(std_hdr     + 1              );
++    lapic       = (void *)(madt        + 1              );
++    io_apic     = (void *)(lapic       + num_lapic      );
++    int_src_ovr = (void *)(io_apic     + 1              );
++    lapic_nmi   = (void *)(int_src_ovr + num_int_src_ovr);
++
++    madt->lapic_addr = cpu_to_le32(APIC_DEFAULT_ADDRESS);
++    madt->flags      = cpu_to_le32(1); /* PCAT_COMPAT */
++
++    /* create a Local APIC structure for each possible APIC ID */
++    for (i = 0; i < num_lapic; ++i) {
++        lapic[i].hdr.type     = 0; /* Processor Local APIC */
++        lapic[i].hdr.length   = sizeof *lapic;
++        lapic[i].processor_id = i;
++        lapic[i].apic_id      = i;
++        lapic[i].flags        = cpu_to_le32(0); /* disabled */
++    }
++    /* enable the CPUs with a CPU index in the [0..smp_cpus-1] range */
++    for (i = 0; i < smp_cpus; ++i) {
++        lapic[x86_cpu_apic_id_from_index(i)].flags = cpu_to_le32(1);
++    }
++
++    io_apic->hdr.type     = 1; /* I/O APIC */
++    io_apic->hdr.length   = sizeof *io_apic;
++    io_apic->io_apic_id   = 0;
++    io_apic->reserved     = 0;
++    io_apic->io_apic_addr = cpu_to_le32(IO_APIC_DEFAULT_ADDRESS);
++    io_apic->gsi_base     = cpu_to_le32(0);
++
++    for (i = 0; i < sizeof pci_isa_irq; ++i) {
++        int_src_ovr[i].hdr.type   = 2; /* Interrupt Source Override */
++        int_src_ovr[i].hdr.length = sizeof *int_src_ovr;
++        int_src_ovr[i].bus        = 0;
++        int_src_ovr[i].source     = pci_isa_irq[i];
++        int_src_ovr[i].gsi        = cpu_to_le32(pci_isa_irq[i]);
++        int_src_ovr[i].flags      = cpu_to_le16(0xd);
++                                    /* active high, level-triggered */
++    }
++    if (kvm_allows_irq0_override()) {
++        int_src_ovr[i].hdr.type   = 2; /* Interrupt Source Override */
++        int_src_ovr[i].hdr.length = sizeof *int_src_ovr;
++        int_src_ovr[i].bus        = 0;
++        int_src_ovr[i].source     = 0;
++        int_src_ovr[i].gsi        = cpu_to_le32(2);
++        int_src_ovr[i].flags      = cpu_to_le16(0); /* conforms to bus spec */
++    }
++
++    lapic_nmi->hdr.type     = 4; /* Local APIC NMI */
++    lapic_nmi->hdr.length   = sizeof *lapic_nmi;
++    lapic_nmi->processor_id = 0xff; /* all processors */
++    lapic_nmi->flags        = cpu_to_le16(0); /* conforms to bus spec */
++    lapic_nmi->lint         = 1; /* NMI connected to LAPIC input LINT1 */
++
++    acpi_table_fill_hdr(std_hdr, blob_size, "APIC");
++    *out_blob = blob;
++    *out_blob_size = blob_size;
++}
+diff --git a/hw/i386/pc.c b/hw/i386/pc.c
+index 8727489..f91ed21 100644
+--- a/hw/i386/pc.c
++++ b/hw/i386/pc.c
+@@ -53,6 +53,7 @@
+ #include "qemu/bitmap.h"
+ #include "qemu/config-file.h"
+ #include "hw/acpi/acpi.h"
++#include "hw/i386/acpi.h"
+ 
+ /* debug PC/ISA interrupts */
+ //#define DEBUG_IRQ
+@@ -922,6 +923,19 @@ void pc_acpi_init(const char *default_dsdt)
+     }
+ }
+ 
++static void pc_acpi_madt(FWCfgState *fw_cfg)
++{
++    unsigned num_lapic;
++    char unsigned *blob;
++    size_t blob_size;
++
++    /* see note on FW_CFG_MAX_CPUS in bochs_bios_init() */
++    num_lapic = pc_apic_id_limit(max_cpus);
++
++    acpi_build_madt(&blob, &blob_size, num_lapic);
++    fw_cfg_add_file(fw_cfg, "etc/acpi/APIC", blob, blob_size);
++}
++
+ FWCfgState *pc_memory_init(MemoryRegion *system_memory,
+                            const char *kernel_filename,
+                            const char *kernel_cmdline,
+@@ -974,6 +988,8 @@ FWCfgState *pc_memory_init(MemoryRegion *system_memory,
+     fw_cfg = bochs_bios_init();
+     rom_set_fw(fw_cfg);
+ 
++    pc_acpi_madt(fw_cfg);
++
+     if (linux_boot) {
+         load_linux(fw_cfg, kernel_filename, initrd_filename, kernel_cmdline, below_4g_mem_size);
+     }
+diff --git a/hw/i386/Makefile.objs b/hw/i386/Makefile.objs
+index 205d22e..a55da29 100644
+--- a/hw/i386/Makefile.objs
++++ b/hw/i386/Makefile.objs
+@@ -1,6 +1,7 @@
+ obj-$(CONFIG_KVM) += kvm/
+ obj-y += multiboot.o smbios.o
+ obj-y += pc.o pc_piix.o pc_q35.o
++obj-y += acpi.o
+ obj-$(CONFIG_XEN) += xen_domainbuild.o xen_machine_pv.o
+ 
+ obj-y += kvmvapic.o
+-- 
+1.7.1
+
+

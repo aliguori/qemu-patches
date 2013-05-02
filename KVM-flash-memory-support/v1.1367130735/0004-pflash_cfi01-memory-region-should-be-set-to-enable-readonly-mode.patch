@@ -1,0 +1,39 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Jordan Justen <jordan.l.justen@intel.com>
+To: qemu-devel@nongnu.org
+Cc: Jordan Justen <jordan.l.justen@intel.com>
+Date: Sun, 28 Apr 2013 01:32:19 -0700
+Message-id: 1367137941-4310-5-git-send-email-jordan.l.justen@intel.com
+Subject: [PATCH 4/6] pflash_cfi01: memory region should be set to enable
+ readonly mode
+
+This causes any writes to the memory region to trap to the
+device handler.
+
+This is also important for KVM, because this allows the memory
+region to be set using KVM_MEM_READONLY, which allows the memory
+region to be read & executed. (Without this, KVM will not support
+executing from the memory region.)
+
+Signed-off-by: Jordan Justen <jordan.l.justen@intel.com>
+---
+ hw/block/pflash_cfi01.c |    2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/hw/block/pflash_cfi01.c b/hw/block/pflash_cfi01.c
+index 3ff20e0..b65225e 100644
+--- a/hw/block/pflash_cfi01.c
++++ b/hw/block/pflash_cfi01.c
+@@ -596,6 +596,8 @@ static int pflash_cfi01_init(SysBusDevice *dev)
+         }
+     }
+ 
++    memory_region_set_readonly(&pfl->mem, true);
++
+     if (pfl->bs) {
+         pfl->ro = bdrv_is_read_only(pfl->bs);
+     } else {
+-- 
+1.7.10.4
+
+

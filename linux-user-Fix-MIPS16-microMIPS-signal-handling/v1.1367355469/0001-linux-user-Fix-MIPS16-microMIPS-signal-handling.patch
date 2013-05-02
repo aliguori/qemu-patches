@@ -1,0 +1,52 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Kwok Cheung Yeung <kcy@codesourcery.com>
+To: qemu-devel@nongnu.org
+Cc: riku.voipio@iki.fi, Kwok Cheung Yeung <kcy@codesourcery.com>
+Date: Tue, 30 Apr 2013 15:57:49 +0100
+Message-id: 1367333869-1718-1-git-send-email-kcy@codesourcery.com
+Subject: [PATCH 1/1] linux-user: Fix MIPS16/microMIPS signal handling
+
+Signal handlers written using a compressed MIPS instruction
+set will segfault when invoked.  This patch fixes this.
+
+Switch the ISA mode on cores supporting the MIPS16/microMIPS
+ISAs according to bit 0 of the signal handler address.  Clear
+bit 0 of the address assigned to the PC.
+
+Signed-off-by: Kwok Cheung Yeung <kcy@codesourcery.com>
+---
+ linux-user/signal.c | 10 ++++++++++
+ 1 file changed, 10 insertions(+)
+
+diff --git a/linux-user/signal.c b/linux-user/signal.c
+index 1055507..abfb382 100644
+--- a/linux-user/signal.c
++++ b/linux-user/signal.c
+@@ -2662,6 +2662,11 @@ static void setup_frame(int sig, struct target_sigaction * ka,
+     * since it returns to userland using eret
+     * we cannot do this here, and we must set PC directly */
+     regs->active_tc.PC = regs->active_tc.gpr[25] = ka->_sa_handler;
++    if (regs->insn_flags & (ASE_MIPS16 | ASE_MICROMIPS)) {
++        regs->hflags &= ~MIPS_HFLAG_M16;
++        regs->hflags |= (ka->_sa_handler & 1) << MIPS_HFLAG_M16_SHIFT;
++        regs->active_tc.PC &= ~(target_ulong) 1;
++    }
+     unlock_user_struct(frame, frame_addr, 1);
+     return;
+ 
+@@ -2771,6 +2776,11 @@ static void setup_rt_frame(int sig, struct target_sigaction *ka,
+     * since it returns to userland using eret
+     * we cannot do this here, and we must set PC directly */
+     env->active_tc.PC = env->active_tc.gpr[25] = ka->_sa_handler;
++    if (env->insn_flags & (ASE_MIPS16 | ASE_MICROMIPS)) {
++        env->hflags &= ~MIPS_HFLAG_M16;
++        env->hflags |= (ka->_sa_handler & 1) << MIPS_HFLAG_M16_SHIFT;
++        env->active_tc.PC &= ~(target_ulong) 1;
++    }
+     unlock_user_struct(frame, frame_addr, 1);
+     return;
+ 
+-- 
+1.8.2.2
+
+

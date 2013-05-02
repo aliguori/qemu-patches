@@ -1,0 +1,46 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Stefan Hajnoczi <stefanha@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>
+Date: Fri, 12 Apr 2013 16:38:20 +0200
+Message-id: 1365777502-7035-3-git-send-email-stefanha@redhat.com
+Subject: [PATCH 2/4] linux-user: pass correct host flags to eventfd2 call
+
+From: Petar Jovanovic <petar.jovanovic@rt-rk.com>
+
+This change makes conversion of TARGET_O_NONBLOCK and TARGET_O_CLOEXEC flags
+to host flags before calling eventfd for TARGET_NR_eventfd2.
+
+Signed-off-by: Petar Jovanovic <petar.jovanovic@imgtec.com>
+Reviewed-by: Peter Maydell <peter.maydell@linaro.org>
+Signed-off-by: Stefan Hajnoczi <stefanha@redhat.com>
+---
+ linux-user/syscall.c | 11 ++++++++++-
+ 1 file changed, 10 insertions(+), 1 deletion(-)
+
+diff --git a/linux-user/syscall.c b/linux-user/syscall.c
+index ee82a2d..1f07621 100644
+--- a/linux-user/syscall.c
++++ b/linux-user/syscall.c
+@@ -8823,8 +8823,17 @@ abi_long do_syscall(void *cpu_env, int num, abi_long arg1,
+ #endif
+ #if defined(TARGET_NR_eventfd2)
+     case TARGET_NR_eventfd2:
+-        ret = get_errno(eventfd(arg1, arg2));
++    {
++        int host_flags = arg2 & (~(TARGET_O_NONBLOCK | TARGET_O_CLOEXEC));
++        if (arg2 & TARGET_O_NONBLOCK) {
++            host_flags |= O_NONBLOCK;
++        }
++        if (arg2 & TARGET_O_CLOEXEC) {
++            host_flags |= O_CLOEXEC;
++        }
++        ret = get_errno(eventfd(arg1, host_flags));
+         break;
++    }
+ #endif
+ #endif /* CONFIG_EVENTFD  */
+ #if defined(CONFIG_FALLOCATE) && defined(TARGET_NR_fallocate)
+-- 
+1.8.1.4
+

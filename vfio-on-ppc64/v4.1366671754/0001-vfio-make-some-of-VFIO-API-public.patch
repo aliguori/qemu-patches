@@ -1,0 +1,113 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Alexey Kardashevskiy <aik@ozlabs.ru>
+To: Alex Williamson <alex.williamson@redhat.com>
+Cc: David Gibson <david@gibson.dropbear.id.au>, qemu-ppc@nongnu.org,
+ Alexey Kardashevskiy <aik@ozlabs.ru>, qemu-devel@nongnu.org
+Date: Mon, 22 Apr 2013 18:02:35 +1000
+Message-id: 1366617757-6604-2-git-send-email-aik@ozlabs.ru
+Subject: [PATCH 1/3] vfio: make some of VFIO API public
+
+The patch makes vfio_dma_map/vfio_dma_unmap functions public
+for explicit use by VFIO clients rather that just being
+called from MemoryListener.
+
+The patch also adds a "connect" parameter to the vfio_get_group() function
+to allow control over group and container creation and connection before
+any device from the group is actially created in QEMU.
+
+Cc: David Gibson <david@gibson.dropbear.id.au>
+Signed-off-by: Alexey Kardashevskiy <aik@ozlabs.ru>
+---
+ hw/misc/vfio.c         |   15 ++++++++-------
+ include/hw/misc/vfio.h |   17 +++++++++++++++++
+ 2 files changed, 25 insertions(+), 7 deletions(-)
+ create mode 100644 include/hw/misc/vfio.h
+
+diff --git a/hw/misc/vfio.c b/hw/misc/vfio.c
+index 693a9ff..503125e 100644
+--- a/hw/misc/vfio.c
++++ b/hw/misc/vfio.c
+@@ -39,6 +39,7 @@
+ #include "qemu/range.h"
+ #include "sysemu/kvm.h"
+ #include "sysemu/sysemu.h"
++#include "hw/misc/vfio.h"
+ 
+ /* #define DEBUG_VFIO */
+ #ifdef DEBUG_VFIO
+@@ -1877,8 +1878,8 @@ static void vfio_pci_write_config(PCIDevice *pdev, uint32_t addr,
+ /*
+  * DMA - Mapping and unmapping for the "type1" IOMMU interface used on x86
+  */
+-static int vfio_dma_unmap(VFIOContainer *container,
+-                          hwaddr iova, ram_addr_t size)
++int vfio_dma_unmap(VFIOContainer *container,
++                   hwaddr iova, ram_addr_t size)
+ {
+     struct vfio_iommu_type1_dma_unmap unmap = {
+         .argsz = sizeof(unmap),
+@@ -1895,8 +1896,8 @@ static int vfio_dma_unmap(VFIOContainer *container,
+     return 0;
+ }
+ 
+-static int vfio_dma_map(VFIOContainer *container, hwaddr iova,
+-                        ram_addr_t size, void *vaddr, bool readonly)
++int vfio_dma_map(VFIOContainer *container, hwaddr iova,
++                 ram_addr_t size, void *vaddr, bool readonly)
+ {
+     struct vfio_iommu_type1_dma_map map = {
+         .argsz = sizeof(map),
+@@ -2706,7 +2707,7 @@ static void vfio_disconnect_container(VFIOGroup *group)
+     }
+ }
+ 
+-static VFIOGroup *vfio_get_group(int groupid)
++VFIOGroup *vfio_get_group(int groupid, bool connect)
+ {
+     VFIOGroup *group;
+     char path[32];
+@@ -2747,7 +2748,7 @@ static VFIOGroup *vfio_get_group(int groupid)
+     group->groupid = groupid;
+     QLIST_INIT(&group->device_list);
+ 
+-    if (vfio_connect_container(group)) {
++    if (connect && vfio_connect_container(group)) {
+         error_report("vfio: failed to setup container for group %d", groupid);
+         close(group->fd);
+         g_free(group);
+@@ -2980,7 +2981,7 @@ static int vfio_initfn(PCIDevice *pdev)
+     DPRINTF("%s(%04x:%02x:%02x.%x) group %d\n", __func__, vdev->host.domain,
+             vdev->host.bus, vdev->host.slot, vdev->host.function, groupid);
+ 
+-    group = vfio_get_group(groupid);
++    group = vfio_get_group(groupid, true);
+     if (!group) {
+         error_report("vfio: failed to get group %d", groupid);
+         return -ENOENT;
+diff --git a/include/hw/misc/vfio.h b/include/hw/misc/vfio.h
+new file mode 100644
+index 0000000..f39aef8
+--- /dev/null
++++ b/include/hw/misc/vfio.h
+@@ -0,0 +1,17 @@
++#ifndef VFIO_API_H
++#define VFIO_API_H
++
++#include <linux/vfio.h>
++
++struct VFIOContainer;
++struct VFIOGroup;
++
++extern int vfio_dma_unmap(struct VFIOContainer *container,
++                          hwaddr iova, ram_addr_t size);
++
++extern int vfio_dma_map(struct VFIOContainer *container, hwaddr iova,
++                        ram_addr_t size, void *vaddr, bool readonly);
++
++extern struct VFIOGroup *vfio_get_group(int groupid, bool connect);
++
++#endif
+-- 
+1.7.10.4
+
+

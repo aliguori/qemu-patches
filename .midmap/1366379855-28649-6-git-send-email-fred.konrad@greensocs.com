@@ -1,0 +1,1 @@
+../virtio-rng-refactoring/v4.1366405047/0005-virtio-rng-ccw-switch-to-the-new-API.patch

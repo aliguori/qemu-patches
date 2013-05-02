@@ -1,0 +1,41 @@
+From patches Mon Sep 17 00:00:00 2001
+From: =?utf-8?q?Herv=C3=A9_Poussineau_=3Chpoussin=40reactos=2Eorg=3E?=
+To: =?UTF-8?B?SGVydsOpIFBvdXNzaW5lYXU=?= <hpoussin@reactos.org>,
+ qemu-devel@nongnu.org
+Cc: qemu-trivial@nongnu.org, Paolo Bonzini <pbonzini@redhat.com>,
+ qemu-devel@nongnu.org,
+ =?UTF-8?q?Herv=C3=A9=20Poussineau?= <hpoussin@reactos.org>
+Date: Wed,  1 May 2013 07:41:26 +0200
+Message-id: 1367386886-6839-1-git-send-email-hpoussin@reactos.org
+Subject: [PATCH 1/1] pvscsi: fix compilation on 32 bit hosts
+
+This fixes the following error:
+In file included from qemu/include/trace.h:4:0,
+                 from trace/generated-events.c:3:
+./trace/generated-tracers.h: In function ‘trace_pvscsi_get_sg_list’:
+./trace/generated-tracers.h:4271:9: error: format ‘%lu’ expects argument of
+type ‘long unsigned int’, but argument 4 has type ‘size_t’ [-Werror=format]
+
+Signed-off-by: Hervé Poussineau <hpoussin@reactos.org>
+
+---
+ trace-events |    2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/trace-events b/trace-events
+index ffaa3f4..55e80be 100644
+--- a/trace-events
++++ b/trace-events
+@@ -776,7 +776,7 @@ pvscsi_update_irq_msi(void) "sending MSI notification"
+ pvscsi_cmp_ring_put(unsigned long addr) "got completion descriptor 0x%lx"
+ pvscsi_msg_ring_put(unsigned long addr) "got message descriptor 0x%lx"
+ pvscsi_complete_request(uint64_t context, uint64_t len, uint8_t sense_key) "completion: ctx: 0x%"PRIx64", len: 0x%"PRIx64", sense key: %u"
+-pvscsi_get_sg_list(int nsg, size_t size) "get SG list: depth: %u, size: %lu"
++pvscsi_get_sg_list(int nsg, size_t size) "get SG list: depth: %u, size: %zu"
+ pvscsi_get_next_sg_elem(uint32_t flags) "unknown flags in SG element (val: 0x%x)"
+ pvscsi_command_complete_not_found(uint32_t tag) "can't find request for tag 0x%x"
+ pvscsi_command_complete_data_run(void) "not all data required for command transferred"
+-- 
+1.7.10.4
+
+

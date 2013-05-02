@@ -1,0 +1,379 @@
+From patches Mon Sep 17 00:00:00 2001
+From: "Anthony Liguori" <aliguori@us.ibm.com>
+To: Anthony Liguori <aliguori@us.ibm.com>, Kevin Wolf <kwolf@redhat.com>,
+ qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, Libvirt <libvir-list@redhat.com>,
+ Kevin Wolf <kwolf@redhat.com>, qemu-devel@nongnu.org,
+ Luiz Capitulino <lcapitulino@redhat.com>,
+ Markus Armbruster <armbru@redhat.com>
+Date: Fri, 26 Apr 2013 14:43:07 -0500
+Message-id: 1367005387-330-4-git-send-email-aliguori@us.ibm.com
+Subject: [PATCH 3/3] gtk: add devices menu to allow changing removable block
+ devices
+
+To generate this menu, we first walk the composition tree to
+find any device with a 'drive' property.  We then record these
+devices and the BlockDriverState that they are associated with.
+
+Then we use query-block to get the BDS state for each of the
+discovered devices.
+
+This code doesn't handle hot-plug yet but it should deal nicely
+with someone using the human monitor.
+
+Signed-off-by: Anthony Liguori <aliguori@us.ibm.com>
+---
+ ui/gtk.c | 302 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 302 insertions(+)
+
+diff --git a/ui/gtk.c b/ui/gtk.c
+index e12f228..c420914 100644
+--- a/ui/gtk.c
++++ b/ui/gtk.c
+@@ -64,6 +64,7 @@
+ #include "x_keymap.h"
+ #include "keymaps.h"
+ #include "sysemu/char.h"
++#include "qapi/qmp/qevents.h"
+ 
+ //#define DEBUG_GTK
+ 
+@@ -139,6 +140,10 @@ typedef struct GtkDisplayState
+     GtkWidget *grab_on_hover_item;
+     GtkWidget *vga_item;
+ 
++    GtkWidget *devices_menu_item;
++    GtkWidget *devices_menu;
++    GHashTable *devices_map;
++
+     int nb_vcs;
+     VirtualConsole vc[MAX_VCS];
+ 
+@@ -165,6 +170,8 @@ typedef struct GtkDisplayState
+     bool external_pause_update;
+ 
+     bool modifier_pressed[ARRAY_SIZE(modifier_keycode)];
++
++    Notifier event_notifier;
+ } GtkDisplayState;
+ 
+ static GtkDisplayState *global_state;
+@@ -1382,6 +1389,296 @@ static GtkWidget *gd_create_menu_view(GtkDisplayState *s, GtkAccelGroup *accel_g
+     return view_menu;
+ }
+ 
++typedef void (DeviceIterFunc)(const char *path, const char *property, void *opaque);
++
++static void device_foreach_proptype(const char *path, const char *proptype,
++                                    DeviceIterFunc *fn, void *opaque)
++{
++    ObjectPropertyInfoList *prop_list, *iter;
++
++    prop_list = qmp_qom_list(path, NULL);
++    for (iter = prop_list; iter; iter = iter->next) {
++        ObjectPropertyInfo *prop = iter->value;
++
++        if (strstart(prop->type, "child<", NULL)) {
++            char *subpath;
++            subpath = g_strdup_printf("%s/%s", path, prop->name);
++            device_foreach_proptype(subpath, proptype, fn, opaque);
++            g_free(subpath);
++        } else if (strcmp(prop->type, proptype) == 0) {
++            fn(path, prop->name, opaque);
++        }
++    }
++    qapi_free_ObjectPropertyInfoList(prop_list);
++}
++
++typedef enum DiskType
++{
++    DT_NORMAL,
++    DT_CDROM,
++    DT_FLOPPY,
++} DiskType;
++
++typedef struct BlockDeviceMenu
++{
++    GtkWidget *entry;
++    GtkWidget *submenu;
++    GtkWidget *eject;
++    GtkWidget *change;
++
++    char *name;
++    char *path;
++    char *desc;
++    DiskType disk_type;
++} BlockDeviceMenu;
++
++static void gd_block_device_menu_update(BlockDeviceMenu *bdm, BlockInfo *info)
++{
++    bool value;
++    const char *label = _("<No media>");
++
++    value = info->has_inserted && !info->locked;
++    gtk_widget_set_sensitive(bdm->eject, value);
++
++    value = !info->locked;
++    gtk_widget_set_sensitive(bdm->change, value);
++
++    if (info->has_inserted) {
++        label = info->inserted->file;
++        if (strlen(label) > 32) {
++            char *new_label;
++
++            new_label = strrchr(label, '/');
++            if (new_label) {
++                label = new_label + 1;
++            }
++        }
++    }
++
++    gtk_menu_item_set_label(GTK_MENU_ITEM(bdm->change), label);
++}
++
++static void gd_update_block_menus(GtkDisplayState *s)
++{
++    BlockInfoList *block_list, *iter;
++
++    block_list = qmp_query_block(NULL);
++    for (iter = block_list; iter; iter = iter->next) {
++        BlockInfo *info = iter->value;
++        BlockDeviceMenu *bdm;
++
++        if (!info->removable) {
++            continue;
++        }
++
++        bdm = g_hash_table_lookup(s->devices_map, info->device);
++        if (!bdm) {
++            continue;
++        }
++
++        gd_block_device_menu_update(bdm, info);
++    }
++    qapi_free_BlockInfoList(block_list);
++}
++
++static void gd_enum_disk(const char *path, const char *proptype, void *opaque)
++{
++    GtkDisplayState *s = opaque;
++    Object *obj;
++    char *block_id;
++
++    obj = object_resolve_path(path, NULL);
++    g_assert(obj != NULL);
++
++    block_id = object_property_get_str(obj, proptype, NULL);
++    if (strcmp(block_id, "") != 0) {
++        BlockDeviceMenu *bdm;
++        DiskType disk_type;
++        char *type;
++        char *desc = NULL;
++
++        type = object_property_get_str(obj, "type", NULL);
++
++        if (strcmp(type, "ide-cd") == 0 || strcmp(type, "ide-hd") == 0) {
++            desc = object_property_get_str(obj, "drive-id", NULL);
++        } else {
++            desc = g_strdup(type);
++        }
++
++        if (strcmp(type, "ide-cd") == 0) {
++            disk_type = DT_CDROM;
++        } else if (strcmp(type, "isa-fdc") == 0) {
++            disk_type = DT_FLOPPY;
++        } else {
++            disk_type = DT_NORMAL;
++        }
++
++        bdm = g_malloc0(sizeof(*bdm));
++        bdm->name = g_strdup(block_id);
++        bdm->path = g_strdup(path);
++        bdm->desc = desc;
++        bdm->disk_type = disk_type;
++
++        g_free(type);
++
++        g_hash_table_insert(s->devices_map, bdm->name, bdm);
++    }
++    g_free(block_id);
++}
++
++static void gd_error(GtkDisplayState *s, const char *fmt, ...)
++{
++    GtkWidget *dialog;
++    char *message;
++    va_list ap;
++
++    va_start(ap, fmt);
++    message = g_strdup_vprintf(fmt, ap);
++    va_end(ap);
++
++    dialog = gtk_message_dialog_new(GTK_WINDOW(s->window), GTK_DIALOG_DESTROY_WITH_PARENT,
++                                    GTK_MESSAGE_ERROR, GTK_BUTTONS_OK,
++                                    "%s", message);
++
++    g_free(message);
++
++    gtk_widget_show_all(dialog);
++
++    g_signal_connect_swapped(dialog, "response", G_CALLBACK(gtk_widget_destroy), dialog);
++}
++
++static void gd_menu_bdm_change_response(GtkDialog *dialog, gint response_id,
++                                        gpointer opaque)
++{
++    BlockDeviceMenu *bdm = opaque;
++
++    if (response_id == GTK_RESPONSE_ACCEPT) {
++        char *filename;
++        Error *local_err = NULL;
++
++        filename = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(dialog));
++
++        qmp_change(bdm->name, filename, false, NULL, &local_err);
++        if (local_err) {
++            gd_error(global_state,
++                     _("Block device change failed: %s"),
++                     error_get_pretty(local_err));
++            error_free(local_err);
++        }
++
++        g_free(filename);
++    }
++
++    gtk_widget_destroy(GTK_WIDGET(dialog));
++}
++
++static void gd_menu_bdm_change(GtkMenuItem *item, void *opaque)
++{
++    GtkDisplayState *s = global_state;
++    BlockDeviceMenu *bdm = opaque;
++    GtkWidget *chooser;
++
++    chooser = gtk_file_chooser_dialog_new(_("Choose Image File"),
++                                          GTK_WINDOW(s->window),
++                                          GTK_FILE_CHOOSER_ACTION_OPEN,
++                                          GTK_STOCK_CANCEL, GTK_RESPONSE_CANCEL,
++                                          GTK_STOCK_OPEN, GTK_RESPONSE_ACCEPT,
++                                          NULL);
++
++    g_signal_connect(chooser, "response",
++                     G_CALLBACK(gd_menu_bdm_change_response), bdm);
++
++    gtk_widget_show_all(chooser);
++}
++
++static void gd_menu_bdm_eject(GtkMenuItem *item, void *opaque)
++{
++    BlockDeviceMenu *bdm = opaque;
++
++    qmp_eject(bdm->name, false, false, NULL);
++}
++
++static void gd_event_notify(Notifier *notifier, void *data)
++{
++    QDict *event = qobject_to_qdict(data);
++    const char *event_str;
++
++    event_str = qdict_get_str(event, "event");
++    if (strcmp(event_str, "DEVICE_TRAY_MOVED") == 0) {
++        gd_update_block_menus(global_state);
++    }
++}
++
++static GtkWidget *gd_create_menu_devices(GtkDisplayState *s, GtkAccelGroup *accel_group)
++{
++    GtkWidget *devices_menu;
++    BlockInfoList *block_list, *iter;
++
++    s->event_notifier.notify = gd_event_notify;
++    qmp_add_event_notifier(&s->event_notifier);
++    s->devices_map = g_hash_table_new(g_str_hash, g_str_equal);
++
++    /* We first search for devices that has a drive property. */
++    device_foreach_proptype("/", "drive", gd_enum_disk, s);
++
++    devices_menu = gtk_menu_new();
++    gtk_menu_set_accel_group(GTK_MENU(devices_menu), accel_group);
++
++    block_list = qmp_query_block(NULL);
++    for (iter = block_list; iter; iter = iter->next) {
++        BlockInfo *info = iter->value;
++        BlockDeviceMenu *bdm;
++        const char *stock_id = NULL;
++
++        /* Only show removable devices */
++        if (!info->removable) {
++            continue;
++        }
++
++        /* Only show devices were we could identify the actual device */
++        bdm = g_hash_table_lookup(s->devices_map, info->device);
++        if (!bdm) {
++            continue;
++        }
++
++        bdm->submenu = gtk_menu_new();
++        bdm->change = gtk_image_menu_item_new_from_stock(GTK_STOCK_OPEN, NULL);
++        gtk_menu_item_set_label(GTK_MENU_ITEM(bdm->change), _("<No media>"));
++        bdm->eject = gtk_image_menu_item_new_from_stock(GTK_STOCK_CLOSE, NULL);
++        gtk_menu_item_set_label(GTK_MENU_ITEM(bdm->eject), _("Eject"));
++        gtk_menu_shell_append(GTK_MENU_SHELL(bdm->submenu), bdm->change);
++        gtk_menu_shell_append(GTK_MENU_SHELL(bdm->submenu), bdm->eject);
++
++        g_signal_connect(bdm->change, "activate",
++                         G_CALLBACK(gd_menu_bdm_change), bdm);
++        g_signal_connect(bdm->eject, "activate",
++                         G_CALLBACK(gd_menu_bdm_eject), bdm);
++
++        switch (bdm->disk_type) {
++        case DT_NORMAL:
++            stock_id = GTK_STOCK_HARDDISK;
++            break;
++        case DT_CDROM:
++            stock_id = GTK_STOCK_CDROM;
++            break;
++        case DT_FLOPPY:
++            stock_id = GTK_STOCK_FLOPPY;
++            break;
++        }
++
++        bdm->entry = gtk_image_menu_item_new_from_stock(stock_id, NULL);
++        gtk_menu_item_set_label(GTK_MENU_ITEM(bdm->entry), bdm->desc);
++        gtk_menu_item_set_submenu(GTK_MENU_ITEM(bdm->entry), bdm->submenu);
++        gtk_menu_shell_append(GTK_MENU_SHELL(devices_menu), bdm->entry);
++
++        gd_block_device_menu_update(bdm, info);
++    }
++
++    qapi_free_BlockInfoList(block_list);
++
++    return devices_menu;
++}
++
+ static void gd_create_menus(GtkDisplayState *s)
+ {
+     GtkAccelGroup *accel_group;
+@@ -1389,6 +1686,7 @@ static void gd_create_menus(GtkDisplayState *s)
+     accel_group = gtk_accel_group_new();
+     s->machine_menu = gd_create_menu_machine(s, accel_group);
+     s->view_menu = gd_create_menu_view(s, accel_group);
++    s->devices_menu = gd_create_menu_devices(s, accel_group);
+ 
+     s->machine_menu_item = gtk_menu_item_new_with_mnemonic(_("_Machine"));
+     gtk_menu_item_set_submenu(GTK_MENU_ITEM(s->machine_menu_item),
+@@ -1399,6 +1697,10 @@ static void gd_create_menus(GtkDisplayState *s)
+     gtk_menu_item_set_submenu(GTK_MENU_ITEM(s->view_menu_item), s->view_menu);
+     gtk_menu_shell_append(GTK_MENU_SHELL(s->menu_bar), s->view_menu_item);
+ 
++    s->devices_menu_item = gtk_menu_item_new_with_mnemonic(_("_Devices"));
++    gtk_menu_item_set_submenu(GTK_MENU_ITEM(s->devices_menu_item), s->devices_menu);
++    gtk_menu_shell_append(GTK_MENU_SHELL(s->menu_bar), s->devices_menu_item);
++
+     g_object_set_data(G_OBJECT(s->window), "accel_group", accel_group);
+     gtk_window_add_accel_group(GTK_WINDOW(s->window), accel_group);
+     s->accel_group = accel_group;
+-- 
+1.8.0
+

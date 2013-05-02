@@ -1,0 +1,1 @@
+../KVM-Dont-assume-that-mpstate-exists-with-in-kernel-PIC-always/v3.1367372904/0006-openpic-factor-out-some-common-defines-into-openpich.patch

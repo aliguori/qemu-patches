@@ -1,0 +1,43 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: Paolo Bonzini <pbonzini@redhat.com>, qemu-devel@nongnu.org,
+ Orit Wasserman <owasserm@redhat.com>
+Cc: owasserm@redhat.com, qemu-devel@nongnu.org, quintela@redhat.com
+Date: Wed, 27 Mar 2013 17:36:26 +0100
+Message-id: 1364402192-18169-1-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 0/6] migration: followups for writev patches
+
+This series fixes a few small problems in Orit's writev patches:
+
+1) socket_put_buffer is not needed anymore and can be dropped (patch 1);
+
+2) sendmsg could do a partial write even for a blocking socket, in
+case it is interrupted by a signal. This should not happen for
+migration, but it is relatively easy to fix in iov_send_recv (patches
+2 to 5);
+
+3) recent libvirt will always use fd migration, and thus will not
+benefit from the writev speedups.  fd migration also uses FILE*, which
+incurs an extra copy.  Patch 6 fixes both issues.
+
+Thanks,
+
+Paolo
+
+Paolo Bonzini (6):
+  qemu-file: drop socket_put_buffer
+  iov: reorganize iov_send_recv, part 1
+  iov: reorganize iov_send_recv, part 2
+  iov: reorganize iov_send_recv, part 3
+  iov: handle partial writes from sendmsg and recvmsg
+  qemu-file: do not use stdio for qemu_fdopen
+
+ savevm.c   | 113 ++++++++++++++++++++++++++++++++++++++++++++++++-------------
+ util/iov.c | 104 ++++++++++++++++++++++++++++++++------------------------
+ 2 files changed, 148 insertions(+), 69 deletions(-)
+
+Reviewed-by: Orit Wasserman <owasserm@redhat.com>
+-- 
+1.8.1.4
+
+

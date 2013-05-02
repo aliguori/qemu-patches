@@ -1,0 +1,1 @@
+../vmdk-zeroed-grain-GTE-support/v5.1367508321/0005-vmdk-store-fields-of-VmdkMetaData-in-cpu-endian.patch

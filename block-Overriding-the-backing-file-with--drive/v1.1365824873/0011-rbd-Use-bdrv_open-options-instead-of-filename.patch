@@ -1,0 +1,73 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Kevin Wolf <kwolf@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: kwolf@redhat.com, stefanha@redhat.com
+Date: Fri, 12 Apr 2013 22:48:04 +0200
+Message-id: 1365799688-19918-12-git-send-email-kwolf@redhat.com
+Subject: [PATCH 11/15] rbd: Use bdrv_open options instead of filename
+
+This is only to convert the internal interface that is used for passing
+the "filename" to be parsed, but converting to actual fine grained
+options is left for another day, as it doesn't look trivial.
+
+Signed-off-by: Kevin Wolf <kwolf@redhat.com>
+Reviewed-by: Eric Blake <eblake@redhat.com>
+---
+ block/rbd.c | 31 ++++++++++++++++++++++++++++++-
+ 1 file changed, 30 insertions(+), 1 deletion(-)
+
+diff --git a/block/rbd.c b/block/rbd.c
+index 1a8ea6d..938ceeb 100644
+--- a/block/rbd.c
++++ b/block/rbd.c
+@@ -441,7 +441,21 @@ static int qemu_rbd_aio_flush_cb(void *opaque)
+     return (s->qemu_aio_count > 0);
+ }
+ 
+-static int qemu_rbd_open(BlockDriverState *bs, const char *filename,
++/* TODO Convert to fine grained options */
++static QemuOptsList runtime_opts = {
++    .name = "rbd",
++    .head = QTAILQ_HEAD_INITIALIZER(runtime_opts.head),
++    .desc = {
++        {
++            .name = "filename",
++            .type = QEMU_OPT_STRING,
++            .help = "Specification of the rbd image",
++        },
++        { /* end of list */ }
++    },
++};
++
++static int qemu_rbd_open(BlockDriverState *bs, const char *dummy,
+                          QDict *options, int flags)
+ {
+     BDRVRBDState *s = bs->opaque;
+@@ -450,8 +464,23 @@ static int qemu_rbd_open(BlockDriverState *bs, const char *filename,
+     char conf[RBD_MAX_CONF_SIZE];
+     char clientname_buf[RBD_MAX_CONF_SIZE];
+     char *clientname;
++    QemuOpts *opts;
++    Error *local_err = NULL;
++    const char *filename;
+     int r;
+ 
++    opts = qemu_opts_create_nofail(&runtime_opts);
++    qemu_opts_absorb_qdict(opts, options, &local_err);
++    if (error_is_set(&local_err)) {
++        qerror_report_err(local_err);
++        error_free(local_err);
++        qemu_opts_del(opts);
++        return -EINVAL;
++    }
++
++    filename = qemu_opt_get(opts, "filename");
++    qemu_opts_del(opts);
++
+     if (qemu_rbd_parsename(filename, pool, sizeof(pool),
+                            snap_buf, sizeof(snap_buf),
+                            s->name, sizeof(s->name),
+-- 
+1.8.1.4
+
+

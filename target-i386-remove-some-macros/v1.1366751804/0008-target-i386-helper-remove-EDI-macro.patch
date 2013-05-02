@@ -1,0 +1,105 @@
+From patches Mon Sep 17 00:00:00 2001
+From: liguang <lig.fnst@cn.fujitsu.com>
+To: qemu-devel@nongnu.org
+Cc: peter.maydell@linaro.org, ehabkost@redhat.com,
+ liguang <lig.fnst@cn.fujitsu.com>, blauwirbel@gmail.com, imammedo@redhat.com,
+ pbonzini@redhat.com, afaerber@suse.de, rth@twiddle.net
+Date: Tue, 23 Apr 2013 16:16:52 +0800
+Message-id: 1366705016-30471-9-git-send-email-lig.fnst@cn.fujitsu.com
+Subject: [PATCH 08/12] target-i386/helper: remove EDI macro
+
+Signed-off-by: liguang <lig.fnst@cn.fujitsu.com>
+---
+ target-i386/cpu.h        |    2 --
+ target-i386/seg_helper.c |    6 +++---
+ target-i386/smm_helper.c |    8 ++++----
+ 3 files changed, 7 insertions(+), 9 deletions(-)
+
+diff --git a/target-i386/cpu.h b/target-i386/cpu.h
+index a7c73bf..23166d1 100644
+--- a/target-i386/cpu.h
++++ b/target-i386/cpu.h
+@@ -1107,8 +1107,6 @@ static inline int cpu_mmu_index (CPUX86State *env)
+         ? MMU_KSMAP_IDX : MMU_KERNEL_IDX;
+ }
+ 
+-#undef EDI
+-#define EDI (env->regs[R_EDI])
+ #undef EIP
+ #define EIP (env->eip)
+ #define DF  (env->df)
+diff --git a/target-i386/seg_helper.c b/target-i386/seg_helper.c
+index 2d4193c..ae612d4 100644
+--- a/target-i386/seg_helper.c
++++ b/target-i386/seg_helper.c
+@@ -331,7 +331,7 @@ static void switch_tss(CPUX86State *env, int tss_selector,
+         cpu_stl_kernel(env, env->tr.base + (0x28 + 4 * 4), env->regs[R_ESP]);
+         cpu_stl_kernel(env, env->tr.base + (0x28 + 5 * 4), env->regs[R_EBP]);
+         cpu_stl_kernel(env, env->tr.base + (0x28 + 6 * 4), env->regs[R_ESI]);
+-        cpu_stl_kernel(env, env->tr.base + (0x28 + 7 * 4), EDI);
++        cpu_stl_kernel(env, env->tr.base + (0x28 + 7 * 4), env->regs[R_EDI]);
+         for (i = 0; i < 6; i++) {
+             cpu_stw_kernel(env, env->tr.base + (0x48 + i * 4),
+                            env->segs[i].selector);
+@@ -347,7 +347,7 @@ static void switch_tss(CPUX86State *env, int tss_selector,
+         cpu_stw_kernel(env, env->tr.base + (0x12 + 4 * 2), env->regs[R_ESP]);
+         cpu_stw_kernel(env, env->tr.base + (0x12 + 5 * 2), env->regs[R_EBP]);
+         cpu_stw_kernel(env, env->tr.base + (0x12 + 6 * 2), env->regs[R_ESI]);
+-        cpu_stw_kernel(env, env->tr.base + (0x12 + 7 * 2), EDI);
++        cpu_stw_kernel(env, env->tr.base + (0x12 + 7 * 2), env->regs[R_EDI]);
+         for (i = 0; i < 4; i++) {
+             cpu_stw_kernel(env, env->tr.base + (0x22 + i * 4),
+                            env->segs[i].selector);
+@@ -403,7 +403,7 @@ static void switch_tss(CPUX86State *env, int tss_selector,
+     env->regs[R_ESP] = new_regs[4];
+     env->regs[R_EBP] = new_regs[5];
+     env->regs[R_ESI] = new_regs[6];
+-    EDI = new_regs[7];
++    env->regs[R_EDI] = new_regs[7];
+     if (new_eflags & VM_MASK) {
+         for (i = 0; i < 6; i++) {
+             load_seg_vm(env, i, new_segs[i]);
+diff --git a/target-i386/smm_helper.c b/target-i386/smm_helper.c
+index d051f03..2489573 100644
+--- a/target-i386/smm_helper.c
++++ b/target-i386/smm_helper.c
+@@ -89,7 +89,7 @@ void do_smm_enter(CPUX86State *env)
+     stq_phys(sm_state + 0x7fd8, env->regs[R_ESP]);
+     stq_phys(sm_state + 0x7fd0, env->regs[R_EBP]);
+     stq_phys(sm_state + 0x7fc8, env->regs[R_ESI]);
+-    stq_phys(sm_state + 0x7fc0, EDI);
++    stq_phys(sm_state + 0x7fc0, env->regs[R_EDI]);
+     for (i = 8; i < 16; i++) {
+         stq_phys(sm_state + 0x7ff8 - i * 8, env->regs[i]);
+     }
+@@ -109,7 +109,7 @@ void do_smm_enter(CPUX86State *env)
+     stl_phys(sm_state + 0x7ff8, env->cr[3]);
+     stl_phys(sm_state + 0x7ff4, cpu_compute_eflags(env));
+     stl_phys(sm_state + 0x7ff0, env->eip);
+-    stl_phys(sm_state + 0x7fec, EDI);
++    stl_phys(sm_state + 0x7fec, env->regs[R_EDI]);
+     stl_phys(sm_state + 0x7fe8, env->regs[R_ESI]);
+     stl_phys(sm_state + 0x7fe4, env->regs[R_EBP]);
+     stl_phys(sm_state + 0x7fe0, env->regs[R_ESP]);
+@@ -220,7 +220,7 @@ void helper_rsm(CPUX86State *env)
+     env->regs[R_ESP] = ldq_phys(sm_state + 0x7fd8);
+     env->regs[R_EBP] = ldq_phys(sm_state + 0x7fd0);
+     env->regs[R_ESI] = ldq_phys(sm_state + 0x7fc8);
+-    EDI = ldq_phys(sm_state + 0x7fc0);
++    env->regs[R_EDI] = ldq_phys(sm_state + 0x7fc0);
+     for (i = 8; i < 16; i++) {
+         env->regs[i] = ldq_phys(sm_state + 0x7ff8 - i * 8);
+     }
+@@ -244,7 +244,7 @@ void helper_rsm(CPUX86State *env)
+     cpu_load_eflags(env, ldl_phys(sm_state + 0x7ff4),
+                     ~(CC_O | CC_S | CC_Z | CC_A | CC_P | CC_C | DF_MASK));
+     env->eip = ldl_phys(sm_state + 0x7ff0);
+-    EDI = ldl_phys(sm_state + 0x7fec);
++    env->regs[R_EDI] = ldl_phys(sm_state + 0x7fec);
+     env->regs[R_ESI] = ldl_phys(sm_state + 0x7fe8);
+     env->regs[R_EBP] = ldl_phys(sm_state + 0x7fe4);
+     env->regs[R_ESP] = ldl_phys(sm_state + 0x7fe0);
+-- 
+1.7.2.5
+
+

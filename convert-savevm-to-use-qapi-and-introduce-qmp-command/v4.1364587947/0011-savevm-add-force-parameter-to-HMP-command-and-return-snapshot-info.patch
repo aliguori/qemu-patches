@@ -1,0 +1,89 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Pavel Hrdina <phrdina@redhat.com>
+To: qemu-devel@nongnu.org, Pavel Hrdina <phrdina@redhat.com>
+Cc: qemu-devel@nongnu.org, phrdina@redhat.com, armbru@redhat.com,
+ lcapitulino@redhat.com
+Date: Fri, 29 Mar 2013 15:12:38 +0100
+Message-id: f8e52c68ad53b2020ac0e1eaaa3c6bfa853e4dfb.1364565637.git.phrdina@redhat.com
+Subject: [PATCH 11/11] savevm: add force parameter to HMP command and return
+ snapshot info
+
+HMP command "savevm" now takes extra optional force parameter to specify
+whether replace existing snapshot or not. It also returns information
+about created snapshot.
+
+Signed-off-by: Pavel Hrdina <phrdina@redhat.com>
+Reviewed-by: Eric Blake <eblake@redhat.com>
+---
+ hmp-commands.hx | 16 ++++++++--------
+ hmp.c           | 18 +++++++++++++++++-
+ 2 files changed, 25 insertions(+), 9 deletions(-)
+
+diff --git a/hmp-commands.hx b/hmp-commands.hx
+index 382b87d..9719cc0 100644
+--- a/hmp-commands.hx
++++ b/hmp-commands.hx
+@@ -307,19 +307,19 @@ ETEXI
+ 
+     {
+         .name       = "savevm",
+-        .args_type  = "name:s?",
+-        .params     = "[tag|id]",
+-        .help       = "save a VM snapshot. If no tag or id are provided, a new snapshot is created",
++        .args_type  = "force:-f,name:s?",
++        .params     = "[-f] [tag|id]",
++        .help       = "save a VM snapshot, to replace existing snapshot use force flag",
+         .mhandler.cmd = hmp_vm_snapshot_save,
+     },
+ 
+ STEXI
+-@item savevm [@var{tag}|@var{id}]
++@item savevm [@var{-f}] @var{tag}|@var{id}
+ @findex savevm
+-Create a snapshot of the whole virtual machine. If @var{tag} is
+-provided, it is used as human readable identifier. If there is already
+-a snapshot with the same @var{tag} or @var{id}, it is replaced. More info at
+-@ref{vm_snapshots}.
++Create a snapshot of the whole virtual machine. Parameter "name" is optional.
++If @var{tag} is provided, it is used as human readable identifier. If there is
++already a snapshot with the same @var{tag} or @var{id}, @var{-f} flag needs to
++be specified. More info at @ref{vm_snapshots}.
+ ETEXI
+ 
+     {
+diff --git a/hmp.c b/hmp.c
+index b38b6ce..151e48b 100644
+--- a/hmp.c
++++ b/hmp.c
+@@ -1437,10 +1437,26 @@ void hmp_chardev_remove(Monitor *mon, const QDict *qdict)
+ void hmp_vm_snapshot_save(Monitor *mon, const QDict *qdict)
+ {
+     const char *name = qdict_get_try_str(qdict, "name");
++    bool force = qdict_get_try_bool(qdict, "force", 0);
+     Error *err = NULL;
+     SnapshotInfo *info = NULL;
+ 
+-    info = qmp_vm_snapshot_save(!!name, name, true, true, &err);
++    info = qmp_vm_snapshot_save(!!name, name, !!force, force, &err);
++
++    if (info) {
++        char buf[256];
++        QEMUSnapshotInfo sn = {
++            .vm_state_size = info->vm_state_size,
++            .date_sec = info->date_sec,
++            .date_nsec = info->date_nsec,
++            .vm_clock_nsec = info->vm_clock_sec * 1000000000 +
++                             info->vm_clock_nsec,
++        };
++        pstrcpy(sn.id_str, sizeof(sn.id_str), info->id);
++        pstrcpy(sn.name, sizeof(sn.name), info->name);
++        monitor_printf(mon, "%s\n", bdrv_snapshot_dump(buf, sizeof(buf), &sn));
++    }
++
+     qapi_free_SnapshotInfo(info);
+     hmp_handle_error(mon, &err);
+ }
+-- 
+1.8.1.4
+
+

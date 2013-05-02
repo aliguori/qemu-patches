@@ -1,0 +1,46 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: Paolo Bonzini <pbonzini@redhat.com>, qemu-devel@nongnu.org
+Cc: qemu-devel@nongnu.org
+Date: Tue,  9 Apr 2013 12:25:37 +0200
+Message-id: 1365503137-20386-1-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 1/1] configure: remove duplicate test
+
+We already had a test to add -march=i486 when needed.  Make the
+existing test independent of vhost-net, so that it is also used
+under Win32.
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ configure | 7 +------
+ 1 file changed, 1 insertion(+), 6 deletions(-)
+
+diff --git a/configure b/configure
+index 1ed939a..d5f2918 100755
+--- a/configure
++++ b/configure
+@@ -571,11 +571,6 @@ if test "$mingw32" = "yes" ; then
+   QEMU_CFLAGS="-DWIN32_LEAN_AND_MEAN -DWINVER=0x501 $QEMU_CFLAGS"
+   # enable C99/POSIX format strings (needs mingw32-runtime 3.15 or later)
+   QEMU_CFLAGS="-D__USE_MINGW_ANSI_STDIO=1 $QEMU_CFLAGS"
+-  if test "$cpu" = "i386"; then
+-    # We need something better than i386 for __sync_val_compare_and_swap
+-    # and can expect that QEMU will only run on i686 or later.
+-    QEMU_CFLAGS="-march=i686 $QEMU_CFLAGS"
+-  fi
+   LIBS="-lwinmm -lws2_32 -liphlpapi $LIBS"
+ cat > $TMPC << EOF
+ int main(void) { return 0; }
+@@ -3049,7 +3044,7 @@ fi
+ # __sync_fetch_and_and requires at least -march=i486. Many toolchains
+ # use i686 as default anyway, but for those that don't, an explicit
+ # specification is necessary
+-if test "$vhost_net" = "yes" && test "$cpu" = "i386"; then
++if test "$cpu" = "i386"; then
+   cat > $TMPC << EOF
+ static int sfaa(int *ptr)
+ {
+-- 
+1.8.1.4
+
+

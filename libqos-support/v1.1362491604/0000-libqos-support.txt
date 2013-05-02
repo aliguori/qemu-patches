@@ -1,0 +1,31 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Anthony Liguori <aliguori@us.ibm.com>
+To: Anthony Liguori <aliguori@us.ibm.com>,
+ Stefan Hajnoczi <stefanha@redhat.com>, qemu-devel@nongnu.org
+Cc: Stefan Hajnoczi <stefanha@redhat.com>, Kevin Wolf <kwolf@redhat.com>,
+ qemu-devel@nongnu.org
+Date: Tue,  5 Mar 2013 07:53:24 -0600
+Message-id: 1362491612-19226-1-git-send-email-aliguori@us.ibm.com
+Subject: [PATCH 0/8] libqos support
+
+This is a not completely polished version of libqos that includes PCI
+support.  I haven't gone through the patches thoroughly yet so I've got
+it marked as RFC.  It works and is functionally complete.  I know the
+files are missing copyrights though and the commit messages need some
+work.  I also haven't run checkpatch on the patches yet.
+
+I've included a test of the i440fx but not a virtio-blk test.  There's a
+lot more infrastructure (block and virtio) needed for that.  That has been
+what's been holding up this series.  But since it's become a bottleneck
+for other people, I decided to split these bits off and save the virtio
+bits for another day.
+
+Note that the pam test is pretty slow because it does a tremendous number
+of byte memory accesses.  On my laptop, it comes in around two seconds
+which isn't that bad.
+
+Regards,
+
+Anthony Liguori
+
+

@@ -1,0 +1,34 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: 
+Date: Mon, 15 Apr 2013 15:19:33 +0200
+Message-id: 1366031973-7718-13-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 12/12] exec: remove useless declarations from memory-internal.h
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ include/exec/memory-internal.h | 6 ------
+ 1 file changed, 6 deletions(-)
+
+diff --git a/include/exec/memory-internal.h b/include/exec/memory-internal.h
+index 977467b..1b156fd 100644
+--- a/include/exec/memory-internal.h
++++ b/include/exec/memory-internal.h
+@@ -49,12 +49,6 @@ ram_addr_t qemu_ram_alloc(ram_addr_t size, MemoryRegion *mr);
+ void qemu_ram_free(ram_addr_t addr);
+ void qemu_ram_free_from_ptr(ram_addr_t addr);
+ 
+-struct MemoryRegion;
+-struct MemoryRegionSection;
+-
+-void qemu_register_coalesced_mmio(hwaddr addr, ram_addr_t size);
+-void qemu_unregister_coalesced_mmio(hwaddr addr, ram_addr_t size);
+-
+ #define VGA_DIRTY_FLAG       0x01
+ #define CODE_DIRTY_FLAG      0x02
+ #define MIGRATION_DIRTY_FLAG 0x08
+-- 
+1.8.1.4
+
+

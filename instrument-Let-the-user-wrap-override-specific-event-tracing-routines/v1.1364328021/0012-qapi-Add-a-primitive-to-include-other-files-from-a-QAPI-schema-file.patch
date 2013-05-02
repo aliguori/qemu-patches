@@ -1,0 +1,179 @@
+From patches Mon Sep 17 00:00:00 2001
+From: =?utf-8?q?Llu=C3=ADs_Vilanova_=3Cvilanova=40ac=2Eupc=2Eedu=3E?=
+To: qemu-devel@nongnu.org
+Cc: 
+Date: Tue, 26 Mar 2013 15:01:28 +0100
+Message-id: 20130326140128.4471.36969.stgit@fimbulvetr.bsc.es
+Subject: [PATCH 12/22] qapi: Add a primitive to include other files from a
+ QAPI schema file
+
+Adds the "input(...)" primitive to the syntax of QAPI schema files.
+
+Signed-off-by: Lluís Vilanova <vilanova@ac.upc.edu>
+---
+ scripts/qapi-commands.py |   10 +++++++---
+ scripts/qapi-types.py    |   10 +++++++---
+ scripts/qapi-visit.py    |   10 +++++++---
+ scripts/qapi.py          |   12 +++++++++++-
+ 4 files changed, 32 insertions(+), 10 deletions(-)
+
+diff --git a/scripts/qapi-commands.py b/scripts/qapi-commands.py
+index e06332b..fa16651 100644
+--- a/scripts/qapi-commands.py
++++ b/scripts/qapi-commands.py
+@@ -386,13 +386,15 @@ def gen_command_def_prologue(prefix="", proxy=False):
+ 
+ 
+ try:
+-    opts, args = getopt.gnu_getopt(sys.argv[1:], "chp:o:m",
++    opts, args = getopt.gnu_getopt(sys.argv[1:], "chp:i:o:m",
+                                    ["source", "header", "prefix=",
+-                                    "output-dir=", "type=", "middle"])
++                                    "input-dir=", "output-dir=",
++                                    "type=", "middle"])
+ except getopt.GetoptError, err:
+     print str(err)
+     sys.exit(1)
+ 
++input_dir = ""
+ output_dir = ""
+ prefix = ""
+ dispatch_type = "sync"
+@@ -406,6 +408,8 @@ do_h = False
+ for o, a in opts:
+     if o in ("-p", "--prefix"):
+         prefix = a
++    elif o in ("-i", "--input-dir"):
++        input_dir = a
+     elif o in ("-o", "--output-dir"):
+         output_dir = a + "/"
+     elif o in ("-t", "--type"):
+@@ -437,7 +441,7 @@ except os.error, e:
+     if e.errno != errno.EEXIST:
+         raise
+ 
+-exprs = parse_schema(sys.stdin)
++exprs = parse_schema(sys.stdin, input_dir)
+ commands = filter(lambda expr: expr.has_key('command'), exprs)
+ commands = filter(lambda expr: not expr.has_key('gen'), commands)
+ 
+diff --git a/scripts/qapi-types.py b/scripts/qapi-types.py
+index 9e19920..ea33668 100644
+--- a/scripts/qapi-types.py
++++ b/scripts/qapi-types.py
+@@ -184,13 +184,15 @@ void qapi_free_%(type)s(%(c_type)s obj)
+ 
+ 
+ try:
+-    opts, args = getopt.gnu_getopt(sys.argv[1:], "chp:o:",
+-                                   ["source", "header", "prefix=", "output-dir="])
++    opts, args = getopt.gnu_getopt(sys.argv[1:], "chp:i:o:",
++                                   ["source", "header", "prefix=",
++                                    "input-dir=", "output-dir="])
+ except getopt.GetoptError, err:
+     print str(err)
+     sys.exit(1)
+ 
+ output_dir = ""
++input_dir = ""
+ prefix = ""
+ c_file = 'qapi-types.c'
+ h_file = 'qapi-types.h'
+@@ -201,6 +203,8 @@ do_h = False
+ for o, a in opts:
+     if o in ("-p", "--prefix"):
+         prefix = a
++    elif o in ("-i", "--input-dir"):
++        input_dir = a
+     elif o in ("-o", "--output-dir"):
+         output_dir = a + "/"
+     elif o in ("-c", "--source"):
+@@ -279,7 +283,7 @@ fdecl.write(mcgen('''
+ ''',
+                   guard=guardname(h_file)))
+ 
+-exprs = parse_schema(sys.stdin)
++exprs = parse_schema(sys.stdin, input_dir)
+ exprs = filter(lambda expr: not expr.has_key('gen'), exprs)
+ 
+ for expr in exprs:
+diff --git a/scripts/qapi-visit.py b/scripts/qapi-visit.py
+index a276540..c372e99 100644
+--- a/scripts/qapi-visit.py
++++ b/scripts/qapi-visit.py
+@@ -235,12 +235,14 @@ void visit_type_%(name)s(Visitor *m, %(name)s * obj, const char *name, Error **e
+                 name=name)
+ 
+ try:
+-    opts, args = getopt.gnu_getopt(sys.argv[1:], "chp:o:",
+-                                   ["source", "header", "prefix=", "output-dir="])
++    opts, args = getopt.gnu_getopt(sys.argv[1:], "chp:i:o:",
++                                   ["source", "header", "prefix=",
++                                    "input-dir=", "output-dir="])
+ except getopt.GetoptError, err:
+     print str(err)
+     sys.exit(1)
+ 
++input_dir = ""
+ output_dir = ""
+ prefix = ""
+ c_file = 'qapi-visit.c'
+@@ -252,6 +254,8 @@ do_h = False
+ for o, a in opts:
+     if o in ("-p", "--prefix"):
+         prefix = a
++    elif o in ("-i", "--input-dir"):
++        input_dir = a
+     elif o in ("-o", "--output-dir"):
+         output_dir = a + "/"
+     elif o in ("-c", "--source"):
+@@ -327,7 +331,7 @@ fdecl.write(mcgen('''
+ ''',
+                   prefix=prefix, guard=guardname(h_file)))
+ 
+-exprs = parse_schema(sys.stdin)
++exprs = parse_schema(sys.stdin, input_dir)
+ 
+ for expr in exprs:
+     if expr.has_key('type'):
+diff --git a/scripts/qapi.py b/scripts/qapi.py
+index afc5f32..2d444d9 100644
+--- a/scripts/qapi.py
++++ b/scripts/qapi.py
+@@ -9,8 +9,12 @@
+ # This work is licensed under the terms of the GNU GPLv2.
+ # See the COPYING.LIB file in the top-level directory.
+ 
++import os
++import re
+ from ordereddict import OrderedDict
+ 
++input_cre = re.compile("\s*input\(\"([^\"]*)\"\)")
++
+ def tokenize(data):
+     while len(data):
+         ch = data[0]
+@@ -72,7 +76,7 @@ def parse(tokens):
+ def evaluate(string):
+     return parse(map(lambda x: x, tokenize(string)))[0]
+ 
+-def parse_schema(fp):
++def parse_schema(fp, input_dir):
+     exprs = []
+     expr = ''
+     expr_eval = None
+@@ -81,6 +85,12 @@ def parse_schema(fp):
+         if line.startswith('#') or line == '\n':
+             continue
+ 
++        line_file = input_cre.match(line)
++        if line_file is not None:
++            path = os.sep.join([input_dir, line_file.group(1)])
++            exprs += parse_schema(file(path), input_dir)
++            continue
++
+         if line.startswith(' '):
+             expr += line
+         elif expr:
+
+

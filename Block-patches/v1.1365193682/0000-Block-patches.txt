@@ -1,0 +1,53 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Kevin Wolf <kwolf@redhat.com>
+To: anthony@codemonkey.ws
+Cc: kwolf@redhat.com, qemu-devel@nongnu.org
+Date: Fri,  5 Apr 2013 15:28:02 +0200
+Message-id: 1365168490-29616-1-git-send-email-kwolf@redhat.com
+Subject: [PATCH 0/8] Block patches
+
+The following changes since commit 162cbbd1736de2bca43fdefa7e98c54a361ee60d:
+
+  Merge remote-tracking branch 'luiz/queue/qmp' into staging (2013-04-02 14:07:35 -0500)
+
+are available in the git repository at:
+
+
+  git://repo.or.cz/qemu/kevin.git for-anthony
+
+for you to fetch changes up to 094e751448359417c712ed1395d151c79ccd2538:
+
+  qcow2: Fix L1 write error handling in qcow2_update_snapshot_refcount (2013-04-05 13:17:49 +0200)
+
+----------------------------------------------------------------
+KONRAD Frederic (1):
+      virtio-blk-x: fix configuration synchronization.
+
+Kevin Wolf (3):
+      usb-storage: Forward serial number to scsi-disk
+      qcow2: Return real error in qcow2_update_snapshot_refcount
+      qcow2: Fix L1 write error handling in qcow2_update_snapshot_refcount
+
+Stefan Hajnoczi (4):
+      block: fix I/O throttling accounting blind spot
+      block: keep I/O throttling slice time constant
+      block: drop duplicated slice extension code
+      block: clean up I/O throttling wait_time code
+
+ block.c                    | 49 +++++++++++++++++++++-------------------------
+ block/qcow2-refcount.c     | 25 +++++++++++------------
+ blockdev.c                 |  1 -
+ hw/pci/pci-hotplug.c       |  2 +-
+ hw/s390x/s390-virtio-bus.c |  4 ++--
+ hw/s390x/s390-virtio-bus.h |  1 -
+ hw/s390x/virtio-ccw.c      |  4 ++--
+ hw/s390x/virtio-ccw.h      |  1 -
+ hw/scsi-bus.c              |  8 ++++++--
+ hw/scsi.h                  |  3 ++-
+ hw/usb/dev-storage.c       |  2 +-
+ hw/virtio-blk.c            |  7 -------
+ hw/virtio-blk.h            |  2 --
+ hw/virtio-pci.c            |  7 ++++---
+ hw/virtio-pci.h            |  1 -
+ include/block/block_int.h  |  3 +--
+ 16 files changed, 54 insertions(+), 66 deletions(-)

@@ -1,0 +1,1 @@
+../directory-reorganization-final-part/v1.1365721821/0009-memory-move-core-typedefs-to-qemu-typedefsh.patch

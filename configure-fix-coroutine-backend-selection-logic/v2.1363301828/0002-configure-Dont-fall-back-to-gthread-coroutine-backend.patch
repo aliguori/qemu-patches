@@ -1,0 +1,178 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Peter Maydell <peter.maydell@linaro.org>
+To: Peter Maydell <peter.maydell@linaro.org>, qemu-devel@nongnu.org
+Cc: Paolo Bonzini <pbonzini@redhat.com>, qemu-devel@nongnu.org,
+ patches@linaro.org
+Date: Thu, 14 Mar 2013 17:57:10 +0000
+Message-id: 1363283830-22717-3-git-send-email-peter.maydell@linaro.org
+Subject: [PATCH 2/2] configure: Don't fall back to gthread coroutine backend
+
+The gthread coroutine backend is broken and does not produce a working
+QEMU; it is only useful for some very limited debugging situations.
+Clean up the backend selection logic in configure so that it now runs
+"if on windows use windows; else prefer ucontext; else sigaltstack".
+
+To do this we refactor the configure code to separate out "test
+whether we have a working ucontext", "pick a default if user didn't
+specify" and "validate that user didn't specify something invalid",
+rather than having all three of these run together. We also simplify
+the Makefile logic so it just links in the backend the configure
+script selects.
+
+Signed-off-by: Peter Maydell <peter.maydell@linaro.org>
+---
+ Makefile.objs  |   11 +---------
+ configure      |   66 ++++++++++++++++++++++++++++++++++++--------------------
+ tests/Makefile |   14 +-----------
+ 3 files changed, 45 insertions(+), 46 deletions(-)
+
+diff --git a/Makefile.objs b/Makefile.objs
+index f99841c..e568c01 100644
+--- a/Makefile.objs
++++ b/Makefile.objs
+@@ -16,16 +16,7 @@ block-obj-y += qapi-types.o qapi-visit.o
+ 
+ block-obj-y += qemu-coroutine.o qemu-coroutine-lock.o qemu-coroutine-io.o
+ block-obj-y += qemu-coroutine-sleep.o
+-ifeq ($(CONFIG_UCONTEXT_COROUTINE),y)
+-block-obj-$(CONFIG_POSIX) += coroutine-ucontext.o
+-else
+-ifeq ($(CONFIG_SIGALTSTACK_COROUTINE),y)
+-block-obj-$(CONFIG_POSIX) += coroutine-sigaltstack.o
+-else
+-block-obj-$(CONFIG_POSIX) += coroutine-gthread.o
+-endif
+-endif
+-block-obj-$(CONFIG_WIN32) += coroutine-win32.o
++block-obj-y += coroutine-$(CONFIG_COROUTINE_BACKEND).o
+ 
+ ifeq ($(CONFIG_VIRTIO)$(CONFIG_VIRTFS)$(CONFIG_PCI),yyy)
+ # Lots of the fsdev/9pcode is pulled in by vl.c via qemu_fsdev_add.
+diff --git a/configure b/configure
+index c674d39..3f31719 100755
+--- a/configure
++++ b/configure
+@@ -3048,31 +3048,55 @@ fi
+ ##########################################
+ # check and set a backend for coroutine
+ 
+-# default is ucontext, but always fallback to gthread
+-# windows autodetected by make
+-if test "$coroutine" = "" -o "$coroutine" = "ucontext"; then
+-  if test "$darwin" != "yes"; then
+-    cat > $TMPC << EOF
++# We prefer ucontext, but it's not always possible. The fallback
++# is sigcontext. gthread is not selectable except explicitly, because
++# it is not functional enough to run QEMU proper. (It is occasionally
++# useful for debugging purposes.)  On Windows the only valid backend
++# is the Windows-specific one.
++
++ucontext_works=no
++if test "$darwin" != "yes"; then
++  cat > $TMPC << EOF
+ #include <ucontext.h>
+ #ifdef __stub_makecontext
+ #error Ignoring glibc stub makecontext which will always fail
+ #endif
+ int main(void) { makecontext(0, 0, 0); return 0; }
+ EOF
+-    if compile_prog "" "" ; then
+-        coroutine_backend=ucontext
+-    else
+-	coroutine_backend=gthread
+-    fi
++  if compile_prog "" "" ; then
++    ucontext_works=yes
++  fi
++fi
++
++if test "$coroutine" = ""; then
++  if test "$mingw32" = "yes"; then
++    coroutine=windows
++  elif test "$ucontext_works" = "yes"; then
++    coroutine=ucontext
++  else
++    coroutine=sigaltstack
+   fi
+-elif test "$coroutine" = "gthread" ; then
+-  coroutine_backend=gthread
+-elif test "$coroutine" = "windows" ; then
+-  coroutine_backend=windows
+-elif test "$coroutine" = "sigaltstack" ; then
+-  coroutine_backend=sigaltstack
+ else
+-  error_exit "unknown coroutine backend $coroutine"
++  case $coroutine in
++  windows)
++    if test "$mingw32" != "yes"; then
++      error_exit "'windows' coroutine backend only valid for Windows"
++    fi
++    ;;
++  ucontext)
++    if test "$ucontext_works" != "yes"; then
++      feature_not_found "ucontext"
++    fi
++    ;;
++  gthread|sigaltstack)
++    if test "$mingw32" = "yes"; then
++      error_exit "only the 'windows' coroutine backend is valid for Windows"
++    fi
++    ;;
++  *)
++    error_exit "unknown coroutine backend $coroutine"
++    ;;
++  esac
+ fi
+ 
+ ##########################################
+@@ -3379,7 +3403,7 @@ echo "OpenGL support    $opengl"
+ echo "libiscsi support  $libiscsi"
+ echo "build guest agent $guest_agent"
+ echo "seccomp support   $seccomp"
+-echo "coroutine backend $coroutine_backend"
++echo "coroutine backend $coroutine"
+ echo "GlusterFS support $glusterfs"
+ echo "virtio-blk-data-plane $virtio_blk_data_plane"
+ echo "gcov              $gcov_tool"
+@@ -3709,11 +3733,7 @@ if test "$rbd" = "yes" ; then
+   echo "CONFIG_RBD=y" >> $config_host_mak
+ fi
+ 
+-if test "$coroutine_backend" = "ucontext" ; then
+-  echo "CONFIG_UCONTEXT_COROUTINE=y" >> $config_host_mak
+-elif test "$coroutine_backend" = "sigaltstack" ; then
+-  echo "CONFIG_SIGALTSTACK_COROUTINE=y" >> $config_host_mak
+-fi
++echo "CONFIG_COROUTINE_BACKEND=$coroutine" >> $config_host_mak
+ 
+ if test "$open_by_handle_at" = "yes" ; then
+   echo "CONFIG_OPEN_BY_HANDLE=y" >> $config_host_mak
+diff --git a/tests/Makefile b/tests/Makefile
+index 567e36e..7fa15c6 100644
+--- a/tests/Makefile
++++ b/tests/Makefile
+@@ -24,19 +24,7 @@ gcov-files-test-string-input-visitor-y = qapi/string-input-visitor.c
+ check-unit-y += tests/test-string-output-visitor$(EXESUF)
+ gcov-files-test-string-output-visitor-y = qapi/string-output-visitor.c
+ check-unit-y += tests/test-coroutine$(EXESUF)
+-ifeq ($(CONFIG_WIN32),y)
+-gcov-files-test-coroutine-y = coroutine-win32.c
+-else
+-ifeq ($(CONFIG_UCONTEXT_COROUTINE),y)
+-gcov-files-test-coroutine-y = coroutine-ucontext.c
+-else
+-ifeq ($(CONFIG_SIGALTSTACK_COROUTINE),y)
+-gcov-files-test-coroutine-y = coroutine-sigaltstack.c
+-else
+-gcov-files-test-coroutine-y = coroutine-gthread.c
+-endif
+-endif
+-endif
++gcov-files-test-coroutine-y = coroutine-$(CONFIG_COROUTINE_BACKEND).c
+ check-unit-y += tests/test-visitor-serialization$(EXESUF)
+ check-unit-y += tests/test-iov$(EXESUF)
+ gcov-files-test-iov-y = util/iov.c
+-- 
+1.7.9.5
+
+

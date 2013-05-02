@@ -1,0 +1,51 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Stefan Weil <sw@weilnetz.de>
+To: qemu-devel@nongnu.org, Stefan Weil <sw@weilnetz.de>
+Cc: Anthony Liguori <aliguori@us.ibm.com>, qemu-devel@nongnu.org,
+ Stefan Weil <sw@weilnetz.de>
+Date: Sat, 30 Mar 2013 15:21:40 +0100
+Message-id: 1364653300-26813-1-git-send-email-sw@weilnetz.de
+Subject: [PATCH 1/1] ui/gtk: Set QEMU window icon
+
+The QEMU icon which is already used for SDL
+is now also loaded by GTK.
+
+Signed-off-by: Stefan Weil <sw@weilnetz.de>
+---
+ ui/gtk.c |   13 +++++++++++++
+ 1 file changed, 13 insertions(+)
+
+diff --git a/ui/gtk.c b/ui/gtk.c
+index a5a8156..c15023b 100644
+--- a/ui/gtk.c
++++ b/ui/gtk.c
+@@ -1363,6 +1363,7 @@ static const DisplayChangeListenerOps dcl_ops = {
+ void gtk_display_init(DisplayState *ds)
+ {
+     GtkDisplayState *s = g_malloc0(sizeof(*s));
++    char *filename;
+ 
+     gtk_init(NULL, NULL);
+ 
+@@ -1394,6 +1395,18 @@ void gtk_display_init(DisplayState *ds)
+ 
+     gtk_notebook_append_page(GTK_NOTEBOOK(s->notebook), s->drawing_area, gtk_label_new("VGA"));
+ 
++    filename = qemu_find_file(QEMU_FILE_TYPE_BIOS, "qemu-icon.bmp");
++    if (filename) {
++        GError *error = NULL;
++        GdkPixbuf *pixbuf = gdk_pixbuf_new_from_file(filename, &error);
++        if (pixbuf) {
++            gtk_window_set_icon(GTK_WINDOW(s->window), pixbuf);
++        } else {
++            g_error_free(error);
++        }
++        g_free(filename);
++    }
++
+     gd_create_menus(s);
+ 
+     gd_connect_signals(s);
+-- 
+1.7.10.4
+

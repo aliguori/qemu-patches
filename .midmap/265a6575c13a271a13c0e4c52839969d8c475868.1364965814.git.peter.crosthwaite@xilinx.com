@@ -1,0 +1,1 @@
+../Stream-Patches/v5.1365020220/0007-xilinx_axidma-Register-reset-properly.patch

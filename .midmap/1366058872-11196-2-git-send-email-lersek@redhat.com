@@ -1,0 +1,1 @@
+../publish-etc-acpi-APIC-in-fw_cfg/v2.1366084065/0001-refer-to-FWCfgState-explicitly.patch

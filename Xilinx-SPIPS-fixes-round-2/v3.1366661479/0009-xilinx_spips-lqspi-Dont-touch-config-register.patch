@@ -1,0 +1,65 @@
+From patches Mon Sep 17 00:00:00 2001
+From: peter.crosthwaite@xilinx.com
+To: qemu-devel@nongnu.org
+Cc: peter.maydell@linaro.org, edgar.iglesias@gmail.com
+Date: Mon, 22 Apr 2013 15:17:09 +1000
+Message-id: 7144a3fd23aaf2791c60626e9ffa0fa8bd428087.1366606958.git.peter.crosthwaite@xilinx.com
+Subject: [PATCH 09/15] xilinx_spips: lqspi: Dont touch config register
+
+From: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+
+The LQSPI mode is supposed to work via the automatic CS mode feature
+rather than manipulate CS lines itself. Now that auto CS is implemented
+remove LQSPIs CS mode override logic. There is still a need to
+manipulate the U_PAGE bit in LQSPI config register to implement
+dual-stack mode however.
+
+Signed-off-by: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+Reviewed-by: Peter Maydell <peter.maydell@linaro.org>
+---
+This patch in new as of v2
+
+ hw/ssi/xilinx_spips.c |   12 ++++++------
+ 1 files changed, 6 insertions(+), 6 deletions(-)
+
+diff --git a/hw/ssi/xilinx_spips.c b/hw/ssi/xilinx_spips.c
+index 3f31a32..2ee3958 100644
+--- a/hw/ssi/xilinx_spips.c
++++ b/hw/ssi/xilinx_spips.c
+@@ -511,16 +511,16 @@ lqspi_read(void *opaque, hwaddr addr, unsigned int size)
+         int flash_addr = (addr / num_effective_busses(s));
+         int slave = flash_addr >> LQSPI_ADDRESS_BITS;
+         int cache_entry = 0;
++        uint32_t u_page_save = s->regs[R_LQSPI_STS] & ~LQSPI_CFG_U_PAGE;
++
++        s->regs[R_LQSPI_STS] &= ~LQSPI_CFG_U_PAGE;
++        s->regs[R_LQSPI_STS] |= slave ? LQSPI_CFG_U_PAGE : 0;
+ 
+         DB_PRINT("config reg status: %08x\n", s->regs[R_LQSPI_CFG]);
+ 
+         fifo8_reset(&s->tx_fifo);
+         fifo8_reset(&s->rx_fifo);
+ 
+-        s->regs[R_CONFIG] &= ~CS;
+-        s->regs[R_CONFIG] |= ((~(1 << slave) << CS_SHIFT) & CS) | MANUAL_CS;
+-        xilinx_spips_update_cs_lines(s);
+-
+         /* instruction */
+         DB_PRINT("pushing read instruction: %02x\n",
+                  (uint8_t)(s->regs[R_LQSPI_CFG] & LQSPI_CFG_INST_CODE));
+@@ -554,9 +554,9 @@ lqspi_read(void *opaque, hwaddr addr, unsigned int size)
+             rx_data_bytes(s, &q->lqspi_buf[cache_entry], 4);
+             cache_entry++;
+         }
+-        xilinx_spips_update_cs_lines(s);
+ 
+-        s->regs[R_CONFIG] |= CS;
++        s->regs[R_LQSPI_STS] &= ~LQSPI_CFG_U_PAGE;
++        s->regs[R_LQSPI_STS] |= u_page_save;
+         xilinx_spips_update_cs_lines(s);
+ 
+         q->lqspi_cached_addr = addr;
+-- 
+1.7.0.4
+
+

@@ -1,0 +1,1 @@
+../target-moxie-Fix-VMState-registration/v1.1365457906/0001-target-moxie-Fix-VMState-registration.patch

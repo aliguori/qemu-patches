@@ -1,0 +1,1 @@
+../fix-migration-failure-from-13-due-to-SeaBIOS-size-change/v1.1360111704/0002-pc_sysfw-fix-migration-for-versions--13-via-resizable-ROM-regions.patch

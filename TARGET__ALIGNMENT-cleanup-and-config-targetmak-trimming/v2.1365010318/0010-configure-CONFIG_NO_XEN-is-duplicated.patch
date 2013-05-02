@@ -1,0 +1,53 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: pmaydell@linaro.org, aurelien@aurel32.net
+Date: Wed,  3 Apr 2013 12:32:08 +0200
+Message-id: 1364985128-23772-11-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 10/10] configure: CONFIG_NO_XEN is duplicated
+
+We already define it in Makefile.target.  But we need to avoid a
+curious double negation in order to eliminate it.
+
+Tested-by: Stefano Stabellini <stefano.stabellini@eu.citrix.com>
+Reviewed-by: Peter Maydell <peter.maydell@linaro.org>
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ configure | 3 ---
+ hw/xen.h  | 2 +-
+ 2 files changed, 1 insertion(+), 4 deletions(-)
+
+diff --git a/configure b/configure
+index c8d47fe..52539a9 100755
+--- a/configure
++++ b/configure
+@@ -4159,12 +4159,9 @@ case "$target_arch2" in
+       if test "$xen_pci_passthrough" = yes; then
+         echo "CONFIG_XEN_PCI_PASSTHROUGH=y" >> "$config_target_mak"
+       fi
+-    else
+-      echo "CONFIG_NO_XEN=y" >> $config_target_mak
+     fi
+     ;;
+   *)
+-    echo "CONFIG_NO_XEN=y" >> $config_target_mak
+ esac
+ case "$target_arch2" in
+   arm|i386|x86_64|ppcemb|ppc|ppc64|s390x)
+diff --git a/hw/xen.h b/hw/xen.h
+index 6235f91..7451c5a 100644
+--- a/hw/xen.h
++++ b/hw/xen.h
+@@ -25,7 +25,7 @@ extern bool xen_allowed;
+ 
+ static inline bool xen_enabled(void)
+ {
+-#if defined(CONFIG_XEN_BACKEND) && !defined(CONFIG_NO_XEN)
++#if defined(CONFIG_XEN_BACKEND) && defined(CONFIG_XEN)
+     return xen_allowed;
+ #else
+     return 0;
+-- 
+1.8.1.4
+
+

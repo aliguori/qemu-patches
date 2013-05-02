@@ -1,0 +1,85 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Liu Yuan <namei.unix@gmail.com>
+To: MORITA Kazutaka <morita.kazutaka@lab.ntt.co.jp>,
+ Liu Yuan <namei.unix@gmail.com>, qemu-devel@nongnu.org
+Cc: MORITA Kazutaka <morita.kazutaka@lab.ntt.co.jp>, sheepdog@lists.wpkg.org,
+ Stefan Hajnoczi <stefanha@redhat.com>, Kevin Wolf <kwolf@redhat.com>,
+ qemu-devel@nongnu.org
+Date: Thu, 18 Apr 2013 19:48:52 +0800
+Message-id: 1366285732-21694-1-git-send-email-namei.unix@gmail.com
+Subject: [PATCH 1/1] sheepdog: implement .bdrv_co_is_allocated
+
+From: Liu Yuan <tailai.ly@taobao.com>
+
+Cc: MORITA Kazutaka <morita.kazutaka@lab.ntt.co.jp>
+Cc: Kevin Wolf <kwolf@redhat.com>
+Cc: Stefan Hajnoczi <stefanha@redhat.com>
+Signed-off-by: Liu Yuan <tailai.ly@taobao.com>
+---
+NOTE: This patch based on the previous discard path
+
+ block/sheepdog.c |   26 ++++++++++++++++++++++++++
+ 1 file changed, 26 insertions(+)
+
+diff --git a/block/sheepdog.c b/block/sheepdog.c
+index c099117..80f7bfc 100644
+--- a/block/sheepdog.c
++++ b/block/sheepdog.c
+@@ -2138,6 +2138,29 @@ static coroutine_fn int sd_co_discard(BlockDriverState *bs, int64_t sector_num,
+     return acb->ret;
+ }
+ 
++static coroutine_fn int
++sd_co_is_allocated(BlockDriverState *bs, int64_t sector_num, int nb_sectors,
++                   int *pnum)
++{
++    BDRVSheepdogState *s = bs->opaque;
++    SheepdogInode *inode = &s->inode;
++    unsigned long start = sector_num * SECTOR_SIZE / SD_DATA_OBJ_SIZE, idx,
++                  end = start + (nb_sectors * SECTOR_SIZE) / SD_DATA_OBJ_SIZE;
++
++    for (idx = start; idx <= end; idx++) {
++        if (inode->data_vdi_id[idx] == 0) {
++            break;
++        }
++    }
++    if (idx == start) {
++        *pnum = SD_DATA_OBJ_SIZE / SECTOR_SIZE;
++        return 0;
++    }
++
++    *pnum = (idx - start) * SD_DATA_OBJ_SIZE / SECTOR_SIZE;
++    return 1;
++}
++
+ static QEMUOptionParameter sd_create_options[] = {
+     {
+         .name = BLOCK_OPT_SIZE,
+@@ -2171,6 +2194,7 @@ static BlockDriver bdrv_sheepdog = {
+     .bdrv_co_writev = sd_co_writev,
+     .bdrv_co_flush_to_disk  = sd_co_flush_to_disk,
+     .bdrv_co_discard = sd_co_discard,
++    .bdrv_co_is_allocated = sd_co_is_allocated,
+ 
+     .bdrv_snapshot_create   = sd_snapshot_create,
+     .bdrv_snapshot_goto     = sd_snapshot_goto,
+@@ -2197,6 +2221,7 @@ static BlockDriver bdrv_sheepdog_tcp = {
+     .bdrv_co_writev = sd_co_writev,
+     .bdrv_co_flush_to_disk  = sd_co_flush_to_disk,
+     .bdrv_co_discard = sd_co_discard,
++    .bdrv_co_is_allocated = sd_co_is_allocated,
+ 
+     .bdrv_snapshot_create   = sd_snapshot_create,
+     .bdrv_snapshot_goto     = sd_snapshot_goto,
+@@ -2223,6 +2248,7 @@ static BlockDriver bdrv_sheepdog_unix = {
+     .bdrv_co_writev = sd_co_writev,
+     .bdrv_co_flush_to_disk  = sd_co_flush_to_disk,
+     .bdrv_co_discard = sd_co_discard,
++    .bdrv_co_is_allocated = sd_co_is_allocated,
+ 
+     .bdrv_snapshot_create   = sd_snapshot_create,
+     .bdrv_snapshot_goto     = sd_snapshot_goto,
+-- 
+1.7.9.5
+
+

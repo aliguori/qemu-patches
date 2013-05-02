@@ -1,0 +1,126 @@
+From patches Mon Sep 17 00:00:00 2001
+From: fred.konrad@greensocs.com
+To: Anthony Liguori <aliguori@us.ibm.com>, qemu-devel@nongnu.org
+Cc: peter.maydell@linaro.org, mark.burton@greensocs.com, agraf@suse.de,
+ amit.shah@redhat.com, cornelia.huck@de.ibm.com, pbonzini@redhat.com,
+ afaerber@suse.de, fred.konrad@greensocs.com
+Date: Tue, 30 Apr 2013 16:08:51 +0200
+Message-id: 1367330931-12994-6-git-send-email-fred.konrad@greensocs.com
+Subject: [PATCH 5/5] virtio-scsi: fix the command line compatibility.
+
+From: KONRAD Frederic <fred.konrad@greensocs.com>
+
+The bus name is wrong since the refactoring.
+
+This keeps the behaviour of the command line.
+
+Signed-off-by: KONRAD Frederic <fred.konrad@greensocs.com>
+---
+ hw/s390x/s390-virtio-bus.c      | 12 ++++++++++++
+ hw/s390x/virtio-ccw.c           | 12 ++++++++++++
+ hw/scsi/virtio-scsi.c           |  3 ++-
+ hw/virtio/virtio-pci.c          | 12 ++++++++++++
+ include/hw/virtio/virtio-scsi.h |  1 -
+ 5 files changed, 38 insertions(+), 2 deletions(-)
+
+diff --git a/hw/s390x/s390-virtio-bus.c b/hw/s390x/s390-virtio-bus.c
+index 83faf97..5a3d97c 100644
+--- a/hw/s390x/s390-virtio-bus.c
++++ b/hw/s390x/s390-virtio-bus.c
+@@ -235,6 +235,18 @@ static int s390_virtio_scsi_init(VirtIOS390Device *s390_dev)
+ {
+     VirtIOSCSIS390 *dev = VIRTIO_SCSI_S390(s390_dev);
+     DeviceState *vdev = DEVICE(&dev->vdev);
++    DeviceState *qdev = DEVICE(s390_dev);
++    char *bus_name;
++
++    /*
++     * For command line compatibility, this sets the virtio-scsi-device bus
++     * name as before.
++     */
++    if (qdev->id) {
++        bus_name = g_strdup_printf("%s.0", qdev->id);
++        virtio_device_set_child_bus_name(VIRTIO_DEVICE(vdev), bus_name);
++        g_free(bus_name);
++    }
+ 
+     qdev_set_parent_bus(vdev, BUS(&s390_dev->bus));
+     if (qdev_init(vdev) < 0) {
+diff --git a/hw/s390x/virtio-ccw.c b/hw/s390x/virtio-ccw.c
+index 4ebefd8..76e6d32 100644
+--- a/hw/s390x/virtio-ccw.c
++++ b/hw/s390x/virtio-ccw.c
+@@ -680,6 +680,18 @@ static int virtio_ccw_scsi_init(VirtioCcwDevice *ccw_dev)
+ {
+     VirtIOSCSICcw *dev = VIRTIO_SCSI_CCW(ccw_dev);
+     DeviceState *vdev = DEVICE(&dev->vdev);
++    DeviceState *qdev = DEVICE(ccw_dev);
++    char *bus_name;
++
++    /*
++     * For command line compatibility, this sets the virtio-scsi-device bus
++     * name as before.
++     */
++    if (qdev->id) {
++        bus_name = g_strdup_printf("%s.0", qdev->id);
++        virtio_device_set_child_bus_name(VIRTIO_DEVICE(vdev), bus_name);
++        g_free(bus_name);
++    }
+ 
+     qdev_set_parent_bus(vdev, BUS(&ccw_dev->bus));
+     if (qdev_init(vdev) < 0) {
+diff --git a/hw/scsi/virtio-scsi.c b/hw/scsi/virtio-scsi.c
+index f7ce743..08dd3f3 100644
+--- a/hw/scsi/virtio-scsi.c
++++ b/hw/scsi/virtio-scsi.c
+@@ -624,7 +624,8 @@ static int virtio_scsi_device_init(VirtIODevice *vdev)
+         return ret;
+     }
+ 
+-    scsi_bus_new(&s->bus, qdev, &virtio_scsi_scsi_info, NULL);
++    scsi_bus_new(&s->bus, qdev, &virtio_scsi_scsi_info, vdev->bus_name);
++
+     if (!qdev->hotplugged) {
+         scsi_bus_legacy_handle_cmdline(&s->bus);
+     }
+diff --git a/hw/virtio/virtio-pci.c b/hw/virtio/virtio-pci.c
+index abd2a3e..ec0066b 100644
+--- a/hw/virtio/virtio-pci.c
++++ b/hw/virtio/virtio-pci.c
+@@ -1106,11 +1106,23 @@ static int virtio_scsi_pci_init_pci(VirtIOPCIProxy *vpci_dev)
+     VirtIOSCSIPCI *dev = VIRTIO_SCSI_PCI(vpci_dev);
+     DeviceState *vdev = DEVICE(&dev->vdev);
+     VirtIOSCSICommon *vs = VIRTIO_SCSI_COMMON(vdev);
++    DeviceState *proxy = DEVICE(vpci_dev);
++    char *bus_name;
+ 
+     if (vpci_dev->nvectors == DEV_NVECTORS_UNSPECIFIED) {
+         vpci_dev->nvectors = vs->conf.num_queues + 3;
+     }
+ 
++    /*
++     * For command line compatibility, this sets the virtio-scsi-device bus
++     * name as before.
++     */
++    if (proxy->id) {
++        bus_name = g_strdup_printf("%s.0", proxy->id);
++        virtio_device_set_child_bus_name(VIRTIO_DEVICE(vdev), bus_name);
++        g_free(bus_name);
++    }
++
+     qdev_set_parent_bus(vdev, BUS(&vpci_dev->bus));
+     if (qdev_init(vdev) < 0) {
+         return -1;
+diff --git a/include/hw/virtio/virtio-scsi.h b/include/hw/virtio/virtio-scsi.h
+index 4db346b..9a98540 100644
+--- a/include/hw/virtio/virtio-scsi.h
++++ b/include/hw/virtio/virtio-scsi.h
+@@ -189,5 +189,4 @@ typedef struct {
+ int virtio_scsi_common_init(VirtIOSCSICommon *vs);
+ int virtio_scsi_common_exit(VirtIOSCSICommon *vs);
+ 
+-
+ #endif /* _QEMU_VIRTIO_SCSI_H */
+-- 
+1.8.1.4
+

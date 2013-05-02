@@ -1,0 +1,1 @@
+../SCSI-updates-for-2013-04-13/v1.1366406651/0001-scsi-avoid-assertion-failure-on-VERIFY-command.patch

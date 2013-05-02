@@ -1,0 +1,125 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: blauwirbel@gmail.com, sw@weilnetz.de
+Date: Mon, 22 Apr 2013 20:53:16 +0200
+Message-id: 1366656797-3567-2-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 1/2] add missing inclusions of config-host.h
+
+The next patch will add a dependency of qemu/osdep.h on config-host.h.
+It could be nicer to use qemu-common.h, but I prefer to be safer this
+close to hard feature freeze.
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ qga/channel-posix.c         | 1 +
+ tests/libi2c-omap.c         | 1 +
+ tests/libqtest.c            | 1 +
+ tests/tcg/test-i386-fprem.c | 1 +
+ tests/test-mul64.c          | 1 +
+ ui/sdl_zoom.c               | 1 +
+ ui/vnc.c                    | 1 +
+ util/hbitmap.c              | 1 +
+ 8 files changed, 8 insertions(+)
+
+diff --git a/qga/channel-posix.c b/qga/channel-posix.c
+index e65dda3..30d978e 100644
+--- a/qga/channel-posix.c
++++ b/qga/channel-posix.c
+@@ -5,6 +5,7 @@
+ #include <fcntl.h>
+ #include <stdlib.h>
+ #include <string.h>
++#include "config-host.h"
+ #include "qemu/osdep.h"
+ #include "qemu/sockets.h"
+ #include "qga/channel.h"
+diff --git a/tests/libi2c-omap.c b/tests/libi2c-omap.c
+index c52458c..68d40f3 100644
+--- a/tests/libi2c-omap.c
++++ b/tests/libi2c-omap.c
+@@ -11,6 +11,7 @@
+ #include <glib.h>
+ #include <string.h>
+ 
++#include "config-host.h"
+ #include "qemu/osdep.h"
+ #include "qemu/bswap.h"
+ #include "libqtest.h"
+diff --git a/tests/libqtest.c b/tests/libqtest.c
+index 884f959..b40269e 100644
+--- a/tests/libqtest.c
++++ b/tests/libqtest.c
+@@ -28,6 +28,7 @@
+ #include <unistd.h>
+ #include <string.h>
+ 
++#include "config-host.h"
+ #include "qemu/compiler.h"
+ #include "qemu/osdep.h"
+ 
+diff --git a/tests/tcg/test-i386-fprem.c b/tests/tcg/test-i386-fprem.c
+index e91fb1a..b64e842 100644
+--- a/tests/tcg/test-i386-fprem.c
++++ b/tests/tcg/test-i386-fprem.c
+@@ -22,6 +22,7 @@
+  *  You should have received a copy of the GNU General Public License
+  *  along with this program; if not, see <http://www.gnu.org/licenses/>.
+  */
++#include "config-host.h"
+ #include "qemu/compiler.h"
+ #include "qemu/osdep.h"
+ #include <stdio.h>
+diff --git a/tests/test-mul64.c b/tests/test-mul64.c
+index a0a17f7..9a6a1ec 100644
+--- a/tests/test-mul64.c
++++ b/tests/test-mul64.c
+@@ -8,6 +8,7 @@
+ 
+ #include <glib.h>
+ #include <stdint.h>
++#include "config-host.h"
+ #include "qemu/host-utils.h"
+ #include "qemu/osdep.h"
+ 
+diff --git a/ui/sdl_zoom.c b/ui/sdl_zoom.c
+index 2625c45..b9b7322 100644
+--- a/ui/sdl_zoom.c
++++ b/ui/sdl_zoom.c
+@@ -11,6 +11,7 @@
+  *
+  */
+ 
++#include "config-host.h"
+ #include "sdl_zoom.h"
+ #include "qemu/osdep.h"
+ #include <glib.h>
+diff --git a/ui/vnc.c b/ui/vnc.c
+index 8ee66b7..e7c28f2 100644
+--- a/ui/vnc.c
++++ b/ui/vnc.c
+@@ -24,6 +24,7 @@
+  * THE SOFTWARE.
+  */
+ 
++#include "config-host.h"
+ #include "vnc.h"
+ #include "vnc-jobs.h"
+ #include "sysemu/sysemu.h"
+diff --git a/util/hbitmap.c b/util/hbitmap.c
+index d936831..fc04d3b 100644
+--- a/util/hbitmap.c
++++ b/util/hbitmap.c
+@@ -9,6 +9,7 @@
+  * later.  See the COPYING file in the top-level directory.
+  */
+ 
++#include "config-host.h"
+ #include <string.h>
+ #include <glib.h>
+ #include <assert.h>
+-- 
+1.8.2
+
+
+

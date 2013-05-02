@@ -1,0 +1,1 @@
+../TARGET__ALIGNMENT-cleanup-and-config-targetmak-trimming/v3.1366233994/0002-elfload-fix-size-of-ABI-dependent-fields-in-core-dumps.patch

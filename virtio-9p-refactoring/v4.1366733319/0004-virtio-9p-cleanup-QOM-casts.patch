@@ -1,0 +1,84 @@
+From patches Mon Sep 17 00:00:00 2001
+From: fred.konrad@greensocs.com
+To: Anthony Liguori <aliguori@us.ibm.com>, qemu-devel@nongnu.org
+Cc: peter.maydell@linaro.org,
+ "Aneesh Kumar K.V" <aneesh.kumar@linux.vnet.ibm.com>,
+ mark.burton@greensocs.com, fred.konrad@greensocs.com
+Date: Tue, 23 Apr 2013 11:08:43 +0200
+Message-id: 1366708123-19626-5-git-send-email-fred.konrad@greensocs.com
+Subject: [PATCH 4/4] virtio-9p: cleanup: QOM casts.
+
+From: KONRAD Frederic <fred.konrad@greensocs.com>
+
+As the virtio-9p-pci is switched to the new API, we can use QOM casts.
+
+Signed-off-by: KONRAD Frederic <fred.konrad@greensocs.com>
+---
+ hw/9pfs/virtio-9p-device.c | 11 +++--------
+ hw/9pfs/virtio-9p.c        |  2 +-
+ hw/9pfs/virtio-9p.h        |  2 +-
+ 3 files changed, 5 insertions(+), 10 deletions(-)
+
+diff --git a/hw/9pfs/virtio-9p-device.c b/hw/9pfs/virtio-9p-device.c
+index 29a639e..62a291b 100644
+--- a/hw/9pfs/virtio-9p-device.c
++++ b/hw/9pfs/virtio-9p-device.c
+@@ -26,16 +26,11 @@ static uint32_t virtio_9p_get_features(VirtIODevice *vdev, uint32_t features)
+     return features;
+ }
+ 
+-static V9fsState *to_virtio_9p(VirtIODevice *vdev)
+-{
+-    return (V9fsState *)vdev;
+-}
+-
+ static void virtio_9p_get_config(VirtIODevice *vdev, uint8_t *config)
+ {
+     int len;
+     struct virtio_9p_config *cfg;
+-    V9fsState *s = to_virtio_9p(vdev);
++    V9fsState *s = VIRTIO_9P(vdev);
+ 
+     len = strlen(s->tag);
+     cfg = g_malloc0(sizeof(struct virtio_9p_config) + len);
+@@ -97,9 +92,9 @@ static int virtio_9p_device_init(VirtIODevice *vdev)
+     s->ctx.uid = -1;
+ 
+     s->ops = fse->ops;
+-    s->vdev.get_features = virtio_9p_get_features;
++    vdev->get_features = virtio_9p_get_features;
+     s->config_size = sizeof(struct virtio_9p_config) + len;
+-    s->vdev.get_config = virtio_9p_get_config;
++    vdev->get_config = virtio_9p_get_config;
+     s->fid_list = NULL;
+     qemu_co_rwlock_init(&s->rename_lock);
+ 
+diff --git a/hw/9pfs/virtio-9p.c b/hw/9pfs/virtio-9p.c
+index db2ae32..296f66f 100644
+--- a/hw/9pfs/virtio-9p.c
++++ b/hw/9pfs/virtio-9p.c
+@@ -631,7 +631,7 @@ static void complete_pdu(V9fsState *s, V9fsPDU *pdu, ssize_t len)
+     virtqueue_push(s->vq, &pdu->elem, len);
+ 
+     /* FIXME: we should batch these completions */
+-    virtio_notify(&s->vdev, s->vq);
++    virtio_notify(VIRTIO_DEVICE(s), s->vq);
+ 
+     /* Now wakeup anybody waiting in flush for this request */
+     qemu_co_queue_next(&pdu->complete);
+diff --git a/hw/9pfs/virtio-9p.h b/hw/9pfs/virtio-9p.h
+index e1fa506..1d6eedb 100644
+--- a/hw/9pfs/virtio-9p.h
++++ b/hw/9pfs/virtio-9p.h
+@@ -205,7 +205,7 @@ struct V9fsFidState
+ 
+ typedef struct V9fsState
+ {
+-    VirtIODevice vdev;
++    VirtIODevice parent_obj;
+     VirtQueue *vq;
+     V9fsPDU pdus[MAX_REQ];
+     QLIST_HEAD(, V9fsPDU) free_list;
+-- 
+1.7.11.7
+

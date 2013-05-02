@@ -1,0 +1,70 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Liu Yuan <namei.unix@gmail.com>
+To: sheepdog@lists.wpkg.org, qemu-devel@nongnu.org
+Cc: 
+Date: Sat, 13 Apr 2013 19:27:20 +0800
+Message-id: 1365852442-28941-3-git-send-email-namei.unix@gmail.com
+Subject: [PATCH 2/3] sheep: teach sheep to discard unused objects
+
+From: Liu Yuan <tailai.ly@taobao.com>
+
+Signed-off-by: Liu Yuan <tailai.ly@taobao.com>
+---
+ include/sheepdog_proto.h |    1 +
+ sheep/ops.c              |   20 ++++++++++++++++++++
+ 2 files changed, 21 insertions(+)
+
+diff --git a/include/sheepdog_proto.h b/include/sheepdog_proto.h
+index f3d69e1..99a6627 100644
+--- a/include/sheepdog_proto.h
++++ b/include/sheepdog_proto.h
+@@ -35,6 +35,7 @@
+ #define SD_OP_GET_VDI_INFO   0x14
+ #define SD_OP_READ_VDIS      0x15
+ #define SD_OP_FLUSH_VDI      0x16
++#define SD_OP_DISCARD        0x17
+ 
+ #define SD_FLAG_CMD_WRITE    0x01
+ #define SD_FLAG_CMD_COW      0x02
+diff --git a/sheep/ops.c b/sheep/ops.c
+index a0502b2..8f6b0c1 100644
+--- a/sheep/ops.c
++++ b/sheep/ops.c
+@@ -741,6 +741,20 @@ static int local_flush_vdi(struct request *req)
+ 	return ret;
+ }
+ 
++static int local_discard(struct request *req)
++{
++	uint64_t oid = req->rq.obj.oid;
++	uint32_t vid = oid_to_vid(oid), zero = 0;
++	int ret, cp = get_vdi_copy_number(vid), idx = data_oid_to_idx(oid);
++
++	sd_dprintf("%"PRIx64, oid);
++	ret = remove_object(oid, cp);
++	if (ret != SD_RES_SUCCESS)
++		return ret;
++	return write_object(vid_to_vdi_oid(vid), (char *)&zero, sizeof(zero),
++			    SD_INODE_HEADER_SIZE + sizeof(vid) * idx, 0, cp);
++}
++
+ static int local_flush_and_del(struct request *req)
+ {
+ 	if (!sys->enable_object_cache)
+@@ -1109,6 +1123,12 @@ static struct sd_op_template sd_ops[] = {
+ 		.process_work = local_flush_vdi,
+ 	},
+ 
++	[SD_OP_DISCARD] = {
++		.name = "DISCARD",
++		.type = SD_OP_TYPE_LOCAL,
++		.process_work = local_discard,
++	},
++
+ 	[SD_OP_FLUSH_DEL_CACHE] = {
+ 		.name = "DEL_CACHE",
+ 		.type = SD_OP_TYPE_LOCAL,
+-- 
+1.7.9.5
+
+

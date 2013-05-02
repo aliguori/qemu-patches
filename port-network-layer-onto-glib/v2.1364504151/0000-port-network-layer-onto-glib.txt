@@ -1,0 +1,66 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Liu Ping Fan <qemulist@gmail.com>
+To: Paolo Bonzini <pbonzini@redhat.com>, liu ping fan <qemulist@gmail.com>,
+ Stefan Hajnoczi <stefanha@gmail.com>, qemu-devel@nongnu.org,
+ Liu Ping Fan <qemulist@gmail.com>, pbonzini@redhat.com
+Cc: Anthony Liguori <aliguori@us.ibm.com>, Paolo Bonzini <pbonzini@redhat.com>,
+ Stefan Hajnoczi <stefanha@gmail.com>, qemu-devel@nongnu.org,
+ Liu Ping Fan <qemulist@gmail.com>, mdroth <mdroth@linux.vnet.ibm.com>,
+ pbonzini@redhat.com
+Date: Thu, 28 Mar 2013 15:55:51 +0800
+Message-id: 1364457355-4119-1-git-send-email-qemulist@gmail.com
+Subject: [PATCH 0/4] port network layer onto glib
+
+From: Liu Ping Fan <pingfank@linux.vnet.ibm.com>
+
+These series aim to make the whole network re-entrant, here only apply backend and frontend,
+and for the netcore, separated patches have been sent out.  All of these will prepare us for
+moving towards making network layer mutlit-thread.
+Finally it would be omething like
+   qemu -object io-thread,id=thread0 \
+     -device virtio-net,rx[0]=thread0,tx[0]=thread0
+
+The brief of the whole aim and plan is documented on
+  http://wiki.qemu.org/Features/network_reentrant
+
+The main issue is about GSource or AioContext,
+  http://marc.info/?t=136315453300002&r=1&w=3
+And I sumary the main points:
+  disadvantage for current AioContext
+   1st. need to define and expand interface for other fd events, while glib open this interface for user *
+   2nd. need to add support for IOCanReadHandler, while gsource provide prepare, check method to allow more flexible control
+   3rd. block layer's AioContext will block other AioContexts on the same thread.
+   4th. need more document
+ disadvantage for glib
+   1st. if more than one fds on the same GSource, need re-implement something like aio_set_file_handler
+
+Since I have successed to port frontend on glib, there is no obstale to use glib.
+
+
+v1->v2:
+  1.NetClientState can associate with up to 2 GSource, for virtio net, one for tx, one for rx, 
+    so vq can run on different threads.
+  2.make network front-end onto glib, currently virtio net dataplane
+
+
+Liu Ping Fan (4):
+  net: port tap onto glib
+  net: resolve race of tap backend and its peer
+  net: port hub onto glib
+  net: port virtio net onto glib
+
+ hw/qdev-properties-system.c |    1 +
+ hw/virtio-net.c             |  165 +++++++++++++++++++++++++++++++++++++++++++
+ hw/virtio.c                 |    6 ++
+ hw/virtio.h                 |    2 +
+ include/net/net.h           |   27 +++++++
+ include/net/queue.h         |   14 ++++
+ net/hub.c                   |   34 ++++++++-
+ net/net.c                   |   97 +++++++++++++++++++++++++
+ net/queue.c                 |    4 +-
+ net/tap.c                   |   62 +++++++++++++---
+ 10 files changed, 397 insertions(+), 15 deletions(-)
+
+-- 
+1.7.4.4
+

@@ -1,0 +1,54 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Dmitry Fleytman <dmitry.fleytman@ravellosystems.com>,
+ Yan Vugenfirer <yan@ravellosystems.com>
+Date: Fri, 27 Jul 2012 17:02:34 +0200
+Message-id: 1343401379-19495-8-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 07/32] cutils: add strpadcpy()
+
+From: Dmitry Fleytman <dmitry.fleytman@ravellosystems.com>
+
+Signed-off-by: Yan Vugenfirer <yan@ravellosystems.com>
+Signed-off-by: Dmitry Fleytman <dmitry.fleytman@ravellosystems.com>
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ cutils.c      |    7 +++++++
+ qemu-common.h |    1 +
+ 2 files changed, 8 insertions(+)
+
+diff --git a/cutils.c b/cutils.c
+index e2bc1b8..9d4c570 100644
+--- a/cutils.c
++++ b/cutils.c
+@@ -28,6 +28,13 @@
+ #include "qemu_socket.h"
+ #include "iov.h"
+ 
++void strpadcpy(char *buf, int buf_size, const char *str, char pad)
++{
++    int len = qemu_strnlen(str, buf_size);
++    memcpy(buf, str, len);
++    memset(buf + len, pad, buf_size - len);
++}
++
+ void pstrcpy(char *buf, int buf_size, const char *str)
+ {
+     int c;
+diff --git a/qemu-common.h b/qemu-common.h
+index 7c8dac8..d26ff39 100644
+--- a/qemu-common.h
++++ b/qemu-common.h
+@@ -138,6 +138,7 @@ int qemu_timedate_diff(struct tm *tm);
+ 
+ /* cutils.c */
+ void pstrcpy(char *buf, int buf_size, const char *str);
++void strpadcpy(char *buf, int buf_size, const char *str, char pad);
+ char *pstrcat(char *buf, int buf_size, const char *s);
+ int strstart(const char *str, const char *val, const char **ptr);
+ int stristart(const char *str, const char *val, const char **ptr);
+-- 
+1.7.10.4
+
+
+

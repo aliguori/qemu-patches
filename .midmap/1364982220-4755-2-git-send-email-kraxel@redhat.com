@@ -1,0 +1,1 @@
+../usb-patch-queue/v1.1365007410/0001-usb-redir-Fix-crash-on-migration-with-no-client-connected.patch

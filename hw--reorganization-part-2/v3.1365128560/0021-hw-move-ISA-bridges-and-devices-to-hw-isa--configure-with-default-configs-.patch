@@ -1,0 +1,128 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: 
+Date: Thu,  4 Apr 2013 21:23:01 +0200
+Message-id: 1365103395-11547-22-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 21/35] hw: move ISA bridges and devices to hw/isa/,
+ configure with default-configs/
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ default-configs/i386-softmmu.mak     | 1 +
+ default-configs/mips-softmmu.mak     | 1 +
+ default-configs/mips64-softmmu.mak   | 1 +
+ default-configs/mips64el-softmmu.mak | 1 +
+ default-configs/mipsel-softmmu.mak   | 1 +
+ default-configs/x86_64-softmmu.mak   | 1 +
+ hw/i386/Makefile.objs                | 2 +-
+ hw/isa/Makefile.objs                 | 2 ++
+ hw/{ => isa}/lpc_ich9.c              | 0
+ hw/{ => isa}/vt82c686.c              | 0
+ hw/mips/Makefile.objs                | 2 +-
+ 11 files changed, 10 insertions(+), 2 deletions(-)
+ rename hw/{ => isa}/lpc_ich9.c (100%)
+ rename hw/{ => isa}/vt82c686.c (100%)
+
+diff --git a/default-configs/i386-softmmu.mak b/default-configs/i386-softmmu.mak
+index 9d852ff..717c8f4 100644
+--- a/default-configs/i386-softmmu.mak
++++ b/default-configs/i386-softmmu.mak
+@@ -35,3 +35,4 @@ CONFIG_WDT_IB700=y
+ CONFIG_PC_SYSFW=y
+ CONFIG_XEN_I386=$(CONFIG_XEN)
+ CONFIG_ISA_DEBUG=y
++CONFIG_LPC_ICH9=y
+diff --git a/default-configs/mips-softmmu.mak b/default-configs/mips-softmmu.mak
+index 2b48452..b764360 100644
+--- a/default-configs/mips-softmmu.mak
++++ b/default-configs/mips-softmmu.mak
+@@ -33,3 +33,4 @@ CONFIG_G364FB=y
+ CONFIG_I8259=y
+ CONFIG_JAZZ_LED=y
+ CONFIG_MC146818RTC=y
++CONFIG_VT82C686=y
+diff --git a/default-configs/mips64-softmmu.mak b/default-configs/mips64-softmmu.mak
+index 5713320..0e4e65d 100644
+--- a/default-configs/mips64-softmmu.mak
++++ b/default-configs/mips64-softmmu.mak
+@@ -33,3 +33,4 @@ CONFIG_G364FB=y
+ CONFIG_I8259=y
+ CONFIG_JAZZ_LED=y
+ CONFIG_MC146818RTC=y
++CONFIG_VT82C686=y
+diff --git a/default-configs/mips64el-softmmu.mak b/default-configs/mips64el-softmmu.mak
+index 096dc80..0a6c4f7 100644
+--- a/default-configs/mips64el-softmmu.mak
++++ b/default-configs/mips64el-softmmu.mak
+@@ -35,3 +35,4 @@ CONFIG_G364FB=y
+ CONFIG_I8259=y
+ CONFIG_JAZZ_LED=y
+ CONFIG_MC146818RTC=y
++CONFIG_VT82C686=y
+diff --git a/default-configs/mipsel-softmmu.mak b/default-configs/mipsel-softmmu.mak
+index 5509f0e..9f9c6da 100644
+--- a/default-configs/mipsel-softmmu.mak
++++ b/default-configs/mipsel-softmmu.mak
+@@ -33,3 +33,4 @@ CONFIG_G364FB=y
+ CONFIG_I8259=y
+ CONFIG_JAZZ_LED=y
+ CONFIG_MC146818RTC=y
++CONFIG_VT82C686=y
+diff --git a/default-configs/x86_64-softmmu.mak b/default-configs/x86_64-softmmu.mak
+index 760d51e..31de945 100644
+--- a/default-configs/x86_64-softmmu.mak
++++ b/default-configs/x86_64-softmmu.mak
+@@ -35,3 +35,4 @@ CONFIG_WDT_IB700=y
+ CONFIG_PC_SYSFW=y
+ CONFIG_XEN_I386=$(CONFIG_XEN)
+ CONFIG_ISA_DEBUG=y
++CONFIG_LPC_ICH9=y
+diff --git a/hw/i386/Makefile.objs b/hw/i386/Makefile.objs
+index 5e91d1e..af7f4b1 100644
+--- a/hw/i386/Makefile.objs
++++ b/hw/i386/Makefile.objs
+@@ -2,7 +2,7 @@ obj-y += apic_common.o apic.o
+ obj-y += sga.o ioapic_common.o ioapic.o piix_pci.o
+ obj-y += vmport.o
+ obj-y += debugexit.o
+-obj-y += lpc_ich9.o q35.o
++obj-y += q35.o
+ obj-y += kvm/
+ obj-y += pc-testdev.o
+ 
+diff --git a/hw/isa/Makefile.objs b/hw/isa/Makefile.objs
+index ad3643b..193746a 100644
+--- a/hw/isa/Makefile.objs
++++ b/hw/isa/Makefile.objs
+@@ -4,4 +4,6 @@ common-obj-$(CONFIG_I82378) += i82378.o
+ common-obj-$(CONFIG_ISA_MMIO) += isa_mmio.o
+ common-obj-$(CONFIG_PC87312) += pc87312.o
+ common-obj-$(CONFIG_PIIX4) += piix4.o
++common-obj-$(CONFIG_VT82C686) += vt82c686.o
+ 
++obj-$(CONFIG_LPC_ICH9) += lpc_ich9.o
+diff --git a/hw/lpc_ich9.c b/hw/isa/lpc_ich9.c
+similarity index 100%
+rename from hw/lpc_ich9.c
+rename to hw/isa/lpc_ich9.c
+diff --git a/hw/vt82c686.c b/hw/isa/vt82c686.c
+similarity index 100%
+rename from hw/vt82c686.c
+rename to hw/isa/vt82c686.c
+diff --git a/hw/mips/Makefile.objs b/hw/mips/Makefile.objs
+index e173a2d..af4d1f9 100644
+--- a/hw/mips/Makefile.objs
++++ b/hw/mips/Makefile.objs
+@@ -1,5 +1,5 @@
+ obj-y += gt64xxx.o
+-obj-$(CONFIG_FULONG) += bonito.o vt82c686.o
++obj-$(CONFIG_FULONG) += bonito.o
+ 
+ obj-y := $(addprefix ../,$(obj-y))
+ 
+-- 
+1.8.1.4
+
+
+

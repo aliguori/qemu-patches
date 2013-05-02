@@ -1,0 +1,1 @@
+../Fix-versatile_pci/v4.1365284665/0007-versatile_pci-Implement-the-correct-PCI-IRQ-mapping.patch

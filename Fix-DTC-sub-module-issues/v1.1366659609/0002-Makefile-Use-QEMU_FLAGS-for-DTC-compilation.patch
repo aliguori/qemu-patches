@@ -1,0 +1,40 @@
+From patches Mon Sep 17 00:00:00 2001
+From: peter.crosthwaite@xilinx.com
+To: qemu-devel@nongnu.org
+Cc: blauwirbel@gmail.com, pbonzini@redhat.com, peter.maydell@linaro.org
+Date: Mon, 22 Apr 2013 14:41:28 +1000
+Message-id: a621f6330c92cf5293789497203866915ec402bb.1366605200.git.peter.crosthwaite@xilinx.com
+Subject: [PATCH 2/2] Makefile: Use QEMU_FLAGS for DTC compilation
+
+From: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+
+Build DTC as QEMU is built. Fixes the issue with mingw build which can't
+handles DTC's default CFLAGS.
+
+Signed-off-by: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+---
+
+ Makefile |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/Makefile b/Makefile
+index c4847aa..385e314 100644
+--- a/Makefile
++++ b/Makefile
+@@ -146,10 +146,10 @@ $(SRC_PATH)/pixman/configure:
+ 	(cd $(SRC_PATH)/pixman; autoreconf -v --install)
+ 
+ DTC_MAKE_ARGS=-I$(SRC_PATH)/dtc VPATH=$(SRC_PATH)/dtc -C dtc V="$(V)" LIBFDT_srcdir=$(SRC_PATH)/dtc/libfdt
+-DTC_CFLAGS=$(CFLAGS) $(extra_cflags) -I$(BUILD_DIR)/dtc -I$(SRC_PATH)/dtc -I$(SRC_PATH)/dtc/libfdt
++DTC_CFLAGS=$(CFLAGS) $(QEMU_CFLAGS) -I$(BUILD_DIR)/dtc -I$(SRC_PATH)/dtc -I$(SRC_PATH)/dtc/libfdt
+ 
+ subdir-dtc:dtc/libfdt dtc/tests
+-	$(call quiet-command,$(MAKE) $(DTC_MAKE_ARGS) CPPFLAGS="$(DTC_CFLAGS)" LDFLAGS="$(LDFLAGS)" ARFLAGS="$(ARFLAGS)" CC="$(CC)" AR="$(AR)" LD="$(LD)" $(SUBDIR_MAKEFLAGS) libfdt/libfdt.a,)
++	$(call quiet-command,$(MAKE) $(DTC_MAKE_ARGS) CFLAGS="$(DTC_CFLAGS)" LDFLAGS="$(LDFLAGS)" ARFLAGS="$(ARFLAGS)" CC="$(CC)" AR="$(AR)" LD="$(LD)" $(SUBDIR_MAKEFLAGS) libfdt/libfdt.a,)
+ 
+ dtc/%:
+ 	mkdir -p $@
+-- 
+1.7.0.4
+
+

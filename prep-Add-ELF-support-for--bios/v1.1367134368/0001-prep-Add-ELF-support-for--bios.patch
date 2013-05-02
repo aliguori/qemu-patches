@@ -1,0 +1,75 @@
+From patches Mon Sep 17 00:00:00 2001
+From: =?utf-8?q?Andreas_F=C3=A4rber_=3Candreas=2Efaerber=40web=2Ede=3E?=
+To: Paolo Bonzini <pbonzini@redhat.com>, Alexander Graf <agraf@suse.de>,
+ =?UTF-8?B?QW5kcmVhcyBGw6RyYmVy?= <andreas.faerber@web.de>,
+ =?iso-8859-1?Q?Andreas_F=E4rber?= <andreas.faerber@web.de>,
+ qemu-devel@nongnu.org,
+ =?ISO-8859-1?Q?Andreas_F=E4rber?= <andreas.faerber@web.de>
+Cc: =?UTF-8?q?Andreas=20F=C3=A4rber?= <andreas.faerber@web.de>,
+ =?ISO-8859-1?Q?Herv=E9_?= =?ISO-8859-1?Q?Poussineau?=
+ <hpoussin@reactos.org>,
+ =?iso-8859-1?Q?Herv=E9_Poussineau?= <hpoussin@reactos.org>,
+ Alexander Graf <agraf@suse.de>, Paolo Bonzini <pbonzini@redhat.com>,
+ PReP <qemu-ppc@nongnu.org>, mark.cave-ayland@ilande.co.uk,
+ qemu-devel@nongnu.org, chouteau@adacore.com, hpoussin@openbios.org,
+ =?ISO-8859-1?Q?Herv=E9_Poussineau?= <hpoussin@reactos.org>,
+ "open list:PReP" <qemu-ppc@nongnu.org>
+Date: Sun, 28 Apr 2013 02:32:48 +0200
+Message-id: 1367109168-3673-1-git-send-email-andreas.faerber@web.de
+Subject: [PATCH 1/1] prep: Add ELF support for -bios
+
+This prepares for switching from OpenHack'Ware to OpenBIOS.
+
+Signed-off-by: Andreas Färber <andreas.faerber@web.de>
+Acked-by: Hervé Poussineau <hpoussin@reactos.org>
+---
+ hw/ppc/prep.c | 21 +++++++++++++--------
+ 1 file changed, 13 insertions(+), 8 deletions(-)
+
+diff --git a/hw/ppc/prep.c b/hw/ppc/prep.c
+index cceab3e..9bb0119 100644
+--- a/hw/ppc/prep.c
++++ b/hw/ppc/prep.c
+@@ -41,6 +41,7 @@
+ #include "sysemu/blockdev.h"
+ #include "sysemu/arch_init.h"
+ #include "exec/address-spaces.h"
++#include "elf.h"
+ 
+ //#define HARD_DEBUG_PPC_IO
+ //#define DEBUG_PPC_IO
+@@ -502,18 +503,22 @@ static void ppc_prep_init(QEMUMachineInitArgs *args)
+         bios_name = BIOS_FILENAME;
+     filename = qemu_find_file(QEMU_FILE_TYPE_BIOS, bios_name);
+     if (filename) {
+-        bios_size = get_image_size(filename);
++        bios_size = load_elf(filename, NULL, NULL, NULL,
++                             NULL, NULL, 1, ELF_MACHINE, 0);
++        if (bios_size < 0) {
++            bios_size = get_image_size(filename);
++            if (bios_size > 0 && bios_size <= BIOS_SIZE) {
++                hwaddr bios_addr;
++                bios_size = (bios_size + 0xfff) & ~0xfff;
++                bios_addr = (uint32_t)(-bios_size);
++                bios_size = load_image_targphys(filename, bios_addr, bios_size);
++            }
++        }
+     } else {
+         bios_size = -1;
+     }
+-    if (bios_size > 0 && bios_size <= BIOS_SIZE) {
+-        hwaddr bios_addr;
+-        bios_size = (bios_size + 0xfff) & ~0xfff;
+-        bios_addr = (uint32_t)(-bios_size);
+-        bios_size = load_image_targphys(filename, bios_addr, bios_size);
+-    }
+     if (bios_size < 0 || bios_size > BIOS_SIZE) {
+-        hw_error("qemu: could not load PPC PREP bios '%s'\n", bios_name);
++        fprintf(stderr, "qemu: could not load PPC PREP bios '%s'\n", bios_name);
+     }
+     if (filename) {
+         g_free(filename);
+-- 
+1.8.1.4
+
+

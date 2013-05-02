@@ -1,0 +1,12 @@
+0000-Block-patches.txt
+0001-block-Introduce-bdrv_writev_vmstate.patch
+0002-savevm-Implement-block_writev_buffer.patch
+0003-block-Introduce-bdrv_pwritev-for-qcow2_save_vmstate.patch
+0004-qemu-iotests-A-few-more-bdrv_pread-pwrite-tests.patch
+0005-qemu-iotests-Add-test-for--drive-options.patch
+0006-qemu-iotests-filter-QEMU_PROG-in-051out.patch
+0007-ide-refuse-WIN_READ_NATIVE_MAX-on-empty-device.patch
+0008-block-Add-support-for-Secure-Shell-ssh-block-device.patch
+0009-block-ssh-Use-libssh2_sftp_fsync-if-supported-by-libssh2-to-flush-to-disk.patch
+0010-iotests-Add-check--ssh-option-to-test-Secure-Shell-block-device.patch
+0011-rbd-add-an-asynchronous-flush.patch

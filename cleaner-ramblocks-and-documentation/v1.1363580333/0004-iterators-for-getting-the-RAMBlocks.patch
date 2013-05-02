@@ -1,0 +1,76 @@
+From patches Mon Sep 17 00:00:00 2001
+From: mrhines@linux.vnet.ibm.com
+To: Paolo Bonzini <pbonzini@redhat.com>, qemu-devel@nongnu.org,
+ mrhines@linux.vnet.ibm.com
+Cc: Anthony Liguori <aliguori@us.ibm.com>, mst@redhat.com,
+ qemu-devel@nongnu.org, Michael R Hines <mrhines@us.ibm.com>,
+ Bulent Abali <abali@us.ibm.com>, owasserm@redhat.com, pbonzini@redhat.com,
+ Gokul B Kandiraju <gokul@us.ibm.com>
+Date: Sun, 17 Mar 2013 23:18:57 -0400
+Message-id: 1363576743-6146-5-git-send-email-mrhines@linux.vnet.ibm.com
+Subject: [PATCH 04/10] iterators for getting the RAMBlocks
+
+From: "Michael R. Hines" <mrhines@us.ibm.com>
+
+This introduces:
+1. qemu_ram_foreach_block
+2. qemu_ram_count_blocks
+
+Both used in communicating the RAMBlocks
+to each side for later memory registration.
+
+Signed-off-by: Michael R. Hines <mrhines@us.ibm.com>
+---
+ exec.c                    |   21 +++++++++++++++++++++
+ include/exec/cpu-common.h |    6 ++++++
+ 2 files changed, 27 insertions(+)
+
+diff --git a/exec.c b/exec.c
+index 8a6aac3..a985da8 100644
+--- a/exec.c
++++ b/exec.c
+@@ -2629,3 +2629,24 @@ bool cpu_physical_memory_is_io(hwaddr phys_addr)
+              memory_region_is_romd(section->mr));
+ }
+ #endif
++
++void qemu_ram_foreach_block(RAMBlockIterFunc func, void *opaque)
++{
++    RAMBlock *block;
++
++    QTAILQ_FOREACH(block, &ram_list.blocks, next) {
++        func(block->host, block->offset, block->length, opaque);
++    }
++}
++
++int qemu_ram_count_blocks(void)
++{
++    RAMBlock *block;
++    int total = 0;
++
++    QTAILQ_FOREACH(block, &ram_list.blocks, next) {
++        total++;
++    }
++
++    return total;
++}
+diff --git a/include/exec/cpu-common.h b/include/exec/cpu-common.h
+index 2e5f11f..aea3fe0 100644
+--- a/include/exec/cpu-common.h
++++ b/include/exec/cpu-common.h
+@@ -119,6 +119,12 @@ extern struct MemoryRegion io_mem_rom;
+ extern struct MemoryRegion io_mem_unassigned;
+ extern struct MemoryRegion io_mem_notdirty;
+ 
++typedef void  (RAMBlockIterFunc)(void *host_addr, 
++    ram_addr_t offset, ram_addr_t length, void *opaque); 
++
++void qemu_ram_foreach_block(RAMBlockIterFunc func, void *opaque);
++int qemu_ram_count_blocks(void);
++
+ #endif
+ 
+ #endif /* !CPU_COMMON_H */
+-- 
+1.7.10.4
+

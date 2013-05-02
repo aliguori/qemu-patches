@@ -1,0 +1,161 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+To: edgar.iglesias@gmail.com, qemu-devel@nongnu.org
+Cc: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+Date: Wed,  3 Apr 2013 15:17:14 +1000
+Message-id: 2a909eb5a8caac5a3903c0a70458e737129c4914.1364965814.git.peter.crosthwaite@xilinx.com
+Subject: [PATCH 14/16] stream: Add flow control API
+
+Add basic flow control to stream. A stream slave may return short, indicating
+that it is not capable of accepting any more data at the present time. Polling
+or a callback can be used via the can_push() function to determine when the
+slave can receive again.
+
+Signed-off-by: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+---
+
+ hw/stream.c         |   13 +++++++++++--
+ hw/stream.h         |   33 ++++++++++++++++++++++++++++++---
+ hw/xilinx_axidma.c  |    3 ++-
+ hw/xilinx_axienet.c |    8 +++++---
+ 4 files changed, 48 insertions(+), 9 deletions(-)
+
+diff --git a/hw/stream.c b/hw/stream.c
+index a07d6a5..5397a8d 100644
+--- a/hw/stream.c
++++ b/hw/stream.c
+@@ -1,11 +1,20 @@
+ #include "hw/stream.h"
+ 
+-void
++size_t
+ stream_push(StreamSlave *sink, uint8_t *buf, size_t len, uint32_t *app)
+ {
+     StreamSlaveClass *k =  STREAM_SLAVE_GET_CLASS(sink);
+ 
+-    k->push(sink, buf, len, app);
++    return k->push(sink, buf, len, app);
++}
++
++bool
++stream_can_push(StreamSlave *sink, StreamCanPushNotifyFn notify,
++                void *notify_opaque)
++{
++    StreamSlaveClass *k =  STREAM_SLAVE_GET_CLASS(sink);
++
++    return k->can_push ? k->can_push(sink, notify, notify_opaque) : true;
+ }
+ 
+ static const TypeInfo stream_slave_info = {
+diff --git a/hw/stream.h b/hw/stream.h
+index f6137d6..ff2cb14 100644
+--- a/hw/stream.h
++++ b/hw/stream.h
+@@ -18,14 +18,41 @@ typedef struct StreamSlave {
+     Object Parent;
+ } StreamSlave;
+ 
++typedef void (*StreamCanPushNotifyFn)(void *opaque);
++
+ typedef struct StreamSlaveClass {
+     InterfaceClass parent;
+-
+-    void (*push)(StreamSlave *obj, unsigned char *buf, size_t len,
++    /**
++     * can push - determine if a stream slave is capable of accepting at least
++     * one byte of data. Returns false if cannot accept. If not implemented, the
++     * slave is assumed to always be capable of recieveing.
++     * @notify: Optional callback that the slave will call when the slave is
++     * capable of recieving again. Only called if false is returned.
++     * @notify_opaque: opaque data to pass to notify call.
++     */
++    bool (*can_push)(StreamSlave *obj, StreamCanPushNotifyFn notify,
++                     void *notify_opaque);
++    /**
++     * push - push data to a Stream slave. The number of bytes pushed is
++     * returned. If the slave short returns, the master must wait before trying
++     * again, the slave may continue to just return 0 waiting for the vm time to
++     * advance. The can_push() function can be used to trap the point in time
++     * where the slave is ready to recieve agai, otherwise polling on a QEMU
++     * timer will work.
++     * @obj: Stream slave to push to
++     * @buf: Data to write
++     * @len: Maximum number of bytes to write
++     */
++    size_t (*push)(StreamSlave *obj, unsigned char *buf, size_t len,
+                                                     uint32_t *app);
+ } StreamSlaveClass;
+ 
+-void
++size_t
+ stream_push(StreamSlave *sink, uint8_t *buf, size_t len, uint32_t *app);
+ 
++bool
++stream_can_push(StreamSlave *sink, StreamCanPushNotifyFn notify,
++                void *notify_opaque);
++
++
+ #endif /* STREAM_H */
+diff --git a/hw/xilinx_axidma.c b/hw/xilinx_axidma.c
+index 2bbfea1..80ce57f 100644
+--- a/hw/xilinx_axidma.c
++++ b/hw/xilinx_axidma.c
+@@ -381,7 +381,7 @@ static void xilinx_axidma_reset(DeviceState *dev)
+     }
+ }
+ 
+-static void
++static size_t
+ xilinx_axidma_data_stream_push(StreamSlave *obj, unsigned char *buf, size_t len,
+                                uint32_t *app)
+ {
+@@ -393,6 +393,7 @@ xilinx_axidma_data_stream_push(StreamSlave *obj, unsigned char *buf, size_t len,
+     }
+     stream_process_s2mem(s, buf, len, app);
+     stream_update_irq(s);
++    return len;
+ }
+ 
+ static uint64_t axidma_read(void *opaque, hwaddr addr,
+diff --git a/hw/xilinx_axienet.c b/hw/xilinx_axienet.c
+index 141d2ac..5c0ea59 100644
+--- a/hw/xilinx_axienet.c
++++ b/hw/xilinx_axienet.c
+@@ -813,7 +813,7 @@ static void eth_cleanup(NetClientState *nc)
+     g_free(s);
+ }
+ 
+-static void
++static size_t
+ xilinx_axienet_data_stream_push(StreamSlave *obj, uint8_t *buf, size_t size,
+                                 uint32_t *hdr)
+ {
+@@ -822,13 +822,13 @@ xilinx_axienet_data_stream_push(StreamSlave *obj, uint8_t *buf, size_t size,
+ 
+     /* TX enable ?  */
+     if (!(s->tc & TC_TX)) {
+-        return;
++        return size;
+     }
+ 
+     /* Jumbo or vlan sizes ?  */
+     if (!(s->tc & TC_JUM)) {
+         if (size > 1518 && size <= 1522 && !(s->tc & TC_VLAN)) {
+-            return;
++            return size;
+         }
+     }
+ 
+@@ -856,6 +856,8 @@ xilinx_axienet_data_stream_push(StreamSlave *obj, uint8_t *buf, size_t size,
+     s->stats.tx_bytes += size;
+     s->regs[R_IS] |= IS_TX_COMPLETE;
+     enet_update_irq(s);
++
++    return size;
+ }
+ 
+ static NetClientInfo net_xilinx_enet_info = {
+-- 
+1.7.0.4
+
+

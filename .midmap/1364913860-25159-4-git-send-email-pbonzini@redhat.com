@@ -1,0 +1,1 @@
+../trim-down-config-targetmak/v1.1364939055/0003-configure-move-CONFIG_QEMU_LDST_OPTIMIZATION-to-config-hostmak.patch

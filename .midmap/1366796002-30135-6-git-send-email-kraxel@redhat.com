@@ -1,0 +1,1 @@
+../console-qom-ify-consoles/v1.1366821197/0005-console-zap-ds-arg-from-register_displaychangelistener.patch

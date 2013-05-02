@@ -1,0 +1,1 @@
+../linux-user-fix-compile-error-due-to-stray-colon-at-end-of-ifdef-line/v1.1366569003/0001-linux-user-fix-compile-error-due-to-stray-colon-at-end-of-ifdef-line.patch

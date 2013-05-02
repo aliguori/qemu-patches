@@ -1,0 +1,1 @@
+../target-i386do-some-cleanups/v1.1366386739/0002-target-i386-smm_helper-replace-env-eip-with-EIP.patch

@@ -1,0 +1,1 @@
+../implement-power-chip/v2.1365182884/0003-vl-create-power-chip-device.patch

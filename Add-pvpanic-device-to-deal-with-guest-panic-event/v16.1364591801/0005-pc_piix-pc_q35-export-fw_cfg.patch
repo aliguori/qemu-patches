@@ -1,0 +1,131 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Hu Tao <hutao@cn.fujitsu.com>
+To: Paolo Bonzini <pbonzini@redhat.com>, qemu-devel <qemu-devel@nongnu.org>,
+ Luiz Capitulino <lcapitulino@redhat.com>, Wen Congyang <wency@cn.fujitsu.com>,
+ Jan Kiszka <jan.kiszka@siemens.com>,
+ KAMEZAWA Hiroyuki <kamezawa.hiroyu@jp.fujitsu.com>,
+ Anthony Liguori <aliguori@us.ibm.com>, "Michael S. Tsirkin" <mst@redhat.com>,
+ Gleb Natapov <gleb@redhat.com>, Peter Maydell <peter.maydell@linaro.org>,
+ Blue Swirl <blauwirbel@gmail.com>, Alexander Graf <agraf@suse.de>,
+ Christian Borntraeger <borntraeger@de.ibm.com>,
+ Sasha Levin <levinsasha928@gmail.com>, Orit Wasserman <owasserm@redhat.com>,
+ Andrew Jones <drjones@redhat.com>, Markus Armbruster <armbru@redhat.com>,
+ Stefan Hajnoczi <stefanha@redhat.com>, Eric Blake <eblake@redhat.com>,
+ Juan Quintela <quintela@redhat.com>, Hu Tao <hutao@cn.fujitsu.com>,
+ "Daniel P. Berrange" <berrange@redhat.com>,
+ Marcelo Tosatti <mtosatti@redhat.com>,
+ Alex Williamson <alex.williamson@redhat.com>
+Cc: qemu-devel <qemu-devel@nongnu.org>,
+ Luiz Capitulino <lcapitulino@redhat.com>, Wen Congyang <wency@cn.fujitsu.com>,
+ Jan Kiszka <jan.kiszka@siemens.com>,
+ KAMEZAWA Hiroyuki <kamezawa.hiroyu@jp.fujitsu.com>,
+ Anthony Liguori <aliguori@us.ibm.com>, "Michael S. Tsirkin" <mst@redhat.com>,
+ Gleb Natapov <gleb@redhat.com>, Peter Maydell <peter.maydell@linaro.org>,
+ Blue Swirl <blauwirbel@gmail.com>, Alexander Graf <agraf@suse.de>,
+ Christian Borntraeger <borntraeger@de.ibm.com>,
+ Sasha Levin <levinsasha928@gmail.com>, Orit Wasserman <owasserm@redhat.com>,
+ Andrew Jones <drjones@redhat.com>, Markus Armbruster <armbru@redhat.com>,
+ Stefan Hajnoczi <stefanha@redhat.com>, Eric Blake <eblake@redhat.com>,
+ Juan Quintela <quintela@redhat.com>,
+ "Daniel P. Berrange" <berrange@redhat.com>,
+ Marcelo Tosatti <mtosatti@redhat.com>,
+ Alex Williamson <alex.williamson@redhat.com>
+Date: Fri, 29 Mar 2013 16:16:46 +0800
+Message-id: 6cafd3eee5c1897db770a9d51c8c1de5e20a1c74.1364541739.git.hutao@cn.fujitsu.com
+Subject: [PATCH 5/6] pc_piix, pc_q35: export fw_cfg
+
+This lets other devices pass informations to seabios.
+
+Signed-off-by: Hu Tao <hutao@cn.fujitsu.com>
+---
+ hw/i386/pc_piix.c | 7 ++++---
+ hw/i386/pc_q35.c  | 9 ++++++---
+ hw/pc.h           | 6 ++++++
+ 3 files changed, 16 insertions(+), 6 deletions(-)
+
+diff --git a/hw/i386/pc_piix.c b/hw/i386/pc_piix.c
+index 0abc9f1..7a9d9a8 100644
+--- a/hw/i386/pc_piix.c
++++ b/hw/i386/pc_piix.c
+@@ -54,6 +54,8 @@ static const int ide_iobase[MAX_IDE_BUS] = { 0x1f0, 0x170 };
+ static const int ide_iobase2[MAX_IDE_BUS] = { 0x3f6, 0x376 };
+ static const int ide_irq[MAX_IDE_BUS] = { 14, 15 };
+ 
++void *fw_cfg_piix;
++
+ /* PC hardware initialisation */
+ static void pc_init1(MemoryRegion *system_memory,
+                      MemoryRegion *system_io,
+@@ -84,7 +86,6 @@ static void pc_init1(MemoryRegion *system_memory,
+     MemoryRegion *ram_memory;
+     MemoryRegion *pci_memory;
+     MemoryRegion *rom_memory;
+-    void *fw_cfg = NULL;
+ 
+     pc_cpus_init(cpu_model);
+     pc_acpi_init("acpi-dsdt.aml");
+@@ -112,7 +113,7 @@ static void pc_init1(MemoryRegion *system_memory,
+ 
+     /* allocate ram and load rom/bios */
+     if (!xen_enabled()) {
+-        fw_cfg = pc_memory_init(system_memory,
++        fw_cfg_piix = pc_memory_init(system_memory,
+                        kernel_filename, kernel_cmdline, initrd_filename,
+                        below_4g_mem_size, above_4g_mem_size,
+                        rom_memory, &ram_memory);
+@@ -210,7 +211,7 @@ static void pc_init1(MemoryRegion *system_memory,
+         /* TODO: Populate SPD eeprom data.  */
+         smbus = piix4_pm_init(pci_bus, piix3_devfn + 3, 0xb100,
+                               gsi[9], *smi_irq,
+-                              kvm_enabled(), fw_cfg);
++                              kvm_enabled(), fw_cfg_piix);
+         smbus_eeprom_init(smbus, 8, NULL, 0);
+     }
+ 
+diff --git a/hw/i386/pc_q35.c b/hw/i386/pc_q35.c
+index 4f5f347..ce7798c 100644
+--- a/hw/i386/pc_q35.c
++++ b/hw/i386/pc_q35.c
+@@ -45,6 +45,8 @@
+ /* ICH9 AHCI has 6 ports */
+ #define MAX_SATA_PORTS     6
+ 
++void *fw_cfg_q35;
++
+ /* set CMOS shutdown status register (index 0xF) as S3_resume(0xFE)
+  *    BIOS will read it and start S3 resume at POST Entry */
+ static void pc_cmos_set_s3_resume(void *opaque, int irq, int level)
+@@ -111,9 +113,10 @@ static void pc_q35_init(QEMUMachineInitArgs *args)
+ 
+     /* allocate ram and load rom/bios */
+     if (!xen_enabled()) {
+-        pc_memory_init(get_system_memory(), kernel_filename, kernel_cmdline,
+-                       initrd_filename, below_4g_mem_size, above_4g_mem_size,
+-                       rom_memory, &ram_memory);
++        fw_cfg_q35 = pc_memory_init(get_system_memory(), kernel_filename,
++                                    kernel_cmdline, initrd_filename,
++                                    below_4g_mem_size, above_4g_mem_size,
++                                    rom_memory, &ram_memory);
+     }
+ 
+     /* irq lines */
+diff --git a/hw/pc.h b/hw/pc.h
+index 8e1dd4c..d42b76b 100644
+--- a/hw/pc.h
++++ b/hw/pc.h
+@@ -145,6 +145,12 @@ PCIBus *i440fx_init(PCII440FXState **pi440fx_state, int *piix_devfn,
+ extern PCIDevice *piix4_dev;
+ int piix4_init(PCIBus *bus, ISABus **isa_bus, int devfn);
+ 
++/* pc_piix.c */
++extern void *fw_cfg_piix;
++
++/* pc_q35.c */
++extern void *fw_cfg_q35;
++
+ /* vga.c */
+ enum vga_retrace_method {
+     VGA_RETRACE_DUMB,
+-- 
+1.8.1.4
+

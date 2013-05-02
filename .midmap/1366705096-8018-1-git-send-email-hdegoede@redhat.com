@@ -1,0 +1,1 @@
+../qxl-Call-spice_qxl_driver_unload-from-qxl_enter_vga_mode/v1.1366730296/0001-qxl-Call-spice_qxl_driver_unload-from-qxl_enter_vga_mode.patch

@@ -1,0 +1,37 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Alon Levy <alevy@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: mlureau@redhat.com
+Date: Mon, 22 Apr 2013 18:04:31 +0300
+Message-id: 1366643098-2566-2-git-send-email-alevy@redhat.com
+Subject: [PATCH 01/28] libcacard: correct T0 historical bytes size
+
+From: Marc-André Lureau <marcandre.lureau@gmail.com>
+
+The VCARD_ATR_PREFIX macro adds a prefix of 6 characters only.
+
+pcsc_scan was complaining before the patch:
+
++ Historical bytes: 56 43 41 52 44 5F 4E 53 53
+ ERROR! ATR is truncated: 2 byte(s) is/are missing
+---
+ libcacard/vcardt.h | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/libcacard/vcardt.h b/libcacard/vcardt.h
+index d3e9522..538bdde 100644
+--- a/libcacard/vcardt.h
++++ b/libcacard/vcardt.h
+@@ -26,7 +26,7 @@ typedef struct VCardEmulStruct VCardEmul;
+ #define MAX_CHANNEL 4
+ 
+ /* create an ATR with appropriate historical bytes */
+-#define VCARD_ATR_PREFIX(size) 0x3b, 0x68+(size), 0x00, 0xff, \
++#define VCARD_ATR_PREFIX(size) 0x3b, 0x66+(size), 0x00, 0xff, \
+                                'V', 'C', 'A', 'R', 'D', '_'
+ 
+ 
+-- 
+1.8.2
+
+

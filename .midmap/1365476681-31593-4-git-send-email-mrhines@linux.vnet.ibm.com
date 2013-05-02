@@ -1,0 +1,1 @@
+../new-formal-protocol-design/v1.1365480269/0003-comprehensive-protocol-documentation.patch

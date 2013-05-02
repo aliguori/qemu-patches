@@ -1,0 +1,1 @@
+../make-audio-card-configuration-uniform/v1.1366328636/0005-audio-replace-audio-card-configuration-with-default-configs.patch

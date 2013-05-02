@@ -1,0 +1,1 @@
+../usb-host-raise-libusbx-minimum-version-to-1013/v1.1366305597/0001-usb-host-raise-libusbx-minimum-version-to-1013.patch

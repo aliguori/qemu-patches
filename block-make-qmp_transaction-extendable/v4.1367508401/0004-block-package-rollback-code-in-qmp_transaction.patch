@@ -1,0 +1,49 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Wenchao Xia <xiawenc@linux.vnet.ibm.com>
+To: qemu-devel@nongnu.org
+Cc: kwolf@redhat.com, stefanha@gmail.com,
+ Wenchao Xia <xiawenc@linux.vnet.ibm.com>, dietmar@proxmox.com,
+ pbonzini@redhat.com
+Date: Thu,  2 May 2013 10:26:45 +0800
+Message-id: 1367461606-7554-5-git-send-email-xiawenc@linux.vnet.ibm.com
+Subject: [PATCH 4/5] block: package rollback code in qmp_transaction()
+
+Signed-off-by: Wenchao Xia <xiawenc@linux.vnet.ibm.com>
+---
+ blockdev.c |   11 ++++++++---
+ 1 files changed, 8 insertions(+), 3 deletions(-)
+
+diff --git a/blockdev.c b/blockdev.c
+index 26bc78e..77adec8 100644
+--- a/blockdev.c
++++ b/blockdev.c
+@@ -882,6 +882,13 @@ static void external_snapshot_commit(BlkTransactionStates *states)
+                 NULL);
+ }
+ 
++static void external_snapshot_rollback(BlkTransactionStates *states)
++{
++    if (states->new_bs) {
++        bdrv_delete(states->new_bs);
++    }
++}
++
+ /*
+  * 'Atomic' group snapshots.  The snapshots are taken as a set, and if any fail
+  *  then we do not pivot any of the devices in the group, and abandon the
+@@ -939,9 +946,7 @@ delete_and_fail:
+     * the original bs for all images
+     */
+     QSIMPLEQ_FOREACH(states, &snap_bdrv_states, entry) {
+-        if (states->new_bs) {
+-             bdrv_delete(states->new_bs);
+-        }
++        external_snapshot_rollback(states);
+     }
+ exit:
+     QSIMPLEQ_FOREACH_SAFE(states, &snap_bdrv_states, entry, next) {
+-- 
+1.7.1
+
+
+

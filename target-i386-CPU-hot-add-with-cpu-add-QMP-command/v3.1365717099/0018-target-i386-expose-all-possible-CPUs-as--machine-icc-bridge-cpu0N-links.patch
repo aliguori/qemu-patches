@@ -1,0 +1,166 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Igor Mammedov <imammedo@redhat.com>
+To: Eduardo Habkost <ehabkost@redhat.com>, Igor Mammedov <imammedo@redhat.com>,
+ qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, ehabkost@redhat.com,
+ claudio.fontana@huawei.com, qemu-devel@nongnu.org, aderumier@odiso.com,
+ lcapitulino@redhat.com, jfrei@linux.vnet.ibm.com, yang.z.zhang@intel.com,
+ pbonzini@redhat.com, eblake@redhat.com, afaerber@suse.de,
+ lig.fnst@cn.fujitsu.com, rth@twiddle.net
+Date: Thu, 11 Apr 2013 16:51:57 +0200
+Message-id: 1365691918-30594-19-git-send-email-imammedo@redhat.com
+Subject: [PATCH 18/19] target-i386: expose all possible CPUs as
+ /machine/icc-bridge/cpu[0..N] links
+
+... and leave links for not present CPUs empty.
+
+It will allow users to query for possible APIC IDs and use them
+with cpu-add QMP command.
+
+Signed-off-by: Igor Mammedov <imammedo@redhat.com>
+---
+v2:
+ * s/get_firmware_id/get_arch_id/ due to rebase
+ * rename cpu_add_notifier to cpu_added_notifier &
+   icc_bridge_cpu_add_req -> icc_bridge_cpued_add_req
+---
+ hw/cpu/icc_bus.c          | 46 ++++++++++++++++++++++++++++++++++++++++++++++
+ hw/i386/pc.c              |  9 +++++++--
+ include/hw/i386/icc_bus.h |  2 ++
+ 3 files changed, 55 insertions(+), 2 deletions(-)
+
+diff --git a/hw/cpu/icc_bus.c b/hw/cpu/icc_bus.c
+index ab9623d..5c0b9d4 100644
+--- a/hw/cpu/icc_bus.c
++++ b/hw/cpu/icc_bus.c
+@@ -18,6 +18,7 @@
+  */
+ #include "hw/i386/icc_bus.h"
+ #include "hw/sysbus.h"
++#include "sysemu/sysemu.h"
+ 
+ static void icc_bus_initfn(Object *obj)
+ {
+@@ -61,15 +62,39 @@ typedef struct ICCBridgeState {
+     SysBusDevice busdev;
+     MemoryRegion apic_container;
+     MemoryRegion ioapic_container;
++    Notifier cpu_added_notifier;
++    Object **links;
+ } ICCBridgeState;
+ #define ICC_BRIGDE(obj) OBJECT_CHECK(ICCBridgeState, (obj), TYPE_ICC_BRIDGE)
+ 
+ 
++void icc_bridge_set_cpu_link(Object *bridge, Object *cpu_obj)
++{
++    gchar *name;
++    Error *error = NULL;
++    CPUState *cpu = CPU(cpu_obj);
++    int64_t id = CPU_GET_CLASS(cpu)->get_arch_id(cpu);
++
++    name = g_strdup_printf("cpu[%" PRIu32 "]", x86_cpu_apic_id_from_index(id));
++    object_property_set_link(bridge, cpu_obj, name, &error);
++    g_free(name);
++
++    g_assert(error == NULL);
++}
++
++static void icc_bridge_cpu_added_req(Notifier *n, void *opaque)
++{
++    ICCBridgeState *s = container_of(n, ICCBridgeState, cpu_added_notifier);
++
++    icc_bridge_set_cpu_link(OBJECT(s), OBJECT(opaque));
++}
++
+ static void icc_bridge_initfn(Object *obj)
+ {
+     ICCBridgeState *s = ICC_BRIGDE(obj);
+     SysBusDevice *sb = SYS_BUS_DEVICE(obj);
+     ICCBus *ibus;
++    int i;
+ 
+     ibus = ICC_BUS(qbus_create(TYPE_ICC_BUS, DEVICE(obj), "icc-bus"));
+ 
+@@ -85,12 +110,33 @@ static void icc_bridge_initfn(Object *obj)
+     memory_region_init(&s->ioapic_container, "icc-ioapic-container", 0x1000);
+     sysbus_init_mmio(sb, &s->ioapic_container);
+     ibus->ioapic_address_space = &s->ioapic_container;
++
++    s->links = g_malloc0(sizeof(Object *) * max_cpus);
++    for (i = 0; i < max_cpus; i++) {
++        gchar *cpu_name;
++
++        cpu_name = g_strdup_printf("cpu[%" PRIu32 "]",
++                                   x86_cpu_apic_id_from_index(i));
++        object_property_add_link(obj, cpu_name, TYPE_CPU, &s->links[i], NULL);
++        g_free(cpu_name);
++    }
++
++    s->cpu_added_notifier.notify = icc_bridge_cpu_added_req;
++    qemu_register_cpu_added_notifier(&s->cpu_added_notifier);
++}
++
++static void icc_bridge_fini(Object *obj)
++{
++    ICCBridgeState *s = ICC_BRIGDE(obj);
++
++    g_free(s->links);
+ }
+ 
+ static const TypeInfo icc_bridge_info = {
+     .name  = "icc-bridge",
+     .parent = TYPE_SYS_BUS_DEVICE,
+     .instance_init  = icc_bridge_initfn,
++    .instance_finalize  = icc_bridge_fini,
+     .instance_size  = sizeof(ICCBridgeState),
+ };
+ 
+diff --git a/hw/i386/pc.c b/hw/i386/pc.c
+index 6d5e164..ada235c 100644
+--- a/hw/i386/pc.c
++++ b/hw/i386/pc.c
+@@ -870,7 +870,8 @@ void pc_acpi_smi_interrupt(void *opaque, int irq, int level)
+     }
+ }
+ 
+-static X86CPU *pc_new_cpu(const char *cpu_model, int64_t apic_id, Error **errp)
++static X86CPU *pc_new_cpu(const char *cpu_model, int64_t apic_id,
++                          SysBusDevice *icc_bridge, Error **errp)
+ {
+     X86CPU *cpu;
+ 
+@@ -882,6 +883,10 @@ static X86CPU *pc_new_cpu(const char *cpu_model, int64_t apic_id, Error **errp)
+     object_property_set_int(OBJECT(cpu), apic_id, "apic-id", errp);
+     object_property_set_bool(OBJECT(cpu), true, "realized", errp);
+ 
++    if (icc_bridge != NULL) {
++        icc_bridge_set_cpu_link(OBJECT(icc_bridge), OBJECT(cpu));
++    }
++
+     if (error_is_set(errp)) {
+         if (cpu != NULL) {
+             object_unref(OBJECT(cpu));
+@@ -911,7 +916,7 @@ void pc_cpus_init(const char *cpu_model)
+                                                  TYPE_ICC_BRIDGE, NULL));
+ 
+     for (i = 0; i < smp_cpus; i++) {
+-        cpu = pc_new_cpu(cpu_model, x86_cpu_apic_id_from_index(i), &error);
++        cpu = pc_new_cpu(cpu_model, x86_cpu_apic_id_from_index(i), ib, &error);
+         if (error) {
+             fprintf(stderr, "%s\n", error_get_pretty(error));
+             error_free(error);
+diff --git a/include/hw/i386/icc_bus.h b/include/hw/i386/icc_bus.h
+index 69a0278..bc31cd9 100644
+--- a/include/hw/i386/icc_bus.h
++++ b/include/hw/i386/icc_bus.h
+@@ -49,5 +49,7 @@ typedef struct ICCDeviceClass {
+ 
+ #define TYPE_ICC_BRIDGE "icc-bridge"
+ 
++void icc_bridge_set_cpu_link(Object *bridge, Object *cpu);
++
+ #endif /* CONFIG_USER_ONLY */
+ #endif
+-- 
+1.8.2
+

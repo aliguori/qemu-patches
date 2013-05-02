@@ -1,0 +1,1 @@
+../SCSI-patches-for-2012-08-27/v1.1343426547/0018-scsi-disk-rd-wr-vr-protect-0-is-an-error.patch

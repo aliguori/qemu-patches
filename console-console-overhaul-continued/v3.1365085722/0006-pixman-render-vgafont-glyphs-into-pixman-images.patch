@@ -1,0 +1,88 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Gerd Hoffmann <kraxel@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, Gerd Hoffmann <kraxel@redhat.com>
+Date: Thu, 4 Apr 2013 09:28:48 +0200
+Message-id: 1365060546-24638-7-git-send-email-kraxel@redhat.com
+Subject: [PATCH 06/24] pixman: render vgafont glyphs into pixman images
+
+Add helper functions to create pixman mask images for glyphs
+and to render these glyphs into a pixman image.
+
+Signed-off-by: Gerd Hoffmann <kraxel@redhat.com>
+---
+ include/ui/qemu-pixman.h |    7 +++++++
+ ui/qemu-pixman.c         |   43 +++++++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 50 insertions(+)
+
+diff --git a/include/ui/qemu-pixman.h b/include/ui/qemu-pixman.h
+index b0f09b5..f012ec5 100644
+--- a/include/ui/qemu-pixman.h
++++ b/include/ui/qemu-pixman.h
+@@ -44,5 +44,12 @@ pixman_image_t *qemu_pixman_mirror_create(pixman_format_code_t format,
+ void qemu_pixman_image_unref(pixman_image_t *image);
+ 
+ pixman_color_t qemu_pixman_color(PixelFormat *pf, uint32_t color);
++pixman_image_t *qemu_pixman_glyph_from_vgafont(int height, const uint8_t *font,
++                                               unsigned int ch);
++void qemu_pixman_glyph_render(pixman_image_t *glyph,
++                              pixman_image_t *surface,
++                              pixman_color_t *fgcol,
++                              pixman_color_t *bgcol,
++                              int x, int y, int cw, int ch);
+ 
+ #endif /* QEMU_PIXMAN_H */
+diff --git a/ui/qemu-pixman.c b/ui/qemu-pixman.c
+index be551e0..254bd8c 100644
+--- a/ui/qemu-pixman.c
++++ b/ui/qemu-pixman.c
+@@ -90,3 +90,46 @@ pixman_color_t qemu_pixman_color(PixelFormat *pf, uint32_t color)
+     c.alpha = ((color & pf->amask) >> pf->ashift) << (16 - pf->abits);
+     return c;
+ }
++
++pixman_image_t *qemu_pixman_glyph_from_vgafont(int height, const uint8_t *font,
++                                               unsigned int ch)
++{
++    pixman_image_t *glyph;
++    uint8_t *data;
++    bool bit;
++    int x, y;
++
++    glyph = pixman_image_create_bits(PIXMAN_a8, 8, height,
++                                     NULL, 0);
++    data = (uint8_t *)pixman_image_get_data(glyph);
++
++    font += height * ch;
++    for (y = 0; y < height; y++, font++) {
++        for (x = 0; x < 8; x++, data++) {
++            bit = (*font) & (1 << (7-x));
++            *data = bit ? 0xff : 0x00;
++        }
++    }
++    return glyph;
++}
++
++void qemu_pixman_glyph_render(pixman_image_t *glyph,
++                              pixman_image_t *surface,
++                              pixman_color_t *fgcol,
++                              pixman_color_t *bgcol,
++                              int x, int y, int cw, int ch)
++{
++    pixman_image_t *ifg = pixman_image_create_solid_fill(fgcol);
++    pixman_image_t *ibg = pixman_image_create_solid_fill(bgcol);
++
++    pixman_image_composite(PIXMAN_OP_SRC, ibg, NULL, surface,
++                           0, 0, 0, 0,
++                           cw * x, ch * y,
++                           cw, ch);
++    pixman_image_composite(PIXMAN_OP_OVER, ifg, glyph, surface,
++                           0, 0, 0, 0,
++                           cw * x, ch * y,
++                           cw, ch);
++    pixman_image_unref(ifg);
++    pixman_image_unref(ibg);
++}
+-- 
+1.7.9.7
+

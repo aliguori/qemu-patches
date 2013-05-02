@@ -1,0 +1,114 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Wenchao Xia <xiawenc@linux.vnet.ibm.com>
+To: qemu-devel@nongnu.org
+Cc: kwolf@redhat.com, pbonzini@redhat.com,
+ Wenchao Xia <xiawenc@linux.vnet.ibm.com>, dietmar@proxmox.com,
+ stefanha@gmail.com
+Date: Mon,  1 Apr 2013 18:01:29 +0800
+Message-id: 1364810491-21404-2-git-send-email-xiawenc@linux.vnet.ibm.com
+Subject: [PATCH 1/3] block: add function deappend()
+
+  This function should be used to remove contents of active *bs on the
+top of backing chain, when top *bs was committed to bs->backing_hd or
+*bs was just appended.
+
+Signed-off-by: Wenchao Xia <xiawenc@linux.vnet.ibm.com>
+---
+ block.c               |   66 +++++++++++++++++++++++++++++++++++++++++++++++++
+ include/block/block.h |    1 +
+ 2 files changed, 67 insertions(+), 0 deletions(-)
+
+diff --git a/block.c b/block.c
+index 0ae2e93..0cacc2f 100644
+--- a/block.c
++++ b/block.c
+@@ -1536,6 +1536,72 @@ void bdrv_append(BlockDriverState *bs_new, BlockDriverState *bs_top)
+             bs_new->drv ? bs_new->drv->format_name : "");
+ }
+ 
++/*
++ * Remove top bs contents in the image backing chain while the chain is live.
++ * Required fields on the top layer will be kept to let qemu continue use
++ * @bs_top.
++ *
++ * This will modify the BlockDriverState fields, and swap contents between
++ * bs_top and bs_top->backing_hd. Both bs_top and bs_top->backing_hd are
++ * modified, and bs_top->backing_hd will be deleted.
++ *
++ * This function does not delete any image files. If @bs_top have no backing
++ * image, the function will do nothing.
++ *
++ * Warning: Caller must guarantee @bs_top have same contents with its backing
++ * image, that is, when @bs_top was just appended or committed to
++ * bs_top->backing_hd.
++ */
++void bdrv_deappend(BlockDriverState *bs_top)
++{
++    BlockDriverState tmp;
++    BlockDriverState *bs_backing = bs_top->backing_hd;
++
++    if (!bs_backing) {
++        return;
++    }
++
++    BlockDriverState *bs_bottom = bs_backing->backing_hd;
++    /* Now only support deappend when bs_top is in following conditions. */
++    g_assert(bs_top->device_name[0] != '\0');
++    g_assert(bs_top->dev != NULL);
++
++    g_assert(bs_top->dirty_bitmap == NULL);
++    g_assert(bs_top->job == NULL);
++    g_assert(bs_top->in_use == 0);
++    g_assert(bs_top->io_limits_enabled == false);
++    g_assert(bs_top->block_timer == NULL);
++
++
++    tmp = *bs_top;
++    *bs_top = *bs_backing;
++    *bs_backing = tmp;
++
++    /* there are some fields which should not be swapped, move them back */
++    bdrv_move_feature_fields(&tmp, bs_top);
++    bdrv_move_feature_fields(bs_top, bs_backing);
++    bdrv_move_feature_fields(bs_backing, &tmp);
++
++    /* bs_top should keep device attached  */
++    g_assert(bs_top->device_name[0] != '\0');
++    g_assert(bs_top->dev != NULL);
++
++    /* check a few fields that should remain */
++    g_assert(bs_top->job == NULL);
++    g_assert(bs_top->in_use == 0);
++    g_assert(bs_top->io_limits_enabled == false);
++    g_assert(bs_top->block_timer == NULL);
++    g_assert(bs_top->backing_hd == bs_bottom);
++
++    /* delete bs_backing */
++    bs_backing->backing_hd = NULL;
++    bs_backing->backing_file[0] = 0;
++    bs_backing->backing_format[0] = 0;
++    bdrv_delete(bs_backing);
++
++    bdrv_rebind(bs_top);
++}
++
+ void bdrv_delete(BlockDriverState *bs)
+ {
+     assert(!bs->dev);
+diff --git a/include/block/block.h b/include/block/block.h
+index 9dc6aad..4450121 100644
+--- a/include/block/block.h
++++ b/include/block/block.h
+@@ -132,6 +132,7 @@ BlockDriverState *bdrv_new(const char *device_name);
+ void bdrv_make_anon(BlockDriverState *bs);
+ void bdrv_swap(BlockDriverState *bs_new, BlockDriverState *bs_old);
+ void bdrv_append(BlockDriverState *bs_new, BlockDriverState *bs_top);
++void bdrv_deappend(BlockDriverState *bs_top);
+ void bdrv_delete(BlockDriverState *bs);
+ int bdrv_parse_cache_flags(const char *mode, int *flags);
+ int bdrv_parse_discard_flags(const char *mode, int *flags);
+-- 
+1.7.1
+
+
+

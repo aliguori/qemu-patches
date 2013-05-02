@@ -1,0 +1,1 @@
+../Add-pvpanic-device-to-deal-with-guest-panic-event/v21.1366993479/0007-pvpanic-create-pvpanic-by-default-for-machine-15.patch

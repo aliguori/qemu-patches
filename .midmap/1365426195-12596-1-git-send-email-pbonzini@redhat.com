@@ -1,0 +1,1 @@
+../qemu-char-really-fix-behavior-on-can_read--0/v1.1365451395/0001-qemu-char-really-fix-behavior-on-can_read--0.patch

@@ -1,0 +1,106 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Tomoki Sekiyama <tsekiyam@redhat.com>
+To: Libaiqing <libaiqing@huawei.com>,
+ "qemu-devel@nongnu.org" <qemu-devel@nongnu.org>, qemu-devel@nongnu.org,
+ "tomoki.sekiyama@hds.com" <tomoki.sekiyama@hds.com>
+Cc: "mdroth@linux.vnet.ibm.com" <mdroth@linux.vnet.ibm.com>,
+ Haofeng <haofeng@huawei.com>,
+ "lcapitulino@redhat.com" <lcapitulino@redhat.com>, mdroth@linux.vnet.ibm.com,
+ lcapitulino@redhat.com, "vrozenfe@redhat.com" <vrozenfe@redhat.com>,
+ vrozenfe@redhat.com, "pbonzini@redhat.com" <pbonzini@redhat.com>,
+ pbonzini@redhat.com
+Date: Fri, 12 Apr 2013 16:01:39 -0400
+Message-id: 20130412200139.20814.71718.stgit@corona
+Subject: [PATCH 00/11] qemu-ga: fsfreeze on Windows using VSS
+
+Hi,
+
+This patch series is attempts to add fsfreeze support for Windows
+qemu-guest-agent.
+
+changes from v1: 
+ - Fix out-tree build by stop using recursive Makefile
+ - Added script to extract VSS SDK headers on POSIX systems using msitools
+   (thanks Paolo)
+ - Remove some unnecessary header files
+
+v1: http://lists.gnu.org/archive/html/qemu-devel/2013-02/msg01963.html
+
+* Description
+In Windows, VSS (Volume Shadow Copy Service) provides a facility to
+quiesce filesystems and applications before disk snapshots are taken.
+This patch series implements "fsfreeze" command of qemu-ga using VSS.
+
+* How to build & run qemu-ga with VSS support
+
+ - Download Microsoft VSS SDK from:
+   http://www.microsoft.com/en-us/download/details.aspx?id=23490
+
+ - Setup the SDK
+   scripts/extract-vsssdk-headers setup.exe (on POSIX-systems)
+
+ - Specify installed SDK directory to configure option as:
+   ./configure -with-vss-sdk="path/to/VSS SDK" --cross-prefix=i686-w64-mingw32-
+
+ - Make qemu-ga.exe
+
+ - Install qemu-ga.exe and qga/vss-win32-provider/qga-provider.{dll,tlb} into
+   the same directory in guests
+
+ - Run `qemu-ga.exe -s install' and `net start qemu-ga' in the guests
+
+Any feedback are appliciated.
+
+---
+Tomoki Sekiyama (11):
+      configure: Support configuring c++ compiler
+      Fix errors and warnings while compiling with c++ compilier
+      Add a script to extract VSS SDK headers on POSIX system
+      qemu-ga: Add an configure option to specify path to Windows VSS SDK
+      qemu-ga: Add Windows VSS provider to quiesce applications on fsfreeze
+      qemu-ga: Add Windows VSS requester to quisce applications and filesystems
+      qemu-ga: call Windows VSS requester in fsfreeze command handler
+      qemu-ga: install Windows VSS provider on `qemu-ga -s install'
+      qemu-ga: Add VSS provider .tlb file in the repository
+      QMP/qemu-ga-client: make timeout longer for guest-fsfreeze-freeze command
+      QMP/qmp.py: set locale for exceptions to display non-ascii messages correctly
+
+
+ .gitignore                              |    1 
+ Makefile                                |    3 
+ Makefile.objs                           |    2 
+ QMP/qemu-ga-client                      |    4 
+ QMP/qmp.py                              |    4 
+ configure                               |   59 ++++
+ hmp.c                                   |    2 
+ hw/pci/pci.c                            |    2 
+ qga/Makefile.objs                       |    7 
+ qga/commands-win32.c                    |   74 ++++-
+ qga/main.c                              |   41 +++
+ qga/vss-win32-provider.h                |   26 ++
+ qga/vss-win32-provider/Makefile.objs    |   25 ++
+ qga/vss-win32-provider/install.cpp      |  494 +++++++++++++++++++++++++++++++
+ qga/vss-win32-provider/provider.cpp     |  474 ++++++++++++++++++++++++++++++
+ qga/vss-win32-provider/qga-provider.def |   10 +
+ qga/vss-win32-provider/qga-provider.idl |   20 +
+ qga/vss-win32-provider/qga-provider.tlb |  Bin
+ qga/vss-win32-requester.cpp             |  393 +++++++++++++++++++++++++
+ qga/vss-win32-requester.h               |   31 ++
+ qga/vss-win32.h                         |   85 +++++
+ rules.mak                               |    9 +
+ scripts/extract-vsssdk-headers          |   25 ++
+ scripts/qapi.py                         |    9 +
+ 24 files changed, 1785 insertions(+), 15 deletions(-)
+ create mode 100644 qga/vss-win32-provider.h
+ create mode 100644 qga/vss-win32-provider/Makefile.objs
+ create mode 100644 qga/vss-win32-provider/install.cpp
+ create mode 100644 qga/vss-win32-provider/provider.cpp
+ create mode 100644 qga/vss-win32-provider/qga-provider.def
+ create mode 100644 qga/vss-win32-provider/qga-provider.idl
+ create mode 100644 qga/vss-win32-provider/qga-provider.tlb
+ create mode 100644 qga/vss-win32-requester.cpp
+ create mode 100644 qga/vss-win32-requester.h
+ create mode 100644 qga/vss-win32.h
+ create mode 100755 scripts/extract-vsssdk-headers
+
+

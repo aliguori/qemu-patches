@@ -1,0 +1,1 @@
+../ccid-and-libcacard-fixes-for-windows-mingw/v3.1366671870/0003-ccid-make-backend_enum_table-static-const-and-adjust-users.patch

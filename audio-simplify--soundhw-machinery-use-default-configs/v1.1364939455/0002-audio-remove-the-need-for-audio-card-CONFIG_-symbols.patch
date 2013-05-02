@@ -1,0 +1,467 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: av1474@comtv.ru
+Date: Tue,  2 Apr 2013 16:50:57 +0200
+Message-id: 1364914261-4237-3-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 2/6] audio: remove the need for audio card CONFIG_* symbols
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ arch_init.c        | 136 +++++++++++++----------------------------------------
+ configure          |   8 +---
+ hw/ac97.c          |   3 +-
+ hw/adlib.c         |   3 +-
+ hw/audiodev.h      |  23 ++-------
+ hw/cs4231a.c       |   3 +-
+ hw/es1370.c        |   3 +-
+ hw/gus.c           |   3 +-
+ hw/intel-hda.c     |  22 ++++-----
+ hw/pcspk.c         |   4 +-
+ hw/pcspk.h         |   2 -
+ hw/sb16.c          |   3 +-
+ hw/usb/dev-audio.c |   1 -
+ 13 files changed, 64 insertions(+), 150 deletions(-)
+
+diff --git a/arch_init.c b/arch_init.c
+index 4ef5a15..f9ad23b 100644
+--- a/arch_init.c
++++ b/arch_init.c
+@@ -899,97 +899,31 @@ struct soundhw {
+     } init;
+ };
+ 
+-static struct soundhw soundhw[] = {
+-#ifdef HAS_AUDIO_CHOICE
+-#ifdef CONFIG_PCSPK
+-    {
+-        "pcspk",
+-        "PC speaker",
+-        0,
+-        1,
+-        { .init_isa = pcspk_audio_init }
+-    },
+-#endif
+-
+-#ifdef CONFIG_SB16
+-    {
+-        "sb16",
+-        "Creative Sound Blaster 16",
+-        0,
+-        1,
+-        { .init_isa = SB16_init }
+-    },
+-#endif
+-
+-#ifdef CONFIG_CS4231A
+-    {
+-        "cs4231a",
+-        "CS4231A",
+-        0,
+-        1,
+-        { .init_isa = cs4231a_init }
+-    },
+-#endif
+-
+-#ifdef CONFIG_ADLIB
+-    {
+-        "adlib",
+-#ifdef HAS_YMF262
+-        "Yamaha YMF262 (OPL3)",
+-#else
+-        "Yamaha YM3812 (OPL2)",
+-#endif
+-        0,
+-        1,
+-        { .init_isa = Adlib_init }
+-    },
+-#endif
+-
+-#ifdef CONFIG_GUS
+-    {
+-        "gus",
+-        "Gravis Ultrasound GF1",
+-        0,
+-        1,
+-        { .init_isa = GUS_init }
+-    },
+-#endif
+-
+-#ifdef CONFIG_AC97
+-    {
+-        "ac97",
+-        "Intel 82801AA AC97 Audio",
+-        0,
+-        0,
+-        { .init_pci = ac97_init }
+-    },
+-#endif
+-
+-#ifdef CONFIG_ES1370
+-    {
+-        "es1370",
+-        "ENSONIQ AudioPCI ES1370",
+-        0,
+-        0,
+-        { .init_pci = es1370_init }
+-    },
+-#endif
++static struct soundhw soundhw[9];
++static int soundhw_count;
+ 
+-#ifdef CONFIG_HDA
+-    {
+-        "hda",
+-        "Intel HD Audio",
+-        0,
+-        0,
+-        { .init_pci = intel_hda_and_codec_init }
+-    },
+-#endif
+-
+-#endif /* HAS_AUDIO_CHOICE */
+-
+-    { NULL, NULL, 0, 0, { NULL } }
+-};
++void isa_register_soundhw(const char *name, const char *descr,
++                          int (*init_isa)(ISABus *bus))
++{
++    assert(soundhw_count < ARRAY_SIZE(soundhw) - 1);
++    soundhw[soundhw_count].name = name;
++    soundhw[soundhw_count].descr = descr;
++    soundhw[soundhw_count].isa = 1;
++    soundhw[soundhw_count].init.init_isa = init_isa;
++    soundhw_count++;
++}
+ 
++void pci_register_soundhw(const char *name, const char *descr,
++                          int (*init_pci)(PCIBus *bus))
++{
++    assert(soundhw_count < ARRAY_SIZE(soundhw) - 1);
++    soundhw[soundhw_count].name = name;
++    soundhw[soundhw_count].descr = descr;
++    soundhw[soundhw_count].isa = 0;
++    soundhw[soundhw_count].init.init_pci = init_pci;
++    soundhw_count++;
++}
++ 
+ void select_soundhw(const char *optarg)
+ {
+     struct soundhw *c;
+@@ -997,16 +931,16 @@ void select_soundhw(const char *optarg)
+     if (is_help_option(optarg)) {
+     show_valid_cards:
+ 
+-#ifdef HAS_AUDIO_CHOICE
+-        printf("Valid sound card names (comma separated):\n");
+-        for (c = soundhw; c->name; ++c) {
+-            printf ("%-11s %s\n", c->name, c->descr);
++        if (soundhw_count) {
++             printf("Valid sound card names (comma separated):\n");
++             for (c = soundhw; c->name; ++c) {
++                 printf ("%-11s %s\n", c->name, c->descr);
++             }
++             printf("\n-soundhw all will enable all of the above\n");
++        } else {
++             printf("Machine has no user-selectable audio hardware "
++                    "(it may or may not have always-present audio hardware).\n");
+         }
+-        printf("\n-soundhw all will enable all of the above\n");
+-#else
+-        printf("Machine has no user-selectable audio hardware "
+-               "(it may or may not have always-present audio hardware).\n");
+-#endif
+         exit(!is_help_option(optarg));
+     }
+     else {
+@@ -1132,11 +1066,7 @@ void cpudef_init(void)
+ 
+ int audio_available(void)
+ {
+-#ifdef HAS_AUDIO
+-    return 1;
+-#else
+-    return 0;
+-#endif
++    return soundhw_count > 0;
+ }
+ 
+ int tcg_available(void)
+diff --git a/configure b/configure
+index 98716ae..dec699d 100755
+--- a/configure
++++ b/configure
+@@ -4322,15 +4322,9 @@ esac
+ 
+ if test "$target_softmmu" = "yes" ; then
+   case "$TARGET_BASE_ARCH" in
+-  arm)
++  arm|lm32|i386|mips|ppc)
+     cflags="-DHAS_AUDIO $cflags"
+   ;;
+-  lm32)
+-    cflags="-DHAS_AUDIO $cflags"
+-  ;;
+-  i386|mips|ppc)
+-    cflags="-DHAS_AUDIO -DHAS_AUDIO_CHOICE $cflags"
+-  ;;
+   esac
+ fi
+ 
+diff --git a/hw/ac97.c b/hw/ac97.c
+index c7d601f..40656e8 100644
+--- a/hw/ac97.c
++++ b/hw/ac97.c
+@@ -1396,7 +1396,7 @@ static void ac97_exitfn (PCIDevice *dev)
+     memory_region_destroy (&s->io_nabm);
+ }
+ 
+-int ac97_init (PCIBus *bus)
++static int ac97_init (PCIBus *bus)
+ {
+     pci_create_simple (bus, -1, "AC97");
+     return 0;
+@@ -1433,6 +1433,7 @@ static const TypeInfo ac97_info = {
+ static void ac97_register_types (void)
+ {
+     type_register_static (&ac97_info);
++    pci_register_soundhw("ac97", "Intel 82801AA AC97 Audio", ac97_init);
+ }
+ 
+ type_init (ac97_register_types)
+diff --git a/hw/adlib.c b/hw/adlib.c
+index ca47b55..b4617ae 100644
+--- a/hw/adlib.c
++++ b/hw/adlib.c
+@@ -369,7 +369,7 @@ static TypeInfo adlib_info = {
+     .class_init    = adlib_class_initfn,
+ };
+ 
+-int Adlib_init (ISABus *bus)
++static int Adlib_init (ISABus *bus)
+ {
+     isa_create_simple (bus, "adlib");
+     return 0;
+@@ -378,6 +378,7 @@ int Adlib_init (ISABus *bus)
+ static void adlib_register_types (void)
+ {
+     type_register_static (&adlib_info);
++    isa_register_soundhw("adlib", ADLIB_DESC, Adlib_init);
+ }
+ 
+ type_init (adlib_register_types)
+diff --git a/hw/audiodev.h b/hw/audiodev.h
+index 428274f..b28abdd 100644
+--- a/hw/audiodev.h
++++ b/hw/audiodev.h
+@@ -1,25 +1,10 @@
+ #ifndef HW_AUDIODEV_H
+ #define HW_AUDIODEV_H 1
+ 
+-/* es1370.c */
+-int es1370_init(PCIBus *bus);
++void isa_register_soundhw(const char *name, const char *descr,
++                          int (*init_isa)(ISABus *bus));
+ 
+-/* sb16.c */
+-int SB16_init(ISABus *bus);
+-
+-/* adlib.c */
+-int Adlib_init(ISABus *bus);
+-
+-/* gus.c */
+-int GUS_init(ISABus *bus);
+-
+-/* ac97.c */
+-int ac97_init(PCIBus *bus);
+-
+-/* cs4231a.c */
+-int cs4231a_init(ISABus *bus);
+-
+-/* intel-hda.c + hda-audio.c */
+-int intel_hda_and_codec_init(PCIBus *bus);
++void pci_register_soundhw(const char *name, const char *descr,
++                          int (*init_pci)(PCIBus *bus));
+ 
+ #endif
+diff --git a/hw/cs4231a.c b/hw/cs4231a.c
+index f005f25..d660ebd 100644
+--- a/hw/cs4231a.c
++++ b/hw/cs4231a.c
+@@ -659,7 +659,7 @@ static int cs4231a_initfn (ISADevice *dev)
+     return 0;
+ }
+ 
+-int cs4231a_init (ISABus *bus)
++static int cs4231a_init (ISABus *bus)
+ {
+     isa_create_simple (bus, "cs4231a");
+     return 0;
+@@ -692,6 +692,7 @@ static const TypeInfo cs4231a_info = {
+ static void cs4231a_register_types (void)
+ {
+     type_register_static (&cs4231a_info);
++    isa_register_soundhw("cs4231a", "CS4231A", cs4231a_init);
+ }
+ 
+ type_init (cs4231a_register_types)
+diff --git a/hw/es1370.c b/hw/es1370.c
+index e64cf23..540ed4c 100644
+--- a/hw/es1370.c
++++ b/hw/es1370.c
+@@ -1051,7 +1051,7 @@ static void es1370_exitfn (PCIDevice *dev)
+     memory_region_destroy (&s->io);
+ }
+ 
+-int es1370_init (PCIBus *bus)
++static int es1370_init (PCIBus *bus)
+ {
+     pci_create_simple (bus, -1, "ES1370");
+     return 0;
+@@ -1083,6 +1083,7 @@ static const TypeInfo es1370_info = {
+ static void es1370_register_types (void)
+ {
+     type_register_static (&es1370_info);
++    pci_register_soundhw("es1370", "ENSONIQ AudioPCI ES1370", es1370_init);
+ }
+ 
+ type_init (es1370_register_types)
+diff --git a/hw/gus.c b/hw/gus.c
+index d268224..b49cdca 100644
+--- a/hw/gus.c
++++ b/hw/gus.c
+@@ -293,7 +293,7 @@ static int gus_initfn (ISADevice *dev)
+     return 0;
+ }
+ 
+-int GUS_init (ISABus *bus)
++static int GUS_init (ISABus *bus)
+ {
+     isa_create_simple (bus, "gus");
+     return 0;
+@@ -327,6 +327,7 @@ static const TypeInfo gus_info = {
+ static void gus_register_types (void)
+ {
+     type_register_static (&gus_info);
++    isa_register_soundhw("gus", "Gravis Ultrasound GF1", GUS_init);
+ }
+ 
+ type_init (gus_register_types)
+diff --git a/hw/intel-hda.c b/hw/intel-hda.c
+index 728b60f..020a850 100644
+--- a/hw/intel-hda.c
++++ b/hw/intel-hda.c
+@@ -1300,21 +1300,11 @@ static const TypeInfo hda_codec_device_type_info = {
+     .class_init = hda_codec_device_class_init,
+ };
+ 
+-static void intel_hda_register_types(void)
+-{
+-    type_register_static(&hda_codec_bus_info);
+-    type_register_static(&intel_hda_info_ich6);
+-    type_register_static(&intel_hda_info_ich9);
+-    type_register_static(&hda_codec_device_type_info);
+-}
+-
+-type_init(intel_hda_register_types)
+-
+ /*
+  * create intel hda controller with codec attached to it,
+  * so '-soundhw hda' works.
+  */
+-int intel_hda_and_codec_init(PCIBus *bus)
++static int intel_hda_and_codec_init(PCIBus *bus)
+ {
+     PCIDevice *controller;
+     BusState *hdabus;
+@@ -1327,3 +1317,13 @@ int intel_hda_and_codec_init(PCIBus *bus)
+     return 0;
+ }
+ 
++static void intel_hda_register_types(void)
++{
++    type_register_static(&hda_codec_bus_info);
++    type_register_static(&intel_hda_info_ich6);
++    type_register_static(&intel_hda_info_ich9);
++    type_register_static(&hda_codec_device_type_info);
++    pci_register_soundhw("hda", "Intel HD Audio", intel_hda_and_codec_init);
++}
++
++type_init(intel_hda_register_types)
+diff --git a/hw/pcspk.c b/hw/pcspk.c
+index d533415..f245998 100644
+--- a/hw/pcspk.c
++++ b/hw/pcspk.c
+@@ -25,6 +25,7 @@
+ #include "hw/hw.h"
+ #include "hw/pc.h"
+ #include "hw/isa.h"
++#include "hw/audiodev.h"
+ #include "audio/audio.h"
+ #include "qemu/timer.h"
+ #include "hw/i8254.h"
+@@ -105,7 +106,7 @@ static void pcspk_callback(void *opaque, int free)
+     }
+ }
+ 
+-int pcspk_audio_init(ISABus *bus)
++static int pcspk_audio_init(ISABus *bus)
+ {
+     PCSpkState *s = pcspk_state;
+     struct audsettings as = {PCSPK_SAMPLE_RATE, 1, AUD_FMT_U8, 0};
+@@ -197,5 +198,6 @@ static const TypeInfo pcspk_info = {
+ static void pcspk_register(void)
+ {
+     type_register_static(&pcspk_info);
++    isa_register_soundhw("pcspk", "PC speaker", pcspk_audio_init);
+ }
+ type_init(pcspk_register)
+diff --git a/hw/pcspk.h b/hw/pcspk.h
+index f448d22..f9dda02 100644
+--- a/hw/pcspk.h
++++ b/hw/pcspk.h
+@@ -40,6 +40,4 @@ static inline ISADevice *pcspk_init(ISABus *bus, ISADevice *pit)
+     return dev;
+ }
+ 
+-int pcspk_audio_init(ISABus *bus);
+-
+ #endif /* !HW_PCSPK_H */
+diff --git a/hw/sb16.c b/hw/sb16.c
+index bd51ceb..046ce98 100644
+--- a/hw/sb16.c
++++ b/hw/sb16.c
+@@ -1384,7 +1384,7 @@ static int sb16_initfn (ISADevice *dev)
+     return 0;
+ }
+ 
+-int SB16_init (ISABus *bus)
++static int SB16_init (ISABus *bus)
+ {
+     isa_create_simple (bus, "sb16");
+     return 0;
+@@ -1419,6 +1419,7 @@ static const TypeInfo sb16_info = {
+ static void sb16_register_types (void)
+ {
+     type_register_static (&sb16_info);
++    isa_register_soundhw("sb16", "Creative Sound Blaster 16", SB16_init);
+ }
+ 
+ type_init (sb16_register_types)
+diff --git a/hw/usb/dev-audio.c b/hw/usb/dev-audio.c
+index b8c79b8..04933a9 100644
+--- a/hw/usb/dev-audio.c
++++ b/hw/usb/dev-audio.c
+@@ -33,7 +33,6 @@
+ #include "hw/usb.h"
+ #include "hw/usb/desc.h"
+ #include "hw/hw.h"
+-#include "hw/audiodev.h"
+ #include "audio/audio.h"
+ 
+ #define USBAUDIO_VENDOR_NUM     0x46f4 /* CRC16() of "QEMU" */
+-- 
+1.8.1.4
+
+
+

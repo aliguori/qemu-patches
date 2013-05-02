@@ -1,0 +1,3 @@
+0000-vmdk-zeroed-grain-GTE-support.txt
+0005-vmdk-store-fields-of-VmdkMetaData-in-cpu-endian.patch
+0006-vmdk-add-bdrv_co_write_zeroes.patch

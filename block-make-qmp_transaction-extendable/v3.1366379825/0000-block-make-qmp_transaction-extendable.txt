@@ -1,0 +1,46 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Wenchao Xia <xiawenc@linux.vnet.ibm.com>
+To: qemu-devel@nongnu.org
+Cc: kwolf@redhat.com, stefanha@gmail.com,
+ Wenchao Xia <xiawenc@linux.vnet.ibm.com>, dietmar@proxmox.com,
+ pbonzini@redhat.com
+Date: Fri, 19 Apr 2013 08:57:05 +0800
+Message-id: 1366333030-8564-1-git-send-email-xiawenc@linux.vnet.ibm.com
+Subject: [PATCH 0/5] block: make qmp_transaction extendable
+
+  This serial will package backing chain snapshot code as one case, to make it
+possible adding more operations later.
+
+v2:
+  Address Kevin's comments:
+  Use the same prototype prepare, commit, rollback model in original code,
+commit should never fail.
+v3:
+  Address Stefan's comments:
+  3/5, 4/5: remove *action parameter since later only BlkTransactionStates* is
+needed.
+  5/5: embbed BlkTransactionStates in ExternalSnapshotStates, *opaque is
+removed, related call back function format change for external snapshot.
+  Address Kevin's comments:
+  removed all indention in commit message.
+  1/5: return void for prepare() function, *errp plays the role as error
+checker.
+  5/5: mark *commit callback must exist, *rollback callback can be NULL. Align
+"callback =" in "const BdrvActionOps external_snapshot_ops" to the same colum.
+  Address Eric's comments:
+  1/5: better commit message.
+  5/5: better commit message and comments in code that only one of rollback()
+or commit() will be called.
+
+Wenchao Xia (5):
+  1 block: package preparation code in qmp_transaction()
+  2 block: move input parsing code in qmp_transaction()
+  3 block: package committing code in qmp_transaction()
+  4 block: package rollback code in qmp_transaction()
+  5 block: make all steps in qmp_transaction() as callback
+
+ blockdev.c |  251 +++++++++++++++++++++++++++++++++++++++---------------------
+ 1 files changed, 163 insertions(+), 88 deletions(-)
+
+
+

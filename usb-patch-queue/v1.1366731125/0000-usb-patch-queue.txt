@@ -1,0 +1,45 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Gerd Hoffmann <kraxel@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Gerd Hoffmann <kraxel@redhat.com>
+Date: Tue, 23 Apr 2013 10:32:05 +0200
+Message-id: 1366705929-11251-1-git-send-email-kraxel@redhat.com
+Subject: [PATCH 0/4] usb patch queue
+
+  Hi,
+
+Nothing major, just some small fixes.
+
+please pull,
+  Gerd
+
+The following changes since commit 456736710df19c2275192269fe67a3f0b2583835:
+
+  block: Fix build with tracing enabled (2013-04-22 11:31:41 -0500)
+
+are available in the git repository at:
+
+  git://git.kraxel.org/qemu usb.81
+
+for you to fetch changes up to 3f5cc97e2ba00b34fd20a5553ed9d2fecf32f7e3:
+
+  usb-host: raise libusbx minimum version to 1.0.13 (2013-04-23 08:43:10 +0200)
+
+----------------------------------------------------------------
+Gerd Hoffmann (3):
+      xhci: remove XHCIRing->base (unused)
+      usb: better speed mismatch error reporting
+      usb-host: raise libusbx minimum version to 1.0.13
+
+Hans de Goede (1):
+      ehci_free_packet: Discard finished packets when the queue is halted
+
+ configure            |    2 +-
+ hw/usb/bus.c         |   36 ++++++++++++++++++++++++++++++++----
+ hw/usb/desc.c        |    2 --
+ hw/usb/hcd-ehci.c    |   16 +++++++++++-----
+ hw/usb/hcd-xhci.c    |    4 +---
+ hw/usb/host-libusb.c |    5 -----
+ trace-events         |    2 +-
+ 7 files changed, 46 insertions(+), 21 deletions(-)
+

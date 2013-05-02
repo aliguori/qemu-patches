@@ -1,0 +1,11 @@
+0000-target-i386-convert-CPU-features-into-properties.txt
+0001-qdev-add-qdev-property-for-bool-type.patch
+0002-target-i386-cpu-convert-existing-dynamic-properties-into-static-properties.patch
+0003-target-i386-move-hyperv_-static-globals-to-CPUState.patch
+0004-target-i386-convert-hv_spinlocks-to-static-property.patch
+0005-target-i386-convert-hv_relaxed-to-static-property.patch
+0006-target-i386-convert-hv_vapic-to-static-property.patch
+0007-target-i386-convert-check-and-enforce-to-static-properties.patch
+0008-target-i386-cleanup-foo-feature-handling.patch
+0009-target-i386-cleanup-fooval-feature-handling.patch
+0010-target-i386-set--feature-using-static-properties.patch

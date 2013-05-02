@@ -1,0 +1,1 @@
+../hw--reorganization-part-2/v3.1365128560/0016-hw-move-I2C-controllers-to-hw-i2c--configure-via-default-configs-.patch

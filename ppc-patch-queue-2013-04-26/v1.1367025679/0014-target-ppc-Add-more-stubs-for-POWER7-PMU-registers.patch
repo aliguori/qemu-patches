@@ -1,0 +1,66 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Alexander Graf <agraf@suse.de>
+To: qemu-ppc@nongnu.org
+Cc: Blue Swirl <blauwirbel@gmail.com>,
+ David Gibson <david@gibson.dropbear.id.au>,
+ Aurelien Jarno <aurelien@aurel32.net>, qemu-devel@nongnu.org
+Date: Fri, 26 Apr 2013 20:21:33 +0200
+Message-id: 1367000509-8833-15-git-send-email-agraf@suse.de
+Subject: [PATCH 14/30] target-ppc: Add more stubs for POWER7 PMU registers
+
+From: David Gibson <david@gibson.dropbear.id.au>
+
+In addition to the performance monitor registers found on nearly all
+6xx chips, the POWER7 has two additional counters (PMC5 & PMC6) and an
+extra control register (MMCRA).  This patch adds stub support for them to
+qemu - the registers won't do anything, but with this change won't cause
+illegal instruction traps accessing them.  They're also registered with
+their ONE_REG ids, so their value will be kept in sync with KVM where
+appropriate.
+
+Signed-off-by: David Gibson <david@gibson.dropbear.id.au>
+Signed-off-by: Alexander Graf <agraf@suse.de>
+---
+ target-ppc/cpu.h            |    1 +
+ target-ppc/translate_init.c |   12 ++++++++++++
+ 2 files changed, 13 insertions(+), 0 deletions(-)
+
+diff --git a/target-ppc/cpu.h b/target-ppc/cpu.h
+index 99ebf7e..b8b09b9 100644
+--- a/target-ppc/cpu.h
++++ b/target-ppc/cpu.h
+@@ -1445,6 +1445,7 @@ static inline void cpu_clone_regs(CPUPPCState *env, target_ulong newsp)
+ #define SPR_PERF2             (0x302)
+ #define SPR_RCPU_MI_RBA2      (0x302)
+ #define SPR_MPC_MI_AP         (0x302)
++#define SPR_MMCRA             (0x302)
+ #define SPR_PERF3             (0x303)
+ #define SPR_RCPU_MI_RBA3      (0x303)
+ #define SPR_MPC_MI_EPN        (0x303)
+diff --git a/target-ppc/translate_init.c b/target-ppc/translate_init.c
+index 769f5fd..b0e3536 100644
+--- a/target-ppc/translate_init.c
++++ b/target-ppc/translate_init.c
+@@ -6977,6 +6977,18 @@ static void init_proc_POWER7 (CPUPPCState *env)
+                      SPR_NOACCESS, SPR_NOACCESS,
+                      &spr_read_generic, &spr_write_generic,
+                      KVM_REG_PPC_DSCR, 0x00000000);
++    spr_register_kvm(env, SPR_MMCRA, "SPR_MMCRA",
++                     SPR_NOACCESS, SPR_NOACCESS,
++                     &spr_read_generic, &spr_write_generic,
++                     KVM_REG_PPC_MMCRA, 0x00000000);
++    spr_register_kvm(env, SPR_PMC5, "SPR_PMC5",
++                     SPR_NOACCESS, SPR_NOACCESS,
++                     &spr_read_generic, &spr_write_generic,
++                     KVM_REG_PPC_PMC5, 0x00000000);
++    spr_register_kvm(env, SPR_PMC6, "SPR_PMC6",
++                     SPR_NOACCESS, SPR_NOACCESS,
++                     &spr_read_generic, &spr_write_generic,
++                     KVM_REG_PPC_PMC6, 0x00000000);
+ #endif /* !CONFIG_USER_ONLY */
+     /* Memory management */
+     /* XXX : not implemented */
+-- 
+1.6.0.2
+
+

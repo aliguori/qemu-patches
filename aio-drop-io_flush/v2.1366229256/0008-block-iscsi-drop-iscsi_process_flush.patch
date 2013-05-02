@@ -1,0 +1,48 @@
+From patches Mon Sep 17 00:00:00 2001
+From: "Stefan Hajnoczi" <stefanha@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, Paolo Bonzini <pbonzini@redhat.com>,
+ Stefan Hajnoczi <stefanha@redhat.com>, pingfank@linux.vnet.ibm.com,
+ Kevin Wolf <kwolf@redhat.com>
+Date: Wed, 17 Apr 2013 15:07:44 +0200
+Message-id: 1366204073-8468-9-git-send-email-stefanha@redhat.com
+Subject: [PATCH 08/17] block/iscsi: drop iscsi_process_flush()
+
+.io_flush() is no longer called so drop iscsi_process_flush().
+
+Signed-off-by: Stefan Hajnoczi <stefanha@redhat.com>
+---
+ block/iscsi.c | 9 +--------
+ 1 file changed, 1 insertion(+), 8 deletions(-)
+
+diff --git a/block/iscsi.c b/block/iscsi.c
+index 92d6eae..2f1a325 100644
+--- a/block/iscsi.c
++++ b/block/iscsi.c
+@@ -147,13 +147,6 @@ static const AIOCBInfo iscsi_aiocb_info = {
+ static void iscsi_process_read(void *arg);
+ static void iscsi_process_write(void *arg);
+ 
+-static int iscsi_process_flush(void *arg)
+-{
+-    IscsiLun *iscsilun = arg;
+-
+-    return iscsi_queue_length(iscsilun->iscsi) > 0;
+-}
+-
+ static void
+ iscsi_set_events(IscsiLun *iscsilun)
+ {
+@@ -167,7 +160,7 @@ iscsi_set_events(IscsiLun *iscsilun)
+         qemu_aio_set_fd_handler(iscsi_get_fd(iscsi),
+                       iscsi_process_read,
+                       (ev & POLLOUT) ? iscsi_process_write : NULL,
+-                      iscsi_process_flush,
++                      NULL,
+                       iscsilun);
+ 
+     }
+-- 
+1.8.1.4
+
+

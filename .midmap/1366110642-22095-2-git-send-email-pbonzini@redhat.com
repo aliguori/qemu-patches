@@ -1,0 +1,1 @@
+../another-round-of-qemu-char-fixes/v1.1366135839/0001-qemu-char-use-consistent-idiom-for-removing-sources.patch

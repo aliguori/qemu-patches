@@ -1,0 +1,1 @@
+../Win32-fixes/v1.1361393009/0002-qemu-timer-move-timeBeginPeriod-timeEndPeriod-to-os-win32.patch

@@ -1,0 +1,6 @@
+0000-qcow2py-dump-metadata.txt
+0001-qcow2py-rename-class-to-Qcow.patch
+0002-qcow2py-add-ImageFile-superclass.patch
+0003-qcow2py-add-load_image-method.patch
+0004-qcow2py-add-method-to-load-backing-image.patch
+0005-qcow2py-add-dump-map-command.patch

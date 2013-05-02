@@ -1,0 +1,104 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Fam Zheng <famz@redhat.com>
+To: Fam Zheng <famz@redhat.com>, qemu-devel@nongnu.org
+Cc: kwolf@redhat.com, Fam Zheng <famz@redhat.com>, qemu-devel@nongnu.org,
+ stefanha@redhat.com, Feiran Zheng <feiran.zheng@emc.com>
+Date: Fri, 19 Apr 2013 11:48:43 +0800
+Message-id: 1366343325-5252-4-git-send-email-famz@redhat.com
+Subject: [PATCH 3/5] vmdk: Add option to create zeroed-grain image
+
+From: Feiran Zheng <feiran.zheng@emc.com>
+
+Add image create option "zeroed-grain" to enable zeroed-grain GTE
+feature of vmdk sparse extents. When this option is on, header version
+of newly created extent will be 2 and VMDK4_FLAG_ZG flag bit will be
+set.
+
+Signed-off-by: Fam Zheng <famz@redhat.com>
+---
+ block/vmdk.c              | 20 +++++++++++++++-----
+ include/block/block_int.h |  1 +
+ 2 files changed, 16 insertions(+), 5 deletions(-)
+
+diff --git a/block/vmdk.c b/block/vmdk.c
+index 5e60940..827b35b 100644
+--- a/block/vmdk.c
++++ b/block/vmdk.c
+@@ -1262,7 +1262,7 @@ static coroutine_fn int vmdk_co_write(BlockDriverState *bs, int64_t sector_num,
+ 
+ 
+ static int vmdk_create_extent(const char *filename, int64_t filesize,
+-                              bool flat, bool compress)
++                              bool flat, bool compress, bool zeroed_grain)
+ {
+     int ret, i;
+     int fd = 0;
+@@ -1284,9 +1284,10 @@ static int vmdk_create_extent(const char *filename, int64_t filesize,
+     }
+     magic = cpu_to_be32(VMDK4_MAGIC);
+     memset(&header, 0, sizeof(header));
+-    header.version = 1;
+-    header.flags =
+-        3 | (compress ? VMDK4_FLAG_COMPRESS | VMDK4_FLAG_MARKER : 0);
++    header.version = zeroed_grain ? 2 : 1;
++    header.flags = 3
++                   | (compress ? VMDK4_FLAG_COMPRESS | VMDK4_FLAG_MARKER : 0)
++                   | (zeroed_grain ? VMDK4_FLAG_ZG : 0);
+     header.compressAlgorithm = compress ? VMDK4_COMPRESSION_DEFLATE : 0;
+     header.capacity = filesize / 512;
+     header.granularity = 128;
+@@ -1467,6 +1468,7 @@ static int vmdk_create(const char *filename, QEMUOptionParameter *options)
+     char parent_desc_line[BUF_SIZE] = "";
+     uint32_t parent_cid = 0xffffffff;
+     uint32_t number_heads = 16;
++    bool zeroed_grain = false;
+     const char desc_template[] =
+         "# Disk DescriptorFile\n"
+         "version=1\n"
+@@ -1502,6 +1504,8 @@ static int vmdk_create(const char *filename, QEMUOptionParameter *options)
+             flags |= options->value.n ? BLOCK_FLAG_COMPAT6 : 0;
+         } else if (!strcmp(options->name, BLOCK_OPT_SUBFMT)) {
+             fmt = options->value.s;
++        } else if (!strcmp(options->name, BLOCK_OPT_ZEROED_GRAIN)) {
++            zeroed_grain |= options->value.n;
+         }
+         options++;
+     }
+@@ -1588,7 +1592,8 @@ static int vmdk_create(const char *filename, QEMUOptionParameter *options)
+         snprintf(ext_filename, sizeof(ext_filename), "%s%s",
+                 path, desc_filename);
+ 
+-        if (vmdk_create_extent(ext_filename, size, flat, compress)) {
++        if (vmdk_create_extent(ext_filename, size,
++                               flat, compress, zeroed_grain)) {
+             return -EINVAL;
+         }
+         filesize -= size;
+@@ -1714,6 +1719,11 @@ static QEMUOptionParameter vmdk_create_options[] = {
+             "VMDK flat extent format, can be one of "
+             "{monolithicSparse (default) | monolithicFlat | twoGbMaxExtentSparse | twoGbMaxExtentFlat | streamOptimized} "
+     },
++    {
++        .name = BLOCK_OPT_ZEROED_GRAIN,
++        .type = OPT_FLAG,
++        .help = "Enable zeroed-grain featur (implies header.version = 2)"
++    },
+     { NULL }
+ };
+ 
+diff --git a/include/block/block_int.h b/include/block/block_int.h
+index 9aa98b5..2c0f94c 100644
+--- a/include/block/block_int.h
++++ b/include/block/block_int.h
+@@ -57,6 +57,7 @@
+ #define BLOCK_OPT_COMPAT_LEVEL      "compat"
+ #define BLOCK_OPT_LAZY_REFCOUNTS    "lazy_refcounts"
+ #define BLOCK_OPT_ADAPTER_TYPE      "adapter_type"
++#define BLOCK_OPT_ZEROED_GRAIN      "zeroed_grain"
+ 
+ typedef struct BdrvTrackedRequest BdrvTrackedRequest;
+ 
+-- 
+1.8.1.4
+
+

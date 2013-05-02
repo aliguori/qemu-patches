@@ -1,0 +1,181 @@
+From patches Mon Sep 17 00:00:00 2001
+From: =?utf-8?q?Andreas_F=C3=A4rber_=3Cafaerber=40suse=2Ede=3E?=
+To: qemu-devel@nongnu.org
+Cc: Kuo-Jung Su <dantesu@faraday-tech.com>,
+ =?UTF-8?q?Andreas=20F=C3=A4rber?= <afaerber@suse.de>
+Date: Mon, 25 Feb 2013 18:06:59 +0100
+Message-id: 1361812020-3827-5-git-send-email-afaerber@suse.de
+Subject: [PATCH 4/5] usb/hcd-ehci: Replace PORTSC macros with variables
+
+From: Kuo-Jung Su <dantesu@faraday-tech.com>
+
+Replace PORTSC macros with variables which could then be
+configured in ehci_xxxx_class_init(...)
+
+Signed-off-by: Kuo-Jung Su <dantesu@faraday-tech.com>
+Signed-off-by: Andreas Färber <afaerber@suse.de>
+---
+ hw/usb/hcd-ehci-pci.c    |    2 ++
+ hw/usb/hcd-ehci-sysbus.c |    6 ++++++
+ hw/usb/hcd-ehci.c        |   22 ++++++++++++++--------
+ hw/usb/hcd-ehci.h        |   12 ++++++------
+ 4 Dateien geändert, 28 Zeilen hinzugefügt(+), 14 Zeilen entfernt(-)
+
+diff --git a/hw/usb/hcd-ehci-pci.c b/hw/usb/hcd-ehci-pci.c
+index 05b4a6d..e534999 100644
+--- a/hw/usb/hcd-ehci-pci.c
++++ b/hw/usb/hcd-ehci-pci.c
+@@ -78,6 +78,8 @@ static void usb_ehci_pci_init(Object *obj)
+ 
+     s->capsbase = 0x00;
+     s->opregbase = 0x20;
++    s->portscbase = 0x44;
++    s->portnr = NB_PORTS;
+ 
+     usb_ehci_init(s, DEVICE(obj));
+ }
+diff --git a/hw/usb/hcd-ehci-sysbus.c b/hw/usb/hcd-ehci-sysbus.c
+index 5806b0a..106d132 100644
+--- a/hw/usb/hcd-ehci-sysbus.c
++++ b/hw/usb/hcd-ehci-sysbus.c
+@@ -51,6 +51,8 @@ static void ehci_sysbus_init(Object *obj)
+ 
+     s->capsbase = sec->capsbase;
+     s->opregbase = sec->opregbase;
++    s->portscbase = sec->portscbase;
++    s->portnr = sec->portnr;
+     s->dma = &dma_context_memory;
+ 
+     usb_ehci_init(s, DEVICE(obj));
+@@ -60,6 +62,10 @@ static void ehci_sysbus_init(Object *obj)
+ static void ehci_sysbus_class_init(ObjectClass *klass, void *data)
+ {
+     DeviceClass *dc = DEVICE_CLASS(klass);
++    SysBusEHCIClass *sec = SYS_BUS_EHCI_CLASS(klass);
++
++    sec->portscbase = 0x44;
++    sec->portnr = NB_PORTS;
+ 
+     dc->realize = usb_ehci_sysbus_realize;
+     dc->vmsd = &vmstate_ehci_sysbus;
+diff --git a/hw/usb/hcd-ehci.c b/hw/usb/hcd-ehci.c
+index a4ffc41..aeaa2f7 100644
+--- a/hw/usb/hcd-ehci.c
++++ b/hw/usb/hcd-ehci.c
+@@ -989,7 +989,7 @@ static uint64_t ehci_port_read(void *ptr, hwaddr addr,
+     uint32_t val;
+ 
+     val = s->portsc[addr >> 2];
+-    trace_usb_ehci_portsc_read(addr + PORTSC_BEGIN, addr >> 2, val);
++    trace_usb_ehci_portsc_read(addr + s->portscbase, addr >> 2, val);
+     return val;
+ }
+ 
+@@ -1030,7 +1030,7 @@ static void ehci_port_write(void *ptr, hwaddr addr,
+     uint32_t old = *portsc;
+     USBDevice *dev = s->ports[port].dev;
+ 
+-    trace_usb_ehci_portsc_write(addr + PORTSC_BEGIN, addr >> 2, val);
++    trace_usb_ehci_portsc_write(addr + s->portscbase, addr >> 2, val);
+ 
+     /* Clear rwc bits */
+     *portsc &= ~(val & PORTSC_RWC_MASK);
+@@ -1063,7 +1063,7 @@ static void ehci_port_write(void *ptr, hwaddr addr,
+ 
+     *portsc &= ~PORTSC_RO_MASK;
+     *portsc |= val;
+-    trace_usb_ehci_portsc_change(addr + PORTSC_BEGIN, addr >> 2, *portsc, old);
++    trace_usb_ehci_portsc_change(addr + s->portscbase, addr >> 2, *portsc, old);
+ }
+ 
+ static void ehci_opreg_write(void *ptr, hwaddr addr,
+@@ -2506,8 +2506,14 @@ void usb_ehci_realize(EHCIState *s, DeviceState *dev, Error **errp)
+ {
+     int i;
+ 
++    if (s->portnr > NB_PORTS) {
++        error_setg(errp, "Too many ports! Max. port number is %d.",
++                   NB_PORTS);
++        return;
++    }
++
+     usb_bus_new(&s->bus, &ehci_bus_ops, dev);
+-    for (i = 0; i < NB_PORTS; i++) {
++    for (i = 0; i < s->portnr; i++) {
+         usb_register_port(&s->bus, &s->ports[i], s, i, &ehci_port_ops,
+                           USB_SPEED_MASK_HIGH);
+         s->ports[i].dev = 0;
+@@ -2527,7 +2533,7 @@ void usb_ehci_init(EHCIState *s, DeviceState *dev)
+     s->caps[0x01] = 0x00;
+     s->caps[0x02] = 0x00;
+     s->caps[0x03] = 0x01;        /* HC version */
+-    s->caps[0x04] = NB_PORTS;    /* Number of downstream ports */
++    s->caps[0x04] = s->portnr;   /* Number of downstream ports */
+     s->caps[0x05] = 0x00;        /* No companion ports at present */
+     s->caps[0x06] = 0x00;
+     s->caps[0x07] = 0x00;
+@@ -2543,13 +2549,13 @@ void usb_ehci_init(EHCIState *s, DeviceState *dev)
+     memory_region_init_io(&s->mem_caps, &ehci_mmio_caps_ops, s,
+                           "capabilities", CAPA_SIZE);
+     memory_region_init_io(&s->mem_opreg, &ehci_mmio_opreg_ops, s,
+-                          "operational", PORTSC_BEGIN);
++                          "operational", s->portscbase);
+     memory_region_init_io(&s->mem_ports, &ehci_mmio_port_ops, s,
+-                          "ports", PORTSC_END - PORTSC_BEGIN);
++                          "ports", 4 * s->portnr);
+ 
+     memory_region_add_subregion(&s->mem, s->capsbase, &s->mem_caps);
+     memory_region_add_subregion(&s->mem, s->opregbase, &s->mem_opreg);
+-    memory_region_add_subregion(&s->mem, s->opregbase + PORTSC_BEGIN,
++    memory_region_add_subregion(&s->mem, s->opregbase + s->portscbase,
+                                 &s->mem_ports);
+ }
+ 
+diff --git a/hw/usb/hcd-ehci.h b/hw/usb/hcd-ehci.h
+index 951b117..7629762 100644
+--- a/hw/usb/hcd-ehci.h
++++ b/hw/usb/hcd-ehci.h
+@@ -40,11 +40,7 @@
+ #define MMIO_SIZE        0x1000
+ #define CAPA_SIZE        0x10
+ 
+-#define PORTSC               0x0044
+-#define PORTSC_BEGIN         PORTSC
+-#define PORTSC_END           (PORTSC + 4 * NB_PORTS)
+-
+-#define NB_PORTS         6        /* Number of downstream ports */
++#define NB_PORTS         6        /* Max. Number of downstream ports */
+ 
+ typedef struct EHCIPacket EHCIPacket;
+ typedef struct EHCIQueue EHCIQueue;
+@@ -268,6 +264,8 @@ struct EHCIState {
+     int companion_count;
+     uint16_t capsbase;
+     uint16_t opregbase;
++    uint16_t portscbase;
++    uint16_t portnr;
+ 
+     /* properties */
+     uint32_t maxframes;
+@@ -278,7 +276,7 @@ struct EHCIState {
+      */
+     uint8_t caps[CAPA_SIZE];
+     union {
+-        uint32_t opreg[PORTSC_BEGIN/sizeof(uint32_t)];
++        uint32_t opreg[0x44/sizeof(uint32_t)];
+         struct {
+             uint32_t usbcmd;
+             uint32_t usbsts;
+@@ -363,6 +361,8 @@ typedef struct SysBusEHCIClass {
+ 
+     uint16_t capsbase;
+     uint16_t opregbase;
++    uint16_t portscbase;
++    uint16_t portnr;
+ } SysBusEHCIClass;
+ 
+ #endif
+-- 
+1.7.10.4
+
+

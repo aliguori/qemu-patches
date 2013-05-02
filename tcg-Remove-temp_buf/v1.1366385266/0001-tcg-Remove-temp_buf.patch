@@ -1,0 +1,42 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Richard Henderson <rth@twiddle.net>
+To: Blue Swirl <blauwirbel@gmail.com>, qemu-devel@nongnu.org,
+ Richard Henderson <rth@twiddle.net>,
+ =?UTF-8?Q?Andreas_F=C3=A4rber?= <afaerber@suse.de>
+Cc: qemu-devel <qemu-devel@nongnu.org>, Aurelien Jarno <aurelien@aurel32.net>,
+ qemu-devel@nongnu.org, Richard Henderson <rth@twiddle.net>,
+ =?UTF-8?B?QW5kcmVhcyBGw6RyYmVy?= <afaerber@suse.de>, aurelien@aurel32.net
+Date: Fri, 19 Apr 2013 10:27:46 +0200
+Message-id: 1366360066-3373-1-git-send-email-rth@twiddle.net
+Subject: [PATCH 1/1] tcg: Remove temp_buf
+
+All targets have been converted to allocating space for temporaries
+on the stack.  No need to allocate space within the CPU_COMMON block.
+
+Signed-off-by: Richard Henderson <rth@twiddle.net>
+---
+This depends on my tcg-arm patch set that's still outstanding.
+
+
+r~
+---
+ include/exec/cpu-defs.h | 2 --
+ 1 file changed, 2 deletions(-)
+
+diff --git a/include/exec/cpu-defs.h b/include/exec/cpu-defs.h
+index d8c64e9..41f5b32 100644
+--- a/include/exec/cpu-defs.h
++++ b/include/exec/cpu-defs.h
+@@ -152,8 +152,6 @@ typedef struct CPUWatchpoint {
+                                      memory was accessed */             \
+     CPU_COMMON_TLB                                                      \
+     struct TranslationBlock *tb_jmp_cache[TB_JMP_CACHE_SIZE];           \
+-    /* buffer for temporaries in the code generator */                  \
+-    long temp_buf[CPU_TEMP_BUF_NLONGS];                                 \
+                                                                         \
+     int64_t icount_extra; /* Instructions until next timer event.  */   \
+     /* Number of cycles left, with interrupt flag in high bit.          \
+-- 
+1.8.1.4
+
+

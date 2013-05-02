@@ -1,0 +1,121 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: peter.maydell@linaro.org, edgar.iglesias@gmail.com
+Date: Wed, 17 Apr 2013 16:26:42 +0200
+Message-id: 1366208807-4433-9-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 08/13] elfload: use abi_llong/ullong instead of
+ target_llong/ullong
+
+The alignment is a characteristic of the ABI, not the CPU.
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ configure                    |  4 ----
+ include/exec/cpu-defs.h      |  2 --
+ include/exec/user/abitypes.h | 10 ++++++++++
+ linux-user/elfload.c         |  4 ++--
+ 4 files changed, 12 insertions(+), 8 deletions(-)
+
+diff --git a/configure b/configure
+index 1554e5b..f4bfa14 100755
+--- a/configure
++++ b/configure
+@@ -4131,7 +4131,6 @@ bflt="no"
+ target_nptl="no"
+ interp_prefix1=`echo "$interp_prefix" | sed "s/%M/$target_arch2/g"`
+ gdb_xml_files=""
+-target_llong_alignment=8
+ target_libs_softmmu=
+ 
+ TARGET_ARCH="$target_arch2"
+@@ -4152,7 +4151,6 @@ case "$target_arch2" in
+     bflt="yes"
+     target_nptl="yes"
+     gdb_xml_files="arm-core.xml arm-vfp.xml arm-vfp3.xml arm-neon.xml"
+-    target_llong_alignment=4
+   ;;
+   cris)
+     target_nptl="yes"
+@@ -4163,7 +4161,6 @@ case "$target_arch2" in
+   m68k)
+     bflt="yes"
+     gdb_xml_files="cf-core.xml cf-fp.xml"
+-    target_llong_alignment=2
+   ;;
+   microblaze|microblazeel)
+     TARGET_ARCH=microblaze
+@@ -4262,7 +4259,6 @@ case "$cpu" in
+   ;;
+ esac
+ 
+-echo "TARGET_LLONG_ALIGNMENT=$target_llong_alignment" >> $config_target_mak
+ echo "TARGET_ARCH=$TARGET_ARCH" >> $config_target_mak
+ target_arch_name="`upper $TARGET_ARCH`"
+ echo "TARGET_$target_arch_name=y" >> $config_target_mak
+diff --git a/include/exec/cpu-defs.h b/include/exec/cpu-defs.h
+index 3cf1272..d8c64e9 100644
+--- a/include/exec/cpu-defs.h
++++ b/include/exec/cpu-defs.h
+@@ -36,8 +36,6 @@
+ 
+ #define TARGET_LONG_SIZE (TARGET_LONG_BITS / 8)
+ 
+-typedef int64_t target_llong __attribute__((aligned(TARGET_LLONG_ALIGNMENT)));
+-typedef uint64_t target_ullong __attribute__((aligned(TARGET_LLONG_ALIGNMENT)));
+ /* target_ulong is the type of a virtual address */
+ #if TARGET_LONG_SIZE == 4
+ typedef int32_t target_long;
+diff --git a/include/exec/user/abitypes.h b/include/exec/user/abitypes.h
+index 4b04f6d..008501b 100644
+--- a/include/exec/user/abitypes.h
++++ b/include/exec/user/abitypes.h
+@@ -11,6 +11,11 @@
+ #ifdef TARGET_M68K
+ #define ABI_INT_ALIGNMENT 2
+ #define ABI_LONG_ALIGNMENT 2
++#define ABI_LLONG_ALIGNMENT 2
++#endif
++
++#ifdef TARGET_ARM
++#define ABI_LLONG_ALIGNMENT 4
+ #endif
+ 
+ #ifndef ABI_SHORT_ALIGNMENT
+@@ -22,11 +27,16 @@
+ #ifndef ABI_LONG_ALIGNMENT
+ #define ABI_LONG_ALIGNMENT (TARGET_ABI_BITS / 8)
+ #endif
++#ifndef ABI_LLONG_ALIGNMENT
++#define ABI_LLONG_ALIGNMENT 8
++#endif
+ 
+ typedef int16_t abi_short __attribute__ ((aligned(ABI_SHORT_ALIGNMENT)));
+ typedef uint16_t abi_ushort __attribute__((aligned(ABI_SHORT_ALIGNMENT)));
+ typedef int32_t abi_int __attribute__((aligned(ABI_INT_ALIGNMENT)));
+ typedef uint32_t abi_uint __attribute__((aligned(ABI_INT_ALIGNMENT)));
++typedef int64_t abi_llong __attribute__((aligned(ABI_LLONG_ALIGNMENT)));
++typedef uint64_t abi_ullong __attribute__((aligned(ABI_LLONG_ALIGNMENT)));
+ 
+ #ifdef TARGET_ABI32
+ typedef uint32_t abi_ulong __attribute__((aligned(ABI_LONG_ALIGNMENT)));
+diff --git a/linux-user/elfload.c b/linux-user/elfload.c
+index 14a8ecf..979b57c 100644
+--- a/linux-user/elfload.c
++++ b/linux-user/elfload.c
+@@ -102,8 +102,8 @@ enum {
+ #endif
+ 
+ #ifdef TARGET_ABI_MIPSN32
+-typedef target_ulong    target_elf_greg_t;
+-#define tswapreg(ptr)   tswapl(ptr)
++typedef abi_ullong      target_elf_greg_t;
++#define tswapreg(ptr)   tswap64(ptr)
+ #else
+ typedef abi_ulong       target_elf_greg_t;
+ #define tswapreg(ptr)   tswapal(ptr)
+-- 
+1.8.1.4
+
+
+

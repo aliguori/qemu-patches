@@ -1,0 +1,173 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: blauwirbel@gmail.com, sw@weilnetz.de, Anthony Liguori <aliguori@us.ibm.com>
+Date: Mon, 29 Apr 2013 12:11:24 +0200
+Message-id: 1367230284-24612-5-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 4/4] win32: add readv/writev emulation
+
+Commit e9d8fbf (qemu-file: do not use stdio for qemu_fdopen, 2013-03-27)
+introduced a usage of writev, which mingw32 does not have.  Even though
+qemu_fdopen itself is not used on mingw32, the future-proof solution is
+to add an implementation of it.  This is simple and similar to how we
+emulate sendmsg/recvmsg in util/iov.c.
+
+Some files include osdep.h without qemu-common.h, so move the definition
+of iovec to osdep.h too, and include osdep.h from qemu-common.h
+unconditionally (protection against including files when NEED_CPU_H is
+defined is not needed since the removal of AREG0).
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ include/qemu-common.h | 22 ++--------------------
+ include/qemu/osdep.h  | 17 +++++++++++++++++
+ util/iov.c            |  2 +-
+ util/osdep.c          | 43 +++++++++++++++++++++++++++++++++++++++++++
+ 4 files changed, 63 insertions(+), 21 deletions(-)
+
+diff --git a/include/qemu-common.h b/include/qemu-common.h
+index a39cdba..b399d85 100644
+--- a/include/qemu-common.h
++++ b/include/qemu-common.h
+@@ -84,20 +84,6 @@
+ # error Unknown pointer size
+ #endif
+ 
+-#ifndef CONFIG_IOVEC
+-#define CONFIG_IOVEC
+-struct iovec {
+-    void *iov_base;
+-    size_t iov_len;
+-};
+-/*
+- * Use the same value as Linux for now.
+- */
+-#define IOV_MAX		1024
+-#else
+-#include <sys/uio.h>
+-#endif
+-
+ typedef int (*fprintf_function)(FILE *f, const char *fmt, ...)
+     GCC_FMT_ATTR(2, 3);
+ 
+@@ -122,16 +108,12 @@ static inline char *realpath(const char *path, char *resolved_path)
+ void configure_icount(const char *option);
+ extern int use_icount;
+ 
+-/* FIXME: Remove NEED_CPU_H.  */
+-#ifndef NEED_CPU_H
+-
+ #include "qemu/osdep.h"
+ #include "qemu/bswap.h"
+ 
+-#else
+-
++/* FIXME: Remove NEED_CPU_H.  */
++#ifdef NEED_CPU_H
+ #include "cpu.h"
+-
+ #endif /* !defined(NEED_CPU_H) */
+ 
+ /* main function, renamed */
+diff --git a/include/qemu/osdep.h b/include/qemu/osdep.h
+index 8b465fd..42545bc 100644
+--- a/include/qemu/osdep.h
++++ b/include/qemu/osdep.h
+@@ -1,6 +1,7 @@
+ #ifndef QEMU_OSDEP_H
+ #define QEMU_OSDEP_H
+ 
++#include "config-host.h"
+ #include <stdarg.h>
+ #include <stddef.h>
+ #include <stdbool.h>
+@@ -161,6 +162,22 @@ int qemu_close(int fd);
+ int qemu_create_pidfile(const char *filename);
+ int qemu_get_thread_id(void);
+ 
++#ifndef CONFIG_IOVEC
++struct iovec {
++    void *iov_base;
++    size_t iov_len;
++};
++/*
++ * Use the same value as Linux for now.
++ */
++#define IOV_MAX 1024
++
++ssize_t readv(int fd, const struct iovec *iov, int iov_cnt);
++ssize_t writev(int fd, const struct iovec *iov, int iov_cnt);
++#else
++#include <sys/uio.h>
++#endif
++
+ #ifdef _WIN32
+ static inline void qemu_timersub(const struct timeval *val1,
+                                  const struct timeval *val2,
+diff --git a/util/iov.c b/util/iov.c
+index d32226d..78bbbe1 100644
+--- a/util/iov.c
++++ b/util/iov.c
+@@ -99,7 +99,7 @@ size_t iov_size(const struct iovec *iov, const unsigned int iov_cnt)
+ static ssize_t
+ do_send_recv(int sockfd, struct iovec *iov, unsigned iov_cnt, bool do_send)
+ {
+-#if defined CONFIG_IOVEC && defined CONFIG_POSIX
++#ifdef CONFIG_POSIX
+     ssize_t ret;
+     struct msghdr msg;
+     memset(&msg, 0, sizeof(msg));
+diff --git a/util/osdep.c b/util/osdep.c
+index 6ae5aaf..685c8ae 100644
+--- a/util/osdep.c
++++ b/util/osdep.c
+@@ -429,3 +429,46 @@ int socket_init(void)
+ #endif
+     return 0;
+ }
++
++#ifndef CONFIG_IOVEC
++/* helper function for iov_send_recv() */
++static ssize_t
++readv_writev(int fd, const struct iovec *iov, int iov_cnt, bool do_write)
++{
++    unsigned i = 0;
++    ssize_t ret = 0;
++    while (i < iov_cnt) {
++        ssize_t r = do_write
++            ? write(fd, iov[i].iov_base, iov[i].iov_len)
++            : read(fd, iov[i].iov_base, iov[i].iov_len);
++        if (r > 0) {
++            ret += r;
++        } else if (!r) {
++            break;
++        } else if (errno == EINTR) {
++            continue;
++        } else {
++            /* else it is some "other" error,
++             * only return if there was no data processed. */
++            if (ret == 0) {
++                ret = -1;
++            }
++            break;
++        }
++        i++;
++    }
++    return ret;
++}
++
++ssize_t
++readv(int fd, const struct iovec *iov, int iov_cnt)
++{
++    return readv_writev(fd, iov, iov_cnt, false);
++}
++
++ssize_t
++writev(int fd, const struct iovec *iov, int iov_cnt)
++{
++    return readv_writev(fd, iov, iov_cnt, true);
++}
++#endif
+-- 
+1.8.2
+

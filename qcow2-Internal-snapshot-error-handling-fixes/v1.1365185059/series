@@ -1,0 +1,3 @@
+0000-qcow2-Internal-snapshot-error-handling-fixes.txt
+0001-qcow2-Return-real-error-in-qcow2_update_snapshot_refcount.patch
+0002-qcow2-Fix-L1-write-error-handling-in-qcow2_update_snapshot_refcount.patch

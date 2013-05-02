@@ -1,0 +1,44 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Richard Henderson <rth@twiddle.net>
+To: qemu-devel@nongnu.org
+Cc: Stefan Weil <sw@weilnetz.de>
+Date: Thu, 28 Mar 2013 08:37:53 -0700
+Message-id: 1364485075-17899-4-git-send-email-rth@twiddle.net
+Subject: [PATCH 3/5] tci: Avoid code before declarations
+
+This only valid with c99 extensions enabled, and easy to avoid.
+
+Signed-off-by: Richard Henderson <rth@twiddle.net>
+---
+ tci.c | 7 ++++---
+ 1 file changed, 4 insertions(+), 3 deletions(-)
+
+diff --git a/tci.c b/tci.c
+index 77e0980..70f8308 100644
+--- a/tci.c
++++ b/tci.c
+@@ -441,9 +441,6 @@ tcg_target_ulong tcg_qemu_tb_exec(CPUArchState *env, uint8_t *tb_ptr)
+     assert(tb_ptr);
+ 
+     for (;;) {
+-#if defined(GETPC)
+-        tci_tb_ptr = (uintptr_t)tb_ptr;
+-#endif
+         TCGOpcode opc = tb_ptr[0];
+ #if !defined(NDEBUG)
+         uint8_t op_size = tb_ptr[1];
+@@ -466,6 +463,10 @@ tcg_target_ulong tcg_qemu_tb_exec(CPUArchState *env, uint8_t *tb_ptr)
+         uint64_t v64;
+ #endif
+ 
++#if defined(GETPC)
++        tci_tb_ptr = (uintptr_t)tb_ptr;
++#endif
++
+         /* Skip opcode and size entry. */
+         tb_ptr += 2;
+ 
+-- 
+1.8.1.4
+
+

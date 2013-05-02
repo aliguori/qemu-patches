@@ -1,0 +1,1 @@
+../qcow2-Internal-snapshot-error-handling-fixes/v1.1365185059/0001-qcow2-Return-real-error-in-qcow2_update_snapshot_refcount.patch

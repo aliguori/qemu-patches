@@ -1,0 +1,87 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Gerd Hoffmann <kraxel@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Gerd Hoffmann <kraxel@redhat.com>
+Date: Tue, 12 Mar 2013 11:32:35 +0100
+Message-id: 1363084369-27517-5-git-send-email-kraxel@redhat.com
+Subject: [PATCH 04/18] qxl: zap qxl0 global
+
+DisplayChangeListener is passed now to all DisplayChangeListenerOps
+callbacks, so we can use that to access the qxl state and kill the
+qxl0 global variable.
+
+Signed-off-by: Gerd Hoffmann <kraxel@redhat.com>
+---
+ hw/qxl.c |   28 +++++++++++++++-------------
+ 1 file changed, 15 insertions(+), 13 deletions(-)
+
+diff --git a/hw/qxl.c b/hw/qxl.c
+index fe1c4f1..54a8d91 100644
+--- a/hw/qxl.c
++++ b/hw/qxl.c
+@@ -118,8 +118,6 @@ static QXLMode qxl_modes[] = {
+     QXL_MODE_EX(3200, 2400),
+ };
+ 
+-static PCIQXLDevice *qxl0;
+-
+ static void qxl_send_events(PCIQXLDevice *d, uint32_t events);
+ static int qxl_destroy_primary(PCIQXLDevice *d, qxl_async_io async);
+ static void qxl_reset_memslots(PCIQXLDevice *d);
+@@ -1870,28 +1868,34 @@ static void display_update(DisplayChangeListener *dcl,
+                            struct DisplayState *ds,
+                            int x, int y, int w, int h)
+ {
+-    if (qxl0->mode == QXL_MODE_VGA) {
+-        qemu_spice_display_update(&qxl0->ssd, x, y, w, h);
++    PCIQXLDevice *qxl = container_of(dcl, PCIQXLDevice, ssd.dcl);
++
++    if (qxl->mode == QXL_MODE_VGA) {
++        qemu_spice_display_update(&qxl->ssd, x, y, w, h);
+     }
+ }
+ 
+ static void display_resize(DisplayChangeListener *dcl,
+                            struct DisplayState *ds)
+ {
+-    if (qxl0->mode == QXL_MODE_VGA) {
+-        qemu_spice_display_resize(&qxl0->ssd);
++    PCIQXLDevice *qxl = container_of(dcl, PCIQXLDevice, ssd.dcl);
++
++    if (qxl->mode == QXL_MODE_VGA) {
++        qemu_spice_display_resize(&qxl->ssd);
+     }
+ }
+ 
+ static void display_refresh(DisplayChangeListener *dcl,
+                             struct DisplayState *ds)
+ {
+-    if (qxl0->mode == QXL_MODE_VGA) {
+-        qemu_spice_display_refresh(&qxl0->ssd);
++    PCIQXLDevice *qxl = container_of(dcl, PCIQXLDevice, ssd.dcl);
++
++    if (qxl->mode == QXL_MODE_VGA) {
++        qemu_spice_display_refresh(&qxl->ssd);
+     } else {
+-        qemu_mutex_lock(&qxl0->ssd.lock);
+-        qemu_spice_cursor_refresh_unlocked(&qxl0->ssd);
+-        qemu_mutex_unlock(&qxl0->ssd.lock);
++        qemu_mutex_lock(&qxl->ssd.lock);
++        qemu_spice_cursor_refresh_unlocked(&qxl->ssd);
++        qemu_mutex_unlock(&qxl->ssd.lock);
+     }
+ }
+ 
+@@ -2074,8 +2078,6 @@ static int qxl_init_primary(PCIDevice *dev)
+                                    qxl_hw_screen_dump, qxl_hw_text_update, qxl);
+     qemu_spice_display_init_common(&qxl->ssd, vga->ds);
+ 
+-    qxl0 = qxl;
+-
+     rc = qxl_init_common(qxl);
+     if (rc != 0) {
+         return rc;
+-- 
+1.7.9.7
+
+

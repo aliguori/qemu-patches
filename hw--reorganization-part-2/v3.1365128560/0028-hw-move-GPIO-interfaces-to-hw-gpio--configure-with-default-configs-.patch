@@ -1,0 +1,57 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: 
+Date: Thu,  4 Apr 2013 21:23:08 +0200
+Message-id: 1365103395-11547-29-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 28/35] hw: move GPIO interfaces to hw/gpio/,
+ configure with default-configs/
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ hw/arm/Makefile.objs      | 3 +--
+ hw/gpio/Makefile.objs     | 3 +++
+ hw/{ => gpio}/omap_gpio.c | 0
+ hw/{ => gpio}/zaurus.c    | 0
+ 4 files changed, 4 insertions(+), 2 deletions(-)
+ rename hw/{ => gpio}/omap_gpio.c (100%)
+ rename hw/{ => gpio}/zaurus.c (100%)
+
+diff --git a/hw/arm/Makefile.objs b/hw/arm/Makefile.objs
+index 915073b..ec4d0cb 100644
+--- a/hw/arm/Makefile.objs
++++ b/hw/arm/Makefile.objs
+@@ -4,8 +4,7 @@ obj-y += arm_sysctl.o arm11mpcore.o a9mpcore.o
+ obj-y += exynos4210_pmu.o
+ obj-y += a15mpcore.o
+ obj-y += pxa2xx_pcmcia.o
+-obj-y += zaurus.o
+-obj-y += omap_clk.o omap_gpio.o
++obj-y += omap_clk.o
+ obj-y += omap_gpmc.o omap_sdrc.o omap_tap.o omap_l4.o
+ obj-y += cbus.o
+ obj-y += mst_fpga.o
+diff --git a/hw/gpio/Makefile.objs b/hw/gpio/Makefile.objs
+index f8d8ee8..2c8b51f 100644
+--- a/hw/gpio/Makefile.objs
++++ b/hw/gpio/Makefile.objs
+@@ -1,3 +1,6 @@
+ common-obj-$(CONFIG_MAX7310) += max7310.o
+ common-obj-$(CONFIG_PL061) += pl061.o
+ common-obj-$(CONFIG_PUV3) += puv3_gpio.o
++common-obj-$(CONFIG_ZAURUS) += zaurus.o
++
++obj-$(CONFIG_OMAP) += omap_gpio.o
+diff --git a/hw/omap_gpio.c b/hw/gpio/omap_gpio.c
+similarity index 100%
+rename from hw/omap_gpio.c
+rename to hw/gpio/omap_gpio.c
+diff --git a/hw/zaurus.c b/hw/gpio/zaurus.c
+similarity index 100%
+rename from hw/zaurus.c
+rename to hw/gpio/zaurus.c
+-- 
+1.8.1.4
+
+
+

@@ -1,0 +1,1 @@
+../build-ACPI-MADT-for-fw_cfg-clients/v1.1363843392/0003-acpi_table_add-report-fatal-errors-through-an-internal-Error-object.patch

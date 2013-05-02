@@ -1,0 +1,49 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Dong Xu Wang <wdongxu@linux.vnet.ibm.com>
+To: qemu-devel@nongnu.org, Dong Xu Wang <wdongxu@linux.vnet.ibm.com>
+Cc: kwolf@redhat.com, armbru@redhat.com, wdongxu@cn.ibm.com,
+ qemu-devel@nongnu.org, Dong Xu Wang <wdongxu@linux.vnet.ibm.com>,
+ stefanha@redhat.com
+Date: Wed, 10 Apr 2013 14:25:05 +0800
+Message-id: 1365575111-4476-1-git-send-email-wdongxu@linux.vnet.ibm.com
+Subject: [PATCH 0/6] replace QEMUOptionParameter with QemuOpts parser
+
+These patches will replace QEMUOptionParameter with QemuOpts. Change logs
+please go to each patch's commit message.
+
+Dong Xu Wang (6):
+  add def_value_str in QemuOptDesc struct and rewrite qemu_opts_print
+  avoid duplication of default value in QemuOpts
+  Create four QemuOptsList related functions
+  create some QemuOpts functons
+  Use QemuOpts support in block layer
+  remove QEMUOptionParameter related functions and struct
+
+ block.c                   |  98 ++++----
+ block/cow.c               |  46 ++--
+ block/gluster.c           |  37 ++--
+ block/iscsi.c             |  35 ++-
+ block/qcow.c              |  61 +++--
+ block/qcow2.c             | 173 ++++++++-------
+ block/qed.c               |  86 ++++---
+ block/qed.h               |   2 +-
+ block/raw-posix.c         |  59 +++--
+ block/raw-win32.c         |  31 +--
+ block/raw.c               |  30 +--
+ block/rbd.c               |  62 +++---
+ block/sheepdog.c          |  79 ++++---
+ block/vdi.c               |  70 +++---
+ block/vmdk.c              |  90 ++++----
+ block/vpc.c               |  57 ++---
+ block/vvfat.c             |  11 +-
+ include/block/block.h     |   5 +-
+ include/block/block_int.h |   6 +-
+ include/qemu/option.h     |  49 ++--
+ qemu-img.c                |  61 +++--
+ util/qemu-option.c        | 555 ++++++++++++++++++++--------------------------
+ 22 files changed, 791 insertions(+), 912 deletions(-)
+
+-- 
+1.7.11.7
+
+

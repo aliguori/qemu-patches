@@ -1,0 +1,196 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Michael Roth <mdroth@linux.vnet.ibm.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, owasserm@redhat.com,
+ kraxel@redhat.com, qemu-stable@nongnu.org, quintela@redhat.com
+Date: Tue, 5 Feb 2013 18:48:25 -0600
+Message-id: 1360111706-13138-2-git-send-email-mdroth@linux.vnet.ibm.com
+Subject: [PATCH 1/2] savevm: add support for RAMBlock resize handlers
+
+This allow users to register resize handlers to be called in cases where
+a RAMBlock is received over the wire that doesn't match the size of the
+target's corresponding RAMBlock. The handlers are generally responsible
+for tearing down and re-initializing corresponding MemoryRegions based on
+knowledge of what the size of the RAMBlock is that they'll be receiving
+over the wire.
+
+Cc: qemu-stable@nongnu.org
+Signed-off-by: Michael Roth <mdroth@linux.vnet.ibm.com>
+---
+ arch_init.c                 |   28 +++++++++++++---
+ include/migration/vmstate.h |   14 ++++++++
+ savevm.c                    |   77 +++++++++++++++++++++++++++++++++++++++++++
+ 3 files changed, 114 insertions(+), 5 deletions(-)
+
+diff --git a/arch_init.c b/arch_init.c
+index 8da868b..265ad8c 100644
+--- a/arch_init.c
++++ b/arch_init.c
+@@ -793,33 +793,51 @@ static int ram_load(QEMUFile *f, void *opaque, int version_id)
+                 ram_addr_t total_ram_bytes = addr;
+ 
+                 while (total_ram_bytes) {
+-                    RAMBlock *block;
++                    RAMBlock *block, *block_next;
+                     uint8_t len;
+ 
+                     len = qemu_get_byte(f);
+                     qemu_get_buffer(f, (uint8_t *)id, len);
+                     id[len] = 0;
+                     length = qemu_get_be64(f);
++                    ret = 0;
+ 
+-                    QTAILQ_FOREACH(block, &ram_list.blocks, next) {
++                    QTAILQ_FOREACH_SAFE(block, &ram_list.blocks, next,
++                                        block_next) {
+                         if (!strncmp(id, block->idstr, sizeof(id))) {
+                             if (block->length != length) {
+-                                ret =  -EINVAL;
+-                                goto done;
++                                const VMStateRAMResizeHandler *rh =
++                                    vmstate_find_ram_resize(block->mr);
++                                if (rh) {
++                                    ret = vmstate_do_ram_resize(rh, length);
++                                } else {
++                                    ret =  -EINVAL;
++                                }
+                             }
+                             break;
+                         }
+                     }
+ 
++                    if (ret) {
++                        break;
++                    }
++
+                     if (!block) {
+                         fprintf(stderr, "Unknown ramblock \"%s\", cannot "
+                                 "accept migration\n", id);
+                         ret = -EINVAL;
+-                        goto done;
++                        break;
+                     }
+ 
+                     total_ram_bytes -= length;
+                 }
++                /* end of block synchronization phase, resize handlers are
++                 * no longer useful
++                 */
++                vmstate_unregister_ram_resizable_all();
++                if (ret) {
++                    goto done;
++                }
+             }
+         }
+ 
+diff --git a/include/migration/vmstate.h b/include/migration/vmstate.h
+index f27276c..9e50391 100644
+--- a/include/migration/vmstate.h
++++ b/include/migration/vmstate.h
+@@ -637,4 +637,18 @@ void vmstate_register_ram(struct MemoryRegion *memory, DeviceState *dev);
+ void vmstate_unregister_ram(struct MemoryRegion *memory, DeviceState *dev);
+ void vmstate_register_ram_global(struct MemoryRegion *memory);
+ 
++/* definitions for registering resize handlers for memory blocks */
++typedef struct VMStateRAMResizeHandler VMStateRAMResizeHandler;
++
++typedef int (RAMResizeFunc)(struct MemoryRegion *mr, uint64_t size, void *opaque);
++typedef void (RAMResizeCleanupFunc)(void *opaque);
++
++void vmstate_register_ram_resizable(struct MemoryRegion *mr,
++                                    RAMResizeFunc resize_func,
++                                    RAMResizeCleanupFunc cleanup_func,
++                                    void *opaque);
++void vmstate_unregister_ram_resizable_all(void);
++const VMStateRAMResizeHandler *vmstate_find_ram_resize(const struct MemoryRegion *mr);
++int vmstate_do_ram_resize(const VMStateRAMResizeHandler *rh, uint64_t size);
++
+ #endif
+diff --git a/savevm.c b/savevm.c
+index 4eb29b2..0553c47 100644
+--- a/savevm.c
++++ b/savevm.c
+@@ -2388,3 +2388,80 @@ void vmstate_register_ram_global(MemoryRegion *mr)
+ {
+     vmstate_register_ram(mr, NULL);
+ }
++
++/* routines for registering resize handlers for memory blocks */
++struct VMStateRAMResizeHandler {
++    MemoryRegion *mr;
++    RAMResizeFunc *resize_func;
++    RAMResizeCleanupFunc *cleanup_func;
++    void *opaque;
++    QTAILQ_ENTRY(VMStateRAMResizeHandler) next;
++};
++
++static QTAILQ_HEAD(, VMStateRAMResizeHandler) ram_resize_handlers =
++    QTAILQ_HEAD_INITIALIZER(ram_resize_handlers);
++
++void vmstate_register_ram_resizable(MemoryRegion *mr,
++                                    RAMResizeFunc resize_func,
++                                    RAMResizeCleanupFunc cleanup_func,
++                                    void *opaque)
++{
++    VMStateRAMResizeHandler *rh;
++
++    assert(mr && resize_func);
++
++    QTAILQ_FOREACH(rh, &ram_resize_handlers, next) {
++        if (rh->mr == mr) {
++            /* only one resize handler per MemoryRegion */
++            assert(0);
++        }
++    }
++
++    rh = g_malloc0(sizeof(VMStateRAMResizeHandler));
++    rh->mr = mr;
++    rh->resize_func = resize_func;
++    rh->cleanup_func = cleanup_func;
++    rh->opaque = opaque;
++
++    QTAILQ_INSERT_TAIL(&ram_resize_handlers, rh, next);
++}
++
++void vmstate_unregister_ram_resizable_all(void)
++{
++    VMStateRAMResizeHandler *rh, *rh_next;
++
++    QTAILQ_FOREACH_SAFE(rh, &ram_resize_handlers, next, rh_next) {
++        if (rh->cleanup_func) {
++            rh->cleanup_func(rh->opaque);
++            QTAILQ_REMOVE(&ram_resize_handlers, rh, next);
++        }
++        g_free(rh);
++    }
++}
++
++const VMStateRAMResizeHandler *vmstate_find_ram_resize(const MemoryRegion *mr)
++{
++    VMStateRAMResizeHandler *rh;
++
++    QTAILQ_FOREACH(rh, &ram_resize_handlers, next) {
++        if (rh->mr == mr) {
++            return rh;
++        }
++    }
++
++    return NULL;
++}
++
++int vmstate_do_ram_resize(const VMStateRAMResizeHandler *rh, uint64_t size)
++{
++    int ret;
++
++    assert(rh);
++    ret = rh->resize_func(rh->mr, size, rh->opaque);
++    if (ret) {
++        fprintf(stderr, "Unable to resize ramblock \"%s\"",
++                memory_region_name(rh->mr));
++    }
++
++    return ret;
++}
+-- 
+1.7.9.5
+

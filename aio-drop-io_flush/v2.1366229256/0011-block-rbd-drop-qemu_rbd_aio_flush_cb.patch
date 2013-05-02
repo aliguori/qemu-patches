@@ -1,0 +1,80 @@
+From patches Mon Sep 17 00:00:00 2001
+From: "Stefan Hajnoczi" <stefanha@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, Paolo Bonzini <pbonzini@redhat.com>,
+ Stefan Hajnoczi <stefanha@redhat.com>, pingfank@linux.vnet.ibm.com,
+ Kevin Wolf <kwolf@redhat.com>
+Date: Wed, 17 Apr 2013 15:07:47 +0200
+Message-id: 1366204073-8468-12-git-send-email-stefanha@redhat.com
+Subject: [PATCH 11/17] block/rbd: drop qemu_rbd_aio_flush_cb()
+
+.io_flush() is no longer called so drop qemu_rbd_aio_flush_cb().
+qemu_aio_count is unused now so drop it too.
+
+Signed-off-by: Stefan Hajnoczi <stefanha@redhat.com>
+---
+ block/rbd.c | 14 +-------------
+ 1 file changed, 1 insertion(+), 13 deletions(-)
+
+diff --git a/block/rbd.c b/block/rbd.c
+index 141b488..20bf0c7 100644
+--- a/block/rbd.c
++++ b/block/rbd.c
+@@ -100,7 +100,6 @@ typedef struct BDRVRBDState {
+     rados_ioctx_t io_ctx;
+     rbd_image_t image;
+     char name[RBD_MAX_IMAGE_NAME_SIZE];
+-    int qemu_aio_count;
+     char *snap;
+     int event_reader_pos;
+     RADOSCB *event_rcb;
+@@ -428,19 +427,11 @@ static void qemu_rbd_aio_event_reader(void *opaque)
+             if (s->event_reader_pos == sizeof(s->event_rcb)) {
+                 s->event_reader_pos = 0;
+                 qemu_rbd_complete_aio(s->event_rcb);
+-                s->qemu_aio_count--;
+             }
+         }
+     } while (ret < 0 && errno == EINTR);
+ }
+ 
+-static int qemu_rbd_aio_flush_cb(void *opaque)
+-{
+-    BDRVRBDState *s = opaque;
+-
+-    return (s->qemu_aio_count > 0);
+-}
+-
+ static int qemu_rbd_open(BlockDriverState *bs, const char *filename,
+                          QDict *options, int flags)
+ {
+@@ -526,7 +517,7 @@ static int qemu_rbd_open(BlockDriverState *bs, const char *filename,
+     fcntl(s->fds[0], F_SETFL, O_NONBLOCK);
+     fcntl(s->fds[1], F_SETFL, O_NONBLOCK);
+     qemu_aio_set_fd_handler(s->fds[RBD_FD_READ], qemu_rbd_aio_event_reader,
+-                            NULL, qemu_rbd_aio_flush_cb, s);
++                            NULL, NULL, s);
+ 
+ 
+     return 0;
+@@ -710,8 +701,6 @@ static BlockDriverAIOCB *rbd_start_aio(BlockDriverState *bs,
+     off = sector_num * BDRV_SECTOR_SIZE;
+     size = nb_sectors * BDRV_SECTOR_SIZE;
+ 
+-    s->qemu_aio_count++; /* All the RADOSCB */
+-
+     rcb = g_malloc(sizeof(RADOSCB));
+     rcb->done = 0;
+     rcb->acb = acb;
+@@ -748,7 +737,6 @@ static BlockDriverAIOCB *rbd_start_aio(BlockDriverState *bs,
+ 
+ failed:
+     g_free(rcb);
+-    s->qemu_aio_count--;
+     qemu_aio_release(acb);
+     return NULL;
+ }
+-- 
+1.8.1.4
+
+

@@ -1,0 +1,1 @@
+../TARGET__ALIGNMENT-cleanup-and-config-targetmak-trimming/v2.1365010318/0004-elfload-use-abi_short-ushort-instead-of-target_short-ushort.patch

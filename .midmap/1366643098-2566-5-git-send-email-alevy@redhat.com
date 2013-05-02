@@ -1,0 +1,1 @@
+../ccid-and-libcacard-fixes-for-windows-mingw/v3.1366671870/0004-ccid-declare-DEFAULT_ATR-table-to-be-static-const.patch

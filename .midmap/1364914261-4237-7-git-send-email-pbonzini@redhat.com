@@ -1,0 +1,1 @@
+../audio-simplify--soundhw-machinery-use-default-configs/v1.1364939455/0006-audio-move-PCI-audio-cards-to-pcimak.patch

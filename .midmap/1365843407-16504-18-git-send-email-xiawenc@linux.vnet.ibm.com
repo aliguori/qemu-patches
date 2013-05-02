@@ -1,0 +1,1 @@
+../qmp-hmp-interfaces-for-internal-snapshot-info/v12.1365890189/0017-hmp-show-ImageInfo-in-info-block.patch

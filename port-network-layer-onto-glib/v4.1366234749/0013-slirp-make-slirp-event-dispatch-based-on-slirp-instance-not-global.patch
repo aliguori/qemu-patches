@@ -1,0 +1,892 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Liu Ping Fan <qemulist@gmail.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <anthony@codemonkey.ws>,
+ Paolo Bonzini <pbonzini@redhat.com>, Jan Kiszka <jan.kiszka@siemens.com>,
+ Stefan Hajnoczi <stefanha@redhat.com>, mdroth <mdroth@linux.vnet.ibm.com>
+Date: Wed, 17 Apr 2013 16:39:22 +0800
+Message-id: 1366187964-14265-14-git-send-email-qemulist@gmail.com
+Subject: [PATCH 13/15] slirp: make slirp event dispatch based on slirp
+ instance, not global
+
+From: Liu Ping Fan <pingfank@linux.vnet.ibm.com>
+
+Split slirp_pollfds_fill/poll actions into each slirp, so that SlirpState
+can run on dedicated context.
+Each slirp socket will corresponds to a GPollFD, and its SlirpState stands
+for a GSource(EventsGSource). Finally different SlirpState can run on different
+context.
+
+Signed-off-by: Liu Ping Fan <pingfank@linux.vnet.ibm.com>
+
+net: port slirp to glib
+
+Signed-off-by: Liu Ping Fan <pingfank@linux.vnet.ibm.com>
+---
+ main-loop.c      |    4 -
+ net/slirp.c      |   44 ++++
+ slirp/libslirp.h |    7 +-
+ slirp/slirp.c    |  587 +++++++++++++++++++++++++-----------------------------
+ slirp/socket.c   |    2 +
+ slirp/socket.h   |    1 +
+ stubs/slirp.c    |    8 -
+ 7 files changed, 321 insertions(+), 332 deletions(-)
+
+diff --git a/main-loop.c b/main-loop.c
+index 8c9b58c..970f25d 100644
+--- a/main-loop.c
++++ b/main-loop.c
+@@ -432,14 +432,10 @@ int main_loop_wait(int nonblocking)
+     /* XXX: separate device handlers from system ones */
+ #ifdef CONFIG_SLIRP
+     slirp_update_timeout(&timeout);
+-    slirp_pollfds_fill(gpollfds);
+ #endif
+     qemu_iohandler_fill(gpollfds);
+     ret = os_host_main_loop_wait(timeout);
+     qemu_iohandler_poll(gpollfds, ret);
+-#ifdef CONFIG_SLIRP
+-    slirp_pollfds_poll(gpollfds, (ret < 0));
+-#endif
+ 
+     qemu_run_all_timers();
+ 
+diff --git a/net/slirp.c b/net/slirp.c
+index a6116d5..ece98f0 100644
+--- a/net/slirp.c
++++ b/net/slirp.c
+@@ -36,6 +36,7 @@
+ #include "qemu/sockets.h"
+ #include "slirp/libslirp.h"
+ #include "char/char.h"
++#include "util/event_gsource.h"
+ 
+ static int get_str_sep(char *buf, int buf_size, const char **pp, int sep)
+ {
+@@ -76,6 +77,7 @@ typedef struct SlirpState {
+ #ifndef _WIN32
+     char smb_dir[128];
+ #endif
++    EventsGSource *slirp_src;
+ } SlirpState;
+ 
+ static struct slirp_config_str *slirp_configs;
+@@ -120,17 +122,56 @@ static void net_slirp_cleanup(NetClientState *nc)
+     SlirpState *s = DO_UPCAST(SlirpState, nc, nc);
+ 
+     slirp_cleanup(s->slirp);
++    events_source_release(s->slirp_src);
+     slirp_smb_cleanup(s);
+     QTAILQ_REMOVE(&slirp_stacks, s, entry);
+ }
+ 
++static void net_slirp_bind_ctx(NetClientState *nc, GMainContext *ctx)
++{
++    SlirpState *s = DO_UPCAST(SlirpState, nc, nc);
++
++    g_source_attach(&s->slirp_src->source, ctx);
++}
++
+ static NetClientInfo net_slirp_info = {
+     .type = NET_CLIENT_OPTIONS_KIND_USER,
+     .size = sizeof(SlirpState),
+     .receive = net_slirp_receive,
+     .cleanup = net_slirp_cleanup,
++    .bind_ctx = net_slirp_bind_ctx,
+ };
+ 
++static GSourceFuncs slirp_gfuncs = {
++    .prepare = slirp_prepare,
++    .check = events_source_check,
++    .dispatch = events_source_dispatch,
++};
++
++static EventsGSource *slirp_source_new(GSourceFunc dispatch_cb, void *opaque)
++{
++    return events_source_new(&slirp_gfuncs, dispatch_cb, opaque);
++}
++
++GPollFD *slirp_gsource_get_gfd(void *opaque, int fd)
++{
++    GPollFD *retfd;
++    SlirpState *s = opaque;
++    EventsGSource *src = s->slirp_src;
++
++    retfd = events_source_get_gfd(src, fd);
++
++    return retfd;
++}
++
++void slirp_gsource_close_gfd(void *opaque, GPollFD *pollfd)
++{
++    SlirpState *s = opaque;
++    EventsGSource *src = s->slirp_src;
++
++    events_source_close_gfd(src, pollfd);
++}
++
+ static int net_slirp_init(NetClientState *peer, const char *model,
+                           const char *name, int restricted,
+                           const char *vnetwork, const char *vhost,
+@@ -244,6 +285,8 @@ static int net_slirp_init(NetClientState *peer, const char *model,
+ 
+     s->slirp = slirp_init(restricted, net, mask, host, vhostname,
+                           tftp_export, bootfile, dhcp, dns, dnssearch, s);
++    s->slirp_src = slirp_source_new(slirp_handler, s->slirp);
++
+     QTAILQ_INSERT_TAIL(&slirp_stacks, s, entry);
+ 
+     for (config = slirp_configs; config; config = config->next) {
+@@ -266,6 +309,7 @@ static int net_slirp_init(NetClientState *peer, const char *model,
+             goto error;
+     }
+ #endif
++    s->nc.info->bind_ctx(&s->nc, NULL);
+ 
+     return 0;
+ 
+diff --git a/slirp/libslirp.h b/slirp/libslirp.h
+index ceabff8..1aad5a4 100644
+--- a/slirp/libslirp.h
++++ b/slirp/libslirp.h
+@@ -17,11 +17,10 @@ Slirp *slirp_init(int restricted, struct in_addr vnetwork,
+ void slirp_cleanup(Slirp *slirp);
+ 
+ void slirp_update_timeout(uint32_t *timeout);
+-void slirp_pollfds_fill(GArray *pollfds);
+-
+-void slirp_pollfds_poll(GArray *pollfds, int select_error);
+ 
+ void slirp_input(Slirp *slirp, const uint8_t *pkt, int pkt_len);
++gboolean slirp_prepare(GSource *source, gint *time);
++gboolean slirp_handler(gpointer data);
+ 
+ /* you must provide the following functions: */
+ void slirp_output(void *opaque, const uint8_t *pkt, int pkt_len);
+@@ -40,5 +39,7 @@ void slirp_socket_recv(Slirp *slirp, struct in_addr guest_addr,
+                        int guest_port, const uint8_t *buf, int size);
+ size_t slirp_socket_can_recv(Slirp *slirp, struct in_addr guest_addr,
+                              int guest_port);
++GPollFD *slirp_gsource_get_gfd(void *opaque, int fd);
++void slirp_gsource_close_gfd(void *opaque, GPollFD *pollfd);
+ 
+ #endif
+diff --git a/slirp/slirp.c b/slirp/slirp.c
+index 5f1c5e8..883b7bd 100644
+--- a/slirp/slirp.c
++++ b/slirp/slirp.c
+@@ -26,6 +26,7 @@
+ #include "char/char.h"
+ #include "slirp.h"
+ #include "hw/hw.h"
++#include "util/event_gsource.h"
+ 
+ /* host loopback address */
+ struct in_addr loopback_addr;
+@@ -262,386 +263,338 @@ void slirp_update_timeout(uint32_t *timeout)
+     if (!QTAILQ_EMPTY(&slirp_instances)) {
+         *timeout = MIN(1000, *timeout);
+     }
++    curtime = qemu_get_clock_ms(rt_clock);
+ }
+ 
+-void slirp_pollfds_fill(GArray *pollfds)
++gboolean slirp_prepare(GSource *source, gint *time)
+ {
+-    Slirp *slirp;
++    EventsGSource *slirp_src = (EventsGSource *)source;
++    Slirp *slirp = slirp_src->opaque;
+     struct socket *so, *so_next;
+-
+-    if (QTAILQ_EMPTY(&slirp_instances)) {
+-        return;
+-    }
++    int events = 0;
+ 
+     /*
+-     * First, TCP sockets
++     * *_slowtimo needs calling if there are IP fragments
++     * in the fragment queue, or there are TCP connections active
+      */
++    slirp->do_slowtimo = 0;
++    slirp->do_slowtimo |= ((slirp->tcb.so_next != &slirp->tcb) ||
++            (&slirp->ipq.ip_link != slirp->ipq.ip_link.next));
++
++    for (so = slirp->tcb.so_next; so != &slirp->tcb;
++            so = so_next) {
+ 
+-    QTAILQ_FOREACH(slirp, &slirp_instances, entry) {
++        so_next = so->so_next;
++        if (so->pollfd->fd == -1 && so->s != -1) {
++            so->pollfd->fd = so->s;
++            g_source_add_poll(source, so->pollfd);
++        }
+         /*
+-         * *_slowtimo needs calling if there are IP fragments
+-         * in the fragment queue, or there are TCP connections active
++         * See if we need a tcp_fasttimo
+          */
+-        slirp->do_slowtimo = 0;
+-        slirp->do_slowtimo |= ((slirp->tcb.so_next != &slirp->tcb) ||
+-                (&slirp->ipq.ip_link != slirp->ipq.ip_link.next));
+-
+-        for (so = slirp->tcb.so_next; so != &slirp->tcb;
+-                so = so_next) {
+-            int events = 0;
+-
+-            so_next = so->so_next;
+-
+-            so->pollfds_idx = -1;
+-
+-            /*
+-             * See if we need a tcp_fasttimo
+-             */
+-            if (slirp->time_fasttimo == 0 && so->so_tcpcb->t_flags & TF_DELACK) {
+-                slirp->time_fasttimo = curtime; /* Flag when we want a fasttimo */
+-            }
+-
+-            /*
+-             * NOFDREF can include still connecting to local-host,
+-             * newly socreated() sockets etc. Don't want to select these.
+-             */
+-            if (so->so_state & SS_NOFDREF || so->s == -1) {
+-                continue;
+-            }
+-
+-            /*
+-             * Set for reading sockets which are accepting
+-             */
+-            if (so->so_state & SS_FACCEPTCONN) {
+-                GPollFD pfd = {
+-                    .fd = so->s,
+-                    .events = G_IO_IN | G_IO_HUP | G_IO_ERR,
+-                };
+-                so->pollfds_idx = pollfds->len;
+-                g_array_append_val(pollfds, pfd);
+-                continue;
+-            }
++        if (slirp->time_fasttimo == 0 &&
++             so->so_tcpcb->t_flags & TF_DELACK) {
++            slirp->time_fasttimo = curtime; /* Flag when want a fasttimo */
++        }
+ 
+-            /*
+-             * Set for writing sockets which are connecting
+-             */
+-            if (so->so_state & SS_ISFCONNECTING) {
+-                GPollFD pfd = {
+-                    .fd = so->s,
+-                    .events = G_IO_OUT | G_IO_ERR,
+-                };
+-                so->pollfds_idx = pollfds->len;
+-                g_array_append_val(pollfds, pfd);
+-                continue;
+-            }
++        /*
++         * NOFDREF can include still connecting to local-host,
++         * newly socreated() sockets etc. Don't want to select these.
++         */
++        if (so->so_state & SS_NOFDREF || so->s == -1) {
++            continue;
++        }
+ 
+-            /*
+-             * Set for writing if we are connected, can send more, and
+-             * we have something to send
+-             */
+-            if (CONN_CANFSEND(so) && so->so_rcv.sb_cc) {
+-                events |= G_IO_OUT | G_IO_ERR;
+-            }
++        /*
++         * Set for reading sockets which are accepting
++         */
++        if (so->so_state & SS_FACCEPTCONN) {
++            so->pollfd->events = G_IO_IN | G_IO_HUP | G_IO_ERR;
++            continue;
++        }
+ 
+-            /*
+-             * Set for reading (and urgent data) if we are connected, can
+-             * receive more, and we have room for it XXX /2 ?
+-             */
+-            if (CONN_CANFRCV(so) &&
+-                (so->so_snd.sb_cc < (so->so_snd.sb_datalen/2))) {
+-                events |= G_IO_IN | G_IO_HUP | G_IO_ERR | G_IO_PRI;
+-            }
++        /*
++         * Set for writing sockets which are connecting
++         */
++        if (so->so_state & SS_ISFCONNECTING) {
++            so->pollfd->events = G_IO_OUT | G_IO_ERR;
++            continue;
++        }
+ 
+-            if (events) {
+-                GPollFD pfd = {
+-                    .fd = so->s,
+-                    .events = events,
+-                };
+-                so->pollfds_idx = pollfds->len;
+-                g_array_append_val(pollfds, pfd);
+-            }
++        /*
++         * Set for writing if we are connected, can send more, and
++         * we have something to send
++         */
++        if (CONN_CANFSEND(so) && so->so_rcv.sb_cc) {
++            events |= G_IO_OUT | G_IO_ERR;
+         }
+ 
+         /*
+-         * UDP sockets
++         * Set for reading (and urgent data) if we are connected, can
++         * receive more, and we have room for it XXX /2 ?
+          */
+-        for (so = slirp->udb.so_next; so != &slirp->udb;
+-                so = so_next) {
+-            so_next = so->so_next;
++        if (CONN_CANFRCV(so) &&
++            (so->so_snd.sb_cc < (so->so_snd.sb_datalen/2))) {
++            events |= G_IO_IN | G_IO_HUP | G_IO_ERR | G_IO_PRI;
++        }
+ 
+-            so->pollfds_idx = -1;
++        if (events) {
++            so->pollfd->events = events;
++        }
++    }
+ 
+-            /*
+-             * See if it's timed out
+-             */
+-            if (so->so_expire) {
+-                if (so->so_expire <= curtime) {
+-                    udp_detach(so);
+-                    continue;
+-                } else {
+-                    slirp->do_slowtimo = 1; /* Let socket expire */
+-                }
+-            }
++    /*
++     * UDP sockets
++     */
++    for (so = slirp->udb.so_next; so != &slirp->udb;
++            so = so_next) {
++        so_next = so->so_next;
+ 
+-            /*
+-             * When UDP packets are received from over the
+-             * link, they're sendto()'d straight away, so
+-             * no need for setting for writing
+-             * Limit the number of packets queued by this session
+-             * to 4.  Note that even though we try and limit this
+-             * to 4 packets, the session could have more queued
+-             * if the packets needed to be fragmented
+-             * (XXX <= 4 ?)
+-             */
+-            if ((so->so_state & SS_ISFCONNECTED) && so->so_queued <= 4) {
+-                GPollFD pfd = {
+-                    .fd = so->s,
+-                    .events = G_IO_IN | G_IO_HUP | G_IO_ERR,
+-                };
+-                so->pollfds_idx = pollfds->len;
+-                g_array_append_val(pollfds, pfd);
++        /*
++         * See if it's timed out
++         */
++        if (so->so_expire) {
++            if (so->so_expire <= curtime) {
++                udp_detach(so);
++                continue;
++            } else {
++                slirp->do_slowtimo = 1; /* Let socket expire */
+             }
+         }
+ 
+         /*
+-         * ICMP sockets
++         * When UDP packets are received from over the
++         * link, they're sendto()'d straight away, so
++         * no need for setting for writing
++         * Limit the number of packets queued by this session
++         * to 4.  Note that even though we try and limit this
++         * to 4 packets, the session could have more queued
++         * if the packets needed to be fragmented
++         * (XXX <= 4 ?)
+          */
+-        for (so = slirp->icmp.so_next; so != &slirp->icmp;
+-                so = so_next) {
+-            so_next = so->so_next;
++        if ((so->so_state & SS_ISFCONNECTED) && so->so_queued <= 4) {
++            so->pollfd->events = G_IO_IN | G_IO_HUP | G_IO_ERR;
++        }
++    }
+ 
+-            so->pollfds_idx = -1;
++    /*
++     * ICMP sockets
++     */
++    for (so = slirp->icmp.so_next; so != &slirp->icmp;
++            so = so_next) {
++        so_next = so->so_next;
+ 
+-            /*
+-             * See if it's timed out
+-             */
+-            if (so->so_expire) {
+-                if (so->so_expire <= curtime) {
+-                    icmp_detach(so);
+-                    continue;
+-                } else {
+-                    slirp->do_slowtimo = 1; /* Let socket expire */
+-                }
++        /*
++         * See if it's timed out
++         */
++        if (so->so_expire) {
++            if (so->so_expire <= curtime) {
++                icmp_detach(so);
++                continue;
++            } else {
++                slirp->do_slowtimo = 1; /* Let socket expire */
+             }
++        }
+ 
+-            if (so->so_state & SS_ISFCONNECTED) {
+-                GPollFD pfd = {
+-                    .fd = so->s,
+-                    .events = G_IO_IN | G_IO_HUP | G_IO_ERR,
+-                };
+-                so->pollfds_idx = pollfds->len;
+-                g_array_append_val(pollfds, pfd);
+-            }
++        if (so->so_state & SS_ISFCONNECTED) {
++            so->pollfd->events = G_IO_IN | G_IO_HUP | G_IO_ERR;
+         }
+     }
++
++    return false;
+ }
+ 
+-void slirp_pollfds_poll(GArray *pollfds, int select_error)
++gboolean slirp_handler(gpointer data)
+ {
+-    Slirp *slirp;
++    EventsGSource *src = data;
++    Slirp *slirp = src->opaque;
+     struct socket *so, *so_next;
+     int ret;
+ 
+-    if (QTAILQ_EMPTY(&slirp_instances)) {
+-        return;
++    /*
++     * See if anything has timed out
++     */
++    if (slirp->time_fasttimo && ((curtime - slirp->time_fasttimo) >= 2)) {
++        tcp_fasttimo(slirp);
++        slirp->time_fasttimo = 0;
++    }
++    if (slirp->do_slowtimo && ((curtime - slirp->last_slowtimo) >= 499)) {
++        ip_slowtimo(slirp);
++        tcp_slowtimo(slirp);
++        slirp->last_slowtimo = curtime;
+     }
+ 
+-    curtime = qemu_get_clock_ms(rt_clock);
++    /*
++     * Check TCP sockets
++     */
++    for (so = slirp->tcb.so_next; so != &slirp->tcb;
++            so = so_next) {
++        int revents;
+ 
+-    QTAILQ_FOREACH(slirp, &slirp_instances, entry) {
+-        /*
+-         * See if anything has timed out
+-         */
+-        if (slirp->time_fasttimo && ((curtime - slirp->time_fasttimo) >= 2)) {
+-            tcp_fasttimo(slirp);
+-            slirp->time_fasttimo = 0;
++        so_next = so->so_next;
++
++        revents = 0;
++        if (so->pollfd) {
++            revents = so->pollfd->revents;
+         }
+-        if (slirp->do_slowtimo && ((curtime - slirp->last_slowtimo) >= 499)) {
+-            ip_slowtimo(slirp);
+-            tcp_slowtimo(slirp);
+-            slirp->last_slowtimo = curtime;
++        if (so->so_state & SS_NOFDREF || so->s == -1) {
++            continue;
+         }
+ 
+         /*
+-         * Check sockets
++         * Check for URG data
++         * This will soread as well, so no need to
++         * test for G_IO_IN below if this succeeds
+          */
+-        if (!select_error) {
++        if (revents & G_IO_PRI) {
++            sorecvoob(so);
++        }
++        /*
++         * Check sockets for reading
++         */
++        else if (revents & (G_IO_IN | G_IO_HUP | G_IO_ERR)) {
+             /*
+-             * Check TCP sockets
++             * Check for incoming connections
+              */
+-            for (so = slirp->tcb.so_next; so != &slirp->tcb;
+-                    so = so_next) {
+-                int revents;
+-
+-                so_next = so->so_next;
+-
+-                revents = 0;
+-                if (so->pollfds_idx != -1) {
+-                    revents = g_array_index(pollfds, GPollFD,
+-                                            so->pollfds_idx).revents;
+-                }
++            if (so->so_state & SS_FACCEPTCONN) {
++                tcp_connect(so);
++                continue;
++            } /* else */
++            ret = soread(so);
+ 
+-                if (so->so_state & SS_NOFDREF || so->s == -1) {
+-                    continue;
+-                }
++            /* Output it if we read something */
++            if (ret > 0) {
++                tcp_output(sototcpcb(so));
++            }
++        }
+ 
+-                /*
+-                 * Check for URG data
+-                 * This will soread as well, so no need to
+-                 * test for G_IO_IN below if this succeeds
+-                 */
+-                if (revents & G_IO_PRI) {
+-                    sorecvoob(so);
+-                }
+-                /*
+-                 * Check sockets for reading
+-                 */
+-                else if (revents & (G_IO_IN | G_IO_HUP | G_IO_ERR)) {
+-                    /*
+-                     * Check for incoming connections
+-                     */
+-                    if (so->so_state & SS_FACCEPTCONN) {
+-                        tcp_connect(so);
++        /*
++         * Check sockets for writing
++         */
++        if (!(so->so_state & SS_NOFDREF) &&
++                (revents & (G_IO_OUT | G_IO_ERR))) {
++            /*
++             * Check for non-blocking, still-connecting sockets
++             */
++            if (so->so_state & SS_ISFCONNECTING) {
++                /* Connected */
++                so->so_state &= ~SS_ISFCONNECTING;
++
++                ret = send(so->s, (const void *) &ret, 0, 0);
++                if (ret < 0) {
++                    /* XXXXX Must fix, zero bytes is a NOP */
++                    if (errno == EAGAIN || errno == EWOULDBLOCK ||
++                        errno == EINPROGRESS || errno == ENOTCONN) {
+                         continue;
+-                    } /* else */
+-                    ret = soread(so);
+-
+-                    /* Output it if we read something */
+-                    if (ret > 0) {
+-                        tcp_output(sototcpcb(so));
+                     }
+-                }
+ 
+-                /*
+-                 * Check sockets for writing
+-                 */
+-                if (!(so->so_state & SS_NOFDREF) &&
+-                        (revents & (G_IO_OUT | G_IO_ERR))) {
+-                    /*
+-                     * Check for non-blocking, still-connecting sockets
+-                     */
+-                    if (so->so_state & SS_ISFCONNECTING) {
+-                        /* Connected */
+-                        so->so_state &= ~SS_ISFCONNECTING;
+-
+-                        ret = send(so->s, (const void *) &ret, 0, 0);
+-                        if (ret < 0) {
+-                            /* XXXXX Must fix, zero bytes is a NOP */
+-                            if (errno == EAGAIN || errno == EWOULDBLOCK ||
+-                                errno == EINPROGRESS || errno == ENOTCONN) {
+-                                continue;
+-                            }
+-
+-                            /* else failed */
+-                            so->so_state &= SS_PERSISTENT_MASK;
+-                            so->so_state |= SS_NOFDREF;
+-                        }
+-                        /* else so->so_state &= ~SS_ISFCONNECTING; */
+-
+-                        /*
+-                         * Continue tcp_input
+-                         */
+-                        tcp_input((struct mbuf *)NULL, sizeof(struct ip), so);
+-                        /* continue; */
+-                    } else {
+-                        ret = sowrite(so);
+-                    }
+-                    /*
+-                     * XXXXX If we wrote something (a lot), there
+-                     * could be a need for a window update.
+-                     * In the worst case, the remote will send
+-                     * a window probe to get things going again
+-                     */
++                    /* else failed */
++                    so->so_state &= SS_PERSISTENT_MASK;
++                    so->so_state |= SS_NOFDREF;
+                 }
++                /* else so->so_state &= ~SS_ISFCONNECTING; */
+ 
+                 /*
+-                 * Probe a still-connecting, non-blocking socket
+-                 * to check if it's still alive
++                 * Continue tcp_input
+                  */
+-#ifdef PROBE_CONN
+-                if (so->so_state & SS_ISFCONNECTING) {
+-                    ret = qemu_recv(so->s, &ret, 0, 0);
+-
+-                    if (ret < 0) {
+-                        /* XXX */
+-                        if (errno == EAGAIN || errno == EWOULDBLOCK ||
+-                            errno == EINPROGRESS || errno == ENOTCONN) {
+-                            continue; /* Still connecting, continue */
+-                        }
+-
+-                        /* else failed */
+-                        so->so_state &= SS_PERSISTENT_MASK;
+-                        so->so_state |= SS_NOFDREF;
+-
+-                        /* tcp_input will take care of it */
+-                    } else {
+-                        ret = send(so->s, &ret, 0, 0);
+-                        if (ret < 0) {
+-                            /* XXX */
+-                            if (errno == EAGAIN || errno == EWOULDBLOCK ||
+-                                errno == EINPROGRESS || errno == ENOTCONN) {
+-                                continue;
+-                            }
+-                            /* else failed */
+-                            so->so_state &= SS_PERSISTENT_MASK;
+-                            so->so_state |= SS_NOFDREF;
+-                        } else {
+-                            so->so_state &= ~SS_ISFCONNECTING;
+-                        }
+-
+-                    }
+-                    tcp_input((struct mbuf *)NULL, sizeof(struct ip), so);
+-                } /* SS_ISFCONNECTING */
+-#endif
+-            }
+-
+-            /*
+-             * Now UDP sockets.
+-             * Incoming packets are sent straight away, they're not buffered.
+-             * Incoming UDP data isn't buffered either.
+-             */
+-            for (so = slirp->udb.so_next; so != &slirp->udb;
+-                    so = so_next) {
+-                int revents;
+-
+-                so_next = so->so_next;
+-
+-                revents = 0;
+-                if (so->pollfds_idx != -1) {
+-                    revents = g_array_index(pollfds, GPollFD,
+-                            so->pollfds_idx).revents;
+-                }
+-
+-                if (so->s != -1 &&
+-                    (revents & (G_IO_IN | G_IO_HUP | G_IO_ERR))) {
+-                    sorecvfrom(so);
+-                }
++                tcp_input((struct mbuf *)NULL, sizeof(struct ip), so);
++                /* continue; */
++            } else {
++                ret = sowrite(so);
+             }
+-
+             /*
+-             * Check incoming ICMP relies.
++             * XXXXX If we wrote something (a lot), there
++             * could be a need for a window update.
++             * In the worst case, the remote will send
++             * a window probe to get things going again
+              */
+-            for (so = slirp->icmp.so_next; so != &slirp->icmp;
+-                    so = so_next) {
+-                    int revents;
+-
+-                    so_next = so->so_next;
+-
+-                    revents = 0;
+-                    if (so->pollfds_idx != -1) {
+-                        revents = g_array_index(pollfds, GPollFD,
+-                                                so->pollfds_idx).revents;
+-                    }
+-
+-                    if (so->s != -1 &&
+-                        (revents & (G_IO_IN | G_IO_HUP | G_IO_ERR))) {
+-                    icmp_receive(so);
+-                }
+-            }
+         }
+ 
+-        if_start(slirp);
++        /*
++         * Probe a still-connecting, non-blocking socket
++         * to check if it's still alive
++         */
++#ifdef PROBE_CONN
++           if (so->so_state & SS_ISFCONNECTING) {
++               ret = qemu_recv(so->s, &ret, 0, 0);
++
++               if (ret < 0) {
++                   /* XXX */
++                   if (errno == EAGAIN || errno == EWOULDBLOCK ||
++                       errno == EINPROGRESS || errno == ENOTCONN) {
++                       continue; /* Still connecting, continue */
++                   }
++
++                   /* else failed */
++                   so->so_state &= SS_PERSISTENT_MASK;
++                   so->so_state |= SS_NOFDREF;
++
++                   /* tcp_input will take care of it */
++               } else {
++                   ret = send(so->s, &ret, 0, 0);
++                   if (ret < 0) {
++                       /* XXX */
++                       if (errno == EAGAIN || errno == EWOULDBLOCK ||
++                           errno == EINPROGRESS || errno == ENOTCONN) {
++                           continue;
++                       }
++                       /* else failed */
++                       so->so_state &= SS_PERSISTENT_MASK;
++                       so->so_state |= SS_NOFDREF;
++                   } else {
++                       so->so_state &= ~SS_ISFCONNECTING;
++                   }
++
++               }
++               tcp_input((struct mbuf *)NULL, sizeof(struct ip), so);
++           } /* SS_ISFCONNECTING */
++#endif
++       }
++
++       /*
++        * Now UDP sockets.
++        * Incoming packets are sent straight away, they're not buffered.
++        * Incoming UDP data isn't buffered either.
++        */
++       for (so = slirp->udb.so_next; so != &slirp->udb;
++               so = so_next) {
++           int revents;
++
++           so_next = so->so_next;
++
++           revents = 0;
++           if (so->pollfd) {
++               revents = so->pollfd->revents;
++           }
++
++           if (so->s != -1 &&
++               (revents & (G_IO_IN | G_IO_HUP | G_IO_ERR))) {
++               sorecvfrom(so);
++           }
++       }
++
++       /*
++        * Check incoming ICMP relies.
++        */
++       for (so = slirp->icmp.so_next; so != &slirp->icmp;
++          so = so_next) {
++          int revents;
++
++          so_next = so->so_next;
++
++          revents = 0;
++          if (so->pollfd) {
++             revents = so->pollfd->revents;
++          }
++
++          if (so->s != -1 &&
++              (revents & (G_IO_IN | G_IO_HUP | G_IO_ERR))) {
++          icmp_receive(so);
++       }
+     }
++
++    if_start(slirp);
++    return true;
+ }
+ 
+ static void arp_input(Slirp *slirp, const uint8_t *pkt, int pkt_len)
+diff --git a/slirp/socket.c b/slirp/socket.c
+index bb639ae..058d2e3 100644
+--- a/slirp/socket.c
++++ b/slirp/socket.c
+@@ -52,6 +52,7 @@ socreate(Slirp *slirp)
+     so->s = -1;
+     so->slirp = slirp;
+     so->pollfds_idx = -1;
++    so->pollfd = slirp_gsource_get_gfd(slirp->opaque, so->s);
+   }
+   return(so);
+ }
+@@ -64,6 +65,7 @@ sofree(struct socket *so)
+ {
+   Slirp *slirp = so->slirp;
+ 
++  slirp_gsource_close_gfd(slirp->opaque, so->pollfd);
+   if (so->so_emu==EMU_RSH && so->extra) {
+ 	sofree(so->extra);
+ 	so->extra=NULL;
+diff --git a/slirp/socket.h b/slirp/socket.h
+index 57e0407..522c5f0 100644
+--- a/slirp/socket.h
++++ b/slirp/socket.h
+@@ -21,6 +21,7 @@ struct socket {
+   int s;                           /* The actual socket */
+ 
+   int pollfds_idx;                 /* GPollFD GArray index */
++  GPollFD *pollfd;
+ 
+   Slirp *slirp;			   /* managing slirp instance */
+ 
+diff --git a/stubs/slirp.c b/stubs/slirp.c
+index f1fc833..c343364 100644
+--- a/stubs/slirp.c
++++ b/stubs/slirp.c
+@@ -5,11 +5,3 @@ void slirp_update_timeout(uint32_t *timeout)
+ {
+ }
+ 
+-void slirp_pollfds_fill(GArray *pollfds)
+-{
+-}
+-
+-void slirp_pollfds_poll(GArray *pollfds, int select_error)
+-{
+-}
+-
+-- 
+1.7.4.4
+

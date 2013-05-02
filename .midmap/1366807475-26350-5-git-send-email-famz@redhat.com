@@ -1,0 +1,1 @@
+../vmdk-zeroed-grain-GTE-support/v3.1366854269/0004-vmdk-change-magic-number-to-macro.patch

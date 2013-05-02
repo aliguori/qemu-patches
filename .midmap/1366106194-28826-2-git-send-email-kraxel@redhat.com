@@ -1,0 +1,1 @@
+../spice-patch-queue/v1.1366131385/0001-qxl-add-4k--8k-resolutions.patch

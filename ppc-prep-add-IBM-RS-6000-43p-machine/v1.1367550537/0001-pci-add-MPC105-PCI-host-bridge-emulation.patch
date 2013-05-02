@@ -1,0 +1,581 @@
+From patches Mon Sep 17 00:00:00 2001
+From: =?utf-8?q?Herv=C3=A9_Poussineau_=3Chpoussin=40reactos=2Eorg=3E?=
+To: qemu-devel@nongnu.org
+Cc: qemu-ppc@nongnu.org, =?UTF-8?q?Andreas=20F=C3=A4rber?= <afaerber@suse.de>,
+ =?UTF-8?q?Herv=C3=A9=20Poussineau?= <hpoussin@reactos.org>
+Date: Thu,  2 May 2013 22:08:58 +0200
+Message-id: 1367525344-7755-2-git-send-email-hpoussin@reactos.org
+Subject: [PATCH 1/7] pci: add MPC105 PCI host bridge emulation
+
+Non-contiguous I/O is not implemented.
+
+There is also somewhere a bug in the memory controller, which means
+that some real firmwares may not detect the correct amount of memory.
+This can be bypassed by adding '-m 1G' on the command line.
+
+Add x-auto-conf property, to automatically configure the memory
+controller at startup. This will be required by OpenBIOS, which
+doesn't know how to do it.
+
+Signed-off-by: Hervé Poussineau <hpoussin@reactos.org>
+---
+ default-configs/ppc-softmmu.mak |    1 +
+ hw/pci-host/Makefile.objs       |    1 +
+ hw/pci-host/mpc105.c            |  488 +++++++++++++++++++++++++++++++++++++++
+ include/hw/pci/pci_ids.h        |    1 +
+ trace-events                    |    7 +
+ 5 files changed, 498 insertions(+)
+ create mode 100644 hw/pci-host/mpc105.c
+
+diff --git a/default-configs/ppc-softmmu.mak b/default-configs/ppc-softmmu.mak
+index cc3587f..f79b058 100644
+--- a/default-configs/ppc-softmmu.mak
++++ b/default-configs/ppc-softmmu.mak
+@@ -28,6 +28,7 @@ CONFIG_MAC_NVRAM=y
+ CONFIG_MAC_DBDMA=y
+ CONFIG_HEATHROW_PIC=y
+ CONFIG_GRACKLE_PCI=y
++CONFIG_MPC105_PCI=y
+ CONFIG_UNIN_PCI=y
+ CONFIG_DEC_PCI=y
+ CONFIG_PPCE500_PCI=y
+diff --git a/hw/pci-host/Makefile.objs b/hw/pci-host/Makefile.objs
+index 909e702..ec4427b 100644
+--- a/hw/pci-host/Makefile.objs
++++ b/hw/pci-host/Makefile.objs
+@@ -3,6 +3,7 @@ common-obj-y += pam.o
+ # PPC devices
+ common-obj-$(CONFIG_PREP_PCI) += prep.o
+ common-obj-$(CONFIG_GRACKLE_PCI) += grackle.o
++common-obj-$(CONFIG_MPC105_PCI) += mpc105.o
+ # NewWorld PowerMac
+ common-obj-$(CONFIG_UNIN_PCI) += uninorth.o
+ common-obj-$(CONFIG_DEC_PCI) += dec.o
+diff --git a/hw/pci-host/mpc105.c b/hw/pci-host/mpc105.c
+new file mode 100644
+index 0000000..8e4cc95
+--- /dev/null
++++ b/hw/pci-host/mpc105.c
+@@ -0,0 +1,488 @@
++/*
++ * QEMU MPC-105 Eagle PCI host
++ *
++ * Copyright (c) 2013 Hervé Poussineau
++ *
++ * This program is free software: you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License as published by
++ * the Free Software Foundation, either version 2 of the License, or
++ * (at your option) version 3 or any later version.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
++ */
++
++#include "hw/pci/pci.h"
++#include "hw/pci/pci_bus.h"
++#include "hw/pci/pci_host.h"
++#include "hw/i386/pc.h"
++#include "hw/loader.h"
++#include "exec/address-spaces.h"
++#include "elf.h"
++#include "trace.h"
++
++#define TYPE_MPC105_PCI_HOST_BRIDGE "mpc105-pcihost"
++#define MPC105_PCI_HOST_BRIDGE(obj) \
++    OBJECT_CHECK(Mpc105HostState, (obj), TYPE_MPC105_PCI_HOST_BRIDGE)
++
++#define TYPE_MPC105 "mpc105"
++#define MPC105(obj) \
++    OBJECT_CHECK(Mpc105State, (obj), TYPE_MPC105)
++
++#define MEM_STA_03     0x0080
++#define MEM_STA_47     0x0084
++#define EXT_MEM_STA_03 0x0088
++#define EXT_MEM_STA_47 0x008c
++#define MEM_END_03     0x0090
++#define MEM_END_47     0x0094
++#define EXT_MEM_END_03 0x0098
++#define EXT_MEM_END_47 0x009c
++#define MEM_BANK_EN    0x00a0
++#define PROC_CFG_A8    0x00a8
++#define PROC_CFG_AC    0x00ac
++#define ALT_OSV_1      0x00ba
++#define ERR_EN_REG1    0x00c0
++#define ERR_DR1        0x00c1
++#define ERR_EN_REG2    0x00c4
++#define MEM_CFG_1      0x00f0
++#define MEM_CFG_2      0x00f4
++#define MEM_CFG_4      0x00fc
++
++#define MEM_CFG_1_MEMGO (1 << 19)
++
++#define BIOS_SIZE (1024 * 1024)
++
++typedef struct Mpc105State {
++    PCIDevice parent_obj;
++    uint32_t ram_size;
++    uint32_t elf_machine;
++    uint32_t x_auto_conf;
++    char *bios_name;
++    MemoryRegion bios;
++    MemoryRegion simm[8];
++    bool use_sizer[8];
++    /* use a sizer to allow access to only part of a simm */
++    MemoryRegion sizer[8];
++} Mpc105State;
++
++static uint64_t mpc105_unassigned_read(void *opaque, hwaddr addr,
++                                       unsigned int size)
++{
++    trace_mpc105_unassigned_mem_read(addr);
++    return 0;
++}
++
++static void mpc105_unassigned_write(void *opaque, hwaddr addr, uint64_t data,
++                                    unsigned int size)
++{
++    trace_mpc105_unassigned_mem_write(addr, data);
++}
++
++static const MemoryRegionOps mpc105_unassigned_ops = {
++    .read = mpc105_unassigned_read,
++    .write = mpc105_unassigned_write,
++};
++
++static void mpc105_update_memory_mappings(Mpc105State *s)
++{
++    uint32_t start_address, end_address;
++    uint32_t start, ext_start, end, ext_end;
++    uint32_t cfg1;
++    uint64_t simm_size;
++    uint8_t *pci_conf;
++    uint8_t en;
++    bool enabled;
++    int i;
++
++    pci_conf = PCI_DEVICE(s)->config;
++    cfg1 = pci_get_long(pci_conf + MEM_CFG_1);
++
++    memory_region_transaction_begin();
++    if (cfg1 & MEM_CFG_1_MEMGO) {
++        en = pci_get_byte(pci_conf + MEM_BANK_EN);
++    } else {
++        en = 0;
++    }
++
++    for (i = 0; i < 8; i++) {
++        enabled = (en & (1 << i));
++
++        start = pci_get_byte(pci_conf + MEM_STA_03 + i);
++        ext_start = pci_get_byte(pci_conf + EXT_MEM_STA_03 + i) & 0x3;
++        end = pci_get_byte(pci_conf + MEM_END_03 + i);
++        ext_end = pci_get_byte(pci_conf + EXT_MEM_STA_03 + i) & 0x3;
++        start_address = (ext_start << 28) | (start << 20);
++        end_address = (ext_end << 28) | (end << 20) | 0xfffff;
++
++        enabled &= start_address < end_address;
++
++        if (enabled) {
++            trace_mpc105_simm_enable(i, start_address, end_address + 1);
++        } else {
++            trace_mpc105_simm_disable(i);
++        }
++
++        simm_size = memory_region_size(&s->simm[i]);
++        if (simm_size == 0) {
++            continue;
++        }
++
++        /* Clean links between system memory, sizer and simm */
++        if (s->use_sizer[i]) {
++            memory_region_del_subregion(get_system_memory(), &s->sizer[i]);
++            memory_region_del_subregion(&s->sizer[i], &s->simm[i]);
++            s->use_sizer[i] = false;
++        } else {
++            memory_region_del_subregion(get_system_memory(), &s->simm[i]);
++        }
++
++        /* Recreate links compatible with new memory layout */
++        if (enabled && end_address - start_address + 1 < simm_size) {
++            memory_region_init_io(&s->sizer[i], &mpc105_unassigned_ops,
++                                  s, memory_region_name(&s->sizer[i]),
++                                  end_address - start_address + 1);
++            memory_region_add_subregion(&s->sizer[i], 0, &s->simm[i]);
++            memory_region_add_subregion(get_system_memory(), start_address,
++                                        &s->sizer[i]);
++            s->use_sizer[i] = true;
++        } else {
++            memory_region_add_subregion(get_system_memory(), start_address,
++                                        &s->simm[i]);
++        }
++        memory_region_set_enabled(&s->simm[i], enabled);
++    }
++    memory_region_transaction_commit();
++}
++
++static void mpc105_write_config(PCIDevice *dev, uint32_t addr, uint32_t val,
++                                int l)
++{
++    Mpc105State *s = MPC105(dev);
++
++    pci_default_write_config(dev, addr, val, l);
++    if ((addr >= MEM_STA_03 && addr <= MEM_BANK_EN) || addr == MEM_CFG_1) {
++        mpc105_update_memory_mappings(s);
++    }
++}
++
++static void mpc105_reset(Mpc105State *s)
++{
++    PCIDevice *pci = PCI_DEVICE(s);
++    uint8_t *pci_conf;
++    int id;
++
++    pci_conf = pci->config;
++
++    memset(pci_conf + PCI_CONFIG_HEADER_SIZE, 0,
++           PCI_CONFIG_SPACE_SIZE - PCI_CONFIG_HEADER_SIZE);
++    pci_conf[PCI_COMMAND] = PCI_COMMAND_MASTER | PCI_COMMAND_MEMORY;
++    pci_conf[PCI_STATUS] = PCI_STATUS_FAST_BACK;
++    pci_set_long(pci_conf + PROC_CFG_A8, 0xff000010);
++    pci_set_long(pci_conf + PROC_CFG_AC, 0x000c060c);
++    pci_set_byte(pci_conf + ALT_OSV_1, 0x04);
++    pci_set_byte(pci_conf + ERR_EN_REG1, 0x01);
++    pci_set_long(pci_conf + MEM_CFG_1, 0xff020000);
++    pci_set_long(pci_conf + MEM_CFG_2, 0x00000003);
++    pci_set_long(pci_conf + MEM_CFG_4, 0x00100000);
++
++    memset(pci->wmask + PCI_CONFIG_HEADER_SIZE, 0,
++           MEM_CFG_1 - PCI_CONFIG_HEADER_SIZE);
++    memset(pci->wmask + 0x70, 0xff, 2);
++    memset(pci->wmask + MEM_STA_03, 0xff, MEM_BANK_EN - MEM_STA_03 + 1);
++    memset(pci->wmask + PROC_CFG_A8, 0xff, 8);
++    pci_set_word(pci->wmask + ALT_OSV_1, 0xffff);
++    pci_set_byte(pci->wmask + ERR_EN_REG1, 0xff);
++    pci_set_byte(pci->w1cmask + ERR_DR1, 0xff);
++    pci_set_byte(pci->w1cmask + 0xc3, 0xff);
++    pci_set_byte(pci->wmask + ERR_EN_REG2, 0xff);
++    pci_set_byte(pci->w1cmask + 0xc5, 0xff);
++    pci_set_byte(pci->w1cmask + 0xc7, 0xff);
++
++    for (id = 0; id < 8; ++id) {
++        memory_region_set_enabled(&s->simm[id], false);
++    }
++
++    if (s->x_auto_conf) {
++        /* enable all memory banks, starting from address 0 */
++        uint32_t start_address = 0, end_address = 0;
++        uint8_t ext_start, ext_end, enabled = 0;
++        int i;
++        for (i = 0; i < 8; i++) {
++            if (!memory_region_size(&s->simm[i])) {
++                continue;
++            }
++            end_address += memory_region_size(&s->simm[i]);
++            ext_start = pci_get_byte(pci_conf + EXT_MEM_STA_03 + i) & ~0x3;
++            ext_end = pci_get_byte(pci_conf + EXT_MEM_STA_03 + i) & ~0x3;
++            ext_start |= (start_address >> 28) & 0x3;
++            ext_end |= ((end_address - 1) >> 28) & 0x3;
++            pci_set_byte(pci_conf + MEM_STA_03 + i, start_address >> 20);
++            pci_set_byte(pci_conf + EXT_MEM_STA_03 + i, ext_start);
++            pci_set_byte(pci_conf + MEM_END_03 + i, (end_address - 1) >> 20);
++            pci_set_byte(pci_conf + EXT_MEM_END_03 + i, ext_end);
++            start_address = end_address;
++            enabled |= 1 << i;
++        }
++        pci_set_byte(pci_conf + MEM_BANK_EN, enabled);
++        pci_long_test_and_set_mask(pci_conf + MEM_CFG_1, MEM_CFG_1_MEMGO);
++        mpc105_update_memory_mappings(s);
++    }
++}
++
++static void qdev_mpc105_reset(DeviceState *dev)
++{
++    Mpc105State *s = MPC105(dev);
++    mpc105_reset(s);
++}
++
++static int mpc105_post_load(void *opaque, int version_id)
++{
++    Mpc105State *s = opaque;
++    mpc105_update_memory_mappings(s);
++    return 0;
++}
++
++static const VMStateDescription vmstate_mpc105 = {
++    .name = "mpc105",
++    .version_id = 1,
++    .minimum_version_id = 0,
++    .minimum_version_id_old = 1,
++    .post_load = mpc105_post_load,
++    .fields = (VMStateField[]) {
++        VMSTATE_PCI_DEVICE(parent_obj, Mpc105State),
++        VMSTATE_END_OF_LIST()
++    }
++};
++
++static uint64_t mpc105_intack_read(void *opaque, hwaddr addr,
++                                   unsigned int size)
++{
++    return pic_read_irq(isa_pic);
++}
++
++static const MemoryRegionOps mpc105_intack_ops = {
++    .read = mpc105_intack_read,
++    .valid = {
++        .max_access_size = 1,
++    },
++};
++
++static int mpc105_initfn(PCIDevice *dev)
++{
++    Mpc105State *s = MPC105(dev);
++    char *filename;
++    int bios_size = -1;
++    int i = 0;
++    uint32_t simm_size[8] = { 0 };
++
++    unsigned int ram_size = s->ram_size / (1024 * 1024);
++    while (i < 8) {
++        int idx = qemu_fls(ram_size);
++        if (idx < 5) {
++            /* Need at least 16 Mb for a slot */
++            break;
++        } else if (idx >= 8) {
++            /* Limit to 128 Mb by slot (at max) */
++            idx = 8;
++        }
++        simm_size[i] = 1 << (idx - 1);
++        ram_size -= simm_size[i];
++        i++;
++    }
++
++    for (i = 0; i < 8; i++) {
++        char name[] = "simm.?";
++        name[5] = i + '0';
++        if (simm_size[i]) {
++            trace_mpc105_simm_size(i, simm_size[i]);
++            memory_region_init_ram(&s->simm[i], name,
++                                   simm_size[i] * 1024 * 1024);
++            vmstate_register_ram_global(&s->simm[i]);
++        } else {
++            memory_region_init(&s->simm[i], name, 0);
++        }
++        memory_region_init(&s->sizer[i], "sizer", 0);
++        memory_region_add_subregion_overlap(get_system_memory(), 0,
++                                            &s->simm[i], i);
++        memory_region_set_enabled(&s->simm[i], false);
++    }
++
++    memory_region_init_ram(&s->bios, "bios", BIOS_SIZE);
++    memory_region_set_readonly(&s->bios, true);
++    memory_region_add_subregion(get_system_memory(), (uint32_t)(-BIOS_SIZE),
++                                &s->bios);
++    vmstate_register_ram_global(&s->bios);
++    if (s->bios_name) {
++        filename = qemu_find_file(QEMU_FILE_TYPE_BIOS, s->bios_name);
++        if (filename) {
++            if (s->elf_machine != EM_NONE) {
++                bios_size = load_elf(filename, NULL, NULL, NULL,
++                                     NULL, NULL, 1, s->elf_machine, 0);
++            }
++            if (bios_size < 0) {
++                bios_size = get_image_size(filename);
++                if (bios_size > 0 && bios_size <= BIOS_SIZE) {
++                    hwaddr bios_addr;
++                    bios_size = (bios_size + 0xfff) & ~0xfff;
++                    bios_addr = (uint32_t)(-BIOS_SIZE);
++                    bios_size = load_image_targphys(filename, bios_addr,
++                                                    bios_size);
++                }
++            }
++        }
++        if (bios_size < 0 || bios_size > BIOS_SIZE) {
++            hw_error("qemu: could not load bios image '%s'\n", s->bios_name);
++        }
++        if (filename) {
++            g_free(filename);
++        }
++    }
++
++    return 0;
++}
++
++static void mpc105_class_init(ObjectClass *klass, void *data)
++{
++    PCIDeviceClass *k = PCI_DEVICE_CLASS(klass);
++    DeviceClass *dc = DEVICE_CLASS(klass);
++
++    k->init = mpc105_initfn;
++    k->vendor_id = PCI_VENDOR_ID_MOTOROLA;
++    k->device_id = PCI_DEVICE_ID_MOTOROLA_MPC105;
++    k->class_id = PCI_CLASS_BRIDGE_HOST;
++    k->config_write = mpc105_write_config;
++    dc->desc = "MPC105 PCI bridge/Memory controller";
++    dc->reset = qdev_mpc105_reset;
++    dc->vmsd = &vmstate_mpc105;
++    dc->no_user = 1;
++}
++
++static TypeInfo mpc105_info = {
++    .name          = TYPE_MPC105,
++    .parent        = TYPE_PCI_DEVICE,
++    .instance_size = sizeof(Mpc105State),
++    .class_init    = mpc105_class_init,
++};
++
++typedef struct Mpc105HostState {
++    PCIHostState host_state;
++    uint32_t ram_size;
++    qemu_irq irq[PCI_NUM_PINS];
++    PCIBus pci_bus;
++    MemoryRegion pci_io;
++    MemoryRegion isa_io;
++    MemoryRegion pci_intack;
++    MemoryRegion pci_memory;
++    MemoryRegion rom;
++    Mpc105State pci_dev;
++} Mpc105HostState;
++
++static void mpc105_set_irq(void *opaque, int irq_num, int level)
++{
++    qemu_irq *pic = opaque;
++
++    qemu_set_irq(pic[irq_num] , level);
++}
++
++static int mpc105_map_irq(PCIDevice *pci_dev, int irq_num)
++{
++    return (irq_num + (pci_dev->devfn >> 3)) & 1;
++}
++
++static void mpc105_pcihost_realizefn(DeviceState *d, Error **errp)
++{
++    SysBusDevice *dev = SYS_BUS_DEVICE(d);
++    PCIHostState *h = PCI_HOST_BRIDGE(dev);
++    Mpc105HostState *s = MPC105_PCI_HOST_BRIDGE(dev);
++    int i;
++
++    for (i = 0; i < PCI_NUM_PINS; i++) {
++        sysbus_init_irq(dev, &s->irq[i]);
++    }
++
++    pci_bus_irqs(&s->pci_bus, mpc105_set_irq, mpc105_map_irq, s->irq, 4);
++
++    memory_region_init_io(&h->conf_mem, &pci_host_conf_le_ops, s,
++                          "pci-conf-idx", 1);
++    memory_region_add_subregion(get_system_io(), 0xcf8, &h->conf_mem);
++
++    memory_region_init_io(&h->data_mem, &pci_host_data_le_ops, s,
++                          "pci-conf-data", 4);
++    memory_region_add_subregion(get_system_io(), 0xcfc, &h->data_mem);
++
++    object_property_set_bool(OBJECT(&s->pci_dev), true, "realized", errp);
++}
++
++static void mpc105_pcihost_initfn(Object *obj)
++{
++    PCIHostState *h = PCI_HOST_BRIDGE(obj);
++    Mpc105HostState *s = MPC105_PCI_HOST_BRIDGE(obj);
++    DeviceState *pci_dev;
++
++    memory_region_init(&s->pci_io, "pci-io", 0x3f800000);
++    /* FIXME: should handle non-contiguous I/O */
++    isa_mmio_setup(&s->isa_io, 0x800000);
++    memory_region_init(&s->pci_memory, "pci-memory", 0x3f000000);
++    memory_region_init_io(&s->pci_intack, &mpc105_intack_ops, &s->pci_dev,
++                          "pci-intack", 0x10);
++
++    memory_region_init_io(get_system_memory(), &mpc105_unassigned_ops,
++                          &s->pci_dev, "system", UINT32_MAX);
++    memory_region_add_subregion(get_system_memory(), 0x80000000, &s->pci_io);
++    memory_region_add_subregion(&s->pci_io, 0, &s->isa_io);
++    memory_region_add_subregion(get_system_memory(), 0xc0000000,
++                                &s->pci_memory);
++    memory_region_add_subregion(get_system_memory(), 0xbffffff0,
++                                &s->pci_intack);
++
++    pci_bus_new_inplace(&s->pci_bus, DEVICE(obj), NULL,
++                        &s->pci_memory, get_system_io(), 0, TYPE_PCI_BUS);
++    h->bus = &s->pci_bus;
++
++    object_initialize(&s->pci_dev, TYPE_MPC105);
++    pci_dev = DEVICE(&s->pci_dev);
++    qdev_set_parent_bus(pci_dev, BUS(&s->pci_bus));
++    object_property_set_int(OBJECT(&s->pci_dev), PCI_DEVFN(0, 0), "addr",
++                            NULL);
++    qdev_prop_set_bit(pci_dev, "multifunction", false);
++}
++
++static Property mpc105_pcihost_properties[] = {
++    DEFINE_PROP_UINT32("ram-size", Mpc105HostState, pci_dev.ram_size, 0),
++    DEFINE_PROP_UINT32("elf-machine", Mpc105HostState, pci_dev.elf_machine,
++                       EM_NONE),
++    DEFINE_PROP_BIT("x-auto-conf", Mpc105HostState, pci_dev.x_auto_conf, 0,
++                    true),
++    DEFINE_PROP_STRING("bios-name", Mpc105HostState, pci_dev.bios_name),
++    DEFINE_PROP_END_OF_LIST()
++};
++
++static void mpc105_pcihost_class_init(ObjectClass *klass, void *data)
++{
++    DeviceClass *dc = DEVICE_CLASS(klass);
++
++    dc->realize = mpc105_pcihost_realizefn;
++    dc->props = mpc105_pcihost_properties;
++    dc->no_user = 1;
++}
++
++static TypeInfo mpc105_pcihost_info = {
++    .name = TYPE_MPC105_PCI_HOST_BRIDGE,
++    .parent = TYPE_PCI_HOST_BRIDGE,
++    .instance_size = sizeof(Mpc105HostState),
++    .instance_init = mpc105_pcihost_initfn,
++    .class_init = mpc105_pcihost_class_init,
++};
++
++static void mpc105_register_types(void)
++{
++    type_register_static(&mpc105_pcihost_info);
++    type_register_static(&mpc105_info);
++}
++
++type_init(mpc105_register_types)
+diff --git a/include/hw/pci/pci_ids.h b/include/hw/pci/pci_ids.h
+index d8dc2f1..933b987 100644
+--- a/include/hw/pci/pci_ids.h
++++ b/include/hw/pci/pci_ids.h
+@@ -69,6 +69,7 @@
+ #define PCI_VENDOR_ID_TI                 0x104c
+ 
+ #define PCI_VENDOR_ID_MOTOROLA           0x1057
++#define PCI_DEVICE_ID_MOTOROLA_MPC105    0x0001
+ #define PCI_DEVICE_ID_MOTOROLA_MPC106    0x0002
+ #define PCI_DEVICE_ID_MOTOROLA_RAVEN     0x4801
+ 
+diff --git a/trace-events b/trace-events
+index 55e80be..1970b5c 100644
+--- a/trace-events
++++ b/trace-events
+@@ -766,6 +766,13 @@ pc87312_info_ide(uint32_t base) "base 0x%x"
+ pc87312_info_parallel(uint32_t base, uint32_t irq) "base 0x%x, irq %u"
+ pc87312_info_serial(int n, uint32_t base, uint32_t irq) "id=%d, base 0x%x, irq %u"
+ 
++# hw/pci-host/mpc105.c
++mpc105_unassigned_mem_read(uint64_t addr) "Unassigned mem read %" PRIx64
++mpc105_unassigned_mem_write(uint64_t addr, uint64_t val) "Unassigned mem write %" PRIx64 " = 0x%" PRIx64
++mpc105_simm_enable(int id, uint32_t start, uint32_t end) "SIMM #%d 0x%08x-0x%08x"
++mpc105_simm_disable(int id) "SIMM #%d disabled"
++mpc105_simm_size(int id, uint32_t size) "SIMM #%d is %u MB"
++
+ # hw/scsi/vmw_pvscsi.c
+ pvscsi_ring_init_data(uint32_t txr_len_log2, uint32_t rxr_len_log2) "TX/RX rings logarithms set to %d/%d"
+ pvscsi_ring_init_msg(uint32_t len_log2) "MSG ring logarithm set to %d"
+-- 
+1.7.10.4
+
+

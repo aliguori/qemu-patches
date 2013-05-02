@@ -1,0 +1,1917 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: 
+Date: Thu,  4 Apr 2013 21:23:15 +0200
+Message-id: 1365103395-11547-36-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 35/35] hw: move private headers to hw/ subdirectories.
+
+Many headers are used only in a single directory.  These can be
+kept in hw/.
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ hw/{ => alpha}/alpha_sys.h                        |  0
+ hw/alpha/dp264.c                                  |  2 +-
+ hw/alpha/pci.c                                    |  2 +-
+ hw/alpha/typhoon.c                                |  2 +-
+ hw/arm/collie.c                                   |  2 +-
+ hw/arm/strongarm.c                                |  2 +-
+ hw/{ => arm}/strongarm.h                          |  0
+ hw/audio/adlib.c                                  |  2 +-
+ hw/audio/fmopl.c                                  |  2 +-
+ hw/{ => audio}/fmopl.h                            |  0
+ hw/audio/gus.c                                    |  4 +--
+ hw/{ => audio}/gusemu.h                           |  0
+ hw/audio/gusemu_hal.c                             |  4 +--
+ hw/audio/gusemu_mixer.c                           |  4 +--
+ hw/{ => audio}/gustate.h                          |  0
+ hw/audio/hda-codec.c                              |  4 +--
+ hw/{ => audio}/intel-hda-defs.h                   |  0
+ hw/audio/intel-hda.c                              |  4 +--
+ hw/{ => audio}/intel-hda.h                        |  0
+ hw/audio/lm4549.c                                 |  2 +-
+ hw/{ => audio}/lm4549.h                           |  0
+ hw/audio/pl041.c                                  |  4 +--
+ hw/{ => audio}/pl041.h                            |  0
+ hw/{ => block}/xen_blkif.h                        |  0
+ hw/block/xen_disk.c                               |  2 +-
+ hw/char/ipack.c                                   |  2 +-
+ hw/{ => char}/ipack.h                             |  0
+ hw/char/ipoctal232.c                              |  2 +-
+ hw/char/tpci200.c                                 |  2 +-
+ hw/core/loader.c                                  |  2 +-
+ hw/{ => core}/uboot_image.h                       |  0
+ hw/cris/axis_dev88.c                              |  2 +-
+ hw/cris/boot.c                                    |  2 +-
+ hw/{cris-boot.h => cris/boot.h}                   |  0
+ hw/display/blizzard.c                             | 12 +++----
+ hw/{ => display}/blizzard_template.h              |  0
+ hw/display/cirrus_vga.c                           | 38 +++++++++++------------
+ hw/{ => display}/cirrus_vga_rop.h                 |  8 ++---
+ hw/{ => display}/cirrus_vga_rop2.h                |  0
+ hw/{ => display}/cirrus_vga_template.h            |  0
+ hw/display/framebuffer.c                          |  2 +-
+ hw/{ => display}/framebuffer.h                    |  0
+ hw/display/milkymist-vgafb.c                      | 12 +++----
+ hw/{ => display}/milkymist-vgafb_template.h       |  0
+ hw/{ => display}/omap_lcd_template.h              |  0
+ hw/display/omap_lcdc.c                            | 10 +++---
+ hw/display/pl110.c                                | 12 +++----
+ hw/{ => display}/pl110_template.h                 | 12 +++----
+ hw/display/pxa2xx_lcd.c                           | 12 +++----
+ hw/{ => display}/pxa2xx_template.h                |  0
+ hw/display/qxl-logger.c                           |  2 +-
+ hw/display/qxl-render.c                           |  2 +-
+ hw/display/qxl.c                                  |  2 +-
+ hw/{ => display}/qxl.h                            |  2 +-
+ hw/display/sm501.c                                | 14 ++++-----
+ hw/{ => display}/sm501_template.h                 |  0
+ hw/display/tc6393xb.c                             | 10 +++---
+ hw/{ => display}/tc6393xb_template.h              |  0
+ hw/display/vga-isa-mm.c                           |  2 +-
+ hw/display/vga-isa.c                              |  2 +-
+ hw/display/vga-pci.c                              |  2 +-
+ hw/display/vga.c                                  | 18 +++++------
+ hw/{ => display}/vga.h                            |  0
+ hw/{ => display}/vga_int.h                        |  0
+ hw/{ => display}/vga_template.h                   |  0
+ hw/display/vmware_vga.c                           |  2 +-
+ hw/i2c/bitbang_i2c.c                              |  2 +-
+ hw/{ => i2c}/bitbang_i2c.h                        |  0
+ hw/i2c/versatile_i2c.c                            |  2 +-
+ hw/i386/multiboot.c                               |  2 +-
+ hw/{ => i386}/multiboot.h                         |  0
+ hw/i386/pc.c                                      |  2 +-
+ hw/i386/xen_domainbuild.c                         |  2 +-
+ hw/{ => i386}/xen_domainbuild.h                   |  0
+ hw/i386/xen_machine_pv.c                          |  2 +-
+ hw/intc/arm_gic.c                                 |  2 +-
+ hw/intc/arm_gic_common.c                          |  2 +-
+ hw/intc/arm_gic_kvm.c                             |  2 +-
+ hw/intc/armv7m_nvic.c                             |  2 +-
+ hw/{arm_gic_internal.h => intc/gic_internal.h}    |  0
+ hw/{ => lm32}/lm32.h                              |  0
+ hw/lm32/lm32_boards.c                             |  4 +--
+ hw/{ => lm32}/lm32_hwsetup.h                      |  0
+ hw/{ => lm32}/milkymist-hw.h                      |  0
+ hw/lm32/milkymist.c                               |  4 +--
+ hw/microblaze/boot.c                              |  2 +-
+ hw/{microblaze_boot.h => microblaze/boot.h}       |  0
+ hw/microblaze/petalogix_ml605_mmu.c               |  4 +--
+ hw/microblaze/petalogix_s3adsp1800_mmu.c          |  4 +--
+ hw/microblaze/pic_cpu.c                           |  2 +-
+ hw/{microblaze_pic_cpu.h => microblaze/pic_cpu.h} |  0
+ hw/misc/tmp105.c                                  |  2 +-
+ hw/{ => misc}/tmp105.h                            |  0
+ hw/net/e1000.c                                    |  2 +-
+ hw/{e1000_hw.h => net/e1000_regs.h}               |  0
+ hw/net/lance.c                                    |  2 +-
+ hw/net/ne2000-isa.c                               |  2 +-
+ hw/net/ne2000.c                                   |  2 +-
+ hw/{ => net}/ne2000.h                             |  0
+ hw/net/pcnet-pci.c                                |  2 +-
+ hw/net/pcnet.c                                    |  2 +-
+ hw/{ => net}/pcnet.h                              |  0
+ hw/pci-bridge/ioh3420.c                           |  2 +-
+ hw/{ => pci-bridge}/ioh3420.h                     |  0
+ hw/pci-bridge/xio3130_downstream.c                |  2 +-
+ hw/{ => pci-bridge}/xio3130_downstream.h          |  0
+ hw/pci-bridge/xio3130_upstream.c                  |  2 +-
+ hw/{ => pci-bridge}/xio3130_upstream.h            |  0
+ hw/pci-host/dec.c                                 |  2 +-
+ hw/{dec_pci.h => pci-host/dec.h}                  |  0
+ hw/{ => ppc}/ppc405.h                             |  0
+ hw/ppc/ppc405_boards.c                            |  2 +-
+ hw/ppc/ppc405_uc.c                                |  2 +-
+ hw/ppc/ppc440_bamboo.c                            |  2 +-
+ hw/ppc/virtex_ml507.c                             |  2 +-
+ hw/scsi/megasas.c                                 |  2 +-
+ hw/{ => scsi}/mfi.h                               |  0
+ hw/scsi/spapr_vscsi.c                             |  4 +--
+ hw/{ => scsi}/srp.h                               |  0
+ hw/{ppc-viosrp.h => scsi/viosrp.h}                |  0
+ hw/sd/sdhci.c                                     |  2 +-
+ hw/{ => sd}/sdhci.h                               |  0
+ hw/sh4/r2d.c                                      |  2 +-
+ hw/sh4/sh7750.c                                   |  4 +--
+ hw/sh4/sh7750_regnames.c                          |  4 +--
+ hw/{ => sh4}/sh7750_regnames.h                    |  0
+ hw/{ => sh4}/sh7750_regs.h                        |  0
+ hw/usb/ccid-card-emulated.c                       |  2 +-
+ hw/usb/ccid-card-passthru.c                       |  2 +-
+ hw/{ => usb}/ccid.h                               |  0
+ hw/usb/dev-smartcard-reader.c                     |  2 +-
+ hw/virtio/virtio-pci.c                            |  2 +-
+ hw/{ => virtio}/virtio-pci.h                      |  0
+ hw/xen/xen-host-pci-device.c                      |  2 +-
+ hw/{ => xen}/xen-host-pci-device.h                |  0
+ hw/xen/xen_pt.c                                   |  2 +-
+ hw/{ => xen}/xen_pt.h                             |  2 +-
+ hw/xen/xen_pt_config_init.c                       |  2 +-
+ hw/xen/xen_pt_msi.c                               |  2 +-
+ hw/{ => xtensa}/xtensa_bootparam.h                |  0
+ hw/xtensa/xtensa_lx60.c                           |  2 +-
+ 141 files changed, 169 insertions(+), 169 deletions(-)
+ rename hw/{ => alpha}/alpha_sys.h (100%)
+ rename hw/{ => arm}/strongarm.h (100%)
+ rename hw/{ => audio}/fmopl.h (100%)
+ rename hw/{ => audio}/gusemu.h (100%)
+ rename hw/{ => audio}/gustate.h (100%)
+ rename hw/{ => audio}/intel-hda-defs.h (100%)
+ rename hw/{ => audio}/intel-hda.h (100%)
+ rename hw/{ => audio}/lm4549.h (100%)
+ rename hw/{ => audio}/pl041.h (100%)
+ rename hw/{ => block}/xen_blkif.h (100%)
+ rename hw/{ => char}/ipack.h (100%)
+ rename hw/{ => core}/uboot_image.h (100%)
+ rename hw/{cris-boot.h => cris/boot.h} (100%)
+ rename hw/{ => display}/blizzard_template.h (100%)
+ rename hw/{ => display}/cirrus_vga_rop.h (97%)
+ rename hw/{ => display}/cirrus_vga_rop2.h (100%)
+ rename hw/{ => display}/cirrus_vga_template.h (100%)
+ rename hw/{ => display}/framebuffer.h (100%)
+ rename hw/{ => display}/milkymist-vgafb_template.h (100%)
+ rename hw/{ => display}/omap_lcd_template.h (100%)
+ rename hw/{ => display}/pl110_template.h (98%)
+ rename hw/{ => display}/pxa2xx_template.h (100%)
+ rename hw/{ => display}/qxl.h (99%)
+ rename hw/{ => display}/sm501_template.h (100%)
+ rename hw/{ => display}/tc6393xb_template.h (100%)
+ rename hw/{ => display}/vga.h (100%)
+ rename hw/{ => display}/vga_int.h (100%)
+ rename hw/{ => display}/vga_template.h (100%)
+ rename hw/{ => i2c}/bitbang_i2c.h (100%)
+ rename hw/{ => i386}/multiboot.h (100%)
+ rename hw/{ => i386}/xen_domainbuild.h (100%)
+ rename hw/{arm_gic_internal.h => intc/gic_internal.h} (100%)
+ rename hw/{ => lm32}/lm32.h (100%)
+ rename hw/{ => lm32}/lm32_hwsetup.h (100%)
+ rename hw/{ => lm32}/milkymist-hw.h (100%)
+ rename hw/{microblaze_boot.h => microblaze/boot.h} (100%)
+ rename hw/{microblaze_pic_cpu.h => microblaze/pic_cpu.h} (100%)
+ rename hw/{ => misc}/tmp105.h (100%)
+ rename hw/{e1000_hw.h => net/e1000_regs.h} (100%)
+ rename hw/{ => net}/ne2000.h (100%)
+ rename hw/{ => net}/pcnet.h (100%)
+ rename hw/{ => pci-bridge}/ioh3420.h (100%)
+ rename hw/{ => pci-bridge}/xio3130_downstream.h (100%)
+ rename hw/{ => pci-bridge}/xio3130_upstream.h (100%)
+ rename hw/{dec_pci.h => pci-host/dec.h} (100%)
+ rename hw/{ => ppc}/ppc405.h (100%)
+ rename hw/{ => scsi}/mfi.h (100%)
+ rename hw/{ => scsi}/srp.h (100%)
+ rename hw/{ppc-viosrp.h => scsi/viosrp.h} (100%)
+ rename hw/{ => sd}/sdhci.h (100%)
+ rename hw/{ => sh4}/sh7750_regnames.h (100%)
+ rename hw/{ => sh4}/sh7750_regs.h (100%)
+ rename hw/{ => usb}/ccid.h (100%)
+ rename hw/{ => virtio}/virtio-pci.h (100%)
+ rename hw/{ => xen}/xen-host-pci-device.h (100%)
+ rename hw/{ => xen}/xen_pt.h (99%)
+ rename hw/{ => xtensa}/xtensa_bootparam.h (100%)
+
+diff --git a/hw/alpha_sys.h b/hw/alpha/alpha_sys.h
+similarity index 100%
+rename from hw/alpha_sys.h
+rename to hw/alpha/alpha_sys.h
+diff --git a/hw/alpha/dp264.c b/hw/alpha/dp264.c
+index a0dd12c..8695efb 100644
+--- a/hw/alpha/dp264.c
++++ b/hw/alpha/dp264.c
+@@ -10,7 +10,7 @@
+ #include "elf.h"
+ #include "hw/loader.h"
+ #include "hw/boards.h"
+-#include "hw/alpha_sys.h"
++#include "alpha_sys.h"
+ #include "sysemu/sysemu.h"
+ #include "hw/timer/mc146818rtc.h"
+ #include "hw/ide.h"
+diff --git a/hw/alpha/pci.c b/hw/alpha/pci.c
+index 8462868..7327d48 100644
+--- a/hw/alpha/pci.c
++++ b/hw/alpha/pci.c
+@@ -7,7 +7,7 @@
+  */
+ 
+ #include "config.h"
+-#include "hw/alpha_sys.h"
++#include "alpha_sys.h"
+ #include "qemu/log.h"
+ #include "sysemu/sysemu.h"
+ 
+diff --git a/hw/alpha/typhoon.c b/hw/alpha/typhoon.c
+index 41a0ebc..faec8dc 100644
+--- a/hw/alpha/typhoon.c
++++ b/hw/alpha/typhoon.c
+@@ -11,7 +11,7 @@
+ #include "hw/hw.h"
+ #include "hw/arm/devices.h"
+ #include "sysemu/sysemu.h"
+-#include "hw/alpha_sys.h"
++#include "alpha_sys.h"
+ #include "exec/address-spaces.h"
+ 
+ 
+diff --git a/hw/arm/collie.c b/hw/arm/collie.c
+index 76eda8e..5420bb4 100644
+--- a/hw/arm/collie.c
++++ b/hw/arm/collie.c
+@@ -12,7 +12,7 @@
+ #include "hw/sysbus.h"
+ #include "hw/boards.h"
+ #include "hw/arm/devices.h"
+-#include "hw/strongarm.h"
++#include "strongarm.h"
+ #include "hw/arm.h"
+ #include "hw/block/flash.h"
+ #include "sysemu/blockdev.h"
+diff --git a/hw/arm/strongarm.c b/hw/arm/strongarm.c
+index 0e5262d..5873a3c 100644
+--- a/hw/arm/strongarm.c
++++ b/hw/arm/strongarm.c
+@@ -27,7 +27,7 @@
+  *  GNU GPL, version 2 or (at your option) any later version.
+  */
+ #include "hw/sysbus.h"
+-#include "hw/strongarm.h"
++#include "strongarm.h"
+ #include "qemu/error-report.h"
+ #include "hw/arm.h"
+ #include "char/char.h"
+diff --git a/hw/strongarm.h b/hw/arm/strongarm.h
+similarity index 100%
+rename from hw/strongarm.h
+rename to hw/arm/strongarm.h
+diff --git a/hw/audio/adlib.c b/hw/audio/adlib.c
+index 133c0ff..4a58e6e 100644
+--- a/hw/audio/adlib.c
++++ b/hw/audio/adlib.c
+@@ -47,7 +47,7 @@
+ void YMF262UpdateOneQEMU (int which, INT16 *dst, int length);
+ #define SHIFT 2
+ #else
+-#include "hw/fmopl.h"
++#include "fmopl.h"
+ #define SHIFT 1
+ #endif
+ 
+diff --git a/hw/audio/fmopl.c b/hw/audio/fmopl.c
+index e50ba6c..f0a0234 100644
+--- a/hw/audio/fmopl.c
++++ b/hw/audio/fmopl.c
+@@ -39,7 +39,7 @@
+ #include <stdarg.h>
+ #include <math.h>
+ //#include "driver.h"		/* use M.A.M.E. */
+-#include "hw/fmopl.h"
++#include "fmopl.h"
+ 
+ #ifndef PI
+ #define PI 3.14159265358979323846
+diff --git a/hw/fmopl.h b/hw/audio/fmopl.h
+similarity index 100%
+rename from hw/fmopl.h
+rename to hw/audio/fmopl.h
+diff --git a/hw/audio/gus.c b/hw/audio/gus.c
+index e44704b..0604d6e 100644
+--- a/hw/audio/gus.c
++++ b/hw/audio/gus.c
+@@ -25,8 +25,8 @@
+ #include "hw/audio/audio.h"
+ #include "audio/audio.h"
+ #include "hw/isa/isa.h"
+-#include "hw/gusemu.h"
+-#include "hw/gustate.h"
++#include "gusemu.h"
++#include "gustate.h"
+ 
+ #define dolog(...) AUD_log ("audio", __VA_ARGS__)
+ #ifdef DEBUG
+diff --git a/hw/gusemu.h b/hw/audio/gusemu.h
+similarity index 100%
+rename from hw/gusemu.h
+rename to hw/audio/gusemu.h
+diff --git a/hw/audio/gusemu_hal.c b/hw/audio/gusemu_hal.c
+index 0eee617..6096690 100644
+--- a/hw/audio/gusemu_hal.c
++++ b/hw/audio/gusemu_hal.c
+@@ -26,8 +26,8 @@
+  * TODO: check mixer: see 7.20 of sdk for panning pos (applies to all gus models?)?
+  */
+ 
+-#include "hw/gustate.h"
+-#include "hw/gusemu.h"
++#include "gustate.h"
++#include "gusemu.h"
+ 
+ #define GUSregb(position) (*            (gusptr+(position)))
+ #define GUSregw(position) (*(GUSword *) (gusptr+(position)))
+diff --git a/hw/audio/gusemu_mixer.c b/hw/audio/gusemu_mixer.c
+index 816c58a..6d8d9ce 100644
+--- a/hw/audio/gusemu_mixer.c
++++ b/hw/audio/gusemu_mixer.c
+@@ -22,8 +22,8 @@
+  * THE SOFTWARE.
+  */
+ 
+-#include "hw/gusemu.h"
+-#include "hw/gustate.h"
++#include "gusemu.h"
++#include "gustate.h"
+ 
+ #define GUSregb(position)  (*            (gusptr+(position)))
+ #define GUSregw(position)  (*(GUSword *) (gusptr+(position)))
+diff --git a/hw/gustate.h b/hw/audio/gustate.h
+similarity index 100%
+rename from hw/gustate.h
+rename to hw/audio/gustate.h
+diff --git a/hw/audio/hda-codec.c b/hw/audio/hda-codec.c
+index 6bdd820..362d8c0 100644
+--- a/hw/audio/hda-codec.c
++++ b/hw/audio/hda-codec.c
+@@ -19,8 +19,8 @@
+ 
+ #include "hw/hw.h"
+ #include "hw/pci/pci.h"
+-#include "hw/intel-hda.h"
+-#include "hw/intel-hda-defs.h"
++#include "intel-hda.h"
++#include "intel-hda-defs.h"
+ #include "audio/audio.h"
+ 
+ /* -------------------------------------------------------------------------- */
+diff --git a/hw/intel-hda-defs.h b/hw/audio/intel-hda-defs.h
+similarity index 100%
+rename from hw/intel-hda-defs.h
+rename to hw/audio/intel-hda-defs.h
+diff --git a/hw/audio/intel-hda.c b/hw/audio/intel-hda.c
+index 68201cd..3d8077a 100644
+--- a/hw/audio/intel-hda.c
++++ b/hw/audio/intel-hda.c
+@@ -22,8 +22,8 @@
+ #include "hw/pci/msi.h"
+ #include "qemu/timer.h"
+ #include "hw/audio/audio.h"
+-#include "hw/intel-hda.h"
+-#include "hw/intel-hda-defs.h"
++#include "intel-hda.h"
++#include "intel-hda-defs.h"
+ #include "sysemu/dma.h"
+ 
+ /* --------------------------------------------------------------------- */
+diff --git a/hw/intel-hda.h b/hw/audio/intel-hda.h
+similarity index 100%
+rename from hw/intel-hda.h
+rename to hw/audio/intel-hda.h
+diff --git a/hw/audio/lm4549.c b/hw/audio/lm4549.c
+index 67335cb..d75f7ec 100644
+--- a/hw/audio/lm4549.c
++++ b/hw/audio/lm4549.c
+@@ -15,7 +15,7 @@
+ 
+ #include "hw/hw.h"
+ #include "audio/audio.h"
+-#include "hw/lm4549.h"
++#include "lm4549.h"
+ 
+ #if 0
+ #define LM4549_DEBUG  1
+diff --git a/hw/lm4549.h b/hw/audio/lm4549.h
+similarity index 100%
+rename from hw/lm4549.h
+rename to hw/audio/lm4549.h
+diff --git a/hw/audio/pl041.c b/hw/audio/pl041.c
+index 92dddc2..653ab4f 100644
+--- a/hw/audio/pl041.c
++++ b/hw/audio/pl041.c
+@@ -22,8 +22,8 @@
+ 
+ #include "hw/sysbus.h"
+ 
+-#include "hw/pl041.h"
+-#include "hw/lm4549.h"
++#include "pl041.h"
++#include "lm4549.h"
+ 
+ #if 0
+ #define PL041_DEBUG_LEVEL 1
+diff --git a/hw/pl041.h b/hw/audio/pl041.h
+similarity index 100%
+rename from hw/pl041.h
+rename to hw/audio/pl041.h
+diff --git a/hw/xen_blkif.h b/hw/block/xen_blkif.h
+similarity index 100%
+rename from hw/xen_blkif.h
+rename to hw/block/xen_blkif.h
+diff --git a/hw/block/xen_disk.c b/hw/block/xen_disk.c
+index e341168..1104b1a 100644
+--- a/hw/block/xen_disk.c
++++ b/hw/block/xen_disk.c
+@@ -37,7 +37,7 @@
+ 
+ #include "hw/hw.h"
+ #include "hw/xen/xen_backend.h"
+-#include "hw/xen_blkif.h"
++#include "xen_blkif.h"
+ #include "sysemu/blockdev.h"
+ 
+ /* ------------------------------------------------------------- */
+diff --git a/hw/char/ipack.c b/hw/char/ipack.c
+index b1f46c1..e15540d 100644
+--- a/hw/char/ipack.c
++++ b/hw/char/ipack.c
+@@ -8,7 +8,7 @@
+  * later version.
+  */
+ 
+-#include "hw/ipack.h"
++#include "ipack.h"
+ 
+ IPackDevice *ipack_device_find(IPackBus *bus, int32_t slot)
+ {
+diff --git a/hw/ipack.h b/hw/char/ipack.h
+similarity index 100%
+rename from hw/ipack.h
+rename to hw/char/ipack.h
+diff --git a/hw/char/ipoctal232.c b/hw/char/ipoctal232.c
+index 1da6a99..c1e3b19 100644
+--- a/hw/char/ipoctal232.c
++++ b/hw/char/ipoctal232.c
+@@ -8,7 +8,7 @@
+  * later version.
+  */
+ 
+-#include "hw/ipack.h"
++#include "ipack.h"
+ #include "qemu/bitops.h"
+ #include "char/char.h"
+ 
+diff --git a/hw/char/tpci200.c b/hw/char/tpci200.c
+index e3408ef..0170602 100644
+--- a/hw/char/tpci200.c
++++ b/hw/char/tpci200.c
+@@ -8,7 +8,7 @@
+  * later version.
+  */
+ 
+-#include "hw/ipack.h"
++#include "ipack.h"
+ #include "hw/pci/pci.h"
+ #include "qemu/bitops.h"
+ #include <stdio.h>
+diff --git a/hw/core/loader.c b/hw/core/loader.c
+index 2f5072d..7507914 100644
+--- a/hw/core/loader.c
++++ b/hw/core/loader.c
+@@ -46,7 +46,7 @@
+ #include "disas/disas.h"
+ #include "monitor/monitor.h"
+ #include "sysemu/sysemu.h"
+-#include "hw/uboot_image.h"
++#include "uboot_image.h"
+ #include "hw/loader.h"
+ #include "hw/nvram/fw_cfg.h"
+ #include "exec/memory.h"
+diff --git a/hw/uboot_image.h b/hw/core/uboot_image.h
+similarity index 100%
+rename from hw/uboot_image.h
+rename to hw/core/uboot_image.h
+diff --git a/hw/cris/axis_dev88.c b/hw/cris/axis_dev88.c
+index 00daceb..7475671 100644
+--- a/hw/cris/axis_dev88.c
++++ b/hw/cris/axis_dev88.c
+@@ -29,7 +29,7 @@
+ #include "hw/cris/etraxfs.h"
+ #include "hw/loader.h"
+ #include "elf.h"
+-#include "hw/cris-boot.h"
++#include "boot.h"
+ #include "sysemu/blockdev.h"
+ #include "exec/address-spaces.h"
+ 
+diff --git a/hw/cris/boot.c b/hw/cris/boot.c
+index c330e22..622f353 100644
+--- a/hw/cris/boot.c
++++ b/hw/cris/boot.c
+@@ -25,7 +25,7 @@
+ #include "hw/hw.h"
+ #include "hw/loader.h"
+ #include "elf.h"
+-#include "hw/cris-boot.h"
++#include "boot.h"
+ 
+ static void main_cpu_reset(void *opaque)
+ {
+diff --git a/hw/cris-boot.h b/hw/cris/boot.h
+similarity index 100%
+rename from hw/cris-boot.h
+rename to hw/cris/boot.h
+diff --git a/hw/display/blizzard.c b/hw/display/blizzard.c
+index bdb0b15..175c5cd 100644
+--- a/hw/display/blizzard.c
++++ b/hw/display/blizzard.c
+@@ -21,7 +21,7 @@
+ #include "qemu-common.h"
+ #include "ui/console.h"
+ #include "hw/arm/devices.h"
+-#include "hw/vga_int.h"
++#include "vga_int.h"
+ #include "ui/pixel_ops.h"
+ 
+ typedef void (*blizzard_fn_t)(uint8_t *, const uint8_t *, unsigned int);
+@@ -946,15 +946,15 @@ static void blizzard_screen_dump(void *opaque, const char *filename,
+ }
+ 
+ #define DEPTH 8
+-#include "hw/blizzard_template.h"
++#include "blizzard_template.h"
+ #define DEPTH 15
+-#include "hw/blizzard_template.h"
++#include "blizzard_template.h"
+ #define DEPTH 16
+-#include "hw/blizzard_template.h"
++#include "blizzard_template.h"
+ #define DEPTH 24
+-#include "hw/blizzard_template.h"
++#include "blizzard_template.h"
+ #define DEPTH 32
+-#include "hw/blizzard_template.h"
++#include "blizzard_template.h"
+ 
+ void *s1d13745_init(qemu_irq gpio_int)
+ {
+diff --git a/hw/blizzard_template.h b/hw/display/blizzard_template.h
+similarity index 100%
+rename from hw/blizzard_template.h
+rename to hw/display/blizzard_template.h
+diff --git a/hw/display/cirrus_vga.c b/hw/display/cirrus_vga.c
+index 7a4d634..bf2181a 100644
+--- a/hw/display/cirrus_vga.c
++++ b/hw/display/cirrus_vga.c
+@@ -29,7 +29,7 @@
+ #include "hw/hw.h"
+ #include "hw/pci/pci.h"
+ #include "ui/console.h"
+-#include "hw/vga_int.h"
++#include "vga_int.h"
+ #include "hw/loader.h"
+ 
+ /*
+@@ -288,63 +288,63 @@ static void cirrus_bitblt_fill_nop(CirrusVGAState *s,
+ 
+ #define ROP_NAME 0
+ #define ROP_FN(d, s) 0
+-#include "hw/cirrus_vga_rop.h"
++#include "cirrus_vga_rop.h"
+ 
+ #define ROP_NAME src_and_dst
+ #define ROP_FN(d, s) (s) & (d)
+-#include "hw/cirrus_vga_rop.h"
++#include "cirrus_vga_rop.h"
+ 
+ #define ROP_NAME src_and_notdst
+ #define ROP_FN(d, s) (s) & (~(d))
+-#include "hw/cirrus_vga_rop.h"
++#include "cirrus_vga_rop.h"
+ 
+ #define ROP_NAME notdst
+ #define ROP_FN(d, s) ~(d)
+-#include "hw/cirrus_vga_rop.h"
++#include "cirrus_vga_rop.h"
+ 
+ #define ROP_NAME src
+ #define ROP_FN(d, s) s
+-#include "hw/cirrus_vga_rop.h"
++#include "cirrus_vga_rop.h"
+ 
+ #define ROP_NAME 1
+ #define ROP_FN(d, s) ~0
+-#include "hw/cirrus_vga_rop.h"
++#include "cirrus_vga_rop.h"
+ 
+ #define ROP_NAME notsrc_and_dst
+ #define ROP_FN(d, s) (~(s)) & (d)
+-#include "hw/cirrus_vga_rop.h"
++#include "cirrus_vga_rop.h"
+ 
+ #define ROP_NAME src_xor_dst
+ #define ROP_FN(d, s) (s) ^ (d)
+-#include "hw/cirrus_vga_rop.h"
++#include "cirrus_vga_rop.h"
+ 
+ #define ROP_NAME src_or_dst
+ #define ROP_FN(d, s) (s) | (d)
+-#include "hw/cirrus_vga_rop.h"
++#include "cirrus_vga_rop.h"
+ 
+ #define ROP_NAME notsrc_or_notdst
+ #define ROP_FN(d, s) (~(s)) | (~(d))
+-#include "hw/cirrus_vga_rop.h"
++#include "cirrus_vga_rop.h"
+ 
+ #define ROP_NAME src_notxor_dst
+ #define ROP_FN(d, s) ~((s) ^ (d))
+-#include "hw/cirrus_vga_rop.h"
++#include "cirrus_vga_rop.h"
+ 
+ #define ROP_NAME src_or_notdst
+ #define ROP_FN(d, s) (s) | (~(d))
+-#include "hw/cirrus_vga_rop.h"
++#include "cirrus_vga_rop.h"
+ 
+ #define ROP_NAME notsrc
+ #define ROP_FN(d, s) (~(s))
+-#include "hw/cirrus_vga_rop.h"
++#include "cirrus_vga_rop.h"
+ 
+ #define ROP_NAME notsrc_or_dst
+ #define ROP_FN(d, s) (~(s)) | (d)
+-#include "hw/cirrus_vga_rop.h"
++#include "cirrus_vga_rop.h"
+ 
+ #define ROP_NAME notsrc_and_notdst
+ #define ROP_FN(d, s) (~(s)) & (~(d))
+-#include "hw/cirrus_vga_rop.h"
++#include "cirrus_vga_rop.h"
+ 
+ static const cirrus_bitblt_rop_t cirrus_fwd_rop[16] = {
+     cirrus_bitblt_rop_fwd_0,
+@@ -2166,13 +2166,13 @@ static void cirrus_cursor_invalidate(VGACommonState *s1)
+ }
+ 
+ #define DEPTH 8
+-#include "hw/cirrus_vga_template.h"
++#include "cirrus_vga_template.h"
+ 
+ #define DEPTH 16
+-#include "hw/cirrus_vga_template.h"
++#include "cirrus_vga_template.h"
+ 
+ #define DEPTH 32
+-#include "hw/cirrus_vga_template.h"
++#include "cirrus_vga_template.h"
+ 
+ static void cirrus_cursor_draw_line(VGACommonState *s1, uint8_t *d1, int scr_y)
+ {
+diff --git a/hw/cirrus_vga_rop.h b/hw/display/cirrus_vga_rop.h
+similarity index 97%
+rename from hw/cirrus_vga_rop.h
+rename to hw/display/cirrus_vga_rop.h
+index 894610c..9c7bb09 100644
+--- a/hw/cirrus_vga_rop.h
++++ b/hw/display/cirrus_vga_rop.h
+@@ -191,16 +191,16 @@ glue(glue(cirrus_bitblt_rop_bkwd_transp_, ROP_NAME),_16)(CirrusVGAState *s,
+ }
+ 
+ #define DEPTH 8
+-#include "hw/cirrus_vga_rop2.h"
++#include "cirrus_vga_rop2.h"
+ 
+ #define DEPTH 16
+-#include "hw/cirrus_vga_rop2.h"
++#include "cirrus_vga_rop2.h"
+ 
+ #define DEPTH 24
+-#include "hw/cirrus_vga_rop2.h"
++#include "cirrus_vga_rop2.h"
+ 
+ #define DEPTH 32
+-#include "hw/cirrus_vga_rop2.h"
++#include "cirrus_vga_rop2.h"
+ 
+ #undef ROP_NAME
+ #undef ROP_OP
+diff --git a/hw/cirrus_vga_rop2.h b/hw/display/cirrus_vga_rop2.h
+similarity index 100%
+rename from hw/cirrus_vga_rop2.h
+rename to hw/display/cirrus_vga_rop2.h
+diff --git a/hw/cirrus_vga_template.h b/hw/display/cirrus_vga_template.h
+similarity index 100%
+rename from hw/cirrus_vga_template.h
+rename to hw/display/cirrus_vga_template.h
+diff --git a/hw/display/framebuffer.c b/hw/display/framebuffer.c
+index 7326a98..6be31db 100644
+--- a/hw/display/framebuffer.c
++++ b/hw/display/framebuffer.c
+@@ -19,7 +19,7 @@
+ 
+ #include "hw/hw.h"
+ #include "ui/console.h"
+-#include "hw/framebuffer.h"
++#include "framebuffer.h"
+ 
+ /* Render an image from a shared memory framebuffer.  */
+    
+diff --git a/hw/framebuffer.h b/hw/display/framebuffer.h
+similarity index 100%
+rename from hw/framebuffer.h
+rename to hw/display/framebuffer.h
+diff --git a/hw/display/milkymist-vgafb.c b/hw/display/milkymist-vgafb.c
+index 98762ec..3219041 100644
+--- a/hw/display/milkymist-vgafb.c
++++ b/hw/display/milkymist-vgafb.c
+@@ -26,20 +26,20 @@
+ #include "hw/sysbus.h"
+ #include "trace.h"
+ #include "ui/console.h"
+-#include "hw/framebuffer.h"
++#include "framebuffer.h"
+ #include "ui/pixel_ops.h"
+ #include "qemu/error-report.h"
+ 
+ #define BITS 8
+-#include "hw/milkymist-vgafb_template.h"
++#include "milkymist-vgafb_template.h"
+ #define BITS 15
+-#include "hw/milkymist-vgafb_template.h"
++#include "milkymist-vgafb_template.h"
+ #define BITS 16
+-#include "hw/milkymist-vgafb_template.h"
++#include "milkymist-vgafb_template.h"
+ #define BITS 24
+-#include "hw/milkymist-vgafb_template.h"
++#include "milkymist-vgafb_template.h"
+ #define BITS 32
+-#include "hw/milkymist-vgafb_template.h"
++#include "milkymist-vgafb_template.h"
+ 
+ enum {
+     R_CTRL = 0,
+diff --git a/hw/milkymist-vgafb_template.h b/hw/display/milkymist-vgafb_template.h
+similarity index 100%
+rename from hw/milkymist-vgafb_template.h
+rename to hw/display/milkymist-vgafb_template.h
+diff --git a/hw/omap_lcd_template.h b/hw/display/omap_lcd_template.h
+similarity index 100%
+rename from hw/omap_lcd_template.h
+rename to hw/display/omap_lcd_template.h
+diff --git a/hw/display/omap_lcdc.c b/hw/display/omap_lcdc.c
+index 4048cc1..be7e9c0 100644
+--- a/hw/display/omap_lcdc.c
++++ b/hw/display/omap_lcdc.c
+@@ -19,7 +19,7 @@
+ #include "hw/hw.h"
+ #include "ui/console.h"
+ #include "hw/arm/omap.h"
+-#include "hw/framebuffer.h"
++#include "framebuffer.h"
+ #include "ui/pixel_ops.h"
+ 
+ struct omap_lcd_panel_s {
+@@ -70,13 +70,13 @@ static void omap_lcd_interrupts(struct omap_lcd_panel_s *s)
+ #define draw_line_func drawfn
+ 
+ #define DEPTH 8
+-#include "hw/omap_lcd_template.h"
++#include "omap_lcd_template.h"
+ #define DEPTH 15
+-#include "hw/omap_lcd_template.h"
++#include "omap_lcd_template.h"
+ #define DEPTH 16
+-#include "hw/omap_lcd_template.h"
++#include "omap_lcd_template.h"
+ #define DEPTH 32
+-#include "hw/omap_lcd_template.h"
++#include "omap_lcd_template.h"
+ 
+ static draw_line_func draw_line_table2[33] = {
+     [0 ... 32]	= NULL,
+diff --git a/hw/display/pl110.c b/hw/display/pl110.c
+index fbef675..295434e 100644
+--- a/hw/display/pl110.c
++++ b/hw/display/pl110.c
+@@ -9,7 +9,7 @@
+ 
+ #include "hw/sysbus.h"
+ #include "ui/console.h"
+-#include "hw/framebuffer.h"
++#include "framebuffer.h"
+ #include "ui/pixel_ops.h"
+ 
+ #define PL110_CR_EN   0x001
+@@ -111,15 +111,15 @@ static const unsigned char *idregs[] = {
+ };
+ 
+ #define BITS 8
+-#include "hw/pl110_template.h"
++#include "pl110_template.h"
+ #define BITS 15
+-#include "hw/pl110_template.h"
++#include "pl110_template.h"
+ #define BITS 16
+-#include "hw/pl110_template.h"
++#include "pl110_template.h"
+ #define BITS 24
+-#include "hw/pl110_template.h"
++#include "pl110_template.h"
+ #define BITS 32
+-#include "hw/pl110_template.h"
++#include "pl110_template.h"
+ 
+ static int pl110_enabled(pl110_state *s)
+ {
+diff --git a/hw/pl110_template.h b/hw/display/pl110_template.h
+similarity index 98%
+rename from hw/pl110_template.h
+rename to hw/display/pl110_template.h
+index ec4bfd6..e738e4a 100644
+--- a/hw/pl110_template.h
++++ b/hw/display/pl110_template.h
+@@ -27,20 +27,20 @@
+ #undef RGB
+ #define BORDER bgr
+ #define ORDER 0
+-#include "hw/pl110_template.h"
++#include "pl110_template.h"
+ #define ORDER 1
+-#include "hw/pl110_template.h"
++#include "pl110_template.h"
+ #define ORDER 2
+-#include "hw/pl110_template.h"
++#include "pl110_template.h"
+ #undef BORDER
+ #define RGB
+ #define BORDER rgb
+ #define ORDER 0
+-#include "hw/pl110_template.h"
++#include "pl110_template.h"
+ #define ORDER 1
+-#include "hw/pl110_template.h"
++#include "pl110_template.h"
+ #define ORDER 2
+-#include "hw/pl110_template.h"
++#include "pl110_template.h"
+ #undef BORDER
+ 
+ static drawfn glue(pl110_draw_fn_,BITS)[48] =
+diff --git a/hw/display/pxa2xx_lcd.c b/hw/display/pxa2xx_lcd.c
+index ee59bc2..c9bd42e 100644
+--- a/hw/display/pxa2xx_lcd.c
++++ b/hw/display/pxa2xx_lcd.c
+@@ -16,7 +16,7 @@
+ #include "ui/pixel_ops.h"
+ /* FIXME: For graphic_rotate. Should probably be done in common code.  */
+ #include "sysemu/sysemu.h"
+-#include "hw/framebuffer.h"
++#include "framebuffer.h"
+ 
+ struct DMAChannel {
+     uint32_t branch;
+@@ -981,15 +981,15 @@ static const VMStateDescription vmstate_pxa2xx_lcdc = {
+ };
+ 
+ #define BITS 8
+-#include "hw/pxa2xx_template.h"
++#include "pxa2xx_template.h"
+ #define BITS 15
+-#include "hw/pxa2xx_template.h"
++#include "pxa2xx_template.h"
+ #define BITS 16
+-#include "hw/pxa2xx_template.h"
++#include "pxa2xx_template.h"
+ #define BITS 24
+-#include "hw/pxa2xx_template.h"
++#include "pxa2xx_template.h"
+ #define BITS 32
+-#include "hw/pxa2xx_template.h"
++#include "pxa2xx_template.h"
+ 
+ PXA2xxLCDState *pxa2xx_lcdc_init(MemoryRegion *sysmem,
+                                  hwaddr base, qemu_irq irq)
+diff --git a/hw/pxa2xx_template.h b/hw/display/pxa2xx_template.h
+similarity index 100%
+rename from hw/pxa2xx_template.h
+rename to hw/display/pxa2xx_template.h
+diff --git a/hw/display/qxl-logger.c b/hw/display/qxl-logger.c
+index 84f9aa1..3cd85d9 100644
+--- a/hw/display/qxl-logger.c
++++ b/hw/display/qxl-logger.c
+@@ -20,7 +20,7 @@
+  */
+ 
+ #include "qemu/timer.h"
+-#include "hw/qxl.h"
++#include "qxl.h"
+ 
+ static const char *qxl_type[] = {
+     [ QXL_CMD_NOP ]     = "nop",
+diff --git a/hw/display/qxl-render.c b/hw/display/qxl-render.c
+index 8cd9be4..f511a62 100644
+--- a/hw/display/qxl-render.c
++++ b/hw/display/qxl-render.c
+@@ -19,7 +19,7 @@
+  * along with this program; if not, see <http://www.gnu.org/licenses/>.
+  */
+ 
+-#include "hw/qxl.h"
++#include "qxl.h"
+ 
+ static void qxl_blit(PCIQXLDevice *qxl, QXLRect *rect)
+ {
+diff --git a/hw/display/qxl.c b/hw/display/qxl.c
+index b66b414..930b7cf 100644
+--- a/hw/display/qxl.c
++++ b/hw/display/qxl.c
+@@ -27,7 +27,7 @@
+ #include "sysemu/sysemu.h"
+ #include "trace.h"
+ 
+-#include "hw/qxl.h"
++#include "qxl.h"
+ 
+ /*
+  * NOTE: SPICE_RING_PROD_ITEM accesses memory on the pci bar and as
+diff --git a/hw/qxl.h b/hw/display/qxl.h
+similarity index 99%
+rename from hw/qxl.h
+rename to hw/display/qxl.h
+index 36f1a25..8e9b0c2 100644
+--- a/hw/qxl.h
++++ b/hw/display/qxl.h
+@@ -6,7 +6,7 @@
+ #include "ui/console.h"
+ #include "hw/hw.h"
+ #include "hw/pci/pci.h"
+-#include "hw/vga_int.h"
++#include "vga_int.h"
+ #include "qemu/thread.h"
+ 
+ #include "ui/qemu-spice.h"
+diff --git a/hw/display/sm501.c b/hw/display/sm501.c
+index d9fcead..6b660ac 100644
+--- a/hw/display/sm501.c
++++ b/hw/display/sm501.c
+@@ -1171,28 +1171,28 @@ typedef void draw_hwc_line_func(SM501State * s, int crt, uint8_t * palette,
+                                 int c_y, uint8_t *d, int width);
+ 
+ #define DEPTH 8
+-#include "hw/sm501_template.h"
++#include "sm501_template.h"
+ 
+ #define DEPTH 15
+-#include "hw/sm501_template.h"
++#include "sm501_template.h"
+ 
+ #define BGR_FORMAT
+ #define DEPTH 15
+-#include "hw/sm501_template.h"
++#include "sm501_template.h"
+ 
+ #define DEPTH 16
+-#include "hw/sm501_template.h"
++#include "sm501_template.h"
+ 
+ #define BGR_FORMAT
+ #define DEPTH 16
+-#include "hw/sm501_template.h"
++#include "sm501_template.h"
+ 
+ #define DEPTH 32
+-#include "hw/sm501_template.h"
++#include "sm501_template.h"
+ 
+ #define BGR_FORMAT
+ #define DEPTH 32
+-#include "hw/sm501_template.h"
++#include "sm501_template.h"
+ 
+ static draw_line_func * draw_line8_funcs[] = {
+     draw_line8_8,
+diff --git a/hw/sm501_template.h b/hw/display/sm501_template.h
+similarity index 100%
+rename from hw/sm501_template.h
+rename to hw/display/sm501_template.h
+diff --git a/hw/display/tc6393xb.c b/hw/display/tc6393xb.c
+index 2d5fa89..e252ce9 100644
+--- a/hw/display/tc6393xb.c
++++ b/hw/display/tc6393xb.c
+@@ -421,15 +421,15 @@ static void tc6393xb_nand_writeb(TC6393xbState *s, hwaddr addr, uint32_t value)
+ }
+ 
+ #define BITS 8
+-#include "hw/tc6393xb_template.h"
++#include "tc6393xb_template.h"
+ #define BITS 15
+-#include "hw/tc6393xb_template.h"
++#include "tc6393xb_template.h"
+ #define BITS 16
+-#include "hw/tc6393xb_template.h"
++#include "tc6393xb_template.h"
+ #define BITS 24
+-#include "hw/tc6393xb_template.h"
++#include "tc6393xb_template.h"
+ #define BITS 32
+-#include "hw/tc6393xb_template.h"
++#include "tc6393xb_template.h"
+ 
+ static void tc6393xb_draw_graphic(TC6393xbState *s, int full_update)
+ {
+diff --git a/hw/tc6393xb_template.h b/hw/display/tc6393xb_template.h
+similarity index 100%
+rename from hw/tc6393xb_template.h
+rename to hw/display/tc6393xb_template.h
+diff --git a/hw/display/vga-isa-mm.c b/hw/display/vga-isa-mm.c
+index 3b08720..1c50070 100644
+--- a/hw/display/vga-isa-mm.c
++++ b/hw/display/vga-isa-mm.c
+@@ -24,7 +24,7 @@
+ #include "hw/hw.h"
+ #include "ui/console.h"
+ #include "hw/i386/pc.h"
+-#include "hw/vga_int.h"
++#include "vga_int.h"
+ #include "ui/pixel_ops.h"
+ #include "qemu/timer.h"
+ 
+diff --git a/hw/display/vga-isa.c b/hw/display/vga-isa.c
+index 89d7fa6..90959eb 100644
+--- a/hw/display/vga-isa.c
++++ b/hw/display/vga-isa.c
+@@ -26,7 +26,7 @@
+ #include "hw/hw.h"
+ #include "ui/console.h"
+ #include "hw/i386/pc.h"
+-#include "hw/vga_int.h"
++#include "vga_int.h"
+ #include "ui/pixel_ops.h"
+ #include "qemu/timer.h"
+ #include "hw/loader.h"
+diff --git a/hw/display/vga-pci.c b/hw/display/vga-pci.c
+index 05fa9bc..a9c69b6 100644
+--- a/hw/display/vga-pci.c
++++ b/hw/display/vga-pci.c
+@@ -26,7 +26,7 @@
+ #include "hw/hw.h"
+ #include "ui/console.h"
+ #include "hw/pci/pci.h"
+-#include "hw/vga_int.h"
++#include "vga_int.h"
+ #include "ui/pixel_ops.h"
+ #include "qemu/timer.h"
+ #include "hw/loader.h"
+diff --git a/hw/display/vga.c b/hw/display/vga.c
+index dc31fd5..c1b67bb 100644
+--- a/hw/display/vga.c
++++ b/hw/display/vga.c
+@@ -22,11 +22,11 @@
+  * THE SOFTWARE.
+  */
+ #include "hw/hw.h"
+-#include "hw/vga.h"
++#include "vga.h"
+ #include "ui/console.h"
+ #include "hw/i386/pc.h"
+ #include "hw/pci/pci.h"
+-#include "hw/vga_int.h"
++#include "vga_int.h"
+ #include "ui/pixel_ops.h"
+ #include "qemu/timer.h"
+ #include "hw/xen/xen.h"
+@@ -986,28 +986,28 @@ typedef void vga_draw_line_func(VGACommonState *s1, uint8_t *d,
+                                 const uint8_t *s, int width);
+ 
+ #define DEPTH 8
+-#include "hw/vga_template.h"
++#include "vga_template.h"
+ 
+ #define DEPTH 15
+-#include "hw/vga_template.h"
++#include "vga_template.h"
+ 
+ #define BGR_FORMAT
+ #define DEPTH 15
+-#include "hw/vga_template.h"
++#include "vga_template.h"
+ 
+ #define DEPTH 16
+-#include "hw/vga_template.h"
++#include "vga_template.h"
+ 
+ #define BGR_FORMAT
+ #define DEPTH 16
+-#include "hw/vga_template.h"
++#include "vga_template.h"
+ 
+ #define DEPTH 32
+-#include "hw/vga_template.h"
++#include "vga_template.h"
+ 
+ #define BGR_FORMAT
+ #define DEPTH 32
+-#include "hw/vga_template.h"
++#include "vga_template.h"
+ 
+ static unsigned int rgb_to_pixel8_dup(unsigned int r, unsigned int g, unsigned b)
+ {
+diff --git a/hw/vga.h b/hw/display/vga.h
+similarity index 100%
+rename from hw/vga.h
+rename to hw/display/vga.h
+diff --git a/hw/vga_int.h b/hw/display/vga_int.h
+similarity index 100%
+rename from hw/vga_int.h
+rename to hw/display/vga_int.h
+diff --git a/hw/vga_template.h b/hw/display/vga_template.h
+similarity index 100%
+rename from hw/vga_template.h
+rename to hw/display/vga_template.h
+diff --git a/hw/display/vmware_vga.c b/hw/display/vmware_vga.c
+index 5b9ce8f..bcad47a 100644
+--- a/hw/display/vmware_vga.c
++++ b/hw/display/vmware_vga.c
+@@ -31,7 +31,7 @@
+ #define HW_FILL_ACCEL
+ #define HW_MOUSE_ACCEL
+ 
+-#include "hw/vga_int.h"
++#include "vga_int.h"
+ 
+ /* See http://vmware-svga.sf.net/ for some documentation on VMWare SVGA */
+ 
+diff --git a/hw/i2c/bitbang_i2c.c b/hw/i2c/bitbang_i2c.c
+index b8e6d3a..854b8e1 100644
+--- a/hw/i2c/bitbang_i2c.c
++++ b/hw/i2c/bitbang_i2c.c
+@@ -10,7 +10,7 @@
+  * GNU GPL, version 2 or (at your option) any later version.
+  */
+ #include "hw/hw.h"
+-#include "hw/bitbang_i2c.h"
++#include "bitbang_i2c.h"
+ #include "hw/sysbus.h"
+ 
+ //#define DEBUG_BITBANG_I2C
+diff --git a/hw/bitbang_i2c.h b/hw/i2c/bitbang_i2c.h
+similarity index 100%
+rename from hw/bitbang_i2c.h
+rename to hw/i2c/bitbang_i2c.h
+diff --git a/hw/i2c/versatile_i2c.c b/hw/i2c/versatile_i2c.c
+index d0444ae..e09c83d 100644
+--- a/hw/i2c/versatile_i2c.c
++++ b/hw/i2c/versatile_i2c.c
+@@ -22,7 +22,7 @@
+  */
+ 
+ #include "hw/sysbus.h"
+-#include "hw/bitbang_i2c.h"
++#include "bitbang_i2c.h"
+ 
+ typedef struct {
+     SysBusDevice busdev;
+diff --git a/hw/i386/multiboot.c b/hw/i386/multiboot.c
+index c7f01df..d696507 100644
+--- a/hw/i386/multiboot.c
++++ b/hw/i386/multiboot.c
+@@ -24,7 +24,7 @@
+ 
+ #include "hw/hw.h"
+ #include "hw/nvram/fw_cfg.h"
+-#include "hw/multiboot.h"
++#include "multiboot.h"
+ #include "hw/loader.h"
+ #include "elf.h"
+ #include "sysemu/sysemu.h"
+diff --git a/hw/multiboot.h b/hw/i386/multiboot.h
+similarity index 100%
+rename from hw/multiboot.h
+rename to hw/i386/multiboot.h
+diff --git a/hw/i386/pc.c b/hw/i386/pc.c
+index 1f346ff..6290400 100644
+--- a/hw/i386/pc.c
++++ b/hw/i386/pc.c
+@@ -34,7 +34,7 @@
+ #include "hw/i386/smbios.h"
+ #include "hw/loader.h"
+ #include "elf.h"
+-#include "hw/multiboot.h"
++#include "multiboot.h"
+ #include "hw/timer/mc146818rtc.h"
+ #include "hw/timer/i8254.h"
+ #include "hw/audio/pcspk.h"
+diff --git a/hw/i386/xen_domainbuild.c b/hw/i386/xen_domainbuild.c
+index ed90b4b..4e2cf95 100644
+--- a/hw/i386/xen_domainbuild.c
++++ b/hw/i386/xen_domainbuild.c
+@@ -1,6 +1,6 @@
+ #include <signal.h>
+ #include "hw/xen/xen_backend.h"
+-#include "hw/xen_domainbuild.h"
++#include "xen_domainbuild.h"
+ #include "qemu/timer.h"
+ #include "qemu/log.h"
+ 
+diff --git a/hw/xen_domainbuild.h b/hw/i386/xen_domainbuild.h
+similarity index 100%
+rename from hw/xen_domainbuild.h
+rename to hw/i386/xen_domainbuild.h
+diff --git a/hw/i386/xen_machine_pv.c b/hw/i386/xen_machine_pv.c
+index fdd9374..f829a52 100644
+--- a/hw/i386/xen_machine_pv.c
++++ b/hw/i386/xen_machine_pv.c
+@@ -26,7 +26,7 @@
+ #include "hw/i386/pc.h"
+ #include "hw/boards.h"
+ #include "hw/xen/xen_backend.h"
+-#include "hw/xen_domainbuild.h"
++#include "xen_domainbuild.h"
+ #include "sysemu/blockdev.h"
+ 
+ static void xen_init_pv(QEMUMachineInitArgs *args)
+diff --git a/hw/intc/arm_gic.c b/hw/intc/arm_gic.c
+index bcb072b..bae6572 100644
+--- a/hw/intc/arm_gic.c
++++ b/hw/intc/arm_gic.c
+@@ -19,7 +19,7 @@
+  */
+ 
+ #include "hw/sysbus.h"
+-#include "hw/arm_gic_internal.h"
++#include "gic_internal.h"
+ 
+ //#define DEBUG_GIC
+ 
+diff --git a/hw/intc/arm_gic_common.c b/hw/intc/arm_gic_common.c
+index f2dc8bf..f37d360 100644
+--- a/hw/intc/arm_gic_common.c
++++ b/hw/intc/arm_gic_common.c
+@@ -18,7 +18,7 @@
+  * with this program; if not, see <http://www.gnu.org/licenses/>.
+  */
+ 
+-#include "hw/arm_gic_internal.h"
++#include "gic_internal.h"
+ 
+ static void gic_save(QEMUFile *f, void *opaque)
+ {
+diff --git a/hw/intc/arm_gic_kvm.c b/hw/intc/arm_gic_kvm.c
+index 22b40b4..b756456 100644
+--- a/hw/intc/arm_gic_kvm.c
++++ b/hw/intc/arm_gic_kvm.c
+@@ -21,7 +21,7 @@
+ #include "hw/sysbus.h"
+ #include "sysemu/kvm.h"
+ #include "kvm_arm.h"
+-#include "hw/arm_gic_internal.h"
++#include "gic_internal.h"
+ 
+ #define TYPE_KVM_ARM_GIC "kvm-arm-gic"
+ #define KVM_ARM_GIC(obj) \
+diff --git a/hw/intc/armv7m_nvic.c b/hw/intc/armv7m_nvic.c
+index 39d727e..c75891f 100644
+--- a/hw/intc/armv7m_nvic.c
++++ b/hw/intc/armv7m_nvic.c
+@@ -14,7 +14,7 @@
+ #include "qemu/timer.h"
+ #include "hw/arm.h"
+ #include "exec/address-spaces.h"
+-#include "hw/arm_gic_internal.h"
++#include "gic_internal.h"
+ 
+ typedef struct {
+     GICState gic;
+diff --git a/hw/arm_gic_internal.h b/hw/intc/gic_internal.h
+similarity index 100%
+rename from hw/arm_gic_internal.h
+rename to hw/intc/gic_internal.h
+diff --git a/hw/lm32.h b/hw/lm32/lm32.h
+similarity index 100%
+rename from hw/lm32.h
+rename to hw/lm32/lm32.h
+diff --git a/hw/lm32/lm32_boards.c b/hw/lm32/lm32_boards.c
+index b22c94f..6555a97 100644
+--- a/hw/lm32/lm32_boards.c
++++ b/hw/lm32/lm32_boards.c
+@@ -25,8 +25,8 @@
+ #include "hw/loader.h"
+ #include "sysemu/blockdev.h"
+ #include "elf.h"
+-#include "hw/lm32_hwsetup.h"
+-#include "hw/lm32.h"
++#include "lm32_hwsetup.h"
++#include "lm32.h"
+ #include "exec/address-spaces.h"
+ 
+ typedef struct {
+diff --git a/hw/lm32_hwsetup.h b/hw/lm32/lm32_hwsetup.h
+similarity index 100%
+rename from hw/lm32_hwsetup.h
+rename to hw/lm32/lm32_hwsetup.h
+diff --git a/hw/milkymist-hw.h b/hw/lm32/milkymist-hw.h
+similarity index 100%
+rename from hw/milkymist-hw.h
+rename to hw/lm32/milkymist-hw.h
+diff --git a/hw/lm32/milkymist.c b/hw/lm32/milkymist.c
+index c3724de..d02ca0c 100644
+--- a/hw/lm32/milkymist.c
++++ b/hw/lm32/milkymist.c
+@@ -26,8 +26,8 @@
+ #include "hw/loader.h"
+ #include "elf.h"
+ #include "sysemu/blockdev.h"
+-#include "hw/milkymist-hw.h"
+-#include "hw/lm32.h"
++#include "milkymist-hw.h"
++#include "lm32.h"
+ #include "exec/address-spaces.h"
+ 
+ #define BIOS_FILENAME    "mmone-bios.bin"
+diff --git a/hw/microblaze/boot.c b/hw/microblaze/boot.c
+index e13b3e1..23cb11d 100644
+--- a/hw/microblaze/boot.c
++++ b/hw/microblaze/boot.c
+@@ -31,7 +31,7 @@
+ #include "hw/loader.h"
+ #include "elf.h"
+ 
+-#include "hw/microblaze_boot.h"
++#include "boot.h"
+ 
+ static struct
+ {
+diff --git a/hw/microblaze_boot.h b/hw/microblaze/boot.h
+similarity index 100%
+rename from hw/microblaze_boot.h
+rename to hw/microblaze/boot.h
+diff --git a/hw/microblaze/petalogix_ml605_mmu.c b/hw/microblaze/petalogix_ml605_mmu.c
+index 813ef8c..ee6e366 100644
+--- a/hw/microblaze/petalogix_ml605_mmu.c
++++ b/hw/microblaze/petalogix_ml605_mmu.c
+@@ -38,8 +38,8 @@
+ #include "exec/address-spaces.h"
+ #include "hw/ssi.h"
+ 
+-#include "hw/microblaze_boot.h"
+-#include "hw/microblaze_pic_cpu.h"
++#include "boot.h"
++#include "pic_cpu.h"
+ 
+ #include "hw/stream.h"
+ 
+diff --git a/hw/microblaze/petalogix_s3adsp1800_mmu.c b/hw/microblaze/petalogix_s3adsp1800_mmu.c
+index b386403..eedd60e 100644
+--- a/hw/microblaze/petalogix_s3adsp1800_mmu.c
++++ b/hw/microblaze/petalogix_s3adsp1800_mmu.c
+@@ -34,8 +34,8 @@
+ #include "sysemu/blockdev.h"
+ #include "exec/address-spaces.h"
+ 
+-#include "hw/microblaze_boot.h"
+-#include "hw/microblaze_pic_cpu.h"
++#include "boot.h"
++#include "pic_cpu.h"
+ 
+ #define LMB_BRAM_SIZE  (128 * 1024)
+ #define FLASH_SIZE     (16 * 1024 * 1024)
+diff --git a/hw/microblaze/pic_cpu.c b/hw/microblaze/pic_cpu.c
+index 6248de9..16902f7 100644
+--- a/hw/microblaze/pic_cpu.c
++++ b/hw/microblaze/pic_cpu.c
+@@ -23,7 +23,7 @@
+  */
+ 
+ #include "hw/hw.h"
+-#include "hw/microblaze_pic_cpu.h"
++#include "pic_cpu.h"
+ 
+ #define D(x)
+ 
+diff --git a/hw/microblaze_pic_cpu.h b/hw/microblaze/pic_cpu.h
+similarity index 100%
+rename from hw/microblaze_pic_cpu.h
+rename to hw/microblaze/pic_cpu.h
+diff --git a/hw/misc/tmp105.c b/hw/misc/tmp105.c
+index 21a27a6..155e03d 100644
+--- a/hw/misc/tmp105.c
++++ b/hw/misc/tmp105.c
+@@ -20,7 +20,7 @@
+ 
+ #include "hw/hw.h"
+ #include "hw/i2c/i2c.h"
+-#include "hw/tmp105.h"
++#include "tmp105.h"
+ #include "qapi/visitor.h"
+ 
+ static void tmp105_interrupt_update(TMP105State *s)
+diff --git a/hw/tmp105.h b/hw/misc/tmp105.h
+similarity index 100%
+rename from hw/tmp105.h
+rename to hw/misc/tmp105.h
+diff --git a/hw/net/e1000.c b/hw/net/e1000.c
+index 3f18041..e6f46f0 100644
+--- a/hw/net/e1000.c
++++ b/hw/net/e1000.c
+@@ -33,7 +33,7 @@
+ #include "sysemu/sysemu.h"
+ #include "sysemu/dma.h"
+ 
+-#include "hw/e1000_hw.h"
++#include "e1000_regs.h"
+ 
+ #define E1000_DEBUG
+ 
+diff --git a/hw/e1000_hw.h b/hw/net/e1000_regs.h
+similarity index 100%
+rename from hw/e1000_hw.h
+rename to hw/net/e1000_regs.h
+diff --git a/hw/net/lance.c b/hw/net/lance.c
+index 0f4e808..187497c 100644
+--- a/hw/net/lance.c
++++ b/hw/net/lance.c
+@@ -40,7 +40,7 @@
+ #include "qemu/timer.h"
+ #include "qemu/sockets.h"
+ #include "hw/sparc/sun4m.h"
+-#include "hw/pcnet.h"
++#include "pcnet.h"
+ #include "trace.h"
+ 
+ typedef struct {
+diff --git a/hw/net/ne2000-isa.c b/hw/net/ne2000-isa.c
+index e4c10db..a093aa8 100644
+--- a/hw/net/ne2000-isa.c
++++ b/hw/net/ne2000-isa.c
+@@ -26,7 +26,7 @@
+ #include "hw/isa/isa.h"
+ #include "hw/qdev.h"
+ #include "net/net.h"
+-#include "hw/ne2000.h"
++#include "ne2000.h"
+ #include "exec/address-spaces.h"
+ 
+ typedef struct ISANE2000State {
+diff --git a/hw/net/ne2000.c b/hw/net/ne2000.c
+index 7f45831..33ee03e 100644
+--- a/hw/net/ne2000.c
++++ b/hw/net/ne2000.c
+@@ -24,7 +24,7 @@
+ #include "hw/hw.h"
+ #include "hw/pci/pci.h"
+ #include "net/net.h"
+-#include "hw/ne2000.h"
++#include "ne2000.h"
+ #include "hw/loader.h"
+ #include "sysemu/sysemu.h"
+ 
+diff --git a/hw/ne2000.h b/hw/net/ne2000.h
+similarity index 100%
+rename from hw/ne2000.h
+rename to hw/net/ne2000.h
+diff --git a/hw/net/pcnet-pci.c b/hw/net/pcnet-pci.c
+index 61af57e..9df2b87 100644
+--- a/hw/net/pcnet-pci.c
++++ b/hw/net/pcnet-pci.c
+@@ -33,7 +33,7 @@
+ #include "qemu/timer.h"
+ #include "sysemu/dma.h"
+ 
+-#include "hw/pcnet.h"
++#include "pcnet.h"
+ 
+ //#define PCNET_DEBUG
+ //#define PCNET_DEBUG_IO
+diff --git a/hw/net/pcnet.c b/hw/net/pcnet.c
+index b0b462b..b606d2b 100644
+--- a/hw/net/pcnet.c
++++ b/hw/net/pcnet.c
+@@ -41,7 +41,7 @@
+ #include "qemu/sockets.h"
+ #include "sysemu/sysemu.h"
+ 
+-#include "hw/pcnet.h"
++#include "pcnet.h"
+ 
+ //#define PCNET_DEBUG
+ //#define PCNET_DEBUG_IO
+diff --git a/hw/pcnet.h b/hw/net/pcnet.h
+similarity index 100%
+rename from hw/pcnet.h
+rename to hw/net/pcnet.h
+diff --git a/hw/pci-bridge/ioh3420.c b/hw/pci-bridge/ioh3420.c
+index 5cff61e..bb541eb 100644
+--- a/hw/pci-bridge/ioh3420.c
++++ b/hw/pci-bridge/ioh3420.c
+@@ -23,7 +23,7 @@
+ #include "hw/pci/pci_ids.h"
+ #include "hw/pci/msi.h"
+ #include "hw/pci/pcie.h"
+-#include "hw/ioh3420.h"
++#include "ioh3420.h"
+ 
+ #define PCI_DEVICE_ID_IOH_EPORT         0x3420  /* D0:F0 express mode */
+ #define PCI_DEVICE_ID_IOH_REV           0x2
+diff --git a/hw/ioh3420.h b/hw/pci-bridge/ioh3420.h
+similarity index 100%
+rename from hw/ioh3420.h
+rename to hw/pci-bridge/ioh3420.h
+diff --git a/hw/pci-bridge/xio3130_downstream.c b/hw/pci-bridge/xio3130_downstream.c
+index b868f56..1810dd2 100644
+--- a/hw/pci-bridge/xio3130_downstream.c
++++ b/hw/pci-bridge/xio3130_downstream.c
+@@ -22,7 +22,7 @@
+ #include "hw/pci/pci_ids.h"
+ #include "hw/pci/msi.h"
+ #include "hw/pci/pcie.h"
+-#include "hw/xio3130_downstream.h"
++#include "xio3130_downstream.h"
+ 
+ #define PCI_DEVICE_ID_TI_XIO3130D       0x8233  /* downstream port */
+ #define XIO3130_REVISION                0x1
+diff --git a/hw/xio3130_downstream.h b/hw/pci-bridge/xio3130_downstream.h
+similarity index 100%
+rename from hw/xio3130_downstream.h
+rename to hw/pci-bridge/xio3130_downstream.h
+diff --git a/hw/pci-bridge/xio3130_upstream.c b/hw/pci-bridge/xio3130_upstream.c
+index cd5d97d..8e0d97a 100644
+--- a/hw/pci-bridge/xio3130_upstream.c
++++ b/hw/pci-bridge/xio3130_upstream.c
+@@ -22,7 +22,7 @@
+ #include "hw/pci/pci_ids.h"
+ #include "hw/pci/msi.h"
+ #include "hw/pci/pcie.h"
+-#include "hw/xio3130_upstream.h"
++#include "xio3130_upstream.h"
+ 
+ #define PCI_DEVICE_ID_TI_XIO3130U       0x8232  /* upstream port */
+ #define XIO3130_REVISION                0x2
+diff --git a/hw/xio3130_upstream.h b/hw/pci-bridge/xio3130_upstream.h
+similarity index 100%
+rename from hw/xio3130_upstream.h
+rename to hw/pci-bridge/xio3130_upstream.h
+diff --git a/hw/pci-host/dec.c b/hw/pci-host/dec.c
+index 6ec3d22..cff458b 100644
+--- a/hw/pci-host/dec.c
++++ b/hw/pci-host/dec.c
+@@ -23,7 +23,7 @@
+  * THE SOFTWARE.
+  */
+ 
+-#include "hw/dec_pci.h"
++#include "dec.h"
+ #include "hw/sysbus.h"
+ #include "hw/pci/pci.h"
+ #include "hw/pci/pci_host.h"
+diff --git a/hw/dec_pci.h b/hw/pci-host/dec.h
+similarity index 100%
+rename from hw/dec_pci.h
+rename to hw/pci-host/dec.h
+diff --git a/hw/ppc405.h b/hw/ppc/ppc405.h
+similarity index 100%
+rename from hw/ppc405.h
+rename to hw/ppc/ppc405.h
+diff --git a/hw/ppc/ppc405_boards.c b/hw/ppc/ppc405_boards.c
+index 18a29db..8e56b16 100644
+--- a/hw/ppc/ppc405_boards.c
++++ b/hw/ppc/ppc405_boards.c
+@@ -23,7 +23,7 @@
+  */
+ #include "hw/hw.h"
+ #include "hw/ppc/ppc.h"
+-#include "hw/ppc405.h"
++#include "ppc405.h"
+ #include "hw/timer/m48t59.h"
+ #include "hw/block/flash.h"
+ #include "sysemu/sysemu.h"
+diff --git a/hw/ppc/ppc405_uc.c b/hw/ppc/ppc405_uc.c
+index 82b8956..c6c909e 100644
+--- a/hw/ppc/ppc405_uc.c
++++ b/hw/ppc/ppc405_uc.c
+@@ -23,7 +23,7 @@
+  */
+ #include "hw/hw.h"
+ #include "hw/ppc/ppc.h"
+-#include "hw/ppc405.h"
++#include "ppc405.h"
+ #include "hw/char/serial.h"
+ #include "qemu/timer.h"
+ #include "sysemu/sysemu.h"
+diff --git a/hw/ppc/ppc440_bamboo.c b/hw/ppc/ppc440_bamboo.c
+index 48a0218..a55e717 100644
+--- a/hw/ppc/ppc440_bamboo.c
++++ b/hw/ppc/ppc440_bamboo.c
+@@ -25,7 +25,7 @@
+ #include "exec/address-spaces.h"
+ #include "hw/char/serial.h"
+ #include "hw/ppc/ppc.h"
+-#include "hw/ppc405.h"
++#include "ppc405.h"
+ #include "sysemu/sysemu.h"
+ #include "hw/sysbus.h"
+ 
+diff --git a/hw/ppc/virtex_ml507.c b/hw/ppc/virtex_ml507.c
+index db52649..92b4394 100644
+--- a/hw/ppc/virtex_ml507.c
++++ b/hw/ppc/virtex_ml507.c
+@@ -37,7 +37,7 @@
+ 
+ #include "hw/ppc/ppc.h"
+ #include "hw/ppc/ppc4xx.h"
+-#include "hw/ppc405.h"
++#include "ppc405.h"
+ 
+ #include "sysemu/blockdev.h"
+ #include "hw/xilinx.h"
+diff --git a/hw/scsi/megasas.c b/hw/scsi/megasas.c
+index f46f800..14b0552 100644
+--- a/hw/scsi/megasas.c
++++ b/hw/scsi/megasas.c
+@@ -27,7 +27,7 @@
+ #include "block/scsi.h"
+ #include "trace.h"
+ 
+-#include "hw/mfi.h"
++#include "mfi.h"
+ 
+ #define MEGASAS_VERSION "1.70"
+ #define MEGASAS_MAX_FRAMES 2048         /* Firmware limit at 65535 */
+diff --git a/hw/mfi.h b/hw/scsi/mfi.h
+similarity index 100%
+rename from hw/mfi.h
+rename to hw/scsi/mfi.h
+diff --git a/hw/scsi/spapr_vscsi.c b/hw/scsi/spapr_vscsi.c
+index e92b09a..999a463 100644
+--- a/hw/scsi/spapr_vscsi.c
++++ b/hw/scsi/spapr_vscsi.c
+@@ -34,11 +34,11 @@
+ #include "hw/hw.h"
+ #include "hw/scsi/scsi.h"
+ #include "block/scsi.h"
+-#include "hw/srp.h"
++#include "srp.h"
+ #include "hw/qdev.h"
+ #include "hw/ppc/spapr.h"
+ #include "hw/ppc/spapr_vio.h"
+-#include "hw/ppc-viosrp.h"
++#include "viosrp.h"
+ 
+ #include <libfdt.h>
+ 
+diff --git a/hw/srp.h b/hw/scsi/srp.h
+similarity index 100%
+rename from hw/srp.h
+rename to hw/scsi/srp.h
+diff --git a/hw/ppc-viosrp.h b/hw/scsi/viosrp.h
+similarity index 100%
+rename from hw/ppc-viosrp.h
+rename to hw/scsi/viosrp.h
+diff --git a/hw/sd/sdhci.c b/hw/sd/sdhci.c
+index 4a29e6c..91dc9b0 100644
+--- a/hw/sd/sdhci.c
++++ b/hw/sd/sdhci.c
+@@ -29,7 +29,7 @@
+ #include "block/block_int.h"
+ #include "qemu/bitops.h"
+ 
+-#include "hw/sdhci.h"
++#include "sdhci.h"
+ 
+ /* host controller debug messages */
+ #ifndef SDHC_DEBUG
+diff --git a/hw/sdhci.h b/hw/sd/sdhci.h
+similarity index 100%
+rename from hw/sdhci.h
+rename to hw/sd/sdhci.h
+diff --git a/hw/sh4/r2d.c b/hw/sh4/r2d.c
+index bcc326a..256a58c 100644
+--- a/hw/sh4/r2d.c
++++ b/hw/sh4/r2d.c
+@@ -31,7 +31,7 @@
+ #include "hw/boards.h"
+ #include "hw/pci/pci.h"
+ #include "net/net.h"
+-#include "hw/sh7750_regs.h"
++#include "sh7750_regs.h"
+ #include "hw/ide.h"
+ #include "hw/loader.h"
+ #include "hw/usb.h"
+diff --git a/hw/sh4/sh7750.c b/hw/sh4/sh7750.c
+index d72708e..2218b9c 100644
+--- a/hw/sh4/sh7750.c
++++ b/hw/sh4/sh7750.c
+@@ -26,8 +26,8 @@
+ #include "hw/hw.h"
+ #include "hw/sh4/sh.h"
+ #include "sysemu/sysemu.h"
+-#include "hw/sh7750_regs.h"
+-#include "hw/sh7750_regnames.h"
++#include "sh7750_regs.h"
++#include "sh7750_regnames.h"
+ #include "hw/sh4/sh_intc.h"
+ #include "cpu.h"
+ #include "exec/address-spaces.h"
+diff --git a/hw/sh4/sh7750_regnames.c b/hw/sh4/sh7750_regnames.c
+index 7a3cdf3..52ac1cc 100644
+--- a/hw/sh4/sh7750_regnames.c
++++ b/hw/sh4/sh7750_regnames.c
+@@ -1,7 +1,7 @@
+ #include "hw/hw.h"
+ #include "hw/sh4/sh.h"
+-#include "hw/sh7750_regs.h"
+-#include "hw/sh7750_regnames.h"
++#include "sh7750_regs.h"
++#include "sh7750_regnames.h"
+ 
+ #define REGNAME(r) {r, #r},
+ 
+diff --git a/hw/sh7750_regnames.h b/hw/sh4/sh7750_regnames.h
+similarity index 100%
+rename from hw/sh7750_regnames.h
+rename to hw/sh4/sh7750_regnames.h
+diff --git a/hw/sh7750_regs.h b/hw/sh4/sh7750_regs.h
+similarity index 100%
+rename from hw/sh7750_regs.h
+rename to hw/sh4/sh7750_regs.h
+diff --git a/hw/usb/ccid-card-emulated.c b/hw/usb/ccid-card-emulated.c
+index c8f8ba3..29dcd7a 100644
+--- a/hw/usb/ccid-card-emulated.c
++++ b/hw/usb/ccid-card-emulated.c
+@@ -34,7 +34,7 @@
+ #include "qemu/thread.h"
+ #include "char/char.h"
+ #include "monitor/monitor.h"
+-#include "hw/ccid.h"
++#include "ccid.h"
+ 
+ #define DPRINTF(card, lvl, fmt, ...) \
+ do {\
+diff --git a/hw/usb/ccid-card-passthru.c b/hw/usb/ccid-card-passthru.c
+index 984bd0b..5e017ae 100644
+--- a/hw/usb/ccid-card-passthru.c
++++ b/hw/usb/ccid-card-passthru.c
+@@ -11,7 +11,7 @@
+ #include "char/char.h"
+ #include "qemu/sockets.h"
+ #include "monitor/monitor.h"
+-#include "hw/ccid.h"
++#include "ccid.h"
+ #include "libcacard/vscard_common.h"
+ 
+ #define DPRINTF(card, lvl, fmt, ...)                    \
+diff --git a/hw/ccid.h b/hw/usb/ccid.h
+similarity index 100%
+rename from hw/ccid.h
+rename to hw/usb/ccid.h
+diff --git a/hw/usb/dev-smartcard-reader.c b/hw/usb/dev-smartcard-reader.c
+index caebc1c..db8ce02 100644
+--- a/hw/usb/dev-smartcard-reader.c
++++ b/hw/usb/dev-smartcard-reader.c
+@@ -40,7 +40,7 @@
+ #include "hw/usb/desc.h"
+ #include "monitor/monitor.h"
+ 
+-#include "hw/ccid.h"
++#include "ccid.h"
+ 
+ #define DPRINTF(s, lvl, fmt, ...) \
+ do { \
+diff --git a/hw/virtio/virtio-pci.c b/hw/virtio/virtio-pci.c
+index 943b429..2b22588 100644
+--- a/hw/virtio/virtio-pci.c
++++ b/hw/virtio/virtio-pci.c
+@@ -30,7 +30,7 @@
+ #include "hw/loader.h"
+ #include "sysemu/kvm.h"
+ #include "sysemu/blockdev.h"
+-#include "hw/virtio-pci.h"
++#include "virtio-pci.h"
+ #include "qemu/range.h"
+ #include "hw/virtio/virtio-bus.h"
+ 
+diff --git a/hw/virtio-pci.h b/hw/virtio/virtio-pci.h
+similarity index 100%
+rename from hw/virtio-pci.h
+rename to hw/virtio/virtio-pci.h
+diff --git a/hw/xen/xen-host-pci-device.c b/hw/xen/xen-host-pci-device.c
+index ff2e876..743b37b 100644
+--- a/hw/xen/xen-host-pci-device.c
++++ b/hw/xen/xen-host-pci-device.c
+@@ -7,7 +7,7 @@
+  */
+ 
+ #include "qemu-common.h"
+-#include "hw/xen-host-pci-device.h"
++#include "xen-host-pci-device.h"
+ 
+ #define XEN_HOST_PCI_MAX_EXT_CAP \
+     ((PCIE_CONFIG_SPACE_SIZE - PCI_CONFIG_SPACE_SIZE) / (PCI_CAP_SIZEOF + 4))
+diff --git a/hw/xen-host-pci-device.h b/hw/xen/xen-host-pci-device.h
+similarity index 100%
+rename from hw/xen-host-pci-device.h
+rename to hw/xen/xen-host-pci-device.h
+diff --git a/hw/xen/xen_pt.c b/hw/xen/xen_pt.c
+index 0cc4538..c199818 100644
+--- a/hw/xen/xen_pt.c
++++ b/hw/xen/xen_pt.c
+@@ -57,7 +57,7 @@
+ #include "hw/pci/pci.h"
+ #include "hw/xen/xen.h"
+ #include "hw/xen/xen_backend.h"
+-#include "hw/xen_pt.h"
++#include "xen_pt.h"
+ #include "qemu/range.h"
+ #include "exec/address-spaces.h"
+ 
+diff --git a/hw/xen_pt.h b/hw/xen/xen_pt.h
+similarity index 99%
+rename from hw/xen_pt.h
+rename to hw/xen/xen_pt.h
+index d2cac18..942dc60 100644
+--- a/hw/xen_pt.h
++++ b/hw/xen/xen_pt.h
+@@ -4,7 +4,7 @@
+ #include "qemu-common.h"
+ #include "hw/xen/xen_common.h"
+ #include "hw/pci/pci.h"
+-#include "hw/xen-host-pci-device.h"
++#include "xen-host-pci-device.h"
+ 
+ void xen_pt_log(const PCIDevice *d, const char *f, ...) GCC_FMT_ATTR(2, 3);
+ 
+diff --git a/hw/xen/xen_pt_config_init.c b/hw/xen/xen_pt_config_init.c
+index 3ee2adf..01872db 100644
+--- a/hw/xen/xen_pt_config_init.c
++++ b/hw/xen/xen_pt_config_init.c
+@@ -14,7 +14,7 @@
+ 
+ #include "qemu/timer.h"
+ #include "hw/xen/xen_backend.h"
+-#include "hw/xen_pt.h"
++#include "xen_pt.h"
+ 
+ #define XEN_PT_MERGE_VALUE(value, data, val_mask) \
+     (((value) & (val_mask)) | ((data) & ~(val_mask)))
+diff --git a/hw/xen/xen_pt_msi.c b/hw/xen/xen_pt_msi.c
+index dcdfc5c..db2c842 100644
+--- a/hw/xen/xen_pt_msi.c
++++ b/hw/xen/xen_pt_msi.c
+@@ -12,7 +12,7 @@
+ #include <sys/mman.h>
+ 
+ #include "hw/xen/xen_backend.h"
+-#include "hw/xen_pt.h"
++#include "xen_pt.h"
+ #include "hw/i386/apic-msidef.h"
+ 
+ 
+diff --git a/hw/xtensa_bootparam.h b/hw/xtensa/xtensa_bootparam.h
+similarity index 100%
+rename from hw/xtensa_bootparam.h
+rename to hw/xtensa/xtensa_bootparam.h
+diff --git a/hw/xtensa/xtensa_lx60.c b/hw/xtensa/xtensa_lx60.c
+index 5695897..2682eda 100644
+--- a/hw/xtensa/xtensa_lx60.c
++++ b/hw/xtensa/xtensa_lx60.c
+@@ -37,7 +37,7 @@
+ #include "hw/block/flash.h"
+ #include "sysemu/blockdev.h"
+ #include "char/char.h"
+-#include "hw/xtensa_bootparam.h"
++#include "xtensa_bootparam.h"
+ 
+ typedef struct LxBoardDesc {
+     size_t flash_size;
+-- 
+1.8.1.4
+
+

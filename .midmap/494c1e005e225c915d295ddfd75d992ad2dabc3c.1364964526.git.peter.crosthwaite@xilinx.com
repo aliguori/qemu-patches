@@ -1,0 +1,1 @@
+../cadence_uart-U-boot-driver/v1.1365018740/0001-cadence_uart-Flush-queued-characters-on-reset.patch

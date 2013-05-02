@@ -1,0 +1,54 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: Paolo Bonzini <pbonzini@redhat.com>, qemu-devel <qemu-devel@nongnu.org>,
+ qemu-devel@nongnu.org, Hans de Goede <hdegoede@redhat.com>,
+ Amit Shah <amit.shah@redhat.com>, Gerd Hoffmann <kraxel@redhat.com>
+Cc: Anthony Liguori <aliguori@us.ibm.com>, aliguori@us.ibm.com,
+ qemu-devel@nongnu.org, Hans de Goede <hdegoede@redhat.com>,
+ amit.shah@redhat.com, Gerd Hoffmann <kraxel@redhat.com>
+Date: Wed, 10 Apr 2013 15:23:27 +0200
+Message-id: 1365600207-21685-1-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 1/1] qemu-char: another io_add_watch_poll fix
+
+After attaching the source, we have to remove the reference we hold
+to it, because we do not hold anymore a pointer to the source.
+
+If we do not do this, removing the source will not finalize it and
+will not drop the "real" I/O watch source.
+
+This showed up when backporting the new flow control patches to older
+versions of QEMU that still used select.  The whole select then failed
+with EBADF (poll instead will reporting POLLNVAL on a single pollfd)
+and QEMU froze.
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ qemu-char.c | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/qemu-char.c b/qemu-char.c
+index 37117b5..2caef56 100644
+--- a/qemu-char.c
++++ b/qemu-char.c
+@@ -610,6 +610,7 @@ static guint io_add_watch_poll(GIOChannel *channel,
+                                gpointer user_data)
+ {
+     IOWatchPoll *iwp;
++    int tag;
+ 
+     iwp = (IOWatchPoll *) g_source_new(&io_watch_poll_funcs, sizeof(IOWatchPoll));
+     iwp->fd_can_read = fd_can_read;
+@@ -618,7 +619,9 @@ static guint io_add_watch_poll(GIOChannel *channel,
+     iwp->fd_read = (GSourceFunc) fd_read;
+     iwp->src = NULL;
+ 
+-    return g_source_attach(&iwp->parent, NULL);
++    tag = g_source_attach(&iwp->parent, NULL);
++    g_source_unref(&iwp->parent);
++    return tag;
+ }
+ 
+ static GIOChannel *io_channel_from_fd(int fd)
+-- 
+1.8.1.4
+

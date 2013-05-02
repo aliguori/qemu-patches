@@ -1,0 +1,36 @@
+From patches Mon Sep 17 00:00:00 2001
+From: =?utf-8?q?Beno=C3=AEt_Canet_=3Cbenoit=40irqsave=2Enet=3E?=
+To: qemu-devel@nongnu.org
+Cc: =?UTF-8?q?Beno=C3=AEt=20Canet?= <benoit@irqsave.net>,
+ peter.maydell@linaro.org, quintela@redhat.com, aneesh.kumar@linux.vnet.ibm.com,
+ pbonzini@redhat.com
+Date: Thu, 11 Apr 2013 16:41:05 +0200
+Message-id: 1365691268-18036-1-git-send-email-benoit@irqsave.net
+Subject: [PATCH 0/3] Virtio-9p live migration patchset
+
+This patchset is a rework of the 9p live migration patchs made a few years ago
+by Aneesh.
+As the new vmstate API doesn't support linked list so the old API is used.
+
+v2:
+    Drop pre migration flush hook code (Paolo)
+    Use vmstate change notifier (Paolo)
+    Use static variables instead of a struct in patch 2 (Paolo, Peter)
+    Drop spurious root_id related code (Peter)
+    Rename functions in patch two (Benoît)
+
+Benoît Canet (3):
+  virtio-9p: Add support for 9p migration.
+  virtio-9p: Wait for 9p operations to complete before migration and
+    savevm.
+  virtio-9p: Remove migration blockers.
+
+ hw/9pfs/virtio-9p-device.c |  154 ++++++++++++++++++++++++++++++++++++++++++++
+ hw/9pfs/virtio-9p.c        |   98 +++++++++++++++++++++-------
+ hw/9pfs/virtio-9p.h        |    4 +-
+ 3 files changed, 231 insertions(+), 25 deletions(-)
+
+-- 
+1.7.10.4
+
+

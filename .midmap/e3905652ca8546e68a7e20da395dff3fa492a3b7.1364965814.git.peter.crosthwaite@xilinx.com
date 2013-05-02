@@ -1,0 +1,1 @@
+../Stream-Patches/v5.1365020220/0001-xilinx_axienet-typedef-XilinxAXIEnet-struct.patch

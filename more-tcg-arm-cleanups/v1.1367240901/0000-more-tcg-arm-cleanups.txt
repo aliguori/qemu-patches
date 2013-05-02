@@ -1,0 +1,31 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Richard Henderson <rth@twiddle.net>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, aurelien@aurel32.net
+Date: Mon, 29 Apr 2013 08:08:21 -0700
+Message-id: 1367248103-1492-1-git-send-email-rth@twiddle.net
+Subject: [PATCH 0/2] more tcg-arm cleanups
+
+The first patch really ought to get into 1.5.
+
+The second patch is a re-done version of the 19/19 patch from version 5
+of the previous patch series.  We had dropped that due to wanting to
+avoid 16MB assumption changes.  The revised patch merely changes how we
+handle the constant that needs loading.
+
+Please apply.
+
+
+r~
+
+
+Richard Henderson (2):
+  tcg-arm: Fix 64-bit tlb load for pre-v6
+  tcg-arm: Use movi32 in exit_tb
+
+ tcg/arm/tcg-target.c | 18 ++++++++----------
+ 1 file changed, 8 insertions(+), 10 deletions(-)
+
+-- 
+1.8.1.4
+

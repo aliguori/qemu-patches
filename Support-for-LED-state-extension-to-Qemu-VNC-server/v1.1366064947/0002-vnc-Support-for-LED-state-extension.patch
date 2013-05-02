@@ -1,0 +1,122 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Lei Li <lilei@linux.vnet.ibm.com>
+To: Anthony Liguori <aliguori@us.ibm.com>, Lei Li <lilei@linux.vnet.ibm.com>,
+ qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, lagarcia@br.ibm.com,
+ qemu-devel@nongnu.org, Lei Li <lilei@linux.vnet.ibm.com>
+Date: Mon, 15 Apr 2013 17:29:09 +0800
+Message-id: 1366018149-16508-3-git-send-email-lilei@linux.vnet.ibm.com
+Subject: [PATCH 2/2] vnc: Support for LED state extension
+
+Signed-off-by: Lei Li <lilei@linux.vnet.ibm.com>
+---
+ ui/vnc.c |   50 ++++++++++++++++++++++++++++++++++++++++++++++++++
+ ui/vnc.h |    3 ++-
+ 2 files changed, 52 insertions(+), 1 deletions(-)
+
+diff --git a/ui/vnc.c b/ui/vnc.c
+index fa7ab94..b9b3766 100644
+--- a/ui/vnc.c
++++ b/ui/vnc.c
+@@ -1529,6 +1529,33 @@ static void press_key(VncState *vs, int keysym)
+     kbd_put_keycode(keycode | SCANCODE_UP);
+ }
+ 
++static int current_led_state(VncState *vs)
++{
++    int ledstate = 0;
++
++    if (vs->modifiers_state[0x46]) {
++        ledstate |= QEMU_SCROLL_LOCK_LED;
++    }
++    if (vs->modifiers_state[0x45]) {
++        ledstate |= QEMU_NUM_LOCK_LED;
++    }
++    if (vs->modifiers_state[0x3a]) {
++        ledstate |= QEMU_CAPS_LOCK_LED;
++    }
++
++    return ledstate;
++}
++
++static void vnc_led_state_change(VncState *vs, int ledstate)
++{
++    vnc_lock_output(vs);
++    vnc_write_u8(vs, VNC_MSG_SERVER_QEMU);
++    vnc_write_u8(vs, VNC_MSG_SERVER_QEMU_LED_STATE);
++    vnc_write_u8(vs, ledstate);
++    vnc_unlock_output(vs);
++    vnc_flush(vs);
++}
++
+ static void kbd_leds(void *opaque, int ledstate)
+ {
+     VncState *vs = opaque;
+@@ -1547,6 +1574,11 @@ static void kbd_leds(void *opaque, int ledstate)
+     if (vs->modifiers_state[0x46] != scr) {
+         vs->modifiers_state[0x46] = scr;
+     }
++
++    /* Sending the current led state message to the client */
++    if (ledstate != current_led_state(vs)) {
++        vnc_led_state_change(vs, current_led_state(vs));
++    }
+ }
+ 
+ static void do_key_event(VncState *vs, int down, int keycode, int sym)
+@@ -1831,6 +1863,20 @@ static void send_ext_audio_ack(VncState *vs)
+     vnc_flush(vs);
+ }
+ 
++static void send_ext_leds_state_ack(VncState *vs)
++{
++    vnc_lock_output(vs);
++    vnc_write_u8(vs, VNC_MSG_SERVER_FRAMEBUFFER_UPDATE);
++    vnc_write_u8(vs, 0);
++    vnc_write_u16(vs, 1);
++    vnc_framebuffer_update(vs, 0, 0,
++                           surface_width(vs->vd->ds),
++                           surface_height(vs->vd->ds),
++                           VNC_ENCODING_LED_STATE);
++    vnc_unlock_output(vs);
++    vnc_flush(vs);
++}
++
+ static void set_encodings(VncState *vs, int32_t *encodings, size_t n_encodings)
+ {
+     int i;
+@@ -1897,6 +1943,10 @@ static void set_encodings(VncState *vs, int32_t *encodings, size_t n_encodings)
+         case VNC_ENCODING_AUDIO:
+             send_ext_audio_ack(vs);
+             break;
++        case VNC_ENCODING_LED_STATE:
++            send_ext_leds_state_ack(vs);
++            vnc_led_state_change(vs, current_led_state(vs));
++            break;
+         case VNC_ENCODING_WMVi:
+             vs->features |= VNC_FEATURE_WMVI_MASK;
+             break;
+diff --git a/ui/vnc.h b/ui/vnc.h
+index 58e002e..709cbab 100644
+--- a/ui/vnc.h
++++ b/ui/vnc.h
+@@ -386,6 +386,7 @@ enum {
+ #define VNC_ENCODING_EXT_KEY_EVENT        0XFFFFFEFE /* -258 */
+ #define VNC_ENCODING_AUDIO                0XFFFFFEFD /* -259 */
+ #define VNC_ENCODING_TIGHT_PNG            0xFFFFFEFC /* -260 */
++#define VNC_ENCODING_LED_STATE            0XFFFFFEFB /* -261 */
+ #define VNC_ENCODING_WMVi                 0x574D5669
+ 
+ /*****************************************************************************
+@@ -475,7 +476,7 @@ enum {
+ 
+ /* QEMU server -> client message IDs */
+ #define VNC_MSG_SERVER_QEMU_AUDIO                 1
+-
++#define VNC_MSG_SERVER_QEMU_LED_STATE             2
+ 
+ 
+ /* QEMU client -> server audio message IDs */
+-- 
+1.7.7.6
+

@@ -1,0 +1,41 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Liu Ping Fan <qemulist@gmail.com>
+To: Liu Ping Fan <qemulist@gmail.com>, Stefan Hajnoczi <stefanha@gmail.com>,
+ qemu-devel@nongnu.org, liu ping fan <qemulist@gmail.com>
+Cc: Anthony Liguori <aliguori@us.ibm.com>, Paolo Bonzini <pbonzini@redhat.com>,
+ qemu-devel <qemu-devel@nongnu.org>, Stefan Hajnoczi <stefanha@gmail.com>,
+ qemu-devel@nongnu.org, mdroth <mdroth@linux.vnet.ibm.com>
+Date: Thu, 28 Mar 2013 15:55:53 +0800
+Message-id: 1364457355-4119-3-git-send-email-qemulist@gmail.com
+Subject: [PATCH 2/4] net: resolve race of tap backend and its peer
+
+From: Liu Ping Fan <pingfank@linux.vnet.ibm.com>
+
+Signed-off-by: Liu Ping Fan <pingfank@linux.vnet.ibm.com>
+---
+ net/tap.c |    7 ++++++-
+ 1 files changed, 6 insertions(+), 1 deletions(-)
+
+diff --git a/net/tap.c b/net/tap.c
+index 0b663d1..401161c 100644
+--- a/net/tap.c
++++ b/net/tap.c
+@@ -321,9 +321,14 @@ static void tap_cleanup(NetClientState *nc)
+ static void tap_poll(NetClientState *nc, bool enable)
+ {
+     TAPState *s = DO_UPCAST(TAPState, nc, nc);
+-    /* fixme, when tap backend on another thread, the disable should be sync */
++
+     tap_read_poll(s, enable);
+     tap_write_poll(s, enable);
++
++    if (!enable) {
++        /* need sync so vhost can take over polling */
++        g_source_remove_poll(&nc->nsrc->source, &nc->nsrc->gfd);
++    }
+ }
+ 
+ int tap_get_fd(NetClientState *nc)
+-- 
+1.7.4.4
+

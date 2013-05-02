@@ -1,0 +1,262 @@
+From patches Mon Sep 17 00:00:00 2001
+From: mrhines@linux.vnet.ibm.com
+To: Paolo Bonzini <pbonzini@redhat.com>, qemu-devel@nongnu.org,
+ mrhines@linux.vnet.ibm.com
+Cc: Anthony Liguori <aliguori@us.ibm.com>, mst@redhat.com,
+ qemu-devel@nongnu.org, Michael R Hines <mrhines@us.ibm.com>,
+ Bulent Abali <abali@us.ibm.com>, owasserm@redhat.com, pbonzini@redhat.com,
+ Gokul B Kandiraju <gokul@us.ibm.com>
+Date: Wed, 10 Apr 2013 00:29:36 -0400
+Message-id: 1365568180-19593-4-git-send-email-mrhines@linux.vnet.ibm.com
+Subject: [PATCH 3/7] Introduce QEMURamControlOps
+
+From: "Michael R. Hines" <mrhines@us.ibm.com>
+
+RDMA requires hooks before and after each iteration round
+in order to coordinate the new dynamic page registration support.
+This is done now by introducing a new set of function pointers
+which are only used by arch_init.c.
+
+Pointers include:
+1. save_ram_page (which can be defined by anyone, not just RDMA)
+2. hook after each iteration
+3. hook before each iteration
+
+The pointers are then installed in savevm.c because they
+need visibility into QEMUFile.
+
+Now that we have a proper set of pointers, we no longer need
+specific checks anymore to determine whether or not RDMA
+is enabled.
+
+Signed-off-by: Michael R. Hines <mrhines@us.ibm.com>
+---
+ include/migration/migration.h |   52 +++++++++++++++++++++
+ savevm.c                      |  104 +++++++++++++++++++++++++++++++++++++----
+ 2 files changed, 146 insertions(+), 10 deletions(-)
+
+diff --git a/include/migration/migration.h b/include/migration/migration.h
+index e2acec6..0287321 100644
+--- a/include/migration/migration.h
++++ b/include/migration/migration.h
+@@ -21,6 +21,7 @@
+ #include "qapi/error.h"
+ #include "migration/vmstate.h"
+ #include "qapi-types.h"
++#include "exec/cpu-common.h"
+ 
+ struct MigrationParams {
+     bool blk;
+@@ -75,6 +76,10 @@ void fd_start_incoming_migration(const char *path, Error **errp);
+ 
+ void fd_start_outgoing_migration(MigrationState *s, const char *fdname, Error **errp);
+ 
++void rdma_start_outgoing_migration(void *opaque, const char *host_port, Error **errp);
++
++void rdma_start_incoming_migration(const char * host_port, Error **errp);
++
+ void migrate_fd_error(MigrationState *s);
+ 
+ void migrate_fd_connect(MigrationState *s);
+@@ -127,4 +132,51 @@ int migrate_use_xbzrle(void);
+ int64_t migrate_xbzrle_cache_size(void);
+ 
+ int64_t xbzrle_cache_resize(int64_t new_size);
++
++bool migrate_check_for_zero(void);
++bool migrate_chunk_register_destination(void);
++
++/*
++ * Hooks before and after each iteration round to perform special functions.
++ * In the case of RDMA, this is to handle dynamic server registration.
++ */
++#define RAM_CONTROL_SETUP    0
++#define RAM_CONTROL_ROUND    1
++#define RAM_CONTROL_REGISTER 2
++#define RAM_CONTROL_FINISH   3
++
++typedef void (RAMFunc)(QEMUFile *f, void *opaque, int section);
++
++struct QEMURamControlOps {
++    RAMFunc *before_ram_iterate;
++    RAMFunc *after_ram_iterate;
++    RAMFunc *register_ram_iterate;
++    size_t (*save_page)(QEMUFile *f,
++               void *opaque, ram_addr_t block_offset, 
++               ram_addr_t offset, int cont, size_t size, 
++               bool zero);
++};
++
++const QEMURamControlOps *qemu_savevm_get_control(QEMUFile *f);
++
++void ram_control_before_iterate(QEMUFile *f, int section);
++void ram_control_after_iterate(QEMUFile *f, int section);
++void ram_control_register_iterate(QEMUFile *f, int section);
++size_t ram_control_save_page(QEMUFile *f, ram_addr_t block_offset, 
++                                    ram_addr_t offset, int cont, 
++                                    size_t size, bool zero);
++
++#ifdef CONFIG_RDMA
++extern const QEMURamControlOps qemu_rdma_control;
++
++size_t qemu_rdma_save_page(QEMUFile *f, void *opaque,
++                           ram_addr_t block_offset, 
++                           ram_addr_t offset, int cont, 
++                           size_t size, bool zero);
++
++void qemu_rdma_registration_stop(QEMUFile *f, void *opaque, int section);
++void qemu_rdma_registration_handle(QEMUFile *f, void *opaque, int section);
++void qemu_ram_registration_start(QEMUFile *f, void *opaque, int section);
++#endif
++
+ #endif
+diff --git a/savevm.c b/savevm.c
+index b1d8988..26eabb3 100644
+--- a/savevm.c
++++ b/savevm.c
+@@ -409,16 +409,24 @@ static const QEMUFileOps socket_write_ops = {
+     .close =      socket_close
+ };
+ 
+-QEMUFile *qemu_fopen_socket(int fd, const char *mode)
++bool qemu_file_mode_is_not_valid(const char * mode)
+ {
+-    QEMUFileSocket *s = g_malloc0(sizeof(QEMUFileSocket));
+-
+     if (mode == NULL ||
+         (mode[0] != 'r' && mode[0] != 'w') ||
+         mode[1] != 'b' || mode[2] != 0) {
+         fprintf(stderr, "qemu_fopen: Argument validity check failed\n");
+-        return NULL;
++        return true;
+     }
++    
++    return false;
++}
++
++QEMUFile *qemu_fopen_socket(int fd, const char *mode)
++{
++    QEMUFileSocket *s = g_malloc0(sizeof(QEMUFileSocket));
++
++    if(qemu_file_mode_is_not_valid(mode))
++	return NULL;
+ 
+     s->fd = fd;
+     if (mode[0] == 'w') {
+@@ -430,16 +438,44 @@ QEMUFile *qemu_fopen_socket(int fd, const char *mode)
+     return s->file;
+ }
+ 
++#ifdef CONFIG_RDMA
++const QEMURamControlOps qemu_rdma_write_control = {
++    .before_ram_iterate = qemu_ram_registration_start,
++    .after_ram_iterate = qemu_rdma_registration_stop,
++    .register_ram_iterate = qemu_rdma_registration_handle,
++    .save_page = qemu_rdma_save_page, 
++};
++
++const QEMURamControlOps qemu_rdma_read_control = {
++    .register_ram_iterate = qemu_rdma_registration_handle,
++};
++
++const QEMUFileOps rdma_read_ops = {
++    .get_buffer  = qemu_rdma_get_buffer,
++    .close       = qemu_rdma_close,
++    .get_fd      = qemu_rdma_get_fd,
++    .ram_control = &qemu_rdma_read_control, 
++};
++
++const QEMUFileOps rdma_write_ops = {
++    .put_buffer  = qemu_rdma_put_buffer,
++    .close       = qemu_rdma_close,
++    .get_fd      = qemu_rdma_get_fd,
++    .ram_control = &qemu_rdma_write_control, 
++};
++#endif
++
++const QEMURamControlOps *qemu_savevm_get_control(QEMUFile *f)
++{
++    return f->ops->ram_control;
++}
++
+ QEMUFile *qemu_fopen(const char *filename, const char *mode)
+ {
+     QEMUFileStdio *s;
+ 
+-    if (mode == NULL ||
+-	(mode[0] != 'r' && mode[0] != 'w') ||
+-	mode[1] != 'b' || mode[2] != 0) {
+-        fprintf(stderr, "qemu_fopen: Argument validity check failed\n");
++    if(qemu_file_mode_is_not_valid(mode))
+         return NULL;
+-    }
+ 
+     s = g_malloc0(sizeof(QEMUFileStdio));
+ 
+@@ -509,7 +545,7 @@ int qemu_file_get_error(QEMUFile *f)
+     return f->last_error;
+ }
+ 
+-static void qemu_file_set_error(QEMUFile *f, int ret)
++void qemu_file_set_error(QEMUFile *f, int ret)
+ {
+     if (f->last_error == 0) {
+         f->last_error = ret;
+@@ -554,6 +590,54 @@ static void qemu_fflush(QEMUFile *f)
+     }
+ }
+ 
++void ram_control_before_iterate(QEMUFile *f, int section)
++{
++    const QEMURamControlOps * control = qemu_savevm_get_control(f);
++
++    if(control && control->before_ram_iterate) {
++        qemu_fflush(f);
++        control->before_ram_iterate(f, f->opaque, section);
++    }
++}
++
++void ram_control_after_iterate(QEMUFile *f, int section)
++{
++    const QEMURamControlOps * control = qemu_savevm_get_control(f);
++
++    if(control && control->after_ram_iterate) {
++        qemu_fflush(f);
++        control->after_ram_iterate(f, f->opaque, section);
++    }
++}
++
++void ram_control_register_iterate(QEMUFile *f, int section)
++{
++    const QEMURamControlOps * control = qemu_savevm_get_control(f);
++
++    if(control && control->register_ram_iterate) {
++        qemu_fflush(f);
++        control->register_ram_iterate(f, f->opaque, section);
++    }
++}
++
++size_t ram_control_save_page(QEMUFile *f, ram_addr_t block_offset, 
++                                    ram_addr_t offset, int cont, 
++                                    size_t size, bool zero)
++{
++    const QEMURamControlOps * control = qemu_savevm_get_control(f);
++
++    if(control && control->save_page) {
++        size_t bytes;
++        qemu_fflush(f);
++        bytes = control->save_page(f, f->opaque, block_offset, offset, cont, size, zero);
++        if(bytes > 0)
++            f->pos += bytes;
++        return bytes;
++    }
++
++    return -ENOTSUP;
++}
++
+ static void qemu_fill_buffer(QEMUFile *f)
+ {
+     int len;
+-- 
+1.7.10.4
+

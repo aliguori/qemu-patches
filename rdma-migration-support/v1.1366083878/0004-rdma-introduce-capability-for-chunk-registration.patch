@@ -1,0 +1,89 @@
+From patches Mon Sep 17 00:00:00 2001
+From: mrhines@linux.vnet.ibm.com
+To: Eric Blake <eblake@redhat.com>, qemu-devel@nongnu.org,
+ mrhines@linux.vnet.ibm.com
+Cc: Anthony Liguori <aliguori@us.ibm.com>, Paolo Bonzini <pbonzini@redhat.com>,
+ mst@redhat.com, qemu-devel@nongnu.org, Michael R Hines <mrhines@us.ibm.com>,
+ Bulent Abali <abali@us.ibm.com>, owasserm@redhat.com, pbonzini@redhat.com,
+ Gokul B Kandiraju <gokul@us.ibm.com>
+Date: Mon, 15 Apr 2013 22:44:42 -0400
+Message-id: 1366080286-9288-5-git-send-email-mrhines@linux.vnet.ibm.com
+Subject: [PATCH 4/8] rdma: introduce capability for chunk registration
+
+From: "Michael R. Hines" <mrhines@us.ibm.com>
+
+This capability allows you to disable dynamic chunk registration
+for better throughput on high-performance links.
+
+It is enabled by default.
+
+Signed-off-by: Michael R. Hines <mrhines@us.ibm.com>
+---
+ include/migration/migration.h |    2 ++
+ migration.c                   |   11 ++++++++++-
+ qapi-schema.json              |    2 +-
+ 3 files changed, 13 insertions(+), 2 deletions(-)
+
+diff --git a/include/migration/migration.h b/include/migration/migration.h
+index 0f4510f..e71ac12 100644
+--- a/include/migration/migration.h
++++ b/include/migration/migration.h
+@@ -144,4 +144,6 @@ size_t ram_control_save_page(QEMUFile *f, ram_addr_t block_offset,
+                              ram_addr_t offset, size_t size);
+ 
+ void ram_handle_compressed(void *host, uint8_t ch, uint64_t size);
++
++bool migrate_chunk_register_destination(void);
+ #endif
+diff --git a/migration.c b/migration.c
+index 3b4b467..b46e103 100644
+--- a/migration.c
++++ b/migration.c
+@@ -66,6 +66,7 @@ MigrationState *migrate_get_current(void)
+         .state = MIG_STATE_SETUP,
+         .bandwidth_limit = MAX_THROTTLE,
+         .xbzrle_cache_size = DEFAULT_MIGRATE_CACHE_SIZE,
++        .enabled_capabilities[MIGRATION_CAPABILITY_CHUNK_REGISTER_DESTINATION] = true,
+     };
+ 
+     return &current_migration;
+@@ -120,7 +121,6 @@ void process_incoming_migration(QEMUFile *f)
+     Coroutine *co = qemu_coroutine_create(process_incoming_migration_co);
+     int fd = qemu_get_fd(f);
+ 
+-    assert(fd != -1);
+     qemu_set_nonblock(fd);
+     qemu_coroutine_enter(co, f);
+ }
+@@ -474,6 +474,15 @@ void qmp_migrate_set_downtime(double value, Error **errp)
+     max_downtime = (uint64_t)value;
+ }
+ 
++bool migrate_chunk_register_destination(void)
++{
++    MigrationState *s;
++
++    s = migrate_get_current();
++
++    return s->enabled_capabilities[MIGRATION_CAPABILITY_CHUNK_REGISTER_DESTINATION];
++}
++
+ int migrate_use_xbzrle(void)
+ {
+     MigrationState *s;
+diff --git a/qapi-schema.json b/qapi-schema.json
+index 751d3c2..691bae6 100644
+--- a/qapi-schema.json
++++ b/qapi-schema.json
+@@ -602,7 +602,7 @@
+ # Since: 1.2
+ ##
+ { 'enum': 'MigrationCapability',
+-  'data': ['xbzrle'] }
++  'data': ['xbzrle', 'chunk_register_destination'] }
+ 
+ ##
+ # @MigrationCapabilityStatus
+-- 
+1.7.10.4
+

@@ -1,0 +1,110 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Kevin Wolf <kwolf@redhat.com>
+To: anthony@codemonkey.ws
+Cc: kwolf@redhat.com, qemu-devel@nongnu.org
+Date: Mon, 22 Apr 2013 13:31:28 +0200
+Message-id: 1366630294-18984-15-git-send-email-kwolf@redhat.com
+Subject: [PATCH 14/20] iscsi: Use bdrv_open options instead of filename
+
+This is only to convert the internal interface that is used for passing
+the "filename" to be parsed, but converting to actual fine grained
+options is left for another day, as it doesn't look trivial.
+
+Signed-off-by: Kevin Wolf <kwolf@redhat.com>
+Reviewed-by: Eric Blake <eblake@redhat.com>
+---
+ block/iscsi.c | 39 +++++++++++++++++++++++++++++++++++++--
+ 1 file changed, 37 insertions(+), 2 deletions(-)
+
+diff --git a/block/iscsi.c b/block/iscsi.c
+index 92d6eae..907beba 100644
+--- a/block/iscsi.c
++++ b/block/iscsi.c
+@@ -1003,11 +1003,25 @@ out:
+     return ret;
+ }
+ 
++/* TODO Convert to fine grained options */
++static QemuOptsList runtime_opts = {
++    .name = "iscsi",
++    .head = QTAILQ_HEAD_INITIALIZER(runtime_opts.head),
++    .desc = {
++        {
++            .name = "filename",
++            .type = QEMU_OPT_STRING,
++            .help = "URL to the iscsi image",
++        },
++        { /* end of list */ }
++    },
++};
++
+ /*
+  * We support iscsi url's on the form
+  * iscsi://[<username>%<password>@]<host>[:<port>]/<targetname>/<lun>
+  */
+-static int iscsi_open(BlockDriverState *bs, const char *filename,
++static int iscsi_open(BlockDriverState *bs, const char *dummy,
+                       QDict *options, int flags)
+ {
+     IscsiLun *iscsilun = bs->opaque;
+@@ -1016,6 +1030,9 @@ static int iscsi_open(BlockDriverState *bs, const char *filename,
+     struct scsi_task *task = NULL;
+     struct scsi_inquiry_standard *inq = NULL;
+     char *initiator_name = NULL;
++    QemuOpts *opts;
++    Error *local_err = NULL;
++    const char *filename;
+     int ret;
+ 
+     if ((BDRV_SECTOR_SIZE % 512) != 0) {
+@@ -1025,6 +1042,18 @@ static int iscsi_open(BlockDriverState *bs, const char *filename,
+         return -EINVAL;
+     }
+ 
++    opts = qemu_opts_create_nofail(&runtime_opts);
++    qemu_opts_absorb_qdict(opts, options, &local_err);
++    if (error_is_set(&local_err)) {
++        qerror_report_err(local_err);
++        error_free(local_err);
++        ret = -EINVAL;
++        goto out;
++    }
++
++    filename = qemu_opt_get(opts, "filename");
++
++
+     iscsi_url = iscsi_parse_full_url(iscsi, filename);
+     if (iscsi_url == NULL) {
+         error_report("Failed to parse URL : %s", filename);
+@@ -1126,6 +1155,7 @@ static int iscsi_open(BlockDriverState *bs, const char *filename,
+ #endif
+ 
+ out:
++    qemu_opts_del(opts);
+     if (initiator_name != NULL) {
+         g_free(initiator_name);
+     }
+@@ -1190,6 +1220,7 @@ static int iscsi_create(const char *filename, QEMUOptionParameter *options)
+     int64_t total_size = 0;
+     BlockDriverState bs;
+     IscsiLun *iscsilun = NULL;
++    QDict *bs_options;
+ 
+     memset(&bs, 0, sizeof(BlockDriverState));
+ 
+@@ -1204,7 +1235,11 @@ static int iscsi_create(const char *filename, QEMUOptionParameter *options)
+     bs.opaque = g_malloc0(sizeof(struct IscsiLun));
+     iscsilun = bs.opaque;
+ 
+-    ret = iscsi_open(&bs, filename, NULL, 0);
++    bs_options = qdict_new();
++    qdict_put(bs_options, "filename", qstring_from_str(filename));
++    ret = iscsi_open(&bs, NULL, bs_options, 0);
++    QDECREF(bs_options);
++
+     if (ret != 0) {
+         goto out;
+     }
+-- 
+1.8.1.4
+

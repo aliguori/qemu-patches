@@ -1,0 +1,19 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Kevin Wolf <kwolf@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: kwolf@redhat.com
+Date: Fri,  5 Apr 2013 13:04:19 +0200
+Message-id: 1365159861-21305-1-git-send-email-kwolf@redhat.com
+Subject: [PATCH 0/2] qcow2: Internal snapshot error handling fixes
+
+Kevin Wolf (2):
+  qcow2: Return real error in qcow2_update_snapshot_refcount
+  qcow2: Fix L1 write error handling in qcow2_update_snapshot_refcount
+
+ block/qcow2-refcount.c | 25 +++++++++++++------------
+ 1 file changed, 13 insertions(+), 12 deletions(-)
+
+-- 
+1.8.1.4
+
+

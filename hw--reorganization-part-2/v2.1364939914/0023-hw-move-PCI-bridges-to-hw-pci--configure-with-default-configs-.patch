@@ -1,0 +1,282 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: 
+Date: Tue,  2 Apr 2013 16:58:57 +0200
+Message-id: 1364914749-11141-24-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 23/35] hw: move PCI bridges to hw/pci/,
+ configure with default-configs/
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ default-configs/i386-softmmu.mak       |  3 +++
+ default-configs/mips-softmmu.mak       |  1 +
+ default-configs/mips64-softmmu.mak     |  1 +
+ default-configs/mips64el-softmmu.mak   |  1 +
+ default-configs/mipsel-softmmu.mak     |  1 +
+ default-configs/ppc-softmmu.mak        |  1 +
+ default-configs/ppc64-softmmu.mak      |  1 +
+ default-configs/ppcemb-softmmu.mak     |  1 +
+ default-configs/sparc64-softmmu.mak    |  1 +
+ default-configs/x86_64-softmmu.mak     |  2 ++
+ hw/i386/Makefile.objs                  |  3 +--
+ hw/mips/Makefile.objs                  |  5 -----
+ hw/pci/Makefile.objs                   | 12 ++++++++++++
+ hw/{apb_pci.c => pci/host-apb.c}       |  0
+ hw/{bonito.c => pci/host-bonito.c}     |  0
+ hw/{gt64xxx.c => pci/host-gt64xxx.c}   |  0
+ hw/{piix_pci.c => pci/host-piix.c}     |  0
+ hw/{ppc4xx_pci.c => pci/host-ppc4xx.c} |  0
+ hw/{q35.c => pci/host-q35.c}           |  0
+ hw/{sh_pci.c => pci/host-sh.c}         |  0
+ hw/{spapr_pci.c => pci/host-spapr.c}   |  0
+ hw/ppc/Makefile.objs                   |  3 ---
+ hw/sh4/Makefile.objs                   |  2 +-
+ hw/sparc64/Makefile.objs               |  4 ----
+ 24 files changed, 27 insertions(+), 15 deletions(-)
+ rename hw/{apb_pci.c => pci/host-apb.c} (100%)
+ rename hw/{bonito.c => pci/host-bonito.c} (100%)
+ rename hw/{gt64xxx.c => pci/host-gt64xxx.c} (100%)
+ rename hw/{piix_pci.c => pci/host-piix.c} (100%)
+ rename hw/{ppc4xx_pci.c => pci/host-ppc4xx.c} (100%)
+ rename hw/{q35.c => pci/host-q35.c} (100%)
+ rename hw/{sh_pci.c => pci/host-sh.c} (100%)
+ rename hw/{spapr_pci.c => pci/host-spapr.c} (100%)
+
+diff --git a/default-configs/i386-softmmu.mak b/default-configs/i386-softmmu.mak
+index 594921c..2167e3b 100644
+--- a/default-configs/i386-softmmu.mak
++++ b/default-configs/i386-softmmu.mak
+@@ -31,6 +31,8 @@ CONFIG_TPM_TIS=y
+ CONFIG_TPM_PASSTHROUGH=y
+ CONFIG_PCI_HOTPLUG=y
+ CONFIG_MC146818RTC=y
++CONFIG_PCI_PIIX=y
++CONFIG_PCI_HOTPLUG=y
+ CONFIG_WDT_IB700=y
+ CONFIG_PC_SYSFW=y
+ CONFIG_XEN_I386=$(CONFIG_XEN)
+@@ -39,3 +41,4 @@ CONFIG_ISA_TESTDEV=y
+ CONFIG_VMPORT=y
+ CONFIG_SGA=y
+ CONFIG_LPC_ICH9=y
++CONFIG_Q35=y
+diff --git a/default-configs/mips-softmmu.mak b/default-configs/mips-softmmu.mak
+index 2b48452..fc05135 100644
+--- a/default-configs/mips-softmmu.mak
++++ b/default-configs/mips-softmmu.mak
+@@ -32,4 +32,5 @@ CONFIG_PFLASH_CFI01=y
+ CONFIG_G364FB=y
+ CONFIG_I8259=y
+ CONFIG_JAZZ_LED=y
++CONFIG_PCI_GT64XXX=y
+ CONFIG_MC146818RTC=y
+diff --git a/default-configs/mips64-softmmu.mak b/default-configs/mips64-softmmu.mak
+index 5713320..e3a5f86 100644
+--- a/default-configs/mips64-softmmu.mak
++++ b/default-configs/mips64-softmmu.mak
+@@ -32,4 +32,5 @@ CONFIG_PFLASH_CFI01=y
+ CONFIG_G364FB=y
+ CONFIG_I8259=y
+ CONFIG_JAZZ_LED=y
++CONFIG_PCI_GT64XXX=y
+ CONFIG_MC146818RTC=y
+diff --git a/default-configs/mips64el-softmmu.mak b/default-configs/mips64el-softmmu.mak
+index 096dc80..c0faab0 100644
+--- a/default-configs/mips64el-softmmu.mak
++++ b/default-configs/mips64el-softmmu.mak
+@@ -34,4 +34,5 @@ CONFIG_FULONG=y
+ CONFIG_G364FB=y
+ CONFIG_I8259=y
+ CONFIG_JAZZ_LED=y
++CONFIG_PCI_GT64XXX=y
+ CONFIG_MC146818RTC=y
+diff --git a/default-configs/mipsel-softmmu.mak b/default-configs/mipsel-softmmu.mak
+index 5509f0e..f031046 100644
+--- a/default-configs/mipsel-softmmu.mak
++++ b/default-configs/mipsel-softmmu.mak
+@@ -32,4 +32,5 @@ CONFIG_PFLASH_CFI01=y
+ CONFIG_G364FB=y
+ CONFIG_I8259=y
+ CONFIG_JAZZ_LED=y
++CONFIG_PCI_GT64XXX=y
+ CONFIG_MC146818RTC=y
+diff --git a/default-configs/ppc-softmmu.mak b/default-configs/ppc-softmmu.mak
+index 36a8ed3..6eb472d 100644
+--- a/default-configs/ppc-softmmu.mak
++++ b/default-configs/ppc-softmmu.mak
+@@ -41,6 +41,7 @@ CONFIG_PTIMER=y
+ CONFIG_I8259=y
+ CONFIG_XILINX=y
+ CONFIG_XILINX_ETHLITE=y
++CONFIG_PCI_PPC4XX=y
+ CONFIG_E500=$(CONFIG_FDT)
+ # For PReP
+ CONFIG_MC146818RTC=y
+diff --git a/default-configs/ppc64-softmmu.mak b/default-configs/ppc64-softmmu.mak
+index 2d5df77..bc69d3c 100644
+--- a/default-configs/ppc64-softmmu.mak
++++ b/default-configs/ppc64-softmmu.mak
+@@ -41,6 +41,7 @@ CONFIG_PTIMER=y
+ CONFIG_I8259=y
+ CONFIG_XILINX=y
+ CONFIG_XILINX_ETHLITE=y
++CONFIG_PCI_PPC4XX=y
+ CONFIG_PSERIES=$(CONFIG_FDT)
+ CONFIG_E500=$(CONFIG_FDT)
+ # For pSeries
+diff --git a/default-configs/ppcemb-softmmu.mak b/default-configs/ppcemb-softmmu.mak
+index ce705a9..ee63657 100644
+--- a/default-configs/ppcemb-softmmu.mak
++++ b/default-configs/ppcemb-softmmu.mak
+@@ -36,6 +36,7 @@ CONFIG_PTIMER=y
+ CONFIG_I8259=y
+ CONFIG_XILINX=y
+ CONFIG_XILINX_ETHLITE=y
++CONFIG_PCI_PPC4XX=y
+ CONFIG_E500=$(CONFIG_FDT)
+ # For PReP
+ CONFIG_MC146818RTC=y
+diff --git a/default-configs/sparc64-softmmu.mak b/default-configs/sparc64-softmmu.mak
+index 3b3dc55..9b08ee8 100644
+--- a/default-configs/sparc64-softmmu.mak
++++ b/default-configs/sparc64-softmmu.mak
+@@ -13,4 +13,5 @@ CONFIG_PCKBD=y
+ CONFIG_FDC=y
+ CONFIG_IDE_ISA=y
+ CONFIG_IDE_CMD646=y
++CONFIG_PCI_APB=y
+ CONFIG_MC146818RTC=y
+diff --git a/default-configs/x86_64-softmmu.mak b/default-configs/x86_64-softmmu.mak
+index c0d152f..6ddc03d 100644
+--- a/default-configs/x86_64-softmmu.mak
++++ b/default-configs/x86_64-softmmu.mak
+@@ -31,6 +31,7 @@ CONFIG_TPM_TIS=y
+ CONFIG_TPM_PASSTHROUGH=y
+ CONFIG_PCI_HOTPLUG=y
+ CONFIG_MC146818RTC=y
++CONFIG_PCI_PIIX=y
+ CONFIG_WDT_IB700=y
+ CONFIG_PC_SYSFW=y
+ CONFIG_XEN_I386=$(CONFIG_XEN)
+@@ -39,3 +40,4 @@ CONFIG_ISA_TESTDEV=y
+ CONFIG_VMPORT=y
+ CONFIG_SGA=y
+ CONFIG_LPC_ICH9=y
++CONFIG_Q35=y
+diff --git a/hw/i386/Makefile.objs b/hw/i386/Makefile.objs
+index 1dc9575..c06e92a 100644
+--- a/hw/i386/Makefile.objs
++++ b/hw/i386/Makefile.objs
+@@ -1,6 +1,5 @@
+ obj-y += apic_common.o apic.o
+-obj-y += ioapic_common.o ioapic.o piix_pci.o
+-obj-y += q35.o
++obj-y += ioapic_common.o ioapic.o
+ obj-y += kvm/
+ 
+ obj-y := $(addprefix ../,$(obj-y))
+diff --git a/hw/mips/Makefile.objs b/hw/mips/Makefile.objs
+index af4d1f9..ae3c949 100644
+--- a/hw/mips/Makefile.objs
++++ b/hw/mips/Makefile.objs
+@@ -1,8 +1,3 @@
+-obj-y += gt64xxx.o
+-obj-$(CONFIG_FULONG) += bonito.o
+-
+-obj-y := $(addprefix ../,$(obj-y))
+-
+ obj-y += mips_r4k.o mips_jazz.o mips_malta.o mips_mipssim.o
+ obj-y += addr.o cputimer.o mips_int.o
+ obj-$(CONFIG_FULONG) += mips_fulong2e.o
+diff --git a/hw/pci/Makefile.objs b/hw/pci/Makefile.objs
+index f319cc9..8b20135 100644
+--- a/hw/pci/Makefile.objs
++++ b/hw/pci/Makefile.objs
+@@ -26,4 +26,16 @@ common-obj-$(CONFIG_PPCE500_PCI) += host-ppce500.o
+ # ARM devices
+ common-obj-$(CONFIG_VERSATILE_PCI) += host-versatile.o
+ 
++obj-$(CONFIG_PCI_APB) += host-apb.o
++obj-$(CONFIG_FULONG) += host-bonito.o
++obj-$(CONFIG_PCI_PIIX) += host-piix.o
++obj-$(CONFIG_PCI_PPC4XX) += host-ppc4xx.o
++obj-$(CONFIG_Q35) += host-q35.o
++obj-$(CONFIG_SH4) += host-sh.o
++obj-$(CONFIG_PSERIES) += host-spapr.o
++
++# This file embeds differences between big- and little-endian
++# Malta boards.  These should be only in hw/mips/.
++obj-$(CONFIG_PCI_GT64XXX) += host-gt64xxx.o
++
+ obj-$(CONFIG_PCI_HOTPLUG) += pci-hotplug.o
+diff --git a/hw/apb_pci.c b/hw/pci/host-apb.c
+similarity index 100%
+rename from hw/apb_pci.c
+rename to hw/pci/host-apb.c
+diff --git a/hw/bonito.c b/hw/pci/host-bonito.c
+similarity index 100%
+rename from hw/bonito.c
+rename to hw/pci/host-bonito.c
+diff --git a/hw/gt64xxx.c b/hw/pci/host-gt64xxx.c
+similarity index 100%
+rename from hw/gt64xxx.c
+rename to hw/pci/host-gt64xxx.c
+diff --git a/hw/piix_pci.c b/hw/pci/host-piix.c
+similarity index 100%
+rename from hw/piix_pci.c
+rename to hw/pci/host-piix.c
+diff --git a/hw/ppc4xx_pci.c b/hw/pci/host-ppc4xx.c
+similarity index 100%
+rename from hw/ppc4xx_pci.c
+rename to hw/pci/host-ppc4xx.c
+diff --git a/hw/q35.c b/hw/pci/host-q35.c
+similarity index 100%
+rename from hw/q35.c
+rename to hw/pci/host-q35.c
+diff --git a/hw/sh_pci.c b/hw/pci/host-sh.c
+similarity index 100%
+rename from hw/sh_pci.c
+rename to hw/pci/host-sh.c
+diff --git a/hw/spapr_pci.c b/hw/pci/host-spapr.c
+similarity index 100%
+rename from hw/spapr_pci.c
+rename to hw/pci/host-spapr.c
+diff --git a/hw/ppc/Makefile.objs b/hw/ppc/Makefile.objs
+index 1e24b58..79b5c1e 100644
+--- a/hw/ppc/Makefile.objs
++++ b/hw/ppc/Makefile.objs
+@@ -1,8 +1,5 @@
+ # IBM pSeries (sPAPR)
+-obj-$(CONFIG_PSERIES) += spapr_pci.o
+ obj-$(CONFIG_PSERIES) += spapr_nvram.o
+-# PowerPC 4xx boards
+-obj-y += ppc4xx_pci.o
+ # PowerPC OpenPIC
+ obj-y += openpic.o
+ 
+diff --git a/hw/sh4/Makefile.objs b/hw/sh4/Makefile.objs
+index 76b37bb..5a49ae8 100644
+--- a/hw/sh4/Makefile.objs
++++ b/hw/sh4/Makefile.objs
+@@ -1,4 +1,4 @@
+-obj-y += sh_intc.o sh_pci.o
++obj-y += sh_intc.o
+ 
+ obj-y := $(addprefix ../,$(obj-y))
+ 
+diff --git a/hw/sparc64/Makefile.objs b/hw/sparc64/Makefile.objs
+index 178464b..a84cfe3 100644
+--- a/hw/sparc64/Makefile.objs
++++ b/hw/sparc64/Makefile.objs
+@@ -1,5 +1 @@
+-obj-y = apb_pci.o
+-
+-obj-y := $(addprefix ../,$(obj-y))
+-
+ obj-y += sun4u.o
+-- 
+1.8.1.4
+
+
+

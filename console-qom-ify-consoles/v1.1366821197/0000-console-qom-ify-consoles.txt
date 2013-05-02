@@ -1,0 +1,72 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Gerd Hoffmann <kraxel@redhat.com>
+To: Gerd Hoffmann <kraxel@redhat.com>, qemu-devel@nongnu.org
+Cc: Gerd Hoffmann <kraxel@redhat.com>
+Date: Wed, 24 Apr 2013 11:33:17 +0200
+Message-id: 1366796002-30135-1-git-send-email-kraxel@redhat.com
+Subject: [PATCH 0/5] console: qom-ify consoles
+
+  Hi,
+
+Here are the console patches, targeting 1.5.  It's just the QemuConsole
+QOM-ification and two little fixes.
+
+I'll go hold back the screendump monitor patch until the dust from the
+qom api discussions has settled and it is clear which route we are
+taking wrt new vs. extended commands.  Which implies it most likely is
+1.6 material.
+
+please pull,
+  Gerd
+
+The following changes since commit bb71623811686ce3c34ce724f073f5c5dd95f51b:
+
+  Move TPM passthrough specific command line options to backend structure (2013-04-23 10:40:40 -0500)
+
+are available in the git repository at:
+
+  git://git.kraxel.org/qemu pixman.v12
+
+for you to fetch changes up to c7b02648d878828dd88868f59b5d666dbbbf1d6d:
+
+  console: zap ds arg from register_displaychangelistener (2013-04-24 10:37:59 +0200)
+
+----------------------------------------------------------------
+Gerd Hoffmann (5):
+      console: qom-ify QemuConsole
+      console: add device link to QemuConsoles
+      console: add qemu_console_lookup_by_device
+      console: switch ppm_save to qemu_open
+      console: zap ds arg from register_displaychangelistener
+
+ hw/arm/musicpal.c            |    2 +-
+ hw/display/blizzard.c        |    2 +-
+ hw/display/cirrus_vga.c      |    4 +--
+ hw/display/exynos4210_fimd.c |    2 +-
+ hw/display/g364fb.c          |    2 +-
+ hw/display/jazz_led.c        |    2 +-
+ hw/display/milkymist-vgafb.c |    2 +-
+ hw/display/omap_lcdc.c       |    2 +-
+ hw/display/pl110.c           |    2 +-
+ hw/display/pxa2xx_lcd.c      |    2 +-
+ hw/display/qxl.c             |    6 ++--
+ hw/display/sm501.c           |    2 +-
+ hw/display/ssd0303.c         |    2 +-
+ hw/display/ssd0323.c         |    2 +-
+ hw/display/tc6393xb.c        |    2 +-
+ hw/display/tcx.c             |    4 +--
+ hw/display/vga-isa-mm.c      |    2 +-
+ hw/display/vga-isa.c         |    2 +-
+ hw/display/vga-pci.c         |    2 +-
+ hw/display/vmware_vga.c      |    7 +++--
+ hw/unicore32/puv3.c          |    2 +-
+ include/ui/console.h         |   22 ++++++++++++--
+ ui/cocoa.m                   |    2 +-
+ ui/console.c                 |   65 ++++++++++++++++++++++++++++++++++++------
+ ui/curses.c                  |    2 +-
+ ui/gtk.c                     |    2 +-
+ ui/sdl.c                     |    2 +-
+ ui/spice-display.c           |    2 +-
+ ui/vnc.c                     |    2 +-
+ 29 files changed, 109 insertions(+), 45 deletions(-)
+

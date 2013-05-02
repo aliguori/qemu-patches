@@ -1,0 +1,66 @@
+From patches Mon Sep 17 00:00:00 2001
+From: =?utf-8?q?Andreas_F=C3=A4rber_=3Cafaerber=40suse=2Ede=3E?=
+To: qemu-devel@nongnu.org
+Cc: =?UTF-8?q?Andreas=20F=C3=A4rber?= <afaerber@suse.de>
+Date: Sat, 27 Apr 2013 22:18:55 +0200
+Message-id: 1367093935-29091-21-git-send-email-afaerber@suse.de
+Subject: [PATCH 20/20] wdt_ib700: QOM'ify
+
+Introduce type constant and cast macro to obsolete DO_UPCAST().
+
+Prepares for ISA realizefn.
+
+Signed-off-by: Andreas Färber <afaerber@suse.de>
+---
+ hw/watchdog/wdt_ib700.c | 12 ++++++++----
+ 1 file changed, 8 insertions(+), 4 deletions(-)
+
+diff --git a/hw/watchdog/wdt_ib700.c b/hw/watchdog/wdt_ib700.c
+index b8c4be8..6b8e33a 100644
+--- a/hw/watchdog/wdt_ib700.c
++++ b/hw/watchdog/wdt_ib700.c
+@@ -35,8 +35,12 @@
+ #define ib700_debug(fs,...)
+ #endif
+ 
++#define TYPE_IB700 "ib700"
++#define IB700(obj) OBJECT_CHECK(IB700State, (obj), TYPE_IB700)
++
+ typedef struct IB700state {
+-    ISADevice dev;
++    ISADevice parent_obj;
++
+     QEMUTimer *timer;
+ } IB700State;
+ 
+@@ -95,7 +99,7 @@ static const VMStateDescription vmstate_ib700 = {
+ 
+ static int wdt_ib700_init(ISADevice *dev)
+ {
+-    IB700State *s = DO_UPCAST(IB700State, dev, dev);
++    IB700State *s = IB700(dev);
+ 
+     ib700_debug("watchdog init\n");
+ 
+@@ -108,7 +112,7 @@ static int wdt_ib700_init(ISADevice *dev)
+ 
+ static void wdt_ib700_reset(DeviceState *dev)
+ {
+-    IB700State *s = DO_UPCAST(IB700State, dev.qdev, dev);
++    IB700State *s = IB700(dev);
+ 
+     ib700_debug("watchdog reset\n");
+ 
+@@ -130,7 +134,7 @@ static void wdt_ib700_class_init(ObjectClass *klass, void *data)
+ }
+ 
+ static const TypeInfo wdt_ib700_info = {
+-    .name          = "ib700",
++    .name          = TYPE_IB700,
+     .parent        = TYPE_ISA_DEVICE,
+     .instance_size = sizeof(IB700State),
+     .class_init    = wdt_ib700_class_init,
+-- 
+1.8.1.4
+
+

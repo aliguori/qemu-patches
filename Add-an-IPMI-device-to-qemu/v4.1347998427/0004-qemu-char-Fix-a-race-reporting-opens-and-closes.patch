@@ -1,0 +1,95 @@
+From patches Mon Sep 17 00:00:00 2001
+From: minyard@acm.org
+To: qemu-devel@nongnu.org
+Cc: Corey Minyard <cminyard@mvista.com>
+Date: Tue, 18 Sep 2012 15:00:31 -0500
+Message-id: 1347998443-20599-5-git-send-email-minyard@acm.org
+Subject: [PATCH 04/16] qemu-char: Fix a race reporting opens and closes
+
+From: Corey Minyard <cminyard@mvista.com>
+
+When an open event is reported, it is done through a bh.  But close
+events are reported immediately.  So if an open event is in the bh
+and a close occurs, an extraneous open happens, which can confuse a
+user.
+
+To fix this, this patch sets the "opened" flag immediately instead
+of in the bh handler and checks to make sure the opened flag is
+set before reporting an open event.
+
+This also modifies the spice code to call qemu_chr_generic_open
+to report an open, to keep things consistent.
+
+Signed-off-by: Corey Minyard <cminyard@mvista.com>
+---
+ qemu-char.c       |   18 ++++++++++++++++--
+ spice-qemu-char.c |    7 +++++--
+ 2 files changed, 21 insertions(+), 4 deletions(-)
+
+diff --git a/qemu-char.c b/qemu-char.c
+index f6a671b..9e3ac40 100644
+--- a/qemu-char.c
++++ b/qemu-char.c
+@@ -111,10 +111,13 @@ void qemu_chr_be_event(CharDriverState *s, int event)
+     /* Keep track if the char device is open */
+     switch (event) {
+         case CHR_EVENT_OPENED:
++            /*
++             * See the comment in qemu_chr_generic_open_bh() for why
++             * 's->opened = 1' is not here.
++             */
+             if (s->recon_timer) {
+                 qemu_del_timer(s->recon_timer);
+             }
+-            s->opened = 1;
+             break;
+         case CHR_EVENT_CLOSED:
+             if (s->recon_timer) {
+@@ -134,13 +137,24 @@ void qemu_chr_be_event(CharDriverState *s, int event)
+ static void qemu_chr_generic_open_bh(void *opaque)
+ {
+     CharDriverState *s = opaque;
+-    qemu_chr_be_event(s, CHR_EVENT_OPENED);
++    /*
++     * Since the "close" event doesn't go through a bh, there is a
++     * possible race condition if a close comes in after an open, but
++     * the open is in the bh queue.  So we double-check here, and we
++     * set opened in qemu_chr_generic_open() instead of
++     * qemu_chr_be_event().
++     */
++    if (s->opened) {
++        qemu_chr_be_event(s, CHR_EVENT_OPENED);
++    }
+     qemu_bh_delete(s->bh);
+     s->bh = NULL;
+ }
+ 
+ void qemu_chr_generic_open(CharDriverState *s)
+ {
++    /* See the comment in qemu_chr_generic_open_bh() for why this is here */
++    s->opened = 1;
+     if (s->bh == NULL) {
+ 	s->bh = qemu_bh_new(qemu_chr_generic_open_bh, s);
+ 	qemu_bh_schedule(s->bh);
+diff --git a/spice-qemu-char.c b/spice-qemu-char.c
+index 2fb8a10..d7516bd 100644
+--- a/spice-qemu-char.c
++++ b/spice-qemu-char.c
+@@ -93,8 +93,11 @@ static void vmc_state(SpiceCharDeviceInstance *sin, int connected)
+         return;
+     }
+ 
+-    qemu_chr_be_event(scd->chr,
+-                      connected ? CHR_EVENT_OPENED : CHR_EVENT_CLOSED);
++    if (connected) {
++        qemu_chr_generic_open(scd->chr);
++    } else {
++        qemu_chr_be_event(scd->chr, CHR_EVENT_CLOSED);
++    }
+ }
+ 
+ static SpiceCharDeviceInterface vmc_interface = {
+-- 
+1.7.4.1
+
+

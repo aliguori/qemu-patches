@@ -1,0 +1,7 @@
+0000-Add-pvpanic-device-to-deal-with-guest-panic-event.txt
+0001-Wire-up-disabled-wait-a-panicked-event-on-s390.patch
+0002-add-a-new-qevent-QEVENT_GUEST_PANICKED.patch
+0003-introduce-a-new-qom-device-to-deal-with-panicked-event.patch
+0004-pvpanic-pass-configurable-ioport-to-seabios.patch
+0005-pvpanic-create-pvpanic-device-by-default.patch
+0006-pvpanic-add-document-of-pvpanic.patch

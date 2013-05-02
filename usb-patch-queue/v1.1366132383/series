@@ -1,0 +1,8 @@
+0000-usb-patch-queue.txt
+0001-usb-serial-Remove-double-call-to-qemu_chr_add_handlers-NULL-.patch
+0002-xhci-remove-leftover-debug-printf.patch
+0003-xhci-add-xhci_cap_write.patch
+0004-xhci-fix-portsc-writes.patch
+0005-xhci-use-slotid-as-device-address.patch
+0006-xhci-fix-address-device.patch
+0007-use-libusb-for-usb-host.patch

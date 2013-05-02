@@ -1,0 +1,70 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Kevin Wolf <kwolf@redhat.com>
+To: Eric Blake <eblake@redhat.com>, Kevin Wolf <kwolf@redhat.com>,
+ qemu-devel@nongnu.org
+Cc: kwolf@redhat.com, josh.durgin@inktank.com, Oliver.Francke@filoo.de,
+ qemu-devel@nongnu.org, stefanha@redhat.com
+Date: Thu, 25 Apr 2013 15:59:27 +0200
+Message-id: 1366898367-22166-1-git-send-email-kwolf@redhat.com
+Subject: [PATCH 1/1] rbd: Fix use after free in rbd_open()
+
+Commit 56d1b4d2 frees the QemuOpts for the driver-specific options
+immediately, even though it still needs the filename string that is
+contained there. This doesn't work. Move the deletion of the QemuOpts to
+the end of the function where its content isn't needed any more.
+
+Signed-off-by: Kevin Wolf <kwolf@redhat.com>
+Reviewed-by: Eric Blake <eblake@redhat.com>
+---
+ block/rbd.c | 9 ++++++---
+ 1 file changed, 6 insertions(+), 3 deletions(-)
+
+diff --git a/block/rbd.c b/block/rbd.c
+index 1826411..0f2608b 100644
+--- a/block/rbd.c
++++ b/block/rbd.c
+@@ -478,20 +478,20 @@ static int qemu_rbd_open(BlockDriverState *bs, QDict *options, int flags)
+     }
+ 
+     filename = qemu_opt_get(opts, "filename");
+-    qemu_opts_del(opts);
+ 
+     if (qemu_rbd_parsename(filename, pool, sizeof(pool),
+                            snap_buf, sizeof(snap_buf),
+                            s->name, sizeof(s->name),
+                            conf, sizeof(conf)) < 0) {
+-        return -EINVAL;
++        r = -EINVAL;
++        goto failed_opts;
+     }
+ 
+     clientname = qemu_rbd_parse_clientname(conf, clientname_buf);
+     r = rados_create(&s->cluster, clientname);
+     if (r < 0) {
+         error_report("error initializing");
+-        return r;
++        goto failed_opts;
+     }
+ 
+     s->snap = NULL;
+@@ -557,6 +557,7 @@ static int qemu_rbd_open(BlockDriverState *bs, QDict *options, int flags)
+                             NULL, qemu_rbd_aio_flush_cb, s);
+ 
+ 
++    qemu_opts_del(opts);
+     return 0;
+ 
+ failed:
+@@ -566,6 +567,8 @@ failed_open:
+ failed_shutdown:
+     rados_shutdown(s->cluster);
+     g_free(s->snap);
++failed_opts:
++    qemu_opts_del(opts);
+     return r;
+ }
+ 
+-- 
+1.8.1.4
+
+

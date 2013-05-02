@@ -1,0 +1,40 @@
+From patches Mon Sep 17 00:00:00 2001
+From: "Michael S. Tsirkin" <mst@redhat.com>
+To: Laszlo Ersek <lersek@redhat.com>, Anthony Liguori <aliguori@us.ibm.com>,
+ qemu-devel@nongnu.org, "Michael S. Tsirkin" <mst@redhat.com>
+Cc: Anthony Liguori <aliguori@us.ibm.com>, Paolo Bonzini <pbonzini@redhat.com>,
+ qemu-devel@nongnu.org, "Michael S. Tsirkin" <mst@redhat.com>
+Date: Mon, 15 Apr 2013 12:37:37 +0300
+Message-id: cover.1366018642.git.mst@redhat.com
+Subject: [PATCH 0/3] acpi: more infrastructure cleanups
+
+I wanted to help Laszlo completely move ACPI tables out of seabios in
+time for 1.5, but had to put out some fires so didn't manage to do this
+in time, and going offline for now.
+
+Meanwhile, here is some refactoring that I did complete.  This does not
+do much by itself, but works fine for me and will be helpful down the
+road.
+
+This includes a couple of patches I posted previously
+and another one on top.
+
+Pls consider for 1.5.
+
+
+Michael S. Tsirkin (3):
+  acpi: move declarations from pc.h to acpi.h
+  acpi: add acpi_table_add_hdr
+  acpi.h: make it self contained
+
+ arch_init.c            |  1 +
+ hw/acpi/core.c         | 97 +++++++++++++++++++++++++++++++++++---------------
+ hw/i386/pc.c           |  1 +
+ hw/i386/pc_piix.c      |  1 +
+ include/hw/acpi/acpi.h | 20 +++++++++++
+ include/hw/i386/pc.h   |  8 -----
+ 6 files changed, 91 insertions(+), 37 deletions(-)
+
+-- 
+MST
+

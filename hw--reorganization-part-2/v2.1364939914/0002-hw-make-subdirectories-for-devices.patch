@@ -1,0 +1,195 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: 
+Date: Tue,  2 Apr 2013 16:58:36 +0200
+Message-id: 1364914749-11141-3-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 02/35] hw: make subdirectories for devices
+
+Prepare the new directory structure.
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ hw/Makefile.objs          | 34 +++++++++++++++++++++++++++++++---
+ hw/acpi/Makefile.objs     |  0
+ hw/audio/Makefile.objs    |  0
+ hw/block/Makefile.objs    |  0
+ hw/bt/Makefile.objs       |  0
+ hw/char/Makefile.objs     |  0
+ hw/core/Makefile.objs     |  0
+ hw/display/Makefile.objs  |  0
+ hw/dma/Makefile.objs      |  0
+ hw/gpio/Makefile.objs     |  0
+ hw/i2c/Makefile.objs      |  0
+ hw/input/Makefile.objs    |  0
+ hw/intc/Makefile.objs     |  0
+ hw/isa/Makefile.objs      |  0
+ hw/misc/Makefile.objs     |  0
+ hw/net/Makefile.objs      |  0
+ hw/nvram/Makefile.objs    |  0
+ hw/scsi/Makefile.objs     |  0
+ hw/sd/Makefile.objs       |  0
+ hw/ssi/Makefile.objs      |  0
+ hw/timer/Makefile.objs    |  0
+ hw/virtio/Makefile.objs   |  0
+ hw/watchdog/Makefile.objs |  0
+ hw/xen/Makefile.objs      |  0
+ 24 files changed, 31 insertions(+), 3 deletions(-)
+ create mode 100644 hw/acpi/Makefile.objs
+ create mode 100644 hw/audio/Makefile.objs
+ create mode 100644 hw/block/Makefile.objs
+ create mode 100644 hw/bt/Makefile.objs
+ create mode 100644 hw/char/Makefile.objs
+ create mode 100644 hw/core/Makefile.objs
+ create mode 100644 hw/display/Makefile.objs
+ create mode 100644 hw/dma/Makefile.objs
+ create mode 100644 hw/gpio/Makefile.objs
+ create mode 100644 hw/i2c/Makefile.objs
+ create mode 100644 hw/input/Makefile.objs
+ create mode 100644 hw/intc/Makefile.objs
+ create mode 100644 hw/isa/Makefile.objs
+ create mode 100644 hw/misc/Makefile.objs
+ create mode 100644 hw/net/Makefile.objs
+ create mode 100644 hw/nvram/Makefile.objs
+ create mode 100644 hw/scsi/Makefile.objs
+ create mode 100644 hw/sd/Makefile.objs
+ create mode 100644 hw/ssi/Makefile.objs
+ create mode 100644 hw/timer/Makefile.objs
+ create mode 100644 hw/virtio/Makefile.objs
+ create mode 100644 hw/watchdog/Makefile.objs
+ create mode 100644 hw/xen/Makefile.objs
+
+diff --git a/hw/Makefile.objs b/hw/Makefile.objs
+index d0b2ecb..39d60ec 100644
+--- a/hw/Makefile.objs
++++ b/hw/Makefile.objs
+@@ -3,8 +3,38 @@ common-obj-y += qdev.o qdev-properties.o
+ # irq.o needed for qdev GPIO handling:
+ common-obj-y += irq.o
+ 
++devices-dirs-$(CONFIG_REALLY_VIRTFS) += 9pfs/
++devices-dirs-$(CONFIG_ACPI) += acpi/
++devices-dirs-$(CONFIG_SOFTMMU) += audio/
++devices-dirs-$(CONFIG_SOFTMMU) += block/
++devices-dirs-$(CONFIG_SOFTMMU) += bt/
++devices-dirs-$(CONFIG_SOFTMMU) += char/
++devices-dirs-$(CONFIG_SOFTMMU) += cpu/
++devices-dirs-$(CONFIG_SOFTMMU) += display/
++devices-dirs-$(CONFIG_SOFTMMU) += dma/
++devices-dirs-$(CONFIG_SOFTMMU) += gpio/
++devices-dirs-$(CONFIG_SOFTMMU) += i2c/
++devices-dirs-$(CONFIG_SOFTMMU) += ide/
++devices-dirs-$(CONFIG_SOFTMMU) += input/
++devices-dirs-$(CONFIG_SOFTMMU) += intc/
++devices-dirs-$(CONFIG_SOFTMMU) += isa/
++devices-dirs-$(CONFIG_SOFTMMU) += misc/
++devices-dirs-$(CONFIG_SOFTMMU) += net/
++devices-dirs-$(CONFIG_SOFTMMU) += nvram/
++devices-dirs-$(CONFIG_SOFTMMU) += pci/
++devices-dirs-$(CONFIG_SOFTMMU) += scsi/
++devices-dirs-$(CONFIG_SOFTMMU) += sd/
++devices-dirs-$(CONFIG_SOFTMMU) += ssi/
++devices-dirs-$(CONFIG_SOFTMMU) += timer/
++devices-dirs-$(CONFIG_SOFTMMU) += usb/
++devices-dirs-$(CONFIG_SOFTMMU) += virtio/
++devices-dirs-$(CONFIG_SOFTMMU) += watchdog/
++devices-dirs-$(CONFIG_SOFTMMU) += xen/
++common-obj-y += core/
++common-obj-y += $(devices-dirs-y)
++obj-y += $(devices-dirs-y)
++
+ ifeq ($(CONFIG_SOFTMMU),y)
+-common-obj-y += usb/ ide/ pci/
+ common-obj-y += loader.o
+ common-obj-$(CONFIG_VIRTIO) += virtio-console.o
+ common-obj-$(CONFIG_VIRTIO) += virtio-rng.o
+@@ -167,7 +197,6 @@ common-obj-$(CONFIG_SOUND) += $(sound-obj-y)
+ 
+ common-obj-$(CONFIG_REALLY_VIRTFS) += 9pfs/
+ 
+-common-obj-y += usb/
+ common-obj-$(CONFIG_PTIMER) += ptimer.o
+ common-obj-$(CONFIG_MAX7310) += max7310.o
+ common-obj-$(CONFIG_WM8750) += wm8750.o
+@@ -207,7 +236,6 @@ obj-$(CONFIG_VIRTIO) += virtio.o virtio-blk.o virtio-balloon.o virtio-net.o
+ obj-$(CONFIG_VIRTIO) += virtio-serial-bus.o virtio-scsi.o
+ obj-$(CONFIG_SOFTMMU) += vhost_net.o
+ obj-$(CONFIG_VHOST_NET) += vhost.o
+-obj-$(CONFIG_REALLY_VIRTFS) += 9pfs/
+ obj-$(CONFIG_VGA) += vga.o
+ 
+ # Inter-VM PCI shared memory & VFIO PCI device assignment
+diff --git a/hw/acpi/Makefile.objs b/hw/acpi/Makefile.objs
+new file mode 100644
+index 0000000..e69de29
+diff --git a/hw/audio/Makefile.objs b/hw/audio/Makefile.objs
+new file mode 100644
+index 0000000..e69de29
+diff --git a/hw/block/Makefile.objs b/hw/block/Makefile.objs
+new file mode 100644
+index 0000000..e69de29
+diff --git a/hw/bt/Makefile.objs b/hw/bt/Makefile.objs
+new file mode 100644
+index 0000000..e69de29
+diff --git a/hw/char/Makefile.objs b/hw/char/Makefile.objs
+new file mode 100644
+index 0000000..e69de29
+diff --git a/hw/core/Makefile.objs b/hw/core/Makefile.objs
+new file mode 100644
+index 0000000..e69de29
+diff --git a/hw/display/Makefile.objs b/hw/display/Makefile.objs
+new file mode 100644
+index 0000000..e69de29
+diff --git a/hw/dma/Makefile.objs b/hw/dma/Makefile.objs
+new file mode 100644
+index 0000000..e69de29
+diff --git a/hw/gpio/Makefile.objs b/hw/gpio/Makefile.objs
+new file mode 100644
+index 0000000..e69de29
+diff --git a/hw/i2c/Makefile.objs b/hw/i2c/Makefile.objs
+new file mode 100644
+index 0000000..e69de29
+diff --git a/hw/input/Makefile.objs b/hw/input/Makefile.objs
+new file mode 100644
+index 0000000..e69de29
+diff --git a/hw/intc/Makefile.objs b/hw/intc/Makefile.objs
+new file mode 100644
+index 0000000..e69de29
+diff --git a/hw/isa/Makefile.objs b/hw/isa/Makefile.objs
+new file mode 100644
+index 0000000..e69de29
+diff --git a/hw/misc/Makefile.objs b/hw/misc/Makefile.objs
+new file mode 100644
+index 0000000..e69de29
+diff --git a/hw/net/Makefile.objs b/hw/net/Makefile.objs
+new file mode 100644
+index 0000000..e69de29
+diff --git a/hw/nvram/Makefile.objs b/hw/nvram/Makefile.objs
+new file mode 100644
+index 0000000..e69de29
+diff --git a/hw/scsi/Makefile.objs b/hw/scsi/Makefile.objs
+new file mode 100644
+index 0000000..e69de29
+diff --git a/hw/sd/Makefile.objs b/hw/sd/Makefile.objs
+new file mode 100644
+index 0000000..e69de29
+diff --git a/hw/ssi/Makefile.objs b/hw/ssi/Makefile.objs
+new file mode 100644
+index 0000000..e69de29
+diff --git a/hw/timer/Makefile.objs b/hw/timer/Makefile.objs
+new file mode 100644
+index 0000000..e69de29
+diff --git a/hw/virtio/Makefile.objs b/hw/virtio/Makefile.objs
+new file mode 100644
+index 0000000..e69de29
+diff --git a/hw/watchdog/Makefile.objs b/hw/watchdog/Makefile.objs
+new file mode 100644
+index 0000000..e69de29
+diff --git a/hw/xen/Makefile.objs b/hw/xen/Makefile.objs
+new file mode 100644
+index 0000000..e69de29
+-- 
+1.8.1.4
+
+
+

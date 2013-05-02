@@ -1,0 +1,161 @@
+From patches Mon Sep 17 00:00:00 2001
+From: "Nicholas A. Bellinger" <nab@linux-iscsi.org>
+To: "Nicholas A. Bellinger" <nab@linux-iscsi.org>,
+ Paolo Bonzini <pbonzini@redhat.com>, "Michael S. Tsirkin" <mst@redhat.com>,
+ target-devel <target-devel@vger.kernel.org>
+Cc: "Nicholas A. Bellinger" <nab@linux-iscsi.org>,
+ Paolo Bonzini <pbonzini@redhat.com>, qemu-devel <qemu-devel@nongnu.org>,
+ target-devel <target-devel@vger.kernel.org>,
+ lf-virt <virtualization@lists.linux-foundation.org>,
+ kvm-devel <kvm@vger.kernel.org>, "Michael S. Tsirkin" <mst@redhat.com>,
+ Nicholas Bellinger <nab@linux-iscsi.org>,
+ Anthony Liguori <aliguori@linux.vnet.ibm.com>,
+ Stefan Hajnoczi <stefanha@redhat.com>, Asias He <asias@redhat.com>
+Date: Wed,  3 Apr 2013 09:15:11 +0000
+Message-id: 1364980511-25122-1-git-send-email-nab@linux-iscsi.org
+Subject: [PATCH 1/1] vhost: Add vhost_commit callback for SeaBIOS ROM region
+ re-mapping
+
+From: Nicholas Bellinger <nab@linux-iscsi.org>
+
+This patch follows MST's recommendation to move checks for
+vhost_verify_ring_mappings() -> cpu_physical_memory_map() operations
+from MemoryListener->region_[add,del]() -> vhost_set_memory() into
+final MemoryListener->commit() -> vhost_commit() callback.
+
+It addresses the case where virtio-scsi vq ioport RAM re-mapping
+to read-only SeaBIOS ROM triggers a cpu_physical_memory_map()
+NIL MemoryRegionSection pointer failure.
+
+Also save vhost_dev->mem_changed_[start,end]_addr values in
+vhost_set_memory() for final ranges_overlap checks.  (Thanks Paolo!)
+
+Cc: Michael S. Tsirkin <mst@redhat.com>
+Cc: Paolo Bonzini <pbonzini@redhat.com>
+Cc: Asias He <asias@redhat.com>
+Signed-off-by: Nicholas Bellinger <nab@linux-iscsi.org>
+Acked-by: Michael S. Tsirkin <mst@redhat.com>
+---
+ hw/vhost.c |   53 ++++++++++++++++++++++++++++++++++++++---------------
+ hw/vhost.h |    3 +++
+ 2 files changed, 41 insertions(+), 15 deletions(-)
+
+diff --git a/hw/vhost.c b/hw/vhost.c
+index 832cc89..00345f2 100644
+--- a/hw/vhost.c
++++ b/hw/vhost.c
+@@ -385,8 +385,6 @@ static void vhost_set_memory(MemoryListener *listener,
+     bool log_dirty = memory_region_is_logging(section->mr);
+     int s = offsetof(struct vhost_memory, regions) +
+         (dev->mem->nregions + 1) * sizeof dev->mem->regions[0];
+-    uint64_t log_size;
+-    int r;
+     void *ram;
+ 
+     dev->mem = g_realloc(dev->mem, s);
+@@ -419,12 +417,47 @@ static void vhost_set_memory(MemoryListener *listener,
+         /* Remove old mapping for this memory, if any. */
+         vhost_dev_unassign_memory(dev, start_addr, size);
+     }
++    dev->mem_changed_start_addr = MIN(dev->mem_changed_start_addr, start_addr);
++    dev->mem_changed_end_addr = MAX(dev->mem_changed_end_addr, start_addr + size - 1);
++    dev->memory_changed = true;
++}
++
++static bool vhost_section(MemoryRegionSection *section)
++{
++    return memory_region_is_ram(section->mr);
++}
++
++static void vhost_begin(MemoryListener *listener)
++{
++    struct vhost_dev *dev = container_of(listener, struct vhost_dev,
++                                         memory_listener);
++    dev->mem_changed_end_addr = 0;
++    dev->mem_changed_start_addr = -1;
++}
+ 
++static void vhost_commit(MemoryListener *listener)
++{
++    struct vhost_dev *dev = container_of(listener, struct vhost_dev,
++                                         memory_listener);
++    hwaddr start_addr = 0;
++    ram_addr_t size = 0;
++    uint64_t log_size;
++    int r;
++
++    if (!dev->memory_changed) {
++        return;
++    }
+     if (!dev->started) {
+         return;
+     }
++    if (dev->mem_changed_start_addr > dev->mem_changed_end_addr) {
++        return;
++    }
+ 
+     if (dev->started) {
++        start_addr = dev->mem_changed_start_addr;
++        size = dev->mem_changed_end_addr - dev->mem_changed_start_addr + 1;
++
+         r = vhost_verify_ring_mappings(dev, start_addr, size);
+         assert(r >= 0);
+     }
+@@ -432,6 +465,7 @@ static void vhost_set_memory(MemoryListener *listener,
+     if (!dev->log_enabled) {
+         r = ioctl(dev->control, VHOST_SET_MEM_TABLE, dev->mem);
+         assert(r >= 0);
++        dev->memory_changed = false;
+         return;
+     }
+     log_size = vhost_get_log_size(dev);
+@@ -448,19 +482,7 @@ static void vhost_set_memory(MemoryListener *listener,
+     if (dev->log_size > log_size + VHOST_LOG_BUFFER) {
+         vhost_dev_log_resize(dev, log_size);
+     }
+-}
+-
+-static bool vhost_section(MemoryRegionSection *section)
+-{
+-    return memory_region_is_ram(section->mr);
+-}
+-
+-static void vhost_begin(MemoryListener *listener)
+-{
+-}
+-
+-static void vhost_commit(MemoryListener *listener)
+-{
++    dev->memory_changed = false;
+ }
+ 
+ static void vhost_region_add(MemoryListener *listener,
+@@ -854,6 +876,7 @@ int vhost_dev_init(struct vhost_dev *hdev, int devfd, const char *devpath,
+     hdev->log_size = 0;
+     hdev->log_enabled = false;
+     hdev->started = false;
++    hdev->memory_changed = false;
+     memory_listener_register(&hdev->memory_listener, &address_space_memory);
+     hdev->force = force;
+     return 0;
+diff --git a/hw/vhost.h b/hw/vhost.h
+index f062d48..adb40c3 100644
+--- a/hw/vhost.h
++++ b/hw/vhost.h
+@@ -45,6 +45,9 @@ struct vhost_dev {
+     vhost_log_chunk_t *log;
+     unsigned long long log_size;
+     bool force;
++    bool memory_changed;
++    hwaddr mem_changed_start_addr;
++    hwaddr mem_changed_end_addr;
+ };
+ 
+ int vhost_dev_init(struct vhost_dev *hdev, int devfd, const char *devpath,
+-- 
+1.7.2.5
+
+--
+To unsubscribe from this list: send the line "unsubscribe kvm" in
+the body of a message to majordomo@vger.kernel.org
+More majordomo info at  http://vger.kernel.org/majordomo-info.html

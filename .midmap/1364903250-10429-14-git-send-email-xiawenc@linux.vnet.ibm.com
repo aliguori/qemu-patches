@@ -1,0 +1,1 @@
+../qmp-hmp-interfaces-for-internal-snapshot-info/v11.1364950033/0013-block-dump-to-buffer-for-bdrv_snapshot_dump-and-bdrv_image_info_dump.patch

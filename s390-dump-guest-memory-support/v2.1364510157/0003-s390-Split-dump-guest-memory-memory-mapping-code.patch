@@ -1,0 +1,374 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Jens Freimann <jfrei@linux.vnet.ibm.com>
+To: Alexander Graf <agraf@suse.de>, Jens Freimann <jfrei@linux.vnet.ibm.com>
+Cc: Ekaterina Tumanova <tumanova_ek@ru.ibm.com>,
+ qemu-devel <qemu-devel@nongnu.org>,
+ Christian Borntraeger <borntraeger@de.ibm.com>,
+ =?ISO-8859-1?Q?Andreas_F=E4rber?= <afaerber@suse.de>,
+ Alexander Graf <agraf@suse.de>,
+ Ekaterina Tumanova <tumanova@linux.vnet.ibm.com>,
+ =?UTF-8?q?Andreas=20F=C3=A4rber?= <afaerber@suse.de>,
+ Cornelia Huck <cornelia.huck@de.ibm.com>, Rabin Vincent <rabin@rab.in>,
+ Jens Freimann <jfrei@linux.vnet.ibm.com>
+Date: Thu, 28 Mar 2013 17:36:00 +0100
+Message-id: 1364488560-16265-4-git-send-email-jfrei@linux.vnet.ibm.com
+Subject: [PATCH 3/3] s390: Split dump-guest-memory memory mapping code
+
+From: Ekaterina Tumanova <tumanova_ek@ru.ibm.com>
+
+Split dump-guest-memory memory mapping code and drop CONFIG_HAVE_GET_MEMORY_MAPPING
+for s390.
+
+Part of the code from the memory_mapping.c was moved to separate
+memory_mapping_common.c file: memory-mapping functions, which dump code needs in
+both paths(CONFIG_HAVE_GET_MEMORY_MAPPING=y and CONFIG_HAVE_GET_MEMORY_MAPPING=n).
+These functions will be built the same time dump.o module is built (based on
+CONFIG_HAVE_CORE_DUMP statement).  Functions, which are left in memory_mapping.c
+are mapping ON specific, they will not be build if no
+CONFIG_HAVE_GET_MEMORY_MAPPING was specified for target architecture.
+In case when CONFIG_HAVE_GET_MEMORY_MAPPING is not specified, but paging is
+requested via command line ("-p" option), the memory_mapping-stub.c will issue
+an error.
+
+Signed-Off-By: Ekaterina Tumanova <tumanova@linux.vnet.ibm.com>
+Signed-off-by: Jens Freimann <jfrei@linux.vnet.ibm.com>
+---
+ Makefile.target                 |   2 +-
+ dump.c                          |   8 +++-
+ include/sysemu/memory_mapping.h |  15 +++++-
+ memory_mapping-stub.c           |  14 +-----
+ memory_mapping.c                |  87 +--------------------------------
+ memory_mapping_common.c         | 103 ++++++++++++++++++++++++++++++++++++++++
+ 6 files changed, 126 insertions(+), 103 deletions(-)
+ create mode 100644 memory_mapping_common.c
+
+diff --git a/Makefile.target b/Makefile.target
+index 2bd6d14..f4eadc7 100644
+--- a/Makefile.target
++++ b/Makefile.target
+@@ -116,7 +116,7 @@ obj-$(CONFIG_KVM) += kvm-all.o
+ obj-$(CONFIG_NO_KVM) += kvm-stub.o
+ obj-y += memory.o savevm.o cputlb.o
+ obj-$(CONFIG_HAVE_GET_MEMORY_MAPPING) += memory_mapping.o
+-obj-$(CONFIG_HAVE_CORE_DUMP) += dump.o
++obj-$(CONFIG_HAVE_CORE_DUMP) += dump.o memory_mapping_common.o
+ obj-$(CONFIG_NO_GET_MEMORY_MAPPING) += memory_mapping-stub.o
+ obj-$(CONFIG_NO_CORE_DUMP) += dump-stub.o
+ LIBS+=-lz
+diff --git a/dump.c b/dump.c
+index fd1d0f6..574c292 100644
+--- a/dump.c
++++ b/dump.c
+@@ -752,9 +752,13 @@ static int dump_init(DumpState *s, int fd, bool paging, bool has_filter,
+     /* get memory mapping */
+     memory_mapping_list_init(&s->list);
+     if (paging) {
+-        qemu_get_guest_memory_mapping(&s->list);
++        qemu_get_guest_memory_mapping(&s->list, errp);
+     } else {
+-        qemu_get_guest_simple_memory_mapping(&s->list);
++        qemu_get_guest_simple_memory_mapping(&s->list, errp);
++    }
++
++    if (ret < 0) {
++        goto cleanup;
+     }
+ 
+     if (s->has_filter) {
+diff --git a/include/sysemu/memory_mapping.h b/include/sysemu/memory_mapping.h
+index 1256125..b7e7471 100644
+--- a/include/sysemu/memory_mapping.h
++++ b/include/sysemu/memory_mapping.h
+@@ -15,6 +15,8 @@
+ #define MEMORY_MAPPING_H
+ 
+ #include "qemu/queue.h"
++#include "qapi/error.h"
++#include "include/qapi/qmp/qerror.h"
+ 
+ /* The physical and virtual address in the memory mapping are contiguous. */
+ typedef struct MemoryMapping {
+@@ -38,6 +40,15 @@ bool cpu_paging_enabled(CPUArchState *env);
+  * memory mapping's list. The region's virtual address starts with virt_addr,
+  * and is contiguous. The list is sorted by phys_addr.
+  */
++
++void memory_mapping_list_add_mapping_sorted(MemoryMappingList *list,
++                                            MemoryMapping *mapping);
++
++void create_new_memory_mapping(MemoryMappingList *list,
++                               hwaddr phys_addr,
++                               hwaddr virt_addr,
++                               ram_addr_t length);
++
+ void memory_mapping_list_add_merge_sorted(MemoryMappingList *list,
+                                           hwaddr phys_addr,
+                                           hwaddr virt_addr,
+@@ -53,10 +64,10 @@ void memory_mapping_list_init(MemoryMappingList *list);
+  *   -1: failed
+  *   -2: unsupported
+  */
+-int qemu_get_guest_memory_mapping(MemoryMappingList *list);
++int qemu_get_guest_memory_mapping(MemoryMappingList *list, Error **errp);
+ 
+ /* get guest's memory mapping without do paging(virtual address is 0). */
+-void qemu_get_guest_simple_memory_mapping(MemoryMappingList *list);
++void qemu_get_guest_simple_memory_mapping(MemoryMappingList *list, Error **errp);
+ 
+ void memory_mapping_filter(MemoryMappingList *list, int64_t begin,
+                            int64_t length);
+diff --git a/memory_mapping-stub.c b/memory_mapping-stub.c
+index 24d5d67..fea489c 100644
+--- a/memory_mapping-stub.c
++++ b/memory_mapping-stub.c
+@@ -15,19 +15,9 @@
+ #include "exec/cpu-all.h"
+ #include "sysemu/memory_mapping.h"
+ 
+-int qemu_get_guest_memory_mapping(MemoryMappingList *list)
++int qemu_get_guest_memory_mapping(MemoryMappingList *list, Error **errp)
+ {
++    error_set(errp, QERR_UNSUPPORTED_COMMAND_OPTION, "paging", "dump-guest-memory", "current architecture");
+     return -2;
+ }
+ 
+-int cpu_get_memory_mapping(MemoryMappingList *list,
+-					                                          CPUArchState *env)
+-{
+-    return -1;
+-}
+-
+-bool cpu_paging_enabled(CPUArchState *env)
+-{
+-    return true;
+-}
+-
+diff --git a/memory_mapping.c b/memory_mapping.c
+index ff45b3a..0d4c15b 100644
+--- a/memory_mapping.c
++++ b/memory_mapping.c
+@@ -15,36 +15,6 @@
+ #include "exec/cpu-all.h"
+ #include "sysemu/memory_mapping.h"
+ 
+-static void memory_mapping_list_add_mapping_sorted(MemoryMappingList *list,
+-                                                   MemoryMapping *mapping)
+-{
+-    MemoryMapping *p;
+-
+-    QTAILQ_FOREACH(p, &list->head, next) {
+-        if (p->phys_addr >= mapping->phys_addr) {
+-            QTAILQ_INSERT_BEFORE(p, mapping, next);
+-            return;
+-        }
+-    }
+-    QTAILQ_INSERT_TAIL(&list->head, mapping, next);
+-}
+-
+-static void create_new_memory_mapping(MemoryMappingList *list,
+-                                      hwaddr phys_addr,
+-                                      hwaddr virt_addr,
+-                                      ram_addr_t length)
+-{
+-    MemoryMapping *memory_mapping;
+-
+-    memory_mapping = g_malloc(sizeof(MemoryMapping));
+-    memory_mapping->phys_addr = phys_addr;
+-    memory_mapping->virt_addr = virt_addr;
+-    memory_mapping->length = length;
+-    list->last_mapping = memory_mapping;
+-    list->num++;
+-    memory_mapping_list_add_mapping_sorted(list, memory_mapping);
+-}
+-
+ static inline bool mapping_contiguous(MemoryMapping *map,
+                                       hwaddr phys_addr,
+                                       hwaddr virt_addr)
+@@ -145,26 +115,6 @@ void memory_mapping_list_add_merge_sorted(MemoryMappingList *list,
+     create_new_memory_mapping(list, phys_addr, virt_addr, length);
+ }
+ 
+-void memory_mapping_list_free(MemoryMappingList *list)
+-{
+-    MemoryMapping *p, *q;
+-
+-    QTAILQ_FOREACH_SAFE(p, &list->head, next, q) {
+-        QTAILQ_REMOVE(&list->head, p, next);
+-        g_free(p);
+-    }
+-
+-    list->num = 0;
+-    list->last_mapping = NULL;
+-}
+-
+-void memory_mapping_list_init(MemoryMappingList *list)
+-{
+-    list->num = 0;
+-    list->last_mapping = NULL;
+-    QTAILQ_INIT(&list->head);
+-}
+-
+ static CPUArchState *find_paging_enabled_cpu(CPUArchState *start_cpu)
+ {
+     CPUArchState *env;
+@@ -178,7 +128,7 @@ static CPUArchState *find_paging_enabled_cpu(CPUArchState *start_cpu)
+     return NULL;
+ }
+ 
+-int qemu_get_guest_memory_mapping(MemoryMappingList *list)
++int qemu_get_guest_memory_mapping(MemoryMappingList *list, Error **errp)
+ {
+     CPUArchState *env, *first_paging_enabled_cpu;
+     RAMBlock *block;
+@@ -209,38 +159,3 @@ int qemu_get_guest_memory_mapping(MemoryMappingList *list)
+     return 0;
+ }
+ 
+-void qemu_get_guest_simple_memory_mapping(MemoryMappingList *list)
+-{
+-    RAMBlock *block;
+-
+-    QTAILQ_FOREACH(block, &ram_list.blocks, next) {
+-        create_new_memory_mapping(list, block->offset, 0, block->length);
+-    }
+-}
+-
+-void memory_mapping_filter(MemoryMappingList *list, int64_t begin,
+-                           int64_t length)
+-{
+-    MemoryMapping *cur, *next;
+-
+-    QTAILQ_FOREACH_SAFE(cur, &list->head, next, next) {
+-        if (cur->phys_addr >= begin + length ||
+-            cur->phys_addr + cur->length <= begin) {
+-            QTAILQ_REMOVE(&list->head, cur, next);
+-            list->num--;
+-            continue;
+-        }
+-
+-        if (cur->phys_addr < begin) {
+-            cur->length -= begin - cur->phys_addr;
+-            if (cur->virt_addr) {
+-                cur->virt_addr += begin - cur->phys_addr;
+-            }
+-            cur->phys_addr = begin;
+-        }
+-
+-        if (cur->phys_addr + cur->length > begin + length) {
+-            cur->length -= cur->phys_addr + cur->length - begin - length;
+-        }
+-    }
+-}
+diff --git a/memory_mapping_common.c b/memory_mapping_common.c
+new file mode 100644
+index 0000000..faae044
+--- /dev/null
++++ b/memory_mapping_common.c
+@@ -0,0 +1,103 @@
++/*
++ * QEMU memory mapping
++ *
++ * Copyright Fujitsu, Corp. 2011, 2012
++ *
++ * Authors:
++ *     Wen Congyang <wency@cn.fujitsu.com>
++ *
++ * This work is licensed under the terms of the GNU GPL, version 2 or later.
++ * See the COPYING file in the top-level directory.
++ *
++ */
++
++#include "cpu.h"
++#include "exec/cpu-all.h"
++#include "sysemu/memory_mapping.h"
++
++void memory_mapping_list_add_mapping_sorted(MemoryMappingList *list,
++                                            MemoryMapping *mapping)
++{
++    MemoryMapping *p;
++
++    QTAILQ_FOREACH(p, &list->head, next) {
++        if (p->phys_addr >= mapping->phys_addr) {
++            QTAILQ_INSERT_BEFORE(p, mapping, next);
++            return;
++        }
++    }
++    QTAILQ_INSERT_TAIL(&list->head, mapping, next);
++}
++
++void create_new_memory_mapping(MemoryMappingList *list,
++                               hwaddr phys_addr,
++                               hwaddr virt_addr,
++                               ram_addr_t length)
++{
++    MemoryMapping *memory_mapping;
++
++    memory_mapping = g_malloc(sizeof(MemoryMapping));
++    memory_mapping->phys_addr = phys_addr;
++    memory_mapping->virt_addr = virt_addr;
++    memory_mapping->length = length;
++    list->last_mapping = memory_mapping;
++    list->num++;
++    memory_mapping_list_add_mapping_sorted(list, memory_mapping);
++}
++
++
++void memory_mapping_list_free(MemoryMappingList *list)
++{
++    MemoryMapping *p, *q;
++
++    QTAILQ_FOREACH_SAFE(p, &list->head, next, q) {
++        QTAILQ_REMOVE(&list->head, p, next);
++        g_free(p);
++    }
++
++    list->num = 0;
++    list->last_mapping = NULL;
++}
++
++void memory_mapping_list_init(MemoryMappingList *list)
++{
++    list->num = 0;
++    list->last_mapping = NULL;
++    QTAILQ_INIT(&list->head);
++}
++
++void qemu_get_guest_simple_memory_mapping(MemoryMappingList *list, Error **errp)
++{
++    RAMBlock *block;
++
++    QTAILQ_FOREACH(block, &ram_list.blocks, next) {
++        create_new_memory_mapping(list, block->offset, 0, block->length);
++    }
++}
++
++void memory_mapping_filter(MemoryMappingList *list, int64_t begin,
++                           int64_t length)
++{
++    MemoryMapping *cur, *next;
++
++    QTAILQ_FOREACH_SAFE(cur, &list->head, next, next) {
++        if (cur->phys_addr >= begin + length ||
++            cur->phys_addr + cur->length <= begin) {
++            QTAILQ_REMOVE(&list->head, cur, next);
++            list->num--;
++            continue;
++        }
++
++        if (cur->phys_addr < begin) {
++            cur->length -= begin - cur->phys_addr;
++            if (cur->virt_addr) {
++                cur->virt_addr += begin - cur->phys_addr;
++            }
++            cur->phys_addr = begin;
++        }
++
++        if (cur->phys_addr + cur->length > begin + length) {
++            cur->length -= cur->phys_addr + cur->length - begin - length;
++        }
++    }
++}
+-- 
+1.7.12.4
+
+

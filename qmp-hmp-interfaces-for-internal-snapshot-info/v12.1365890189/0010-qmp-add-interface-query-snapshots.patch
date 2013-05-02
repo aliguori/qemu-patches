@@ -1,0 +1,146 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Wenchao Xia <xiawenc@linux.vnet.ibm.com>
+To: qemu-devel@nongnu.org
+Cc: kwolf@redhat.com, phrdina@redhat.com,
+ Wenchao Xia <xiawenc@linux.vnet.ibm.com>, stefanha@gmail.com,
+ armbru@redhat.com, lcapitulino@redhat.com, pbonzini@redhat.com
+Date: Sat, 13 Apr 2013 16:56:39 +0800
+Message-id: 1365843407-16504-11-git-send-email-xiawenc@linux.vnet.ibm.com
+Subject: [PATCH 10/18] qmp: add interface query-snapshots
+
+  This interface returns info of valid internal snapshots for whole vm.
+
+Signed-off-by: Wenchao Xia <xiawenc@linux.vnet.ibm.com>
+---
+ block/qapi.c     |   17 +++++++++++++++
+ qapi-schema.json |   14 +++++++++++++
+ qmp-commands.hx  |   58 ++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ 3 files changed, 89 insertions(+), 0 deletions(-)
+
+diff --git a/block/qapi.c b/block/qapi.c
+index 73c1961..13c7860 100644
+--- a/block/qapi.c
++++ b/block/qapi.c
+@@ -268,6 +268,23 @@ BlockInfo *bdrv_query_info(BlockDriverState *bs)
+     return info;
+ }
+ 
++SnapshotInfoList *qmp_query_snapshots(Error **errp)
++{
++    BlockDriverState *bs;
++    SnapshotInfoList *list = NULL;
++
++    /* internal snapshot for whole vm */
++    bs = bdrv_snapshots();
++    if (!bs) {
++        error_setg(errp, "No available block device supports snapshots\n");
++        return NULL;
++    }
++
++    bdrv_query_snapshot_info_list(bs, &list, true, errp);
++
++    return list;
++}
++
+ BlockInfoList *qmp_query_block(Error **errp)
+ {
+     BlockInfoList *head = NULL, **p_next = &head;
+diff --git a/qapi-schema.json b/qapi-schema.json
+index db542f6..16d0b1f 100644
+--- a/qapi-schema.json
++++ b/qapi-schema.json
+@@ -841,6 +841,20 @@
+ { 'command': 'query-block', 'returns': ['BlockInfo'] }
+ 
+ ##
++# @query-snapshots:
++#
++# Get a list of internal snapshots for the whole virtual machine. Only valid
++# internal snapshots will be returned, inconsistent ones will be ignored
++#
++# Returns: a list of @SnapshotInfo describing all consistent virtual machine
++#          snapshots
++#
++# Since: 1.5
++##
++{ 'command': 'query-snapshots',
++  'returns': ['SnapshotInfo'] }
++
++##
+ # @BlockDeviceStats:
+ #
+ # Statistics of a virtual block device or a block backing device.
+diff --git a/qmp-commands.hx b/qmp-commands.hx
+index 1e0e11e..e13c029 100644
+--- a/qmp-commands.hx
++++ b/qmp-commands.hx
+@@ -1765,6 +1765,64 @@ EQMP
+     },
+ 
+ SQMP
++query-snapshots
++---------------
++
++Show the internal consistent snapshot information
++
++Consistent snapshots are snapshots that exist in all writeable block devices.
++When 'savevm' takes a snapshot it uses the same ID across all writeable block
++devices. If a snapshot ID only exists in one block device then it is not a
++consistent one. Each snapshot is represented by a json-object and the returned
++value is a json-array of all snapshots
++
++Each json-object contain the following:
++
++- "id": unique snapshot id (json-string)
++- "name": internal snapshot name (json-string)
++- "vm-state-size": size of the VM state in bytes (json-int)
++- "date-sec": UTC date of the snapshot in seconds (json-int)
++- "date-nsec": fractional part in nanoseconds to be used with
++               date-sec(json-int)
++- "vm-clock-sec": VM clock relative to boot in seconds (json-int)
++- "vm-clock-nsec": fractional part in nanoseconds to be used with
++                   vm-clock-sec (json-int)
++
++Example:
++
++-> { "execute": "query-snapshots" }
++<- {
++      "return":[
++         {
++            "id": "1",
++            "name": "snapshot1",
++            "vm-state-size": 0,
++            "date-sec": 10000200,
++            "date-nsec": 12,
++            "vm-clock-sec": 206,
++            "vm-clock-nsec": 30
++         },
++         {
++            "id": "2",
++            "name": "snapshot2",
++            "vm-state-size": 34000000,
++            "date-sec": 13000200,
++            "date-nsec": 32,
++            "vm-clock-sec": 406,
++            "vm-clock-nsec": 31
++         }
++      ]
++   }
++
++EQMP
++
++    {
++        .name       = "query-snapshots",
++        .args_type  = "",
++        .mhandler.cmd_new = qmp_marshal_input_query_snapshots,
++    },
++
++SQMP
+ query-blockstats
+ ----------------
+ 
+-- 
+1.7.1
+
+
+

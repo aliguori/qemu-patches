@@ -1,0 +1,133 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Laszlo Ersek <lersek@redhat.com>
+To: Anthony Liguori <aliguori@us.ibm.com>, Laszlo Ersek <lersek@redhat.com>,
+ aliguori@us.ibm.com, mst@redhat.com, Kevin O'Connor <kevin@koconnor.net>,
+ qemu-devel@nongnu.org, kraxel@redhat.com
+Cc: Anthony Liguori <aliguori@us.ibm.com>, kraxel@redhat.com,
+ qemu-devel@nongnu.org, mst@redhat.com
+Date: Thu, 21 Mar 2013 00:23:12 +0100
+Message-id: 1363821803-3380-1-git-send-email-lersek@redhat.com
+Subject: [PATCH 00/11] build ACPI MADT for fw_cfg clients
+
+This series reworks the internals of the -acpitable command line option,
+and if that option is not specified, produces the APIC (MADT) table
+inside qemu, to be consumed over fw_cfg (alongside the DSDT).
+
+checkpatch.pl raises quite a few complaints on the start-to-end diff of
+this series, but all of them are clearly wrong.
+
+I've just posted the seabios patches too
+<http://www.seabios.org/pipermail/seabios/2013-March/005960.html>; there
+I mentioned the following testing:
+
+  I cross-tested {patched, unpatched} qemu with {patched, unpatched}
+  seabios. Inside a RHEL-6 guest I dumped the RSDT, DSDT, and APIC
+  (MADT) in all four cases, and compared the results. Patched qemu with
+  unpatched seabios don't play nicely together (two APIC (MADT) tables
+  present). Otherwise everything seemed fine to me.
+
+  The CPU topology was set with
+
+    -smp 3,maxcpus=16,sockets=2,cores=4,threads=2
+
+  The table dumps / disassemblies are too big to include here, please
+  find them at
+  <http://people.redhat.com/~lersek/acpi_move/madt_tests.tar.gz>.
+
+I also tested the following failure/warning modes from the qemu command
+line:
+
+(01) qemu-system-x86_64 -acpitable
+
+     qemu-system-x86_64: -acpitable: requires an argument
+
+(02) qemu-system-x86_64 -acpitable ''
+
+     Wrong acpi table provided: '-acpitable' requires one of 'data' or
+       'file'
+
+(03) qemu-system-x86_64 -acpitable data=p,file=q
+
+     Wrong acpi table provided: '-acpitable' requires one of 'data' or
+       'file'
+
+(04) qemu-system-x86_64 -acpitable data=''
+
+     Wrong acpi table provided: '-acpitable' requires at least one
+       pathname
+
+(05) qemu-system-x86_64 -acpitable q
+
+     Wrong acpi table provided: can't open file q: No such file or
+       directory
+
+(06) touch q
+     qemu-system-x86_64 -acpitable q
+
+     warning: ACPI table: no headers are specified [starts up]
+
+(07) qemu-system-x86_64 -acpitable file=q
+
+     Wrong acpi table provided: ACPI table claiming to have header is
+       too short, available: 0, expected: 36
+
+(08) head -c 36 /dev/zero >q
+     qemu-system-x86_64 -acpitable file=q
+
+     warning: ACPI table has wrong length, header says 0, actual size 36
+       bytes [starts up]
+
+(09) head -c 100000 /dev/zero >q
+     qemu-system-x86_64 -acpitable file=q
+
+     Wrong acpi table provided: ACPI table too big, requested: 100000,
+       max: 65535
+
+(10) qemu-system-x86_64 -acpitable data=q
+
+     Wrong acpi table provided: ACPI table too big, requested: 100036,
+       max: 65535
+
+(11) # renamed "acpi-dsdt.aml" to something else
+     qemu-system-x86_64
+
+     WARNING: failed to find acpi-dsdt.aml [starts up]
+
+(12) # recreated "acpi-dsdt.aml" with "hello, world" contents
+     qemu-system-x86_64
+
+     WARNING: failed to load
+       /opt/qemu-upstream/share/qemu/acpi-dsdt.aml: ACPI table claiming
+       to have header is too short, available: 13, expected: 36 [starts
+       up]
+
+
+Laszlo Ersek (11):
+  strip some whitespace
+  change element type from "char" to "unsigned char" in ACPI table data
+  acpi_table_add(): report fatal errors through an internal Error
+    object
+  qapi schema: add AcpiTableOptions
+  acpi_table_add(): accept QemuOpts and parse it with OptsVisitor
+  acpi_table_add(): extract and reimplement internals
+  like acpi_table_install(), acpi_table_add() should propagate Errors
+  extract/unify the constant 0xfee00000 as APIC_DEFAULT_ADDRESS
+  Introduce IO_APIC_DEFAULT_ADDRESS for 0xfec00000
+  pc_acpi_init(): don't bail as soon as failing to find default DSDT
+  i386/pc: build ACPI MADT for fw_cfg clients
+
+ qapi-schema.json           |   58 +++++++
+ hw/pc.h                    |    7 +-
+ include/sysemu/arch_init.h |    3 +-
+ target-i386/cpu.h          |    4 +-
+ arch_init.c                |   13 +-
+ hw/acpi.c                  |  357 ++++++++++++++++++++++++++------------------
+ hw/apic_common.c           |    2 +-
+ hw/i386/kvmvapic.c         |    2 -
+ hw/i386/pc.c               |  160 +++++++++++++++++++-
+ target-i386/cpu.c          |    4 +-
+ vl.c                       |   12 +-
+ 11 files changed, 449 insertions(+), 173 deletions(-)
+
+
+Reviewed-by: Anthony Liguori <aliguori@us.ibm.com>

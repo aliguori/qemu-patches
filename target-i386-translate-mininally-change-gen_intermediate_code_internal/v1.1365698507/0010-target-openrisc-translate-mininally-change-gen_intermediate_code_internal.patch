@@ -1,0 +1,34 @@
+From patches Mon Sep 17 00:00:00 2001
+From: liguang <lig.fnst@cn.fujitsu.com>
+To: qemu-devel@nongnu.org
+Cc: liguang <lig.fnst@cn.fujitsu.com>
+Date: Thu, 11 Apr 2013 11:41:56 +0800
+Message-id: 1365651722-11241-10-git-send-email-lig.fnst@cn.fujitsu.com
+Subject: [PATCH 10/16] target-openrisc/translate: mininally change
+ gen_intermediate_code_internal
+
+Signed-off-by: liguang <lig.fnst@cn.fujitsu.com>
+---
+ target-openrisc/translate.c |    5 ++---
+ 1 files changed, 2 insertions(+), 3 deletions(-)
+
+diff --git a/target-openrisc/translate.c b/target-openrisc/translate.c
+index 0eafd02..dab0aa2 100644
+--- a/target-openrisc/translate.c
++++ b/target-openrisc/translate.c
+@@ -1703,9 +1703,8 @@ static inline void gen_intermediate_code_internal(OpenRISCCPU *cpu,
+         if (search_pc) {
+             j = tcg_ctx.gen_opc_ptr - tcg_ctx.gen_opc_buf;
+             if (k < j) {
+-                k++;
+-                while (k < j) {
+-                    tcg_ctx.gen_opc_instr_start[k++] = 0;
++                while (++k < j) {
++                    tcg_ctx.gen_opc_instr_start[k] = 0;
+                 }
+             }
+             tcg_ctx.gen_opc_pc[k] = dc->pc;
+-- 
+1.7.2.5
+
+

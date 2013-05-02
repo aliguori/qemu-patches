@@ -1,0 +1,71 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Hans de Goede <hdegoede@redhat.com>
+To: Gerd Hoffmann <kraxel@redhat.com>
+Cc: Hans de Goede <hdegoede@redhat.com>, qemu-devel@nongnu.org
+Date: Fri,  5 Apr 2013 11:30:19 +0200
+Message-id: 1365154225-9443-2-git-send-email-hdegoede@redhat.com
+Subject: [PATCH 1/7] virtio-console: Also throttle when less was written then
+ requested
+
+This is necessary so that we get properly woken up to write the rest.
+
+This patch also changes the len argument to the have_data callback, to
+avoid doing an unsigned signed comparison.
+
+Signed-off-by: Hans de Goede <hdegoede@redhat.com>
+Acked-by: Amit Shah <amit.shah@redhat.com>
+---
+ hw/virtio-console.c | 8 +++++---
+ hw/virtio-serial.h  | 2 +-
+ 2 files changed, 6 insertions(+), 4 deletions(-)
+
+diff --git a/hw/virtio-console.c b/hw/virtio-console.c
+index 284180f..61f9ff5 100644
+--- a/hw/virtio-console.c
++++ b/hw/virtio-console.c
+@@ -34,7 +34,8 @@ static gboolean chr_write_unblocked(GIOChannel *chan, GIOCondition cond,
+ }
+ 
+ /* Callback function that's called when the guest sends us data */
+-static ssize_t flush_buf(VirtIOSerialPort *port, const uint8_t *buf, size_t len)
++static ssize_t flush_buf(VirtIOSerialPort *port,
++                         const uint8_t *buf, ssize_t len)
+ {
+     VirtConsole *vcon = DO_UPCAST(VirtConsole, port, port);
+     ssize_t ret;
+@@ -47,7 +48,7 @@ static ssize_t flush_buf(VirtIOSerialPort *port, const uint8_t *buf, size_t len)
+     ret = qemu_chr_fe_write(vcon->chr, buf, len);
+     trace_virtio_console_flush_buf(port->id, len, ret);
+ 
+-    if (ret <= 0) {
++    if (ret < len) {
+         VirtIOSerialPortClass *k = VIRTIO_SERIAL_PORT_GET_CLASS(port);
+ 
+         /*
+@@ -56,7 +57,8 @@ static ssize_t flush_buf(VirtIOSerialPort *port, const uint8_t *buf, size_t len)
+          * we had a finer-grained message, like -EPIPE, we could close
+          * this connection.
+          */
+-        ret = 0;
++        if (ret < 0)
++            ret = 0;
+         if (!k->is_console) {
+             virtio_serial_throttle_port(port, true);
+             qemu_chr_fe_add_watch(vcon->chr, G_IO_OUT, chr_write_unblocked,
+diff --git a/hw/virtio-serial.h b/hw/virtio-serial.h
+index 516400f..4dc0c0a 100644
+--- a/hw/virtio-serial.h
++++ b/hw/virtio-serial.h
+@@ -104,7 +104,7 @@ typedef struct VirtIOSerialPortClass {
+      * 'len'.  In this case, throttling will be enabled for this port.
+      */
+     ssize_t (*have_data)(VirtIOSerialPort *port, const uint8_t *buf,
+-                         size_t len);
++                         ssize_t len);
+ } VirtIOSerialPortClass;
+ 
+ /*
+-- 
+1.8.1.4
+
+

@@ -1,0 +1,32 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Anton Blanchard <anton@samba.org>
+To: qemu-ppc@nongnu.org, qemu-devel@nongnu.org
+Cc: agraf@suse.de
+Date: Wed, 1 May 2013 20:44:51 +1000
+Message-id: 20130501204451.5689483e@kryten
+Subject: [PATCH 2/2] target-ppc: Add read and write of PPR SPR
+
+
+Recent Linux kernels save and restore the PPR across exceptions
+so we need to handle it.
+
+Signed-off-by: Anton Blanchard <anton@au1.ibm.com>
+---
+
+Index: b/target-ppc/translate_init.c
+===================================================================
+--- a/target-ppc/translate_init.c
++++ b/target-ppc/translate_init.c
+@@ -7010,6 +7010,10 @@ static void init_proc_POWER7 (CPUPPCStat
+                  &spr_read_generic, &spr_write_generic,
+                  &spr_read_generic, &spr_write_generic,
+                  0x00000000);
++    spr_register(env, SPR_PPR, "PPR",
++                 &spr_read_generic, &spr_write_generic,
++                 &spr_read_generic, &spr_write_generic,
++                 0x00000000);
+ #if !defined(CONFIG_USER_ONLY)
+     env->slb_nr = 32;
+ #endif
+
+

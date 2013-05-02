@@ -1,0 +1,109 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Richard Henderson <rth@twiddle.net>
+To: qemu-devel@nongnu.org
+Cc: Aurelien Jarno <aurelien@aurel32.net>
+Date: Sun, 31 Mar 2013 15:34:50 -0700
+Message-id: 1364769305-3687-5-git-send-email-rth@twiddle.net
+Subject: [PATCH 04/19] tcg-arm: Handle negated constant arguments to and/sub
+
+This greatly improves code generation for addition of small
+negative constants.
+
+Reviewed-by: Aurelien Jarno <aurelien@aurel32.net>
+Signed-off-by: Richard Henderson <rth@twiddle.net>
+---
+ tcg/arm/tcg-target.c | 41 +++++++++++++++++++++++++++++++++++------
+ 1 file changed, 35 insertions(+), 6 deletions(-)
+
+diff --git a/tcg/arm/tcg-target.c b/tcg/arm/tcg-target.c
+index 01d9a0c..f34828b 100644
+--- a/tcg/arm/tcg-target.c
++++ b/tcg/arm/tcg-target.c
+@@ -147,6 +147,7 @@ static void patch_reloc(uint8_t *code_ptr, int type,
+ 
+ #define TCG_CT_CONST_ARM 0x100
+ #define TCG_CT_CONST_INV 0x200
++#define TCG_CT_CONST_NEG 0x400
+ 
+ /* parse target specific constraints */
+ static int target_parse_constraint(TCGArgConstraint *ct, const char **pct_str)
+@@ -161,6 +162,9 @@ static int target_parse_constraint(TCGArgConstraint *ct, const char **pct_str)
+     case 'K':
+          ct->ct |= TCG_CT_CONST_INV;
+          break;
++    case 'N': /* The gcc constraint letter is L, already used here.  */
++         ct->ct |= TCG_CT_CONST_NEG;
++         break;
+ 
+     case 'r':
+         ct->ct |= TCG_CT_REG;
+@@ -291,6 +295,8 @@ static inline int tcg_target_const_match(tcg_target_long val,
+         return 1;
+     } else if ((ct & TCG_CT_CONST_INV) && check_fit_imm(~val)) {
+         return 1;
++    } else if ((ct & TCG_CT_CONST_NEG) && check_fit_imm(-val)) {
++        return 1;
+     } else {
+         return 0;
+     }
+@@ -512,6 +518,27 @@ static void tcg_out_dat_rIK(TCGContext *s, int cond, int opc, int opinv,
+     }
+ }
+ 
++static void tcg_out_dat_rIN(TCGContext *s, int cond, int opc, int opneg,
++                            TCGArg dst, TCGArg lhs, TCGArg rhs,
++                            bool rhs_is_const)
++{
++    /* Emit either the reg,imm or reg,reg form of a data-processing insn.
++     * rhs must satisfy the "rIN" constraint.
++     */
++    if (rhs_is_const) {
++        int rot = encode_imm(rhs);
++        if (rot < 0) {
++            rhs = -rhs;
++            rot = encode_imm(rhs);
++            assert(rot >= 0);
++            opc = opneg;
++        }
++        tcg_out_dat_imm(s, cond, opc, dst, lhs, rotl(rhs, rot) | (rot << 7));
++    } else {
++        tcg_out_dat_reg(s, cond, opc, dst, lhs, rhs, SHIFT_IMM_LSL(0));
++    }
++}
++
+ static inline void tcg_out_mul32(TCGContext *s,
+                 int cond, int rd, int rs, int rm)
+ {
+@@ -1594,11 +1621,13 @@ static inline void tcg_out_op(TCGContext *s, TCGOpcode opc,
+                        ARITH_MOV, args[0], 0, args[3], const_args[3]);
+         break;
+     case INDEX_op_add_i32:
+-        c = ARITH_ADD;
+-        goto gen_arith;
++        tcg_out_dat_rIN(s, COND_AL, ARITH_ADD, ARITH_SUB,
++                        args[0], args[1], args[2], const_args[2]);
++        break;
+     case INDEX_op_sub_i32:
+-        c = ARITH_SUB;
+-        goto gen_arith;
++        tcg_out_dat_rIN(s, COND_AL, ARITH_SUB, ARITH_ADD,
++                        args[0], args[1], args[2], const_args[2]);
++        break;
+     case INDEX_op_and_i32:
+         tcg_out_dat_rIK(s, COND_AL, ARITH_AND, ARITH_BIC,
+                         args[0], args[1], args[2], const_args[2]);
+@@ -1789,8 +1818,8 @@ static const TCGTargetOpDef arm_op_defs[] = {
+     { INDEX_op_st_i32, { "r", "r" } },
+ 
+     /* TODO: "r", "r", "ri" */
+-    { INDEX_op_add_i32, { "r", "r", "rI" } },
+-    { INDEX_op_sub_i32, { "r", "r", "rI" } },
++    { INDEX_op_add_i32, { "r", "r", "rIN" } },
++    { INDEX_op_sub_i32, { "r", "r", "rIN" } },
+     { INDEX_op_mul_i32, { "r", "r", "r" } },
+     { INDEX_op_mulu2_i32, { "r", "r", "r", "r" } },
+     { INDEX_op_muls2_i32, { "r", "r", "r", "r" } },
+-- 
+1.8.1.4
+
+

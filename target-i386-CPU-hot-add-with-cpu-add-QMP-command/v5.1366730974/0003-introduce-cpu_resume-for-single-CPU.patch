@@ -1,0 +1,105 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Igor Mammedov <imammedo@redhat.com>
+To: Igor Mammedov <imammedo@redhat.com>, qemu-devel@nongnu.org
+Cc: peter.maydell@linaro.org, gleb@redhat.com, mst@redhat.com,
+ jan.kiszka@siemens.com, qemu-devel@nongnu.org, lcapitulino@redhat.com,
+ blauwirbel@gmail.com, kraxel@redhat.com, eblake@redhat.com,
+ Anthony Liguori <aliguori@us.ibm.com>, quintela@redhat.com, armbru@redhat.com,
+ yang.z.zhang@intel.com, ehabkost@redhat.com, stefano.stabellini@eu.citrix.com,
+ aderumier@odiso.com, anthony.perard@citrix.com, alex.williamson@redhat.com,
+ rth@twiddle.net, kwolf@redhat.com, claudio.fontana@huawei.com,
+ pbonzini@redhat.com, afaerber@suse.de
+Date: Tue, 23 Apr 2013 10:29:37 +0200
+Message-id: 1366705795-24732-4-git-send-email-imammedo@redhat.com
+Subject: [PATCH 03/21] introduce cpu_resume(), for single CPU
+
+also add stub for it, to make possible to use it in qom/cpu.c,
+which is shared with user emulators.
+
+Signed-off-by: Igor Mammedov <imammedo@redhat.com>
+---
+v2:
+ * rename resume_vcpu() to cpu_resume()
+ * remove comment about neccessity to call cpu_synchronize_post_init()
+   which is applicable only to CPU creation. But not to generic CPU
+   resume.
+
+Note:
+  it will be re-used from qom/cpu.c by hotpluged CPU
+---
+ cpus.c              |   11 ++++++++---
+ include/qom/cpu.h   |    7 +++++++
+ stubs/Makefile.objs |    1 +
+ stubs/cpus.c        |    5 +++++
+ 4 files changed, 21 insertions(+), 3 deletions(-)
+ create mode 100644 stubs/cpus.c
+
+diff --git a/cpus.c b/cpus.c
+index 5a98a37..1d88761 100644
+--- a/cpus.c
++++ b/cpus.c
+@@ -993,6 +993,13 @@ void pause_all_vcpus(void)
+     }
+ }
+ 
++void cpu_resume(CPUState *cpu)
++{
++    cpu->stop = false;
++    cpu->stopped = false;
++    qemu_cpu_kick(cpu);
++}
++
+ void resume_all_vcpus(void)
+ {
+     CPUArchState *penv = first_cpu;
+@@ -1000,9 +1007,7 @@ void resume_all_vcpus(void)
+     qemu_clock_enable(vm_clock, true);
+     while (penv) {
+         CPUState *pcpu = ENV_GET_CPU(penv);
+-        pcpu->stop = false;
+-        pcpu->stopped = false;
+-        qemu_cpu_kick(pcpu);
++        cpu_resume(pcpu);
+         penv = penv->next_cpu;
+     }
+ }
+diff --git a/include/qom/cpu.h b/include/qom/cpu.h
+index 3664a1b..d6a0e80 100644
+--- a/include/qom/cpu.h
++++ b/include/qom/cpu.h
+@@ -256,5 +256,12 @@ void cpu_interrupt(CPUState *cpu, int mask);
+  */
+ void cpu_reset_interrupt(CPUState *cpu, int mask);
+ 
++/**
++ * cpu_resume:
++ * @cpu: The CPU to resume.
++ *
++ * Resumes CPU, i.e. puts CPU into runable state.
++ */
++void cpu_resume(CPUState *cpu);
+ 
+ #endif
+diff --git a/stubs/Makefile.objs b/stubs/Makefile.objs
+index 9c55b34..03dff20 100644
+--- a/stubs/Makefile.objs
++++ b/stubs/Makefile.objs
+@@ -23,3 +23,4 @@ stub-obj-y += sysbus.o
+ stub-obj-y += vm-stop.o
+ stub-obj-y += vmstate.o
+ stub-obj-$(CONFIG_WIN32) += fd-register.o
++stub-obj-y += cpus.o
+diff --git a/stubs/cpus.c b/stubs/cpus.c
+new file mode 100644
+index 0000000..37000dd
+--- /dev/null
++++ b/stubs/cpus.c
+@@ -0,0 +1,5 @@
++#include "qom/cpu.h"
++
++void cpu_resume(CPUState *cpu)
++{
++}
+-- 
+1.7.1
+

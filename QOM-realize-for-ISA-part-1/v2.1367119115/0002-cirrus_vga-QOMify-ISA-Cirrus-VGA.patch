@@ -1,0 +1,72 @@
+From patches Mon Sep 17 00:00:00 2001
+From: =?utf-8?q?Andreas_F=C3=A4rber_=3Cafaerber=40suse=2Ede=3E?=
+To: qemu-devel@nongnu.org
+Cc: =?UTF-8?q?Andreas=20F=C3=A4rber?= <afaerber@suse.de>
+Date: Sat, 27 Apr 2013 22:18:37 +0200
+Message-id: 1367093935-29091-3-git-send-email-afaerber@suse.de
+Subject: [PATCH 02/20] cirrus_vga: QOM'ify ISA Cirrus VGA
+
+Introduce type constant and cast macro to obsolete DO_UPCAST().
+
+Prepares for ISA realizefn.
+
+Signed-off-by: Andreas Färber <afaerber@suse.de>
+---
+ hw/display/cirrus_vga.c | 15 ++++++++++-----
+ 1 file changed, 10 insertions(+), 5 deletions(-)
+
+diff --git a/hw/display/cirrus_vga.c b/hw/display/cirrus_vga.c
+index 6e47956..64bfe2b 100644
+--- a/hw/display/cirrus_vga.c
++++ b/hw/display/cirrus_vga.c
+@@ -250,8 +250,13 @@ typedef struct PCICirrusVGAState {
+     CirrusVGAState cirrus_vga;
+ } PCICirrusVGAState;
+ 
++#define TYPE_ISA_CIRRUS_VGA "isa-cirrus-vga"
++#define ISA_CIRRUS_VGA(obj) \
++    OBJECT_CHECK(ISACirrusVGAState, (obj), TYPE_ISA_CIRRUS_VGA)
++
+ typedef struct ISACirrusVGAState {
+-    ISADevice dev;
++    ISADevice parent_obj;
++
+     CirrusVGAState cirrus_vga;
+ } ISACirrusVGAState;
+ 
+@@ -2904,7 +2909,7 @@ static void cirrus_init_common(CirrusVGAState * s, int device_id, int is_pci,
+ 
+ static int vga_initfn(ISADevice *dev)
+ {
+-    ISACirrusVGAState *d = DO_UPCAST(ISACirrusVGAState, dev, dev);
++    ISACirrusVGAState *d = ISA_CIRRUS_VGA(dev);
+     VGACommonState *s = &d->cirrus_vga.vga;
+ 
+     vga_common_init(s);
+@@ -2917,7 +2922,7 @@ static int vga_initfn(ISADevice *dev)
+     return 0;
+ }
+ 
+-static Property isa_vga_cirrus_properties[] = {
++static Property isa_cirrus_vga_properties[] = {
+     DEFINE_PROP_UINT32("vgamem_mb", struct ISACirrusVGAState,
+                        cirrus_vga.vga.vram_size_mb, 8),
+     DEFINE_PROP_END_OF_LIST(),
+@@ -2930,11 +2935,11 @@ static void isa_cirrus_vga_class_init(ObjectClass *klass, void *data)
+ 
+     dc->vmsd  = &vmstate_cirrus_vga;
+     k->init   = vga_initfn;
+-    dc->props = isa_vga_cirrus_properties;
++    dc->props = isa_cirrus_vga_properties;
+ }
+ 
+ static const TypeInfo isa_cirrus_vga_info = {
+-    .name          = "isa-cirrus-vga",
++    .name          = TYPE_ISA_CIRRUS_VGA,
+     .parent        = TYPE_ISA_DEVICE,
+     .instance_size = sizeof(ISACirrusVGAState),
+     .class_init = isa_cirrus_vga_class_init,
+-- 
+1.8.1.4
+
+

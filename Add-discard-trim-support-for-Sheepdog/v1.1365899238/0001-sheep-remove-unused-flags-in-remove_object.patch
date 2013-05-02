@@ -1,0 +1,162 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Liu Yuan <namei.unix@gmail.com>
+To: sheepdog@lists.wpkg.org, qemu-devel@nongnu.org
+Cc: 
+Date: Sat, 13 Apr 2013 19:27:19 +0800
+Message-id: 1365852442-28941-2-git-send-email-namei.unix@gmail.com
+Subject: [PATCH 1/3] sheep: remove unused 'flags' in remove_object()
+
+From: Liu Yuan <tailai.ly@taobao.com>
+
+Signed-off-by: Liu Yuan <tailai.ly@taobao.com>
+---
+ sheep/object_cache.c |    2 +-
+ sheep/sheep_priv.h   |    4 ++--
+ sheep/store.c        |    6 +++---
+ sheep/vdi.c          |   16 ++++++++--------
+ 4 files changed, 14 insertions(+), 14 deletions(-)
+
+diff --git a/sheep/object_cache.c b/sheep/object_cache.c
+index 93ecfe7..1b80a41 100644
+--- a/sheep/object_cache.c
++++ b/sheep/object_cache.c
+@@ -1097,7 +1097,7 @@ err:
+ }
+ 
+ int object_cache_write(uint64_t oid, char *data, unsigned int datalen,
+-		       uint64_t offset, uint16_t flags, bool create)
++		       uint64_t offset, bool create)
+ {
+ 	uint32_t vid = oid_to_vid(oid);
+ 	uint32_t idx = object_cache_oid_to_idx(oid);
+diff --git a/sheep/sheep_priv.h b/sheep/sheep_priv.h
+index d1022ac..ba8e6b2 100644
+--- a/sheep/sheep_priv.h
++++ b/sheep/sheep_priv.h
+@@ -303,7 +303,7 @@ bool node_in_recovery(void);
+ int read_backend_object(uint64_t oid, char *data, unsigned int datalen,
+ 		       uint64_t offset, int nr_copies);
+ int write_object(uint64_t oid, char *data, unsigned int datalen,
+-		 uint64_t offset, uint16_t flags, bool create, int nr_copies);
++		 uint64_t offset, bool create, int nr_copies);
+ int read_object(uint64_t oid, char *data, unsigned int datalen,
+ 		uint64_t offset, int nr_copies);
+ int remove_object(uint64_t oid, int nr_copies);
+@@ -373,7 +373,7 @@ bool object_is_cached(uint64_t oid);
+ void object_cache_try_to_reclaim(int);
+ int object_cache_handle_request(struct request *req);
+ int object_cache_write(uint64_t oid, char *data, unsigned int datalen,
+-		       uint64_t offset, uint16_t flags, bool create);
++		       uint64_t offset, bool create);
+ int object_cache_read(uint64_t oid, char *data, unsigned int datalen,
+ 		      uint64_t offset);
+ int object_cache_flush_vdi(uint32_t vid);
+diff --git a/sheep/store.c b/sheep/store.c
+index f8eee59..d95eb01 100644
+--- a/sheep/store.c
++++ b/sheep/store.c
+@@ -420,14 +420,14 @@ int init_global_pathnames(const char *d, char *argp)
+ 
+ /* Write data to both local object cache (if enabled) and backends */
+ int write_object(uint64_t oid, char *data, unsigned int datalen,
+-		 uint64_t offset, uint16_t flags, bool create, int nr_copies)
++		 uint64_t offset, bool create, int nr_copies)
+ {
+ 	struct sd_req hdr;
+ 	int ret;
+ 
+ 	if (sys->enable_object_cache && object_is_cached(oid)) {
+ 		ret = object_cache_write(oid, data, datalen, offset,
+-					 flags, create);
++					 create);
+ 		if (ret == SD_RES_NO_CACHE)
+ 			goto forward_write;
+ 
+@@ -443,7 +443,7 @@ forward_write:
+ 		sd_init_req(&hdr, SD_OP_CREATE_AND_WRITE_OBJ);
+ 	else
+ 		sd_init_req(&hdr, SD_OP_WRITE_OBJ);
+-	hdr.flags = flags | SD_FLAG_CMD_WRITE;
++	hdr.flags = SD_FLAG_CMD_WRITE;
+ 	hdr.data_length = datalen;
+ 
+ 	hdr.obj.oid = oid;
+diff --git a/sheep/vdi.c b/sheep/vdi.c
+index 52f91e4..5f23846 100644
+--- a/sheep/vdi.c
++++ b/sheep/vdi.c
+@@ -269,7 +269,7 @@ static int create_vdi_obj(struct vdi_iocb *iocb, uint32_t new_vid,
+ 
+ 	if (iocb->create_snapshot && cur_vid != iocb->base_vid) {
+ 		ret = write_object(vid_to_vdi_oid(cur_vid), (char *)cur,
+-				   SD_INODE_HEADER_SIZE, 0, 0, false, 0);
++				   SD_INODE_HEADER_SIZE, 0, false, 0);
+ 		if (ret != 0) {
+ 			sd_printf(SDOG_ERR, "failed");
+ 			ret = SD_RES_BASE_VDI_READ;
+@@ -279,7 +279,7 @@ static int create_vdi_obj(struct vdi_iocb *iocb, uint32_t new_vid,
+ 
+ 	if (iocb->base_vid) {
+ 		ret = write_object(vid_to_vdi_oid(iocb->base_vid), (char *)base,
+-				   SD_INODE_HEADER_SIZE, 0, 0, false, 0);
++				   SD_INODE_HEADER_SIZE, 0, false, 0);
+ 		if (ret != 0) {
+ 			sd_printf(SDOG_ERR, "failed");
+ 			ret = SD_RES_BASE_VDI_WRITE;
+@@ -288,7 +288,7 @@ static int create_vdi_obj(struct vdi_iocb *iocb, uint32_t new_vid,
+ 	}
+ 
+ 	ret = write_object(vid_to_vdi_oid(new_vid), (char *)new, sizeof(*new),
+-			   0, 0, true, iocb->nr_copies);
++			   0, true, iocb->nr_copies);
+ 	if (ret != 0)
+ 		ret = SD_RES_VDI_WRITE;
+ 
+@@ -581,7 +581,7 @@ static int delete_inode(struct deletion_work *dw)
+ 	memset(inode->name, 0, sizeof(inode->name));
+ 
+ 	ret = write_object(vid_to_vdi_oid(dw->vid), (char *)inode,
+-			   SD_INODE_HEADER_SIZE, 0, 0, false, dw->nr_copies);
++			   SD_INODE_HEADER_SIZE, 0, false, dw->nr_copies);
+ 	if (ret != 0) {
+ 		ret = SD_RES_EIO;
+ 		goto out;
+@@ -669,7 +669,7 @@ static void delete_one(struct work *work)
+ 	memset(inode->name, 0, sizeof(inode->name));
+ 
+ 	write_object(vid_to_vdi_oid(vdi_id), (void *)inode,
+-		     sizeof(*inode), 0, 0, false, nr_copies);
++		     sizeof(*inode), 0, false, nr_copies);
+ out:
+ 	free(inode);
+ }
+@@ -881,7 +881,7 @@ int get_vdi_attr(struct sheepdog_vdi_attr *vattr, int data_len,
+ 
+ 		if (ret == SD_RES_NO_OBJ && wr) {
+ 			ret = write_object(oid, (char *)vattr,
+-					   data_len, 0, 0, true, nr_copies);
++					   data_len, 0, true, nr_copies);
+ 			if (ret)
+ 				ret = SD_RES_EIO;
+ 			else
+@@ -902,14 +902,14 @@ int get_vdi_attr(struct sheepdog_vdi_attr *vattr, int data_len,
+ 			else if (delete) {
+ 				ret = write_object(oid, (char *)"", 1,
+ 						   offsetof(struct sheepdog_vdi_attr, name),
+-						   0, false, nr_copies);
++						   false, nr_copies);
+ 				if (ret)
+ 					ret = SD_RES_EIO;
+ 				else
+ 					ret = SD_RES_SUCCESS;
+ 			} else if (wr) {
+ 				ret = write_object(oid, (char *)vattr,
+-						   SD_ATTR_OBJ_SIZE, 0, 0,
++						   SD_ATTR_OBJ_SIZE, 0,
+ 						   false, nr_copies);
+ 
+ 				if (ret)
+-- 
+1.7.9.5
+
+

@@ -1,0 +1,48 @@
+From patches Mon Sep 17 00:00:00 2001
+From: fred.konrad@greensocs.com
+To: Anthony Liguori <aliguori@us.ibm.com>, qemu-devel@nongnu.org
+Cc: cornelia.huck@de.ibm.com, peter.maydell@linaro.org,
+ mark.burton@greensocs.com, fred.konrad@greensocs.com
+Date: Fri, 19 Apr 2013 15:57:34 +0200
+Message-id: 1366379855-28649-8-git-send-email-fred.konrad@greensocs.com
+Subject: [PATCH 7/8] virtio-rng: cleanup: remove qdev field.
+
+From: KONRAD Frederic <fred.konrad@greensocs.com>
+
+The qdev field is no longer needed, just drop it.
+
+Signed-off-by: KONRAD Frederic <fred.konrad@greensocs.com>
+---
+ hw/virtio/virtio-rng.c         | 2 --
+ include/hw/virtio/virtio-rng.h | 2 --
+ 2 files changed, 4 deletions(-)
+
+diff --git a/hw/virtio/virtio-rng.c b/hw/virtio/virtio-rng.c
+index 805dd18..a1dbd1e 100644
+--- a/hw/virtio/virtio-rng.c
++++ b/hw/virtio/virtio-rng.c
+@@ -168,8 +168,6 @@ static int virtio_rng_device_init(VirtIODevice *vdev)
+ 
+     vrng->vdev.get_features = get_features;
+ 
+-    vrng->qdev = qdev;
+-
+     assert(vrng->conf.max_bytes <= INT64_MAX);
+     vrng->quota_remaining = vrng->conf.max_bytes;
+ 
+diff --git a/include/hw/virtio/virtio-rng.h b/include/hw/virtio/virtio-rng.h
+index 973d809..4347818 100644
+--- a/include/hw/virtio/virtio-rng.h
++++ b/include/hw/virtio/virtio-rng.h
+@@ -32,8 +32,6 @@ struct VirtIORNGConf {
+ typedef struct VirtIORNG {
+     VirtIODevice vdev;
+ 
+-    DeviceState *qdev;
+-
+     /* Only one vq - guest puts buffer(s) on it when it needs entropy */
+     VirtQueue *vq;
+ 
+-- 
+1.7.11.7
+

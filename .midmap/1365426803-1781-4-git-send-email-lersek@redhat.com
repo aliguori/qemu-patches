@@ -1,0 +1,1 @@
+../publish-etc-acpi-APIC-in-fw_cfg/v1.1365451998/0003-hw-acpi-export-default-ACPI-headers-using-the-type-just-introduced.patch

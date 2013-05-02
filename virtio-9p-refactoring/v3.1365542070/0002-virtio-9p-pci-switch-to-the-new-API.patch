@@ -1,0 +1,155 @@
+From patches Mon Sep 17 00:00:00 2001
+From: fred.konrad@greensocs.com
+To: Anthony Liguori <aliguori@us.ibm.com>, qemu-devel@nongnu.org,
+ aneesh.kumar@linux.vnet.ibm.com
+Cc: peter.maydell@linaro.org, mark.burton@greensocs.com,
+ fred.konrad@greensocs.com
+Date: Tue, 9 Apr 2013 16:14:32 +0200
+Message-id: 1365516874-31399-3-git-send-email-fred.konrad@greensocs.com
+Subject: [PATCH 2/4] virtio-9p-pci: switch to the new API.
+
+From: KONRAD Frederic <fred.konrad@greensocs.com>
+
+Here the virtio-9p-pci is modified for the new API. The device
+virtio-9p-pci extends virtio-pci. It creates and connects a virtio-9p-device
+during the init. The properties are not changed.
+
+Signed-off-by: KONRAD Frederic <fred.konrad@greensocs.com>
+---
+ hw/virtio/virtio-pci.c | 58 ++++++++++++++++++++++++++++----------------------
+ hw/virtio/virtio-pci.h | 20 ++++++++++++++---
+ 2 files changed, 50 insertions(+), 28 deletions(-)
+
+diff --git a/hw/virtio/virtio-pci.c b/hw/virtio/virtio-pci.c
+index 1ab7c86..df02355 100644
+--- a/hw/virtio/virtio-pci.c
++++ b/hw/virtio/virtio-pci.c
+@@ -1081,46 +1081,54 @@ static const TypeInfo virtio_rng_info = {
+ };
+ 
+ #ifdef CONFIG_VIRTFS
+-static int virtio_9p_init_pci(PCIDevice *pci_dev)
++static int virtio_9p_init_pci(VirtIOPCIProxy *vpci_dev)
+ {
+-    VirtIOPCIProxy *proxy = DO_UPCAST(VirtIOPCIProxy, pci_dev, pci_dev);
+-    VirtIODevice *vdev;
++    V9fsPCIState *dev = VIRTIO_9P_PCI(vpci_dev);
++    DeviceState *vdev = DEVICE(&dev->vdev);
+ 
+-    vdev = virtio_9p_init(&pci_dev->qdev, &proxy->fsconf);
+-    vdev->nvectors = proxy->nvectors;
+-    virtio_init_pci(proxy, vdev);
+-    /* make the actual value visible */
+-    proxy->nvectors = vdev->nvectors;
++    qdev_set_parent_bus(vdev, BUS(&vpci_dev->bus));
++    if (qdev_init(vdev) < 0) {
++        return -1;
++    }
+     return 0;
+ }
+ 
+-static Property virtio_9p_properties[] = {
+-    DEFINE_PROP_BIT("ioeventfd", VirtIOPCIProxy, flags, VIRTIO_PCI_FLAG_USE_IOEVENTFD_BIT, true),
++static Property virtio_9p_pci_properties[] = {
++    DEFINE_PROP_BIT("ioeventfd", VirtIOPCIProxy, flags,
++                    VIRTIO_PCI_FLAG_USE_IOEVENTFD_BIT, true),
+     DEFINE_PROP_UINT32("vectors", VirtIOPCIProxy, nvectors, 2),
+     DEFINE_VIRTIO_COMMON_FEATURES(VirtIOPCIProxy, host_features),
+-    DEFINE_VIRTIO_9P_PROPERTIES(VirtIOPCIProxy, fsconf),
++    DEFINE_VIRTIO_9P_PROPERTIES(V9fsPCIState, vdev.fsconf),
+     DEFINE_PROP_END_OF_LIST(),
+ };
+ 
+-static void virtio_9p_class_init(ObjectClass *klass, void *data)
++static void virtio_9p_pci_class_init(ObjectClass *klass, void *data)
+ {
+     DeviceClass *dc = DEVICE_CLASS(klass);
+-    PCIDeviceClass *k = PCI_DEVICE_CLASS(klass);
++    PCIDeviceClass *pcidev_k = PCI_DEVICE_CLASS(klass);
++    VirtioPCIClass *k = VIRTIO_PCI_CLASS(klass);
+ 
+     k->init = virtio_9p_init_pci;
+-    k->vendor_id = PCI_VENDOR_ID_REDHAT_QUMRANET;
+-    k->device_id = PCI_DEVICE_ID_VIRTIO_9P;
+-    k->revision = VIRTIO_PCI_ABI_VERSION;
+-    k->class_id = 0x2;
+-    dc->props = virtio_9p_properties;
+-    dc->reset = virtio_pci_reset;
++    pcidev_k->vendor_id = PCI_VENDOR_ID_REDHAT_QUMRANET;
++    pcidev_k->device_id = PCI_DEVICE_ID_VIRTIO_9P;
++    pcidev_k->revision = VIRTIO_PCI_ABI_VERSION;
++    pcidev_k->class_id = 0x2;
++    dc->props = virtio_9p_pci_properties;
+ }
+ 
+-static const TypeInfo virtio_9p_info = {
+-    .name          = "virtio-9p-pci",
+-    .parent        = TYPE_PCI_DEVICE,
+-    .instance_size = sizeof(VirtIOPCIProxy),
+-    .class_init    = virtio_9p_class_init,
++static void virtio_9p_pci_instance_init(Object *obj)
++{
++    V9fsPCIState *dev = VIRTIO_9P_PCI(obj);
++    object_initialize(OBJECT(&dev->vdev), TYPE_VIRTIO_9P);
++    object_property_add_child(obj, "virtio-backend", OBJECT(&dev->vdev), NULL);
++}
++
++static const TypeInfo virtio_9p_pci_info = {
++    .name          = TYPE_VIRTIO_9P_PCI,
++    .parent        = TYPE_VIRTIO_PCI,
++    .instance_size = sizeof(V9fsPCIState),
++    .instance_init = virtio_9p_pci_instance_init,
++    .class_init    = virtio_9p_pci_class_init,
+ };
+ #endif
+ 
+@@ -1501,7 +1509,7 @@ static void virtio_pci_register_types(void)
+     type_register_static(&virtio_pci_bus_info);
+     type_register_static(&virtio_pci_info);
+ #ifdef CONFIG_VIRTFS
+-    type_register_static(&virtio_9p_info);
++    type_register_static(&virtio_9p_pci_info);
+ #endif
+     type_register_static(&virtio_blk_pci_info);
+     type_register_static(&virtio_scsi_pci_info);
+diff --git a/hw/virtio/virtio-pci.h b/hw/virtio/virtio-pci.h
+index 85bad25..85a795f 100644
+--- a/hw/virtio/virtio-pci.h
++++ b/hw/virtio/virtio-pci.h
+@@ -83,9 +83,6 @@ struct VirtIOPCIProxy {
+     uint32_t nvectors;
+     NICConf nic;
+     uint32_t host_features;
+-#ifdef CONFIG_VIRTFS
+-    V9fsConf fsconf;
+-#endif
+     virtio_net_conf net;
+     VirtIORNGConf rng;
+     bool ioeventfd_disabled;
+@@ -145,6 +142,23 @@ struct VirtIOSerialPCI {
+     VirtIOSerial vdev;
+ };
+ 
++/*
++ * virtio-9p-pci: This extends VirtioPCIProxy.
++ */
++
++#ifdef CONFIG_VIRTFS
++
++#define TYPE_VIRTIO_9P_PCI "virtio-9p-pci"
++#define VIRTIO_9P_PCI(obj) \
++        OBJECT_CHECK(V9fsPCIState, (obj), TYPE_VIRTIO_9P_PCI)
++
++typedef struct V9fsPCIState {
++    VirtIOPCIProxy parent_obj;
++    V9fsState vdev;
++} V9fsPCIState;
++
++#endif /* CONFIG_VIRTFS */
++
+ void virtio_init_pci(VirtIOPCIProxy *proxy, VirtIODevice *vdev);
+ void virtio_pci_bus_new(VirtioBusState *bus, VirtIOPCIProxy *dev);
+ 
+-- 
+1.8.1.4
+

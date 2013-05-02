@@ -1,0 +1,28 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Luiz Capitulino <lcapitulino@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>
+Date: Fri, 5 Apr 2013 09:12:07 -0400
+Message-id: 1365167531-17553-1-git-send-email-lcapitulino@redhat.com
+Subject: [PATCH 0/4] QMP queue
+
+The changes (since d05ef160453e98546a4197496dc8a3cb2defac53) are available
+in the following repository:
+
+    git://repo.or.cz/qemu/qmp-unstable.git queue/qmp
+
+Luiz Capitulino (4):
+  qstring: add qstring_get_length()
+  Monitor: Make output buffer dynamic
+  hmp: human-monitor-command: stop using the Memory chardev driver
+  chardev: drop the Memory chardev driver
+
+ include/qapi/qmp/qstring.h |  1 +
+ monitor.c                  | 60 +++++++++++++++++++++++++------------------
+ qemu-char.c                | 64 ----------------------------------------------
+ qobject/qstring.c          |  8 ++++++
+ 4 files changed, 44 insertions(+), 89 deletions(-)
+
+-- 
+1.8.1.4
+

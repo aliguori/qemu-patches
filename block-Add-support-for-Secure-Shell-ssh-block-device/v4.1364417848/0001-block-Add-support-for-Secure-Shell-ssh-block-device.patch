@@ -1,0 +1,39 @@
+From patches Mon Sep 17 00:00:00 2001
+From: "Richard W.M. Jones" <rjones@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: 
+Date: Wed, 27 Mar 2013 15:57:28 +0000
+Message-id: 1364399849-5518-1-git-send-email-rjones@redhat.com
+Subject: [PATCH 1/1] block: Add support for Secure Shell (ssh) block device.
+
+This is version 4 of the Secure Shell (ssh) block device.
+
+Links to earlier versions:
+
+v1: http://www.mail-archive.com/qemu-devel@nongnu.org/msg162605.html
+v2: http://www.mail-archive.com/qemu-devel@nongnu.org/msg162730.html
+v3: http://www.mail-archive.com/qemu-devel@nongnu.org/msg162805.html
+
+The version supports:
+
+ - image creation, so eg. 'qemu-img create' can be used
+
+ - extending the file, so qcow2 works
+
+ - file.host, file.port, file.path, file.user properties (or ssh:// URLs)
+
+ - asynch read/write using coroutines
+
+ - ssh-agent authentication
+
+ - checks the remote host key against known_hosts
+
+This version is robust and works for me reliably.  Performance of
+linear reading (eg. qemu-img convert ssh://...) is very fast indeed.
+Random access performance is fairly poor (about the same as sshfs).
+However it's usable remotely for booting and running guests, even over
+relatively slow wifi links.
+
+Rich.
+
+

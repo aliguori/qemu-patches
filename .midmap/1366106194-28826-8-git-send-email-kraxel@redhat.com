@@ -1,0 +1,1 @@
+../spice-patch-queue/v1.1366131385/0007-spice-qemu-char-Add-watch-support.patch

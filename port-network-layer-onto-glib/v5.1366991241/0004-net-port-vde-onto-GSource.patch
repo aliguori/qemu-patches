@@ -1,0 +1,94 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Liu Ping Fan <qemulist@gmail.com>
+To: Liu Ping Fan <qemulist@gmail.com>, qemu-devel@nongnu.org
+Cc: Paolo Bonzini <pbonzini@redhat.com>,
+ Anthony Liguori <anthony@codemonkey.ws>, qemu-devel@nongnu.org,
+ mdroth <mdroth@linux.vnet.ibm.com>, Jan Kiszka <jan.kiszka@siemens.com>,
+ Stefan Hajnoczi <stefanha@redhat.com>
+Date: Fri, 26 Apr 2013 10:47:25 +0800
+Message-id: 1366944455-14239-5-git-send-email-qemulist@gmail.com
+Subject: [PATCH 04/14] net: port vde onto GSource
+
+From: Liu Ping Fan <pingfank@linux.vnet.ibm.com>
+
+Signed-off-by: Liu Ping Fan <pingfank@linux.vnet.ibm.com>
+---
+ net/vde.c |   31 +++++++++++++++++++++++++++++--
+ 1 files changed, 29 insertions(+), 2 deletions(-)
+
+diff --git a/net/vde.c b/net/vde.c
+index 4dea32d..6dbde04 100644
+--- a/net/vde.c
++++ b/net/vde.c
+@@ -30,10 +30,12 @@
+ #include "qemu-common.h"
+ #include "qemu/option.h"
+ #include "qemu/main-loop.h"
++#include "util/event_gsource.h"
+ 
+ typedef struct VDEState {
+     NetClientState nc;
+     VDECONN *vde;
++    EventGSource *nsrc;
+ } VDEState;
+ 
+ static void vde_to_qemu(void *opaque)
+@@ -60,20 +62,43 @@ static ssize_t vde_receive(NetClientState *nc, const uint8_t *buf, size_t size)
+     return ret;
+ }
+ 
++static gboolean vde_handler(gpointer data)
++{
++    EventGSource *nsrc = (EventGSource *)data;
++
++    if (nsrc->gfd.revents & G_IO_IN) {
++        vde_to_qemu(nsrc->opaque);
++    }
++    return true;
++}
++
+ static void vde_cleanup(NetClientState *nc)
+ {
+     VDEState *s = DO_UPCAST(VDEState, nc, nc);
+-    qemu_set_fd_handler(vde_datafd(s->vde), NULL, NULL, NULL);
++    event_source_release(s->nsrc);
+     vde_close(s->vde);
+ }
+ 
++static void vde_bind_ctx(NetClientState *nc, GMainContext *ctx)
++{
++    VDEState *s = DO_UPCAST(VDEState, nc, nc);
++
++    g_source_attach(&s->nsrc->source, ctx);
++}
++
+ static NetClientInfo net_vde_info = {
+     .type = NET_CLIENT_OPTIONS_KIND_VDE,
+     .size = sizeof(VDEState),
+     .receive = vde_receive,
+     .cleanup = vde_cleanup,
++    .bind_ctx = vde_bind_ctx,
+ };
+ 
++static gushort readable(void *opaque)
++{
++    return G_IO_IN;
++}
++
+ static int net_vde_init(NetClientState *peer, const char *model,
+                         const char *name, const char *sock,
+                         int port, const char *group, int mode)
+@@ -104,7 +129,9 @@ static int net_vde_init(NetClientState *peer, const char *model,
+ 
+     s->vde = vde;
+ 
+-    qemu_set_fd_handler(vde_datafd(s->vde), vde_to_qemu, NULL, s);
++    s->nsrc = event_source_new(vde_datafd(vde), vde_handler, s);
++    s->nsrc->readable = readable;
++    nc->info->bind_ctx(nc, NULL);
+ 
+     return 0;
+ }
+-- 
+1.7.4.4
+

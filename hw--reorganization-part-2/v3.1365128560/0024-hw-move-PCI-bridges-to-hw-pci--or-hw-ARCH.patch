@@ -1,0 +1,384 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: 
+Date: Thu,  4 Apr 2013 21:23:04 +0200
+Message-id: 1365103395-11547-25-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 24/35] hw: move PCI bridges to hw/pci-* or hw/ARCH
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ default-configs/i386-softmmu.mak                   | 4 ++++
+ default-configs/sparc64-softmmu.mak                | 1 +
+ default-configs/x86_64-softmmu.mak                 | 4 ++++
+ hw/Makefile.objs                                   | 1 +
+ hw/alpha/Makefile.objs                             | 6 +-----
+ hw/{alpha_typhoon.c => alpha/typhoon.c}            | 0
+ hw/i386/Makefile.objs                              | 3 +--
+ hw/mips/Makefile.objs                              | 6 +-----
+ hw/{gt64xxx.c => mips/gt64xxx_pci.c}               | 0
+ hw/{pci/bridge => pci-bridge}/Makefile.objs        | 0
+ hw/{pci/bridge => pci-bridge}/i82801b11.c          | 0
+ hw/{pci/bridge => pci-bridge}/ioh3420.c            | 0
+ hw/{pci/bridge => pci-bridge}/pci_bridge_dev.c     | 0
+ hw/{pci/bridge => pci-bridge}/xio3130_downstream.c | 0
+ hw/{pci/bridge => pci-bridge}/xio3130_upstream.c   | 0
+ hw/{pci/host => pci-host}/Makefile.objs            | 5 +++++
+ hw/{apb_pci.c => pci-host/apb.c}                   | 8 ++++----
+ hw/{ => pci-host}/bonito.c                         | 0
+ hw/{pci/host => pci-host}/dec.c                    | 0
+ hw/{pci/host => pci-host}/grackle.c                | 0
+ hw/{pci/host => pci-host}/pam.c                    | 0
+ hw/{piix_pci.c => pci-host/piix.c}                 | 0
+ hw/{pci/host => pci-host}/ppce500.c                | 0
+ hw/{pci/host => pci-host}/prep.c                   | 0
+ hw/{ => pci-host}/q35.c                            | 0
+ hw/{pci/host => pci-host}/uninorth.c               | 0
+ hw/{pci/host => pci-host}/versatile.c              | 0
+ hw/pci/Makefile.objs                               | 2 --
+ hw/ppc/Makefile.objs                               | 5 ++---
+ hw/{ => ppc}/ppc4xx_pci.c                          | 0
+ hw/{ => ppc}/spapr_pci.c                           | 0
+ hw/sh4/Makefile.objs                               | 3 ++-
+ hw/{ => sh4}/sh_pci.c                              | 0
+ hw/sparc64/Makefile.objs                           | 4 ----
+ include/hw/pci-host/q35.h                          | 1 -
+ 35 files changed, 26 insertions(+), 27 deletions(-)
+ rename hw/{alpha_typhoon.c => alpha/typhoon.c} (100%)
+ rename hw/{gt64xxx.c => mips/gt64xxx_pci.c} (100%)
+ rename hw/{pci/bridge => pci-bridge}/Makefile.objs (100%)
+ rename hw/{pci/bridge => pci-bridge}/i82801b11.c (100%)
+ rename hw/{pci/bridge => pci-bridge}/ioh3420.c (100%)
+ rename hw/{pci/bridge => pci-bridge}/pci_bridge_dev.c (100%)
+ rename hw/{pci/bridge => pci-bridge}/xio3130_downstream.c (100%)
+ rename hw/{pci/bridge => pci-bridge}/xio3130_upstream.c (100%)
+ rename hw/{pci/host => pci-host}/Makefile.objs (69%)
+ rename hw/{apb_pci.c => pci-host/apb.c} (97%)
+ rename hw/{ => pci-host}/bonito.c (100%)
+ rename hw/{pci/host => pci-host}/dec.c (100%)
+ rename hw/{pci/host => pci-host}/grackle.c (100%)
+ rename hw/{pci/host => pci-host}/pam.c (100%)
+ rename hw/{piix_pci.c => pci-host/piix.c} (100%)
+ rename hw/{pci/host => pci-host}/ppce500.c (100%)
+ rename hw/{pci/host => pci-host}/prep.c (100%)
+ rename hw/{ => pci-host}/q35.c (100%)
+ rename hw/{pci/host => pci-host}/uninorth.c (100%)
+ rename hw/{pci/host => pci-host}/versatile.c (100%)
+ rename hw/{ => ppc}/ppc4xx_pci.c (100%)
+ rename hw/{ => ppc}/spapr_pci.c (100%)
+ rename hw/{ => sh4}/sh_pci.c (100%)
+
+diff --git a/default-configs/i386-softmmu.mak b/default-configs/i386-softmmu.mak
+index 717c8f4..fa070cd 100644
+--- a/default-configs/i386-softmmu.mak
++++ b/default-configs/i386-softmmu.mak
+@@ -31,8 +31,12 @@ CONFIG_TPM_TIS=y
+ CONFIG_TPM_PASSTHROUGH=y
+ CONFIG_PCI_HOTPLUG=y
+ CONFIG_MC146818RTC=y
++CONFIG_PAM=y
++CONFIG_PCI_PIIX=y
++CONFIG_PCI_HOTPLUG=y
+ CONFIG_WDT_IB700=y
+ CONFIG_PC_SYSFW=y
+ CONFIG_XEN_I386=$(CONFIG_XEN)
+ CONFIG_ISA_DEBUG=y
+ CONFIG_LPC_ICH9=y
++CONFIG_Q35=y
+diff --git a/default-configs/sparc64-softmmu.mak b/default-configs/sparc64-softmmu.mak
+index 3b3dc55..9b08ee8 100644
+--- a/default-configs/sparc64-softmmu.mak
++++ b/default-configs/sparc64-softmmu.mak
+@@ -13,4 +13,5 @@ CONFIG_PCKBD=y
+ CONFIG_FDC=y
+ CONFIG_IDE_ISA=y
+ CONFIG_IDE_CMD646=y
++CONFIG_PCI_APB=y
+ CONFIG_MC146818RTC=y
+diff --git a/default-configs/x86_64-softmmu.mak b/default-configs/x86_64-softmmu.mak
+index 31de945..3102c09 100644
+--- a/default-configs/x86_64-softmmu.mak
++++ b/default-configs/x86_64-softmmu.mak
+@@ -31,8 +31,12 @@ CONFIG_TPM_TIS=y
+ CONFIG_TPM_PASSTHROUGH=y
+ CONFIG_PCI_HOTPLUG=y
+ CONFIG_MC146818RTC=y
++CONFIG_PAM=y
++CONFIG_PCI_PIIX=y
++CONFIG_PCI_HOTPLUG=y
+ CONFIG_WDT_IB700=y
+ CONFIG_PC_SYSFW=y
+ CONFIG_XEN_I386=$(CONFIG_XEN)
+ CONFIG_ISA_DEBUG=y
+ CONFIG_LPC_ICH9=y
++CONFIG_Q35=y
+diff --git a/hw/Makefile.objs b/hw/Makefile.objs
+index b2be078..297efce 100644
+--- a/hw/Makefile.objs
++++ b/hw/Makefile.objs
+@@ -17,6 +17,7 @@ devices-dirs-$(CONFIG_SOFTMMU) += misc/
+ devices-dirs-$(CONFIG_SOFTMMU) += net/
+ devices-dirs-$(CONFIG_SOFTMMU) += nvram/
+ devices-dirs-$(CONFIG_SOFTMMU) += pci/
++devices-dirs-$(CONFIG_PCI) += pci-bridge/ pci-host/
+ devices-dirs-$(CONFIG_SOFTMMU) += scsi/
+ devices-dirs-$(CONFIG_SOFTMMU) += sd/
+ devices-dirs-$(CONFIG_SOFTMMU) += ssi/
+diff --git a/hw/alpha/Makefile.objs b/hw/alpha/Makefile.objs
+index 5dfea7a..5c74275 100644
+--- a/hw/alpha/Makefile.objs
++++ b/hw/alpha/Makefile.objs
+@@ -1,5 +1 @@
+-obj-y += alpha_typhoon.o
+-
+-obj-y := $(addprefix ../,$(obj-y))
+-
+-obj-y += dp264.o pci.o
++obj-y += dp264.o pci.o typhoon.o
+diff --git a/hw/alpha_typhoon.c b/hw/alpha/typhoon.c
+similarity index 100%
+rename from hw/alpha_typhoon.c
+rename to hw/alpha/typhoon.c
+diff --git a/hw/i386/Makefile.objs b/hw/i386/Makefile.objs
+index af7f4b1..a531d3a 100644
+--- a/hw/i386/Makefile.objs
++++ b/hw/i386/Makefile.objs
+@@ -1,8 +1,7 @@
+ obj-y += apic_common.o apic.o
+-obj-y += sga.o ioapic_common.o ioapic.o piix_pci.o
++obj-y += sga.o ioapic_common.o ioapic.o
+ obj-y += vmport.o
+ obj-y += debugexit.o
+-obj-y += q35.o
+ obj-y += kvm/
+ obj-y += pc-testdev.o
+ 
+diff --git a/hw/mips/Makefile.objs b/hw/mips/Makefile.objs
+index af4d1f9..0a652f8 100644
+--- a/hw/mips/Makefile.objs
++++ b/hw/mips/Makefile.objs
+@@ -1,8 +1,4 @@
+-obj-y += gt64xxx.o
+-obj-$(CONFIG_FULONG) += bonito.o
+-
+-obj-y := $(addprefix ../,$(obj-y))
+-
+ obj-y += mips_r4k.o mips_jazz.o mips_malta.o mips_mipssim.o
+ obj-y += addr.o cputimer.o mips_int.o
+ obj-$(CONFIG_FULONG) += mips_fulong2e.o
++obj-y += gt64xxx_pci.o
+diff --git a/hw/gt64xxx.c b/hw/mips/gt64xxx_pci.c
+similarity index 100%
+rename from hw/gt64xxx.c
+rename to hw/mips/gt64xxx_pci.c
+diff --git a/hw/pci/bridge/Makefile.objs b/hw/pci-bridge/Makefile.objs
+similarity index 100%
+rename from hw/pci/bridge/Makefile.objs
+rename to hw/pci-bridge/Makefile.objs
+diff --git a/hw/pci/bridge/i82801b11.c b/hw/pci-bridge/i82801b11.c
+similarity index 100%
+rename from hw/pci/bridge/i82801b11.c
+rename to hw/pci-bridge/i82801b11.c
+diff --git a/hw/pci/bridge/ioh3420.c b/hw/pci-bridge/ioh3420.c
+similarity index 100%
+rename from hw/pci/bridge/ioh3420.c
+rename to hw/pci-bridge/ioh3420.c
+diff --git a/hw/pci/bridge/pci_bridge_dev.c b/hw/pci-bridge/pci_bridge_dev.c
+similarity index 100%
+rename from hw/pci/bridge/pci_bridge_dev.c
+rename to hw/pci-bridge/pci_bridge_dev.c
+diff --git a/hw/pci/bridge/xio3130_downstream.c b/hw/pci-bridge/xio3130_downstream.c
+similarity index 100%
+rename from hw/pci/bridge/xio3130_downstream.c
+rename to hw/pci-bridge/xio3130_downstream.c
+diff --git a/hw/pci/bridge/xio3130_upstream.c b/hw/pci-bridge/xio3130_upstream.c
+similarity index 100%
+rename from hw/pci/bridge/xio3130_upstream.c
+rename to hw/pci-bridge/xio3130_upstream.c
+diff --git a/hw/pci/host/Makefile.objs b/hw/pci-host/Makefile.objs
+similarity index 69%
+rename from hw/pci/host/Makefile.objs
+rename to hw/pci-host/Makefile.objs
+index e1d6cce..909e702 100644
+--- a/hw/pci/host/Makefile.objs
++++ b/hw/pci-host/Makefile.objs
+@@ -11,3 +11,8 @@ common-obj-$(CONFIG_PPCE500_PCI) += ppce500.o
+ 
+ # ARM devices
+ common-obj-$(CONFIG_VERSATILE_PCI) += versatile.o
++
++common-obj-$(CONFIG_PCI_APB) += apb.o
++common-obj-$(CONFIG_FULONG) += bonito.o
++common-obj-$(CONFIG_PCI_PIIX) += piix.o
++common-obj-$(CONFIG_PCI_Q35) += q35.o
+diff --git a/hw/apb_pci.c b/hw/pci-host/apb.c
+similarity index 97%
+rename from hw/apb_pci.c
+rename to hw/pci-host/apb.c
+index fe15ae8..b4981d7 100644
+--- a/hw/apb_pci.c
++++ b/hw/pci-host/apb.c
+@@ -92,7 +92,7 @@ static void apb_config_writel (void *opaque, hwaddr addr,
+ {
+     APBState *s = opaque;
+ 
+-    APB_DPRINTF("%s: addr " TARGET_FMT_lx " val %" PRIx64 "\n", __func__, addr, val);
++    APB_DPRINTF("%s: addr " TARGET_FMT_plx " val %" PRIx64 "\n", __func__, addr, val);
+ 
+     switch (addr & 0xffff) {
+     case 0x30 ... 0x4f: /* DMA error registers */
+@@ -201,7 +201,7 @@ static uint64_t apb_config_readl (void *opaque,
+         val = 0;
+         break;
+     }
+-    APB_DPRINTF("%s: addr " TARGET_FMT_lx " -> %x\n", __func__, addr, val);
++    APB_DPRINTF("%s: addr " TARGET_FMT_plx " -> %x\n", __func__, addr, val);
+ 
+     return val;
+ }
+@@ -218,7 +218,7 @@ static void apb_pci_config_write(void *opaque, hwaddr addr,
+     APBState *s = opaque;
+ 
+     val = qemu_bswap_len(val, size);
+-    APB_DPRINTF("%s: addr " TARGET_FMT_lx " val %" PRIx64 "\n", __func__, addr, val);
++    APB_DPRINTF("%s: addr " TARGET_FMT_plx " val %" PRIx64 "\n", __func__, addr, val);
+     pci_data_write(s->bus, addr, val, size);
+ }
+ 
+@@ -230,7 +230,7 @@ static uint64_t apb_pci_config_read(void *opaque, hwaddr addr,
+ 
+     ret = pci_data_read(s->bus, addr, size);
+     ret = qemu_bswap_len(ret, size);
+-    APB_DPRINTF("%s: addr " TARGET_FMT_lx " -> %x\n", __func__, addr, ret);
++    APB_DPRINTF("%s: addr " TARGET_FMT_plx " -> %x\n", __func__, addr, ret);
+     return ret;
+ }
+ 
+diff --git a/hw/bonito.c b/hw/pci-host/bonito.c
+similarity index 100%
+rename from hw/bonito.c
+rename to hw/pci-host/bonito.c
+diff --git a/hw/pci/host/dec.c b/hw/pci-host/dec.c
+similarity index 100%
+rename from hw/pci/host/dec.c
+rename to hw/pci-host/dec.c
+diff --git a/hw/pci/host/grackle.c b/hw/pci-host/grackle.c
+similarity index 100%
+rename from hw/pci/host/grackle.c
+rename to hw/pci-host/grackle.c
+diff --git a/hw/pci/host/pam.c b/hw/pci-host/pam.c
+similarity index 100%
+rename from hw/pci/host/pam.c
+rename to hw/pci-host/pam.c
+diff --git a/hw/piix_pci.c b/hw/pci-host/piix.c
+similarity index 100%
+rename from hw/piix_pci.c
+rename to hw/pci-host/piix.c
+diff --git a/hw/pci/host/ppce500.c b/hw/pci-host/ppce500.c
+similarity index 100%
+rename from hw/pci/host/ppce500.c
+rename to hw/pci-host/ppce500.c
+diff --git a/hw/pci/host/prep.c b/hw/pci-host/prep.c
+similarity index 100%
+rename from hw/pci/host/prep.c
+rename to hw/pci-host/prep.c
+diff --git a/hw/q35.c b/hw/pci-host/q35.c
+similarity index 100%
+rename from hw/q35.c
+rename to hw/pci-host/q35.c
+diff --git a/hw/pci/host/uninorth.c b/hw/pci-host/uninorth.c
+similarity index 100%
+rename from hw/pci/host/uninorth.c
+rename to hw/pci-host/uninorth.c
+diff --git a/hw/pci/host/versatile.c b/hw/pci-host/versatile.c
+similarity index 100%
+rename from hw/pci/host/versatile.c
+rename to hw/pci-host/versatile.c
+diff --git a/hw/pci/Makefile.objs b/hw/pci/Makefile.objs
+index a1511ab..a7fb9d0 100644
+--- a/hw/pci/Makefile.objs
++++ b/hw/pci/Makefile.objs
+@@ -8,6 +8,4 @@ common-obj-$(CONFIG_PCI) += pcie.o pcie_aer.o pcie_port.o
+ common-obj-$(CONFIG_NO_PCI) += pci-stub.o
+ common-obj-$(CONFIG_ALL) += pci-stub.o
+ 
+-common-obj-$(CONFIG_PCI) += bridge/ host/
+-
+ obj-$(CONFIG_PCI_HOTPLUG) += pci-hotplug.o
+diff --git a/hw/ppc/Makefile.objs b/hw/ppc/Makefile.objs
+index 1e24b58..70342c2 100644
+--- a/hw/ppc/Makefile.objs
++++ b/hw/ppc/Makefile.objs
+@@ -1,8 +1,5 @@
+ # IBM pSeries (sPAPR)
+-obj-$(CONFIG_PSERIES) += spapr_pci.o
+ obj-$(CONFIG_PSERIES) += spapr_nvram.o
+-# PowerPC 4xx boards
+-obj-y += ppc4xx_pci.o
+ # PowerPC OpenPIC
+ obj-y += openpic.o
+ 
+@@ -13,8 +10,10 @@ obj-y += ppc.o ppc_booke.o
+ # IBM pSeries (sPAPR)
+ obj-$(CONFIG_PSERIES) += spapr.o xics.o spapr_vio.o spapr_events.o
+ obj-$(CONFIG_PSERIES) += spapr_hcall.o spapr_iommu.o spapr_rtas.o
++obj-$(CONFIG_PSERIES) += spapr_pci.o
+ # PowerPC 4xx boards
+ obj-y += ppc405_boards.o ppc4xx_devs.o ppc405_uc.o ppc440_bamboo.o
++obj-y += ppc4xx_pci.o
+ # PReP
+ obj-y += prep.o
+ # OldWorld PowerMac
+diff --git a/hw/ppc4xx_pci.c b/hw/ppc/ppc4xx_pci.c
+similarity index 100%
+rename from hw/ppc4xx_pci.c
+rename to hw/ppc/ppc4xx_pci.c
+diff --git a/hw/spapr_pci.c b/hw/ppc/spapr_pci.c
+similarity index 100%
+rename from hw/spapr_pci.c
+rename to hw/ppc/spapr_pci.c
+diff --git a/hw/sh4/Makefile.objs b/hw/sh4/Makefile.objs
+index 76b37bb..0387b96 100644
+--- a/hw/sh4/Makefile.objs
++++ b/hw/sh4/Makefile.objs
+@@ -1,7 +1,8 @@
+-obj-y += sh_intc.o sh_pci.o
++obj-y += sh_intc.o
+ 
+ obj-y := $(addprefix ../,$(obj-y))
+ 
+ obj-y += shix.o r2d.o
+ 
+ obj-y += sh7750.o sh7750_regnames.o
++obj-y += sh_pci.o
+diff --git a/hw/sh_pci.c b/hw/sh4/sh_pci.c
+similarity index 100%
+rename from hw/sh_pci.c
+rename to hw/sh4/sh_pci.c
+diff --git a/hw/sparc64/Makefile.objs b/hw/sparc64/Makefile.objs
+index 178464b..a84cfe3 100644
+--- a/hw/sparc64/Makefile.objs
++++ b/hw/sparc64/Makefile.objs
+@@ -1,5 +1 @@
+-obj-y = apb_pci.o
+-
+-obj-y := $(addprefix ../,$(obj-y))
+-
+ obj-y += sun4u.o
+diff --git a/include/hw/pci-host/q35.h b/include/hw/pci-host/q35.h
+index 6b50b5f..e182c82 100644
+--- a/include/hw/pci-host/q35.h
++++ b/include/hw/pci-host/q35.h
+@@ -28,7 +28,6 @@
+ #include "hw/sysbus.h"
+ #include "hw/i386/pc.h"
+ #include "hw/isa/apm.h"
+-#include "hw/i386/apic.h"
+ #include "hw/pci/pci.h"
+ #include "hw/pci/pcie_host.h"
+ #include "hw/acpi/acpi.h"
+-- 
+1.8.1.4
+
+
+

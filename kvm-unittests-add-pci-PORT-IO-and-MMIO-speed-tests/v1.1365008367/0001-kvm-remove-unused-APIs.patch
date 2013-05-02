@@ -1,0 +1,187 @@
+From patches Mon Sep 17 00:00:00 2001
+From: "Michael S. Tsirkin" <mst@redhat.com>
+To: pbonzini@redhat.com, gleb@redhat.com, mtosatti@redhat.com,
+ qemu-devel@nongnu.org, kvm@vger.kernel.org
+Cc: 
+Date: Wed, 3 Apr 2013 11:59:32 +0300
+Message-id: dc1fb45d579a033adce99a1114f110679bd447d8.1364979441.git.mst@redhat.com
+Subject: [PATCH 1/4] kvm: remove unused APIs
+
+There are only used internally now, move them
+out of header and out of stub.
+
+Signed-off-by: Michael S. Tsirkin <mst@redhat.com>
+---
+ include/sysemu/kvm.h |   4 --
+ kvm-all.c            | 107 ++++++++++++++++++++++++++-------------------------
+ kvm-stub.c           |  10 -----
+ 3 files changed, 54 insertions(+), 67 deletions(-)
+
+diff --git a/include/sysemu/kvm.h b/include/sysemu/kvm.h
+index f2d97b5..4a65d9f 100644
+--- a/include/sysemu/kvm.h
++++ b/include/sysemu/kvm.h
+@@ -283,10 +283,6 @@ int kvm_physical_memory_addr_from_host(KVMState *s, void *ram_addr,
+ #endif
+ 
+ #endif
+-int kvm_set_ioeventfd_mmio(int fd, uint32_t adr, uint32_t val, bool assign,
+-                           uint32_t size);
+-
+-int kvm_set_ioeventfd_pio_word(int fd, uint16_t adr, uint16_t val, bool assign);
+ 
+ int kvm_irqchip_add_msi_route(KVMState *s, MSIMessage msg);
+ int kvm_irqchip_update_msi_route(KVMState *s, int virq, MSIMessage msg);
+diff --git a/kvm-all.c b/kvm-all.c
+index 9b433d3..ca9775d 100644
+--- a/kvm-all.c
++++ b/kvm-all.c
+@@ -500,6 +500,60 @@ int kvm_check_extension(KVMState *s, unsigned int extension)
+     return ret;
+ }
+ 
++static int kvm_set_ioeventfd_mmio(int fd, uint32_t addr, uint32_t val, bool assign,
++                                  uint32_t size)
++{
++    int ret;
++    struct kvm_ioeventfd iofd;
++
++    iofd.datamatch = val;
++    iofd.addr = addr;
++    iofd.len = size;
++    iofd.flags = KVM_IOEVENTFD_FLAG_DATAMATCH;
++    iofd.fd = fd;
++
++    if (!kvm_enabled()) {
++        return -ENOSYS;
++    }
++
++    if (!assign) {
++        iofd.flags |= KVM_IOEVENTFD_FLAG_DEASSIGN;
++    }
++
++    ret = kvm_vm_ioctl(kvm_state, KVM_IOEVENTFD, &iofd);
++
++    if (ret < 0) {
++        return -errno;
++    }
++
++    return 0;
++}
++
++static int kvm_set_ioeventfd_pio_word(int fd, uint16_t addr, uint16_t val,
++                                      bool assign)
++{
++    struct kvm_ioeventfd kick = {
++        .datamatch = val,
++        .addr = addr,
++        .len = 2,
++        .flags = KVM_IOEVENTFD_FLAG_DATAMATCH | KVM_IOEVENTFD_FLAG_PIO,
++        .fd = fd,
++    };
++    int r;
++    if (!kvm_enabled()) {
++        return -ENOSYS;
++    }
++    if (!assign) {
++        kick.flags |= KVM_IOEVENTFD_FLAG_DEASSIGN;
++    }
++    r = kvm_vm_ioctl(kvm_state, KVM_IOEVENTFD, &kick);
++    if (r < 0) {
++        return r;
++    }
++    return 0;
++}
++
++
+ static int kvm_check_many_ioeventfds(void)
+ {
+     /* Userspace can use ioeventfd for io notification.  This requires a host
+@@ -1971,59 +2025,6 @@ int kvm_set_signal_mask(CPUArchState *env, const sigset_t *sigset)
+ 
+     return r;
+ }
+-
+-int kvm_set_ioeventfd_mmio(int fd, uint32_t addr, uint32_t val, bool assign,
+-                           uint32_t size)
+-{
+-    int ret;
+-    struct kvm_ioeventfd iofd;
+-
+-    iofd.datamatch = val;
+-    iofd.addr = addr;
+-    iofd.len = size;
+-    iofd.flags = KVM_IOEVENTFD_FLAG_DATAMATCH;
+-    iofd.fd = fd;
+-
+-    if (!kvm_enabled()) {
+-        return -ENOSYS;
+-    }
+-
+-    if (!assign) {
+-        iofd.flags |= KVM_IOEVENTFD_FLAG_DEASSIGN;
+-    }
+-
+-    ret = kvm_vm_ioctl(kvm_state, KVM_IOEVENTFD, &iofd);
+-
+-    if (ret < 0) {
+-        return -errno;
+-    }
+-
+-    return 0;
+-}
+-
+-int kvm_set_ioeventfd_pio_word(int fd, uint16_t addr, uint16_t val, bool assign)
+-{
+-    struct kvm_ioeventfd kick = {
+-        .datamatch = val,
+-        .addr = addr,
+-        .len = 2,
+-        .flags = KVM_IOEVENTFD_FLAG_DATAMATCH | KVM_IOEVENTFD_FLAG_PIO,
+-        .fd = fd,
+-    };
+-    int r;
+-    if (!kvm_enabled()) {
+-        return -ENOSYS;
+-    }
+-    if (!assign) {
+-        kick.flags |= KVM_IOEVENTFD_FLAG_DEASSIGN;
+-    }
+-    r = kvm_vm_ioctl(kvm_state, KVM_IOEVENTFD, &kick);
+-    if (r < 0) {
+-        return r;
+-    }
+-    return 0;
+-}
+-
+ int kvm_on_sigbus_vcpu(CPUState *cpu, int code, void *addr)
+ {
+     return kvm_arch_on_sigbus_vcpu(cpu, code, addr);
+diff --git a/kvm-stub.c b/kvm-stub.c
+index 760aadc..ef1f201 100644
+--- a/kvm-stub.c
++++ b/kvm-stub.c
+@@ -102,16 +102,6 @@ int kvm_set_signal_mask(CPUArchState *env, const sigset_t *sigset)
+ }
+ #endif
+ 
+-int kvm_set_ioeventfd_pio_word(int fd, uint16_t addr, uint16_t val, bool assign)
+-{
+-    return -ENOSYS;
+-}
+-
+-int kvm_set_ioeventfd_mmio(int fd, uint32_t adr, uint32_t val, bool assign, uint32_t len)
+-{
+-    return -ENOSYS;
+-}
+-
+ int kvm_on_sigbus_vcpu(CPUState *cpu, int code, void *addr)
+ {
+     return 1;
+-- 
+MST
+
+--
+To unsubscribe from this list: send the line "unsubscribe kvm" in
+the body of a message to majordomo@vger.kernel.org
+More majordomo info at  http://vger.kernel.org/majordomo-info.html

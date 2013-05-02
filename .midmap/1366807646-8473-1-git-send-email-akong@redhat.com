@@ -1,0 +1,1 @@
+../qapi-introduce-strList-and-visit_type_strList/v1.1366854445/0001-qapi-introduce-strList-and-visit_type_strList.patch

@@ -1,0 +1,1 @@
+../acpi-move-declarations-from-pch-to-acpih/v1.1366035562/0001-acpi-move-declarations-from-pch-to-acpih.patch

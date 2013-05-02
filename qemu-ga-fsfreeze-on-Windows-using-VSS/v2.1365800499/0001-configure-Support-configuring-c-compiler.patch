@@ -1,0 +1,105 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Tomoki Sekiyama <tsekiyam@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: mdroth@linux.vnet.ibm.com, pbonzini@redhat.com, vrozenfe@redhat.com,
+ Tomoki Sekiyama <tomoki.sekiyama@hds.com>, lcapitulino@redhat.com
+Date: Fri, 12 Apr 2013 16:01:42 -0400
+Message-id: 20130412200142.20814.56875.stgit@corona
+Subject: [PATCH 01/11] configure: Support configuring c++ compiler
+
+Add configuration for c++ compiler (${corss_prefix}g++ as default) in
+configure and Makefiles.
+
+Currently, usage of c++ language is only for access to Windows VSS
+using COM+ services in qemu-guest-agent for Windows.
+
+Signed-off-by: Tomoki Sekiyama <tomoki.sekiyama@hds.com>
+---
+ configure |    6 ++++++
+ rules.mak |    9 ++++++++-
+ 2 files changed, 14 insertions(+), 1 deletion(-)
+
+diff --git a/configure b/configure
+index 1ed939a..b74572f 100755
+--- a/configure
++++ b/configure
+@@ -278,6 +278,7 @@ else
+   cc="${CC-${cross_prefix}gcc}"
+ fi
+ 
++cxx="${CXX-${cross_prefix}g++}"
+ ar="${AR-${cross_prefix}ar}"
+ as="${AS-${cross_prefix}as}"
+ cpp="${CPP-$cc -E}"
+@@ -615,6 +616,8 @@ for opt do
+   ;;
+   --host-cc=*) host_cc="$optarg"
+   ;;
++  --cxx=*) cxx="$optarg"
++  ;;
+   --objcc=*) objcc="$optarg"
+   ;;
+   --make=*) make="$optarg"
+@@ -1053,6 +1056,7 @@ echo "  --cross-prefix=PREFIX    use PREFIX for compile tools [$cross_prefix]"
+ echo "  --cc=CC                  use C compiler CC [$cc]"
+ echo "  --host-cc=CC             use C compiler CC [$host_cc] for code run at"
+ echo "                           build time"
++echo "  --cxx=CXX                use C++ compiler CXX [$cxx]"
+ echo "  --objcc=OBJCC            use Objective-C compiler OBJCC [$objcc]"
+ echo "  --extra-cflags=CFLAGS    append extra C compiler flags QEMU_CFLAGS"
+ echo "  --extra-ldflags=LDFLAGS  append extra linker flags LDFLAGS"
+@@ -3349,6 +3353,7 @@ fi
+ echo "Source path       $source_path"
+ echo "C compiler        $cc"
+ echo "Host C compiler   $host_cc"
++echo "C++ compiler      $cxx"
+ echo "Objective-C compiler $objcc"
+ echo "CFLAGS            $CFLAGS"
+ echo "QEMU_CFLAGS       $QEMU_CFLAGS"
+@@ -3860,6 +3865,7 @@ echo "PYTHON=$python" >> $config_host_mak
+ echo "CC=$cc" >> $config_host_mak
+ echo "CC_I386=$cc_i386" >> $config_host_mak
+ echo "HOST_CC=$host_cc" >> $config_host_mak
++echo "CXX=$cxx" >> $config_host_mak
+ echo "OBJCC=$objcc" >> $config_host_mak
+ echo "AR=$ar" >> $config_host_mak
+ echo "AS=$as" >> $config_host_mak
+diff --git a/rules.mak b/rules.mak
+index edc2552..9dfd23a 100644
+--- a/rules.mak
++++ b/rules.mak
+@@ -8,9 +8,13 @@ MAKEFLAGS += -rR
+ %.d:
+ %.h:
+ %.c:
++%.cpp:
+ %.m:
+ %.mak:
+ 
++# Flags for C++ compilation
++QEMU_CXXFLAGS = -D__STDC_LIMIT_MACROS $(filter-out -Wstrict-prototypes -Wmissing-prototypes -Wnested-externs -Wold-style-declaration -Wold-style-definition -Wredundant-decls, $(QEMU_CFLAGS))
++
+ # Flags for dependency generation
+ QEMU_DGFLAGS += -MMD -MP -MT $@ -MF $(*D)/$(*F).d
+ 
+@@ -45,6 +49,9 @@ endif
+ %.o: %.asm
+ 	$(call quiet-command,$(AS) $(ASFLAGS) -o $@ $<,"  AS    $(TARGET_DIR)$@")
+ 
++%.o: %.cpp
++	$(call quiet-command,$(CXX) $(QEMU_INCLUDES) $(QEMU_CXXFLAGS) $(QEMU_DGFLAGS) $(CFLAGS) -c -o $@ $<,"  CXX   $(TARGET_DIR)$@")
++
+ %.o: %.m
+ 	$(call quiet-command,$(OBJCC) $(QEMU_INCLUDES) $(QEMU_CFLAGS) $(QEMU_DGFLAGS) $(CFLAGS) -c -o $@ $<,"  OBJC  $(TARGET_DIR)$@")
+ 
+@@ -65,7 +72,7 @@ quiet-command = $(if $(V),$1,$(if $(2),@echo $2 && $1, @$1))
+ cc-option = $(if $(shell $(CC) $1 $2 -S -o /dev/null -xc /dev/null \
+               >/dev/null 2>&1 && echo OK), $2, $3)
+ 
+-VPATH_SUFFIXES = %.c %.h %.S %.m %.mak %.texi %.sh
++VPATH_SUFFIXES = %.c %.h %.S %.cpp %.m %.mak %.texi %.sh
+ set-vpath = $(if $1,$(foreach PATTERN,$(VPATH_SUFFIXES),$(eval vpath $(PATTERN) $1)))
+ 
+ # find-in-path
+
+

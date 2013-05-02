@@ -1,0 +1,235 @@
+From patches Mon Sep 17 00:00:00 2001
+From: mrhines@linux.vnet.ibm.com
+To: Paolo Bonzini <pbonzini@redhat.com>, qemu-devel@nongnu.org,
+ mrhines@linux.vnet.ibm.com
+Cc: Anthony Liguori <aliguori@us.ibm.com>, mst@redhat.com,
+ qemu-devel@nongnu.org, Michael R Hines <mrhines@us.ibm.com>,
+ Bulent Abali <abali@us.ibm.com>, owasserm@redhat.com, pbonzini@redhat.com,
+ Gokul B Kandiraju <gokul@us.ibm.com>
+Date: Sun, 17 Mar 2013 23:19:00 -0400
+Message-id: 1363576743-6146-8-git-send-email-mrhines@linux.vnet.ibm.com
+Subject: [PATCH 07/10] connection-establishment for RDMA
+
+From: "Michael R. Hines" <mrhines@us.ibm.com>
+
+
+Signed-off-by: Michael R. Hines <mrhines@us.ibm.com>
+---
+ migration-rdma.c |  205 ++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 205 insertions(+)
+ create mode 100644 migration-rdma.c
+
+diff --git a/migration-rdma.c b/migration-rdma.c
+new file mode 100644
+index 0000000..e1ea055
+--- /dev/null
++++ b/migration-rdma.c
+@@ -0,0 +1,205 @@
++/*
++ *  Copyright (C) 2013 Michael R. Hines <mrhines@us.ibm.com>
++ *  Copyright (C) 2013 Jiuxing Liu <jl@us.ibm.com>
++ *
++ *  This program is free software; you can redistribute it and/or modify
++ *  it under the terms of the GNU General Public License as published by
++ *  the Free Software Foundation; under version 2 of the License.
++ *
++ *  This program is distributed in the hope that it will be useful,
++ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
++ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ *  GNU General Public License for more details.
++ *
++ *  You should have received a copy of the GNU General Public License
++ *  along with this program; if not, see <http://www.gnu.org/licenses/>.
++ */
++#include "migration/rdma.h"
++#include "qemu-common.h"
++#include "migration/migration.h"
++#include "migration/qemu-file.h"
++#include <stdio.h>
++#include <sys/types.h>
++#include <sys/socket.h>
++#include <netdb.h>
++#include <arpa/inet.h>
++#include <string.h>
++
++//#define DEBUG_MIGRATION_RDMA
++
++#ifdef DEBUG_MIGRATION_RDMA
++#define DPRINTF(fmt, ...) \
++    do { printf("migration-rdma: " fmt, ## __VA_ARGS__); } while (0)
++#else
++#define DPRINTF(fmt, ...) \
++    do { } while (0)
++#endif
++
++static int rdma_accept_incoming_migration(RDMAData *rdma, Error **errp)
++{
++    int ret;
++
++    ret = qemu_rdma_migrate_listen(rdma, rdma->host, rdma->port);
++    if (ret) {
++        qemu_rdma_print("rdma migration: error listening!");
++        goto err_rdma_server_wait;
++    }
++
++    ret = qemu_rdma_alloc_qp(&rdma->rdma_ctx);
++    if (ret) {
++        qemu_rdma_print("rdma migration: error allocating qp!");
++        goto err_rdma_server_wait;
++    }
++
++    ret = qemu_rdma_migrate_accept(&rdma->rdma_ctx, NULL, NULL, NULL, 0);
++    if (ret) {
++        qemu_rdma_print("rdma migration: error accepting connection!");
++        goto err_rdma_server_wait;
++    }
++
++    ret = qemu_rdma_post_recv_qemu_file(rdma);
++    if (ret) {
++        qemu_rdma_print("rdma migration: error posting second qemu file recv!");
++        goto err_rdma_server_wait;
++    }
++
++    ret = qemu_rdma_post_send_remote_info(rdma);
++    if (ret) {
++        qemu_rdma_print("rdma migration: error sending remote info!");
++        goto err_rdma_server_wait;
++    }
++
++    ret = qemu_rdma_wait_for_wrid(rdma, RDMA_WRID_SEND_REMOTE_INFO);
++    if (ret < 0) {
++        qemu_rdma_print("rdma migration: polling remote info error!");
++        goto err_rdma_server_wait;
++    }
++
++    rdma->total_bytes = 0;
++    rdma->enabled = 1;
++    qemu_rdma_dump_gid("server_connect", rdma->rdma_ctx.cm_id);
++    return 0;
++
++err_rdma_server_wait:
++    qemu_rdma_cleanup(rdma);
++    return -1;
++
++}
++
++int rdma_start_incoming_migration(const char * host_port, Error **errp)
++{
++    RDMAData *rdma = g_malloc0(sizeof(RDMAData));
++    QEMUFile *f;
++    int ret;
++
++    if ((ret = qemu_rdma_data_init(rdma, host_port, errp)) < 0)
++        return ret; 
++
++    ret = qemu_rdma_server_init(rdma, NULL);
++
++    DPRINTF("Starting RDMA-based incoming migration\n");
++
++    if (!ret) {
++        DPRINTF("qemu_rdma_server_init success\n");
++        ret = qemu_rdma_server_prepare(rdma, NULL);
++
++        if (!ret) {
++            DPRINTF("qemu_rdma_server_prepare success\n");
++
++            ret = rdma_accept_incoming_migration(rdma, NULL);
++            if(!ret)
++                DPRINTF("qemu_rdma_accept_incoming_migration success\n");
++            f = qemu_fopen_rdma(rdma, "rb");
++            if (f == NULL) {
++                fprintf(stderr, "could not qemu_fopen RDMA\n");
++                ret = -EIO;
++            }
++
++            process_incoming_migration(f);
++        }
++    }
++
++    return ret;
++}
++
++void rdma_start_outgoing_migration(void *opaque, const char *host_port, Error **errp)
++{
++    RDMAData *rdma = g_malloc0(sizeof(RDMAData));
++    MigrationState *s = opaque;
++    int ret;
++
++    if (qemu_rdma_data_init(rdma, host_port, errp) < 0)
++        return; 
++
++    ret = qemu_rdma_client_init(rdma, NULL);
++    if(!ret) {
++        DPRINTF("qemu_rdma_client_init success\n");
++        ret = qemu_rdma_client_connect(rdma, NULL);
++
++        if(!ret) {
++            s->file = qemu_fopen_rdma(rdma, "wb");
++            DPRINTF("qemu_rdma_client_connect success\n");
++            migrate_fd_connect(s);
++            return;
++        }
++    }
++
++    migrate_fd_error(s);
++}
++
++size_t save_rdma_page(QEMUFile *f, ram_addr_t block_offset, ram_addr_t offset, int cont, size_t size)
++{
++    int ret;
++    size_t bytes_sent = 0;
++    ram_addr_t current_addr;
++    RDMAData * rdma = migrate_use_rdma(f);
++
++    current_addr = block_offset + offset;
++
++    /*
++     * Add this page to the current 'chunk'. If the chunk
++     * is full, an actual RDMA write will occur.
++     */
++    if ((ret = qemu_rdma_write(rdma, current_addr, size)) < 0) {
++        fprintf(stderr, "rdma migration: write error! %d\n", ret);
++        return ret;
++    }
++
++    /*
++     * Drain the Completion Queue if possible.
++     * If not, the end of the iteration will do this
++     * again to make sure we don't overflow the
++     * request queue. 
++     */
++    while (1) {
++        int ret = qemu_rdma_poll(rdma);
++        if (ret == RDMA_WRID_NONE) {
++            break;
++        }
++        if (ret < 0) {
++            fprintf(stderr, "rdma migration: polling error! %d\n", ret);
++            return ret;
++        }
++    }
++
++    bytes_sent += size;
++    return bytes_sent;
++}
++
++size_t qemu_rdma_fill(void * opaque, uint8_t *buf, int size)
++{
++    RDMAData * rdma = opaque;
++    size_t len = 0;
++
++    if(rdma->qemu_file_len) {
++        DPRINTF("RDMA %" PRId64 " of %d bytes already in buffer\n",
++	    rdma->qemu_file_len, size);
++
++        len = MIN(size, rdma->qemu_file_len);
++        memcpy(buf, rdma->qemu_file_curr, len);
++        rdma->qemu_file_curr += len;
++        rdma->qemu_file_len -= len;
++    }
++
++    return len;
++}
+-- 
+1.7.10.4
+

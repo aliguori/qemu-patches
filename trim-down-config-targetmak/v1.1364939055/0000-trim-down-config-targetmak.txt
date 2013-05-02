@@ -1,0 +1,32 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: 
+Date: Tue,  2 Apr 2013 16:44:15 +0200
+Message-id: 1364913860-25159-1-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 0/5] trim down config-target.mak
+
+configure puts a bunch of things in config-target.mak that do not
+really belong there; a better place is either config-host.mak or
+target-*/cpu.h.  This series cleans it up.
+
+Paolo Bonzini (5):
+  configure: move TARGET_*_ALIGNMENT to target-*/cpu.h
+  cpu: default TARGET_LONG_ALIGNMENT to TARGET_LONG_SIZE
+  configure: move CONFIG_QEMU_LDST_OPTIMIZATION to config-host.mak
+  configure: move common libraries to config-host.mak
+  configure: CONFIG_NO_XEN is duplicated
+
+ Makefile.target         |  2 +-
+ configure               | 43 ++++++++++++-------------------------------
+ hw/xen.h                |  2 +-
+ include/exec/cpu-defs.h | 13 +++++++++++++
+ target-arm/cpu.h        |  1 +
+ target-m68k/cpu.h       |  3 +++
+ target-mips/mips-defs.h |  1 +
+ 7 files changed, 32 insertions(+), 33 deletions(-)
+
+-- 
+1.8.1.4
+
+

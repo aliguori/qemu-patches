@@ -1,0 +1,70 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Tomoki Sekiyama <tsekiyam@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: mdroth@linux.vnet.ibm.com, pbonzini@redhat.com, vrozenfe@redhat.com,
+ Tomoki Sekiyama <tomoki.sekiyama@hds.com>, lcapitulino@redhat.com
+Date: Fri, 12 Apr 2013 16:01:46 -0400
+Message-id: 20130412200145.20814.83355.stgit@corona
+Subject: [PATCH 02/11] Fix errors and warnings while compiling with c++
+ compilier
+
+Add C++ keywords to avoid errors in compiling with c++ compiler.
+This also renames class member of PciDeviceInfo to q_class.
+
+Signed-off-by: Tomoki Sekiyama <tomoki.sekiyama@hds.com>
+---
+ hmp.c           |    2 +-
+ hw/pci/pci.c    |    2 +-
+ scripts/qapi.py |    9 ++++++++-
+ 3 files changed, 10 insertions(+), 3 deletions(-)
+
+diff --git a/hmp.c b/hmp.c
+index dbe9b90..9fa89a4 100644
+--- a/hmp.c
++++ b/hmp.c
+@@ -484,7 +484,7 @@ static void hmp_info_pci_device(Monitor *mon, const PciDeviceInfo *dev)
+     if (dev->class_info.has_desc) {
+         monitor_printf(mon, "%s", dev->class_info.desc);
+     } else {
+-        monitor_printf(mon, "Class %04" PRId64, dev->class_info.class);
++        monitor_printf(mon, "Class %04" PRId64, dev->class_info.q_class);
+     }
+ 
+     monitor_printf(mon, ": PCI device %04" PRIx64 ":%04" PRIx64 "\n",
+diff --git a/hw/pci/pci.c b/hw/pci/pci.c
+index d5257ed..a3eaf47 100644
+--- a/hw/pci/pci.c
++++ b/hw/pci/pci.c
+@@ -1460,7 +1460,7 @@ static PciDeviceInfo *qmp_query_pci_device(PCIDevice *dev, PCIBus *bus,
+     info->function = PCI_FUNC(dev->devfn);
+ 
+     class = pci_get_word(dev->config + PCI_CLASS_DEVICE);
+-    info->class_info.class = class;
++    info->class_info.q_class = class;
+     desc = get_class_desc(class);
+     if (desc->desc) {
+         info->class_info.has_desc = true;
+diff --git a/scripts/qapi.py b/scripts/qapi.py
+index afc5f32..b174acb 100644
+--- a/scripts/qapi.py
++++ b/scripts/qapi.py
+@@ -156,9 +156,16 @@ def c_var(name, protect=True):
+     # GCC http://gcc.gnu.org/onlinedocs/gcc-4.7.1/gcc/C-Extensions.html
+     # excluding _.*
+     gcc_words = set(['asm', 'typeof'])
++    # C++ ISO/IEC 14882:2003 2.11
++    cpp_words = set(['bool', 'catch', 'class', 'const_cast', 'delete',
++                     'dynamic_cast', 'explicit', 'false', 'friend', 'mutable',
++                     'namespace', 'new', 'operator', 'private', 'protected',
++                     'public', 'reinterpret_cast', 'static_cast', 'template',
++                     'this', 'throw', 'true', 'try', 'typeid', 'typename',
++                     'using', 'virtual', 'wchar_t'])
+     # namespace pollution:
+     polluted_words = set(['unix'])
+-    if protect and (name in c89_words | c99_words | c11_words | gcc_words | polluted_words):
++    if protect and (name in c89_words | c99_words | c11_words | gcc_words | cpp_words | polluted_words):
+         return "q_" + name
+     return name.replace('-', '_').lstrip("*")
+ 
+
+

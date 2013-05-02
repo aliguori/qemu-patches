@@ -1,0 +1,241 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Jean-Christophe DUBOIS <jcd@tribudubois.net>
+To: qemu-devel@nongnu.org
+Cc: peter.maydell@linaro.org, peter.chubb@nicta.com.au,
+ Jean-Christophe DUBOIS <jcd@tribudubois.net>, philipo@ok-labs.com
+Date: Fri, 19 Apr 2013 00:07:27 +0200
+Message-id: 1366322847-12751-1-git-send-email-jcd@tribudubois.net
+Subject: [PATCH 1/1] Add i.MX25 3DS evaluation board support
+
+This is an initial port of the Freescale i.MX25 processor.
+
+This allow a minimally configured linux kernel to boot on Qemu.
+
+Signed-off-by: Jean-Christophe DUBOIS <jcd@tribudubois.net>
+---
+ hw/arm/Makefile.objs |    1 +
+ hw/arm/imx25_3ds.c   |  199 ++++++++++++++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 200 insertions(+)
+ create mode 100644 hw/arm/imx25_3ds.c
+
+diff --git a/hw/arm/Makefile.objs b/hw/arm/Makefile.objs
+index 9e3a06f..2f4280d 100644
+--- a/hw/arm/Makefile.objs
++++ b/hw/arm/Makefile.objs
+@@ -2,6 +2,7 @@ obj-y += boot.o collie.o exynos4_boards.o gumstix.o highbank.o
+ obj-y += integratorcp.o kzm.o mainstone.o musicpal.o nseries.o
+ obj-y += omap_sx1.o palm.o pic_cpu.o realview.o spitz.o stellaris.o
+ obj-y += tosa.o versatilepb.o vexpress.o xilinx_zynq.o z2.o
++obj-y += imx25_3ds.o
+ 
+ obj-y += armv7m.o exynos4210.o pxa2xx.o pxa2xx_gpio.o pxa2xx_pic.o
+ obj-y += omap1.o omap2.o strongarm.o
+diff --git a/hw/arm/imx25_3ds.c b/hw/arm/imx25_3ds.c
+new file mode 100644
+index 0000000..6ba0f9c
+--- /dev/null
++++ b/hw/arm/imx25_3ds.c
+@@ -0,0 +1,199 @@
++/*
++ * Copyright (c) 2013 Jean-Christophe Dubois
++ *
++ * 3Dstack Board System emulation.
++ *
++ * Based on hw/arm/kzm.c
++ *
++ * Copyright (c) 2008 OKL and 2011 NICTA
++ * Written by Hans at OK-Labs
++ * Updated by Peter Chubb.
++ *
++ * This code is licensed under the GPL, version 2 or later.
++ * See the file `COPYING' in the top level directory.
++ *
++ * It (partially) emulates a i.MX25 3D-Stack PDK board
++ */
++
++#include "hw/sysbus.h"
++#include "exec/address-spaces.h"
++#include "hw/hw.h"
++#include "hw/arm.h"
++#include "hw/arm/devices.h"
++#include "net/net.h"
++#include "sysemu/sysemu.h"
++#include "hw/boards.h"
++#include "hw/char/serial.h"
++#include "hw/arm/imx.h"
++
++    /* Memory map for 3D-Stack Emulation Baseboard:
++     * 0x00000000-0x00003fff 16k secure ROM       IGNORED
++     * 0x00004000-0x00403fff Reserved             IGNORED
++     * 0x00404000-0x00408fff ROM                  IGNORED
++     * 0x00409000-0x0fffffff Reserved             IGNORED
++     * 0x10000000-0x1fffffff Reserved             IGNORED
++     * 0x20000000-0x2fffffff Reserved             IGNORED
++     * 0x30000000-0x3fffffff Reserved             IGNORED
++     * 0x40000000-0x43efffff Reserved             IGNORED
++     * 0x43f00000-0x6fffffff I.MX25 Internal Register Space
++     *   0x43f00000 IO_AREA0
++     *   0x43f90000 UART1                         EMULATED
++     *   0x43f94000 UART2                         EMULATED
++     *   0x43fb0000 UART4                         IGNORED
++     *   0x43fb4000 UART5                         IGNORED
++     *   0x5000c000 UART3                         IGNORED
++     *   0x53f80000 CCM                           EMULATED
++     *   0x53f84000 GPT 4                         EMULATED
++     *   0x53f88000 GPT 3                         EMULATED
++     *   0x53f8c000 GPT 2                         EMULATED
++     *   0x53f90000 GPT 1                         EMULATED
++     *   0x53f94000 PIT 1                         EMULATED
++     *   0x53f98000 PIT 2                         EMULATED
++     *   0x68000000 ASIC                          EMULATED
++     * 0x78000000-0x7801ffff SRAM                 EMULATED
++     * 0x78020000-0x7fffffff SRAM Aliasing        EMULATED
++     * 0x80000000-0x87ffffff RAM                  EMULATED
++     * 0x88000000-0x8fffffff RAM Aliasing         EMULATED
++     * 0x90000000-0x9fffffff RAM                  IGNORED
++     * 0xa0000000-0xa7ffffff Flash                IGNORED
++     * 0xa8000000-0xafffffff Flash                IGNORED
++     * 0xb0000000-0xb1ffffff SRAM                 IGNORED
++     * 0xb2000000-0xb3ffffff SRAM                 IGNORED
++     * 0xb4000000-0xb5ffffff CS4                  IGNORED
++     * 0xb6000000-0xb8000fff Reserved             IGNORED
++     * 0xb8001000-0xb8001fff SDRM CTRL reg        IGNORED
++     * 0xb8002000-0xb8002fff WEIM CTRL reg        IGNORED
++     * 0xb8003000-0xb8003fff M3IF CTRL reg        IGNORED
++     * 0xb8004000-0xb8004fff EMI CTRL reg         IGNORED
++     * 0xb8005000-0xbaffffff Reserved             IGNORED
++     * 0xbb000000-0xbb000fff NAND flash area buf  IGNORED
++     * 0xbb001000-0xbb0011ff NAND flash reserved  IGNORED
++     * 0xbb001200-0xbb001dff Reserved             IGNORED
++     * 0xbb001e00-0xbb001fff NAN flash CTRL reg   IGNORED
++     * 0xbb012000-0xbfffffff Reserved             IGNORED
++     * 0xc0000000-0xffffffff Reserved             IGNORED
++     */
++
++#define IMX25_SRAM_ADDRESS	(0x78000000)
++#define IMX25_SRAMSIZE		(128*1024)
++#define IMX25_CS_SRAMSIZE	(128*1024*1024)
++#define IMX25_3DS_ADDRESS	(0x80000000)
++#define IMX25_CS_RAMSIZE	(256*1024*1024)
++
++static struct arm_boot_info imx25_3ds_binfo = {
++    .loader_start = IMX25_3DS_ADDRESS,
++    .board_id = 1771,
++};
++
++static void imx25_3ds_init(QEMUMachineInitArgs *args)
++{
++    ram_addr_t ram_size = args->ram_size;
++    const char *cpu_model = args->cpu_model;
++    const char *kernel_filename = args->kernel_filename;
++    const char *kernel_cmdline = args->kernel_cmdline;
++    const char *initrd_filename = args->initrd_filename;
++    ARMCPU *cpu;
++    MemoryRegion *address_space_mem = get_system_memory();
++    MemoryRegion *ram = g_new(MemoryRegion, 1);
++    MemoryRegion *sram = g_new(MemoryRegion, 1);
++    qemu_irq *cpu_pic;
++    DeviceState *dev;
++    DeviceState *ccm;
++
++    if (!cpu_model) {
++        cpu_model = "arm926";
++    }
++
++    cpu = cpu_arm_init(cpu_model);
++    if (!cpu) {
++        fprintf(stderr, "Unable to find CPU definition\n");
++        exit(1);
++    }
++
++    /* On a real system, the first 16k is a `secure boot rom' */
++
++    if (ram_size > (2 * IMX25_CS_RAMSIZE)) {
++        fprintf(stderr, "i.MX25 can support only up to 512 MB\n");
++        exit(1);
++    }
++
++    /* create our main memory */
++    memory_region_init_ram(ram, "imx25.ram", ram_size < IMX25_CS_RAMSIZE ? 
++                                             ram_size : IMX25_CS_RAMSIZE);
++    vmstate_register_ram_global(ram);
++    memory_region_add_subregion(address_space_mem, IMX25_3DS_ADDRESS, ram);
++
++    if (ram_size < IMX25_CS_RAMSIZE) {
++      MemoryRegion *ram_alias = g_new(MemoryRegion, 1);
++      memory_region_init_alias(ram_alias, "ram.alias", ram, 0,
++                               IMX25_CS_RAMSIZE - ram_size);
++      memory_region_add_subregion(address_space_mem,
++                                  IMX25_3DS_ADDRESS + ram_size,
++                                  ram_alias);
++    } else if (ram_size > IMX25_CS_RAMSIZE) {
++      MemoryRegion *ram2 = g_new(MemoryRegion, 1);
++      memory_region_init_ram(ram2, "imx25.ram2", ram_size - IMX25_CS_RAMSIZE);
++      vmstate_register_ram_global(ram2);
++      memory_region_add_subregion(address_space_mem, 
++                                  IMX25_3DS_ADDRESS + IMX25_CS_RAMSIZE, ram2);
++    }
++
++    /* create the sram area */
++    memory_region_init_ram(sram, "imx25.sram", IMX25_SRAMSIZE);
++    vmstate_register_ram_global(sram);
++    memory_region_add_subregion(address_space_mem, IMX25_SRAM_ADDRESS, sram);
++
++    MemoryRegion *sram_alias = g_new(MemoryRegion, 1);
++    memory_region_init_alias(sram_alias, "sram.alias", sram, 0,
++                             IMX25_CS_SRAMSIZE - IMX25_SRAMSIZE);
++    memory_region_add_subregion(address_space_mem,
++                                IMX25_SRAM_ADDRESS + IMX25_SRAMSIZE,
++                                sram_alias);
++
++    /* add the PIC */
++    cpu_pic = arm_pic_init_cpu(cpu);
++    dev = sysbus_create_varargs("imx_avic", 0x68000000,
++                                cpu_pic[ARM_PIC_CPU_IRQ],
++                                cpu_pic[ARM_PIC_CPU_FIQ], NULL);
++
++    /* add some serial lines */
++    imx_serial_create(0, 0x43f90000, qdev_get_gpio_in(dev, 45));
++    imx_serial_create(1, 0x43f94000, qdev_get_gpio_in(dev, 32));
++    // Qemu does not support more than 4 serial ports. Too bad.
++    //imx_serial_create(3, 0x5000c000, qdev_get_gpio_in(dev, 18));
++    //imx_serial_create(4, 0x43fb0000, qdev_get_gpio_in(dev, 46));
++    //imx_serial_create(5, 0x43fb4000, qdev_get_gpio_in(dev, 47));
++
++    ccm = sysbus_create_simple("imx_ccm", 0x53f80000, NULL);
++
++    /* add gpt timers */
++    imx_timerg_create(0x53f84000, qdev_get_gpio_in(dev, 1), ccm);
++    imx_timerg_create(0x53f88000, qdev_get_gpio_in(dev, 29), ccm);
++    imx_timerg_create(0x53f8c000, qdev_get_gpio_in(dev, 53), ccm);
++    imx_timerg_create(0x53f90000, qdev_get_gpio_in(dev, 54), ccm);
++
++    /* add epit timers */
++    imx_timerp_create(0x53f94000, qdev_get_gpio_in(dev, 28), ccm);
++    imx_timerp_create(0x53f98000, qdev_get_gpio_in(dev, 27), ccm);
++
++    imx25_3ds_binfo.ram_size = ram_size;
++    imx25_3ds_binfo.kernel_filename = kernel_filename;
++    imx25_3ds_binfo.kernel_cmdline = kernel_cmdline;
++    imx25_3ds_binfo.initrd_filename = initrd_filename;
++    imx25_3ds_binfo.nb_cpus = 1;
++    arm_load_kernel(cpu, &imx25_3ds_binfo);
++}
++
++static QEMUMachine imx25_3ds_machine = {
++    .name = "imx25_3ds",
++    .desc = "ARM i.MX25 PDK board (ARM926)",
++    .init = imx25_3ds_init,
++    DEFAULT_MACHINE_OPTIONS,
++};
++
++static void imx25_3ds_machine_init(void)
++{
++    qemu_register_machine(&imx25_3ds_machine);
++}
++
++machine_init(imx25_3ds_machine_init)
+-- 
+1.7.10.4
+
+

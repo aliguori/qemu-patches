@@ -1,0 +1,95 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Laszlo Ersek <lersek@redhat.com>
+To: Laszlo Ersek <lersek@redhat.com>, Anthony Liguori <anthony@codemonkey.ws>,
+ qemu-devel@nongnu.org, mst@redhat.com
+Cc: "Michael S. Tsirkin" <mst@redhat.com>
+Date: Thu, 18 Apr 2013 22:22:17 +0200
+Message-id: 1366316544-1428-1-git-send-email-lersek@redhat.com
+Subject: [PATCH 0/7] publish etc/acpi/APIC in fw_cfg
+
+v4:
+- patches 1-6 are unchanged and carry Michael's ACK,
+- patch 7 is rendered dependent on a new configure switch (default off)
+  [Michael Tsirkin].
+
+v3:
+- rebased to current master 24a6e7f4,
+- added Michael's S-o-b to 6/7 [Eric Blake],
+- added Dave Frodin's relicensing ACK to 7/7, originally sent to Michael
+  in private [Michael Tsirkin],
+- slightly reworded 7/7's commit message where it credits Michael's
+  prototype [Eric Blake].
+
+v2:
+- address (1) in
+  <http://thread.gmane.org/gmane.comp.emulators.qemu/206146/focus=206195>:
+
+  - rebase to Paolo's recent series
+    <http://thread.gmane.org/gmane.comp.emulators.qemu/206196/focus=206278>,
+
+  - patch 2 is new, fixes style of function parameter references in a
+    comment [mst],
+
+  - patch 6 is new, moves a macro definition [mst],
+
+  - patch 7 should be structured more logically now, plus the commit
+    message has grown some bits related to licensing [mst].
+    acpi_table_fill_hdr() is kept distinct from the -acpitable switch's
+    implementation on purpose, similarly to pc_acpi_install() in v1.
+
+- Tested APIC / DSDT / RSDT against contents saved from v1.
+
+v1 blurb:
+
+  This series exports the MADT (APIC) ACPI table under the new
+  "etc/acpi/APIC" fw_cfg file. I sought to follow the requirements set
+  forth in [1], the new table is only visible in the patched/patched
+  case. I cross-tested { master, patched } qemu with { master, patched }
+  seabios (the APIC, DSDT and RSDT tables) using guest acpidump and
+  dmesg.
+
+  The -acpitable command line option is purposely ignored based on the
+  last paragraph of [2]; the user isn't supposed to pass APIC with that
+  option.
+
+  checkpatch.pl complains a little but (as last time) it's a false
+  alarm.
+
+  The series is bisectable.
+
+  [1] http://thread.gmane.org/gmane.comp.emulators.qemu/202005/focus=202072
+  [2] http://thread.gmane.org/gmane.comp.bios.coreboot.seabios/5960/focus=6008
+
+Laszlo Ersek (6):
+  refer to FWCfgState explicitly
+  acpi_table_install(): fix funcparam formatting in leading comment
+  hw/acpi: extract standard table headers as a standalone structure
+  hw/acpi: export default ACPI headers using the type just introduced
+  hw/acpi: export acpi_checksum()
+  hw/i386: build ACPI MADT (APIC) for fw_cfg clients
+
+Michael S. Tsirkin (1):
+  hw/i386/pc.c: move IO_APIC_DEFAULT_ADDRESS to include/hw/i386/apic.h
+
+ configure              |   12 ++++
+ hw/i386/Makefile.objs  |    1 +
+ hw/i386/acpi.h         |    9 +++
+ hw/i386/multiboot.h    |    4 +-
+ include/hw/acpi/acpi.h |   15 +++++
+ include/hw/i386/apic.h |    2 +
+ include/hw/i386/pc.h   |   19 +++---
+ include/hw/loader.h    |    3 +-
+ hw/acpi/core.c         |   91 ++++++++++++++-------------
+ hw/acpi/piix4.c        |    2 +-
+ hw/core/loader.c       |    2 +-
+ hw/i386/acpi.c         |  159 ++++++++++++++++++++++++++++++++++++++++++++++++
+ hw/i386/multiboot.c    |    2 +-
+ hw/i386/pc.c           |   49 +++++++++++----
+ hw/i386/pc_piix.c      |    2 +-
+ hw/sparc/sun4m.c       |    6 +-
+ hw/sparc64/sun4u.c     |    2 +-
+ 17 files changed, 303 insertions(+), 77 deletions(-)
+ create mode 100644 hw/i386/acpi.h
+ create mode 100644 hw/i386/acpi.c
+
+

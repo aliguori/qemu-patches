@@ -1,0 +1,43 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Dmitry Fleytman <dmitry@daynix.com>
+To: Dmitry Fleytman <dmitry@daynix.com>, qemu-devel@nongnu.org,
+ virtualization@lists.linux-foundation.org
+Cc: Ronen Hod <rhod@redhat.com>, rusty@rustcorp.com.au, qemu-devel@nongnu.org,
+ "Michael S. Tsirkin" <mst@redhat.com>,
+ virtualization@lists.linux-foundation.org, Dmitry Fleytman <dmitry@daynix.com>,
+ Yan Vugenfirer <yan@daynix.com>, Dmitry Fleytman <dfleytma@redhat.com>
+Date: Tue,  2 Apr 2013 14:38:58 +0300
+Message-id: 1364902740-24948-1-git-send-email-dmitry@daynix.com
+Subject: [PATCH 0/2] virtio-spec/net: dynamic network offloads configuration
+
+From: Dmitry Fleytman <dfleytma@redhat.com>
+
+V3 changes:
+  1. Compat macro added
+  2. Feature name beautification
+
+V2 changes:
+  1. _GUEST_ added to command and feature names
+  2. Live migration logic fixed
+
+Reported-by: Michael S. Tsirkin <mst@redhat.com>
+
+One of recently introduced Windows features (RSC)
+requires network driver to be able to enable and disable
+HW LRO offload on the fly without device reinitialization.
+
+Current Virtio specification doesn't support this requirement.
+The solution proposed by following spec patch is to add
+a new control command for this purpose.
+
+The same solution may be used in Linux driver for ethtool interface
+implementation.
+
+Patch for QEMU mainline that implements this specification change
+attached as well.
+
+Acked-by: Michael S. Tsirkin <mst@redhat.com>
+-- 
+1.8.1.4
+
+

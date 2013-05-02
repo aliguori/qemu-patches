@@ -1,0 +1,25 @@
+From patches Mon Sep 17 00:00:00 2001
+From: liguang <lig.fnst@cn.fujitsu.com>
+To: peter.maydell@linaro.org, qemu-devel@nongnu.org
+Cc: blauwirbel@gmail.com, pbonzini@redhat.com,
+ liguang <lig.fnst@cn.fujitsu.com>, afaerber@suse.de,
+ Anthony Liguori <aliguori@us.ibm.com>
+Date: Fri, 19 Apr 2013 10:52:19 +0800
+Message-id: 1366339945-17151-1-git-send-email-lig.fnst@cn.fujitsu.com
+Subject: [PATCH 0/6] target-i386:do some cleanups
+
+here are some cleanups
+
+Li Guang (6)
+	 target-i386/seg_helper: replace env->eip with EIP
+	 target-i386/smm_helper: replace env->eip with EIP
+	 target-i386/svm_helper: replace env->eip with EIP
+	 target-i386/svm_helper: remove redundant assignment
+	 target-i386/seg_helper: refactor 4 helper functions
+	 target-i386/seg_helper: define names for code/data segment types
+
+target-i386/seg_helper.c | 296 +++++++++++++++++++++++-----------------------
+target-i386/smm_helper.c | 10 +++++-----
+target-i386/svm_helper.c | 6 +++---
+3 files changed, 139 insertions(+), 174 deletions(-)
+

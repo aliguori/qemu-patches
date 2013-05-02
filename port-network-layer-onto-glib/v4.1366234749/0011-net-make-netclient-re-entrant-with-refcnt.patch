@@ -1,0 +1,364 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Liu Ping Fan <qemulist@gmail.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <anthony@codemonkey.ws>,
+ Paolo Bonzini <pbonzini@redhat.com>, Jan Kiszka <jan.kiszka@siemens.com>,
+ Stefan Hajnoczi <stefanha@redhat.com>, mdroth <mdroth@linux.vnet.ibm.com>
+Date: Wed, 17 Apr 2013 16:39:20 +0800
+Message-id: 1366187964-14265-12-git-send-email-qemulist@gmail.com
+Subject: [PATCH 11/15] net: make netclient re-entrant with refcnt
+
+From: Liu Ping Fan <pingfank@linux.vnet.ibm.com>
+
+With refcnt, NetClientState's user can run agaist deleter.
+
+Signed-off-by: Liu Ping Fan <pingfank@linux.vnet.ibm.com>
+---
+ hw/qdev-properties-system.c |   14 +++++++++++++
+ include/net/net.h           |    3 ++
+ net/hub.c                   |    3 ++
+ net/net.c                   |   46 ++++++++++++++++++++++++++++++++++++++++--
+ net/slirp.c                 |    3 +-
+ 5 files changed, 65 insertions(+), 4 deletions(-)
+
+diff --git a/hw/qdev-properties-system.c b/hw/qdev-properties-system.c
+index ce3af22..14c6d49 100644
+--- a/hw/qdev-properties-system.c
++++ b/hw/qdev-properties-system.c
+@@ -301,6 +301,7 @@ static void set_vlan(Object *obj, Visitor *v, void *opaque,
+         return;
+     }
+ 
++    /* inc ref, released when unset property */
+     hubport = net_hub_port_find(id);
+     if (!hubport) {
+         error_set(errp, QERR_INVALID_PARAMETER_VALUE,
+@@ -310,11 +311,24 @@ static void set_vlan(Object *obj, Visitor *v, void *opaque,
+     *ptr = hubport;
+ }
+ 
++static void release_vlan(Object *obj, const char *name, void *opaque)
++{
++    DeviceState *dev = DEVICE(obj);
++    Property *prop = opaque;
++    NICPeers *peers_ptr = qdev_get_prop_ptr(dev, prop);
++    NetClientState **ptr = &peers_ptr->ncs[0];
++
++    if (*ptr) {
++        netclient_unref(*ptr);
++    }
++}
++
+ PropertyInfo qdev_prop_vlan = {
+     .name  = "vlan",
+     .print = print_vlan,
+     .get   = get_vlan,
+     .set   = set_vlan,
++    .release = release_vlan,
+ };
+ 
+ int qdev_prop_set_drive(DeviceState *dev, const char *name,
+diff --git a/include/net/net.h b/include/net/net.h
+index 54f91ea..ef4137d 100644
+--- a/include/net/net.h
++++ b/include/net/net.h
+@@ -61,6 +61,7 @@ typedef struct NetClientInfo {
+ } NetClientInfo;
+ 
+ struct NetClientState {
++    int ref;
+     NetClientInfo *info;
+     int link_down;
+     QTAILQ_ENTRY(NetClientState) next;
+@@ -89,6 +90,8 @@ typedef struct NICState {
+ NetClientState *qemu_find_netdev(const char *id);
+ int qemu_find_net_clients_except(const char *id, NetClientState **ncs,
+                                  NetClientOptionsKind type, int max);
++void netclient_ref(NetClientState *nc);
++void netclient_unref(NetClientState *nc);
+ NetClientState *qemu_new_net_client(NetClientInfo *info,
+                                     NetClientState *peer,
+                                     const char *model,
+diff --git a/net/hub.c b/net/hub.c
+index 812a6dc..2970f8e 100644
+--- a/net/hub.c
++++ b/net/hub.c
+@@ -212,6 +212,7 @@ NetClientState *net_hub_find_client_by_name(int hub_id, const char *name)
+                 peer = port->nc.peer;
+ 
+                 if (peer && strcmp(peer->name, name) == 0) {
++                    netclient_ref(peer);
+                     qemu_mutex_unlock(&hub->ports_lock);
+                     return peer;
+                 }
+@@ -237,6 +238,7 @@ NetClientState *net_hub_port_find(int hub_id)
+             QLIST_FOREACH(port, &hub->ports, next) {
+                 nc = port->nc.peer;
+                 if (!nc) {
++                    netclient_ref(&port->nc);
+                     qemu_mutex_unlock(&hub->ports_lock);
+                     return &(port->nc);
+                 }
+@@ -247,6 +249,7 @@ NetClientState *net_hub_port_find(int hub_id)
+     }
+ 
+     nc = net_hub_add_port(hub_id, NULL);
++    netclient_ref(nc);
+     return nc;
+ }
+ 
+diff --git a/net/net.c b/net/net.c
+index 7619762..ac859ff 100644
+--- a/net/net.c
++++ b/net/net.c
+@@ -45,6 +45,7 @@
+ # define CONFIG_NET_BRIDGE
+ #endif
+ 
++static QemuMutex net_clients_lock;
+ static QTAILQ_HEAD(, NetClientState) net_clients;
+ 
+ int default_net = 1;
+@@ -166,6 +167,7 @@ static char *assign_name(NetClientState *nc1, const char *model)
+     char buf[256];
+     int id = 0;
+ 
++    qemu_mutex_lock(&net_clients_lock);
+     QTAILQ_FOREACH(nc, &net_clients, next) {
+         if (nc == nc1) {
+             continue;
+@@ -176,6 +178,7 @@ static char *assign_name(NetClientState *nc1, const char *model)
+             id++;
+         }
+     }
++    qemu_mutex_unlock(&net_clients_lock);
+ 
+     snprintf(buf, sizeof(buf), "%s.%d", model, id);
+ 
+@@ -206,9 +209,13 @@ static void qemu_net_client_setup(NetClientState *nc,
+         assert(!peer->peer);
+         nc->peer = peer;
+         peer->peer = nc;
++        netclient_ref(peer);
++        netclient_ref(nc);
+     }
+     qemu_mutex_init(&nc->peer_lock);
++    qemu_mutex_lock(&net_clients_lock);
+     QTAILQ_INSERT_TAIL(&net_clients, nc, next);
++    qemu_mutex_unlock(&net_clients_lock);
+ 
+     nc->send_queue = qemu_new_net_queue(nc);
+     nc->destructor = destructor;
+@@ -224,6 +231,7 @@ NetClientState *qemu_new_net_client(NetClientInfo *info,
+     assert(info->size >= sizeof(NetClientState));
+ 
+     nc = g_malloc0(info->size);
++    netclient_ref(nc);
+     qemu_net_client_setup(nc, info, peer, model, name,
+                           qemu_net_client_destructor);
+ 
+@@ -284,7 +292,9 @@ void *qemu_get_nic_opaque(NetClientState *nc)
+ 
+ static void qemu_cleanup_net_client(NetClientState *nc)
+ {
++    qemu_mutex_lock(&net_clients_lock);
+     QTAILQ_REMOVE(&net_clients, nc, next);
++    qemu_mutex_unlock(&net_clients_lock);
+ 
+     if (nc->info->cleanup) {
+         nc->info->cleanup(nc);
+@@ -306,6 +316,18 @@ static void qemu_free_net_client(NetClientState *nc)
+     }
+ }
+ 
++void netclient_ref(NetClientState *nc)
++{
++    __sync_add_and_fetch(&nc->ref, 1);
++}
++
++void netclient_unref(NetClientState *nc)
++{
++    if (__sync_sub_and_fetch(&nc->ref, 1) == 0) {
++        qemu_free_net_client(nc);
++    }
++}
++
+ /* elimate the reference and sync with exit of rx/tx action.
+  * And flush out peer's queue.
+  */
+@@ -334,8 +356,10 @@ static void qemu_net_client_detach_flush(NetClientState *nc)
+     nc->peer = NULL;
+     if (peer) {
+         qemu_net_queue_purge(peer->send_queue, nc);
++        netclient_unref(peer);
+     }
+     qemu_mutex_unlock(&nc->peer_lock);
++    netclient_unref(nc);
+ }
+ 
+ void qemu_del_net_client(NetClientState *nc)
+@@ -381,7 +405,7 @@ void qemu_del_net_client(NetClientState *nc)
+     for (i = 0; i < queues; i++) {
+         qemu_net_client_detach_flush(ncs[i]);
+         qemu_cleanup_net_client(ncs[i]);
+-        qemu_free_net_client(ncs[i]);
++        netclient_unref(ncs[i]);
+     }
+ }
+ 
+@@ -392,7 +416,7 @@ void qemu_del_nic(NICState *nic)
+     /* If this is a peer NIC and peer has already been deleted, free it now. */
+     if (nic->peer_deleted) {
+         for (i = 0; i < queues; i++) {
+-            qemu_free_net_client(nic->pending_peer[i]);
++            netclient_unref(nic->pending_peer[i]);
+         }
+     }
+ 
+@@ -401,7 +425,7 @@ void qemu_del_nic(NICState *nic)
+ 
+         qemu_net_client_detach_flush(nc);
+         qemu_cleanup_net_client(nc);
+-        qemu_free_net_client(nc);
++        netclient_unref(nc);
+     }
+ 
+     g_free(nic->pending_peer);
+@@ -412,6 +436,7 @@ void qemu_foreach_nic(qemu_nic_foreach func, void *opaque)
+ {
+     NetClientState *nc;
+ 
++    qemu_mutex_lock(&net_clients_lock);
+     QTAILQ_FOREACH(nc, &net_clients, next) {
+         if (nc->info->type == NET_CLIENT_OPTIONS_KIND_NIC) {
+             if (nc->queue_index == 0) {
+@@ -419,6 +444,7 @@ void qemu_foreach_nic(qemu_nic_foreach func, void *opaque)
+             }
+         }
+     }
++    qemu_mutex_unlock(&net_clients_lock);
+ }
+ 
+ int qemu_can_send_packet_nolock(NetClientState *sender)
+@@ -633,13 +659,17 @@ NetClientState *qemu_find_netdev(const char *id)
+ {
+     NetClientState *nc;
+ 
++    qemu_mutex_lock(&net_clients_lock);
+     QTAILQ_FOREACH(nc, &net_clients, next) {
+         if (nc->info->type == NET_CLIENT_OPTIONS_KIND_NIC)
+             continue;
+         if (!strcmp(nc->name, id)) {
++            netclient_ref(nc);
++            qemu_mutex_unlock(&net_clients_lock);
+             return nc;
+         }
+     }
++    qemu_mutex_unlock(&net_clients_lock);
+ 
+     return NULL;
+ }
+@@ -650,6 +680,7 @@ int qemu_find_net_clients_except(const char *id, NetClientState **ncs,
+     NetClientState *nc;
+     int ret = 0;
+ 
++    qemu_mutex_lock(&net_clients_lock);
+     QTAILQ_FOREACH(nc, &net_clients, next) {
+         if (nc->info->type == type) {
+             continue;
+@@ -661,6 +692,7 @@ int qemu_find_net_clients_except(const char *id, NetClientState **ncs,
+             ret++;
+         }
+     }
++    qemu_mutex_unlock(&net_clients_lock);
+ 
+     return ret;
+ }
+@@ -969,6 +1001,7 @@ void net_host_device_remove(Monitor *mon, const QDict *qdict)
+         return;
+     }
+     qemu_del_net_client(nc);
++    netclient_unref(nc);
+ }
+ 
+ void netdev_add(QemuOpts *opts, Error **errp)
+@@ -1024,6 +1057,7 @@ void qmp_netdev_del(const char *id, Error **errp)
+     }
+ 
+     qemu_del_net_client(nc);
++    netclient_unref(nc);
+     qemu_opts_del(opts);
+ }
+ 
+@@ -1042,6 +1076,7 @@ void do_info_network(Monitor *mon, const QDict *qdict)
+ 
+     net_hub_info(mon);
+ 
++    qemu_mutex_lock(&net_clients_lock);
+     QTAILQ_FOREACH(nc, &net_clients, next) {
+         peer = nc->peer;
+         type = nc->info->type;
+@@ -1059,6 +1094,7 @@ void do_info_network(Monitor *mon, const QDict *qdict)
+             print_net_client(mon, peer);
+         }
+     }
++    qemu_mutex_unlock(&net_clients_lock);
+ }
+ 
+ void qmp_set_link(const char *name, bool up, Error **errp)
+@@ -1112,6 +1148,7 @@ void net_cleanup(void)
+             qemu_del_net_client(nc);
+         }
+     }
++    qemu_mutex_destroy(&net_clients_lock);
+ }
+ 
+ void net_check_clients(void)
+@@ -1133,6 +1170,7 @@ void net_check_clients(void)
+ 
+     net_hub_check_clients();
+ 
++    qemu_mutex_lock(&net_clients_lock);
+     QTAILQ_FOREACH(nc, &net_clients, next) {
+         if (!nc->peer) {
+             fprintf(stderr, "Warning: %s %s has no peer\n",
+@@ -1140,6 +1178,7 @@ void net_check_clients(void)
+                     "nic" : "netdev", nc->name);
+         }
+     }
++    qemu_mutex_unlock(&net_clients_lock);
+ 
+     /* Check that all NICs requested via -net nic actually got created.
+      * NICs created via -device don't need to be checked here because
+@@ -1197,6 +1236,7 @@ int net_init_clients(void)
+ #endif
+     }
+ 
++    qemu_mutex_init(&net_clients_lock);
+     QTAILQ_INIT(&net_clients);
+ 
+     if (qemu_opts_foreach(qemu_find_opts("netdev"), net_init_netdev, NULL, 1) == -1)
+diff --git a/net/slirp.c b/net/slirp.c
+index 4df550f..a6116d5 100644
+--- a/net/slirp.c
++++ b/net/slirp.c
+@@ -346,7 +346,7 @@ void net_slirp_hostfwd_remove(Monitor *mon, const QDict *qdict)
+ 
+     err = slirp_remove_hostfwd(QTAILQ_FIRST(&slirp_stacks)->slirp, is_udp,
+                                host_addr, host_port);
+-
++    netclient_unref(&s->nc);
+     monitor_printf(mon, "host forwarding rule for %s %s\n", src_str,
+                    err ? "not found" : "removed");
+     return;
+@@ -437,6 +437,7 @@ void net_slirp_hostfwd_add(Monitor *mon, const QDict *qdict)
+     }
+     if (s) {
+         slirp_hostfwd(s, redir_str, 0);
++        netclient_unref(&s->nc);
+     }
+ 
+ }
+-- 
+1.7.4.4
+

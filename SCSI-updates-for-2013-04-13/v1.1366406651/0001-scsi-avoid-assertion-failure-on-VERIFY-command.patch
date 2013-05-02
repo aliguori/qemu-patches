@@ -1,0 +1,70 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: asias@redhat.com, nab@linux-iscsi.org
+Date: Fri, 19 Apr 2013 16:24:12 +0200
+Message-id: 1366381460-6041-2-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 1/9] scsi: avoid assertion failure on VERIFY command
+
+A verify command is not an actual read (we do not implement
+compare mode) and thus does not have an AIOCB attached.  Do
+not crash in scsi_dma_complete.
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ hw/scsi/scsi-disk.c | 19 ++++++++++++++-----
+ 1 file changed, 14 insertions(+), 5 deletions(-)
+
+diff --git a/hw/scsi/scsi-disk.c b/hw/scsi/scsi-disk.c
+index f52bd11..c8d2a99 100644
+--- a/hw/scsi/scsi-disk.c
++++ b/hw/scsi/scsi-disk.c
+@@ -244,14 +244,15 @@ done:
+     }
+ }
+ 
+-static void scsi_dma_complete(void *opaque, int ret)
++static void scsi_dma_complete_noio(void *opaque, int ret)
+ {
+     SCSIDiskReq *r = (SCSIDiskReq *)opaque;
+     SCSIDiskState *s = DO_UPCAST(SCSIDiskState, qdev, r->req.dev);
+ 
+-    assert(r->req.aiocb != NULL);
+-    r->req.aiocb = NULL;
+-    bdrv_acct_done(s->qdev.conf.bs, &r->acct);
++    if (r->req.aiocb != NULL) {
++        r->req.aiocb = NULL;
++        bdrv_acct_done(s->qdev.conf.bs, &r->acct);
++    }
+     if (r->req.io_canceled) {
+         goto done;
+     }
+@@ -277,6 +278,14 @@ done:
+     }
+ }
+ 
++static void scsi_dma_complete(void *opaque, int ret)
++{
++    SCSIDiskReq *r = (SCSIDiskReq *)opaque;
++
++    assert(r->req.aiocb != NULL);
++    scsi_dma_complete_noio(opaque, ret);
++}
++
+ static void scsi_read_complete(void * opaque, int ret)
+ {
+     SCSIDiskReq *r = (SCSIDiskReq *)opaque;
+@@ -496,7 +505,7 @@ static void scsi_write_data(SCSIRequest *req)
+     if (r->req.cmd.buf[0] == VERIFY_10 || r->req.cmd.buf[0] == VERIFY_12 ||
+         r->req.cmd.buf[0] == VERIFY_16) {
+         if (r->req.sg) {
+-            scsi_dma_complete(r, 0);
++            scsi_dma_complete_noio(r, 0);
+         } else {
+             scsi_write_complete(r, 0);
+         }
+-- 
+1.8.1.4
+
+
+

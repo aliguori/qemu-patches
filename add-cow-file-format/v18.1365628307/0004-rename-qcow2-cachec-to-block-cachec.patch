@@ -1,0 +1,1351 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Dong Xu Wang <wdongxu@linux.vnet.ibm.com>
+To: Stefan Hajnoczi <stefanha@gmail.com>, qemu-devel@nongnu.org,
+ Dong Xu Wang <wdongxu@linux.vnet.ibm.com>
+Cc: kwol@redhat.com, wdongxu@cn.ibm.com,
+ Dong Xu Wang <wdongxu@linux.vnet.ibm.com>, stefanha@redhat.com,
+ qemu-devel@nongnu.org
+Date: Wed, 10 Apr 2013 16:11:51 +0800
+Message-id: 1365581513-3475-5-git-send-email-wdongxu@linux.vnet.ibm.com
+Subject: [PATCH 4/6] rename qcow2-cache.c to block-cache.c
+
+We will re-use qcow2-cache as block layer common cache code,
+so change its name and made some changes, define a struct named
+BlockTableType, pass BlockTableType and table size parameters to
+block cache initialization function.
+
+Signed-off-by: Dong Xu Wang <wdongxu@linux.vnet.ibm.com>
+---
+v17-v18:
+1) move struct to source file.
+2) cluster_size->table_size.
+ block/Makefile.objs         |   3 +-
+ block/block-cache.c         | 339 ++++++++++++++++++++++++++++++++++++++++++++
+ block/qcow2-cache.c         | 323 -----------------------------------------
+ block/qcow2-cluster.c       |  52 +++----
+ block/qcow2-refcount.c      |  62 ++++----
+ block/qcow2.c               |  21 +--
+ block/qcow2.h               |  23 +--
+ include/block/block-cache.h |  60 ++++++++
+ trace-events                |  13 +-
+ 9 files changed, 483 insertions(+), 413 deletions(-)
+ create mode 100644 block/block-cache.c
+ delete mode 100644 block/qcow2-cache.c
+ create mode 100644 include/block/block-cache.h
+
+diff --git a/block/Makefile.objs b/block/Makefile.objs
+index c067f38..4fe81dc 100644
+--- a/block/Makefile.objs
++++ b/block/Makefile.objs
+@@ -1,5 +1,6 @@
+ block-obj-y += raw.o cow.o qcow.o vdi.o vmdk.o cloop.o dmg.o bochs.o vpc.o vvfat.o
+-block-obj-y += qcow2.o qcow2-refcount.o qcow2-cluster.o qcow2-snapshot.o qcow2-cache.o
++block-obj-y += qcow2.o qcow2-refcount.o qcow2-cluster.o qcow2-snapshot.o
++block-obj-y += block-cache.o
+ block-obj-y += qed.o qed-gencb.o qed-l2-cache.o qed-table.o qed-cluster.o
+ block-obj-y += qed-check.o
+ block-obj-y += parallels.o blkdebug.o blkverify.o
+diff --git a/block/block-cache.c b/block/block-cache.c
+new file mode 100644
+index 0000000..3544691
+--- /dev/null
++++ b/block/block-cache.c
+@@ -0,0 +1,339 @@
++/*
++ * QEMU Block Layer Cache
++ *
++ * Copyright IBM, Corp. 2012
++ *
++ * Authors:
++ *  Dong Xu Wang <wdongxu@linux.vnet.ibm.com>
++ *
++ * This file is based on qcow2-cache.c, see its copyrights below:
++ *
++ * L2/refcount table cache for the QCOW2 format
++ *
++ * Copyright (c) 2010 Kevin Wolf <kwolf@redhat.com>
++ *
++ * Permission is hereby granted, free of charge, to any person obtaining a copy
++ * of this software and associated documentation files (the "Software"), to deal
++ * in the Software without restriction, including without limitation the rights
++ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
++ * copies of the Software, and to permit persons to whom the Software is
++ * furnished to do so, subject to the following conditions:
++ *
++ * The above copyright notice and this permission notice shall be included in
++ * all copies or substantial portions of the Software.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
++ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
++ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
++ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
++ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
++ * THE SOFTWARE.
++ */
++
++#include "block/block_int.h"
++#include "qemu-common.h"
++#include "trace.h"
++#include "block/block-cache.h"
++
++typedef struct BlockCachedTable {
++    void    *table;
++    int64_t offset;
++    bool    dirty;
++    int     cache_hits;
++    int     ref;
++} BlockCachedTable;
++
++struct BlockCache {
++    BlockCachedTable    *entries;
++    struct BlockCache   *depends;
++    int                 size;
++    size_t              table_size;
++    BlockTableType      table_type;
++    bool                depends_on_flush;
++};
++
++BlockCache *block_cache_create(BlockDriverState *bs, int num_tables,
++                               size_t table_size, BlockTableType type)
++{
++    BlockCache *c;
++    int i;
++
++    c = g_malloc0(sizeof(*c));
++    c->size = num_tables;
++    c->entries = g_malloc0(sizeof(*c->entries) * num_tables);
++    c->table_type = type;
++    c->table_size = table_size;
++
++    for (i = 0; i < c->size; i++) {
++        c->entries[i].table = qemu_blockalign(bs, table_size);
++    }
++
++    return c;
++}
++
++int block_cache_destroy(BlockDriverState *bs, BlockCache *c)
++{
++    int i;
++
++    for (i = 0; i < c->size; i++) {
++        assert(c->entries[i].ref == 0);
++        qemu_vfree(c->entries[i].table);
++    }
++
++    g_free(c->entries);
++    g_free(c);
++
++    return 0;
++}
++
++static int block_cache_flush_dependency(BlockDriverState *bs, BlockCache *c)
++{
++    int ret;
++
++    ret = block_cache_flush(bs, c->depends);
++    if (ret < 0) {
++        return ret;
++    }
++
++    c->depends = NULL;
++    c->depends_on_flush = false;
++
++    return 0;
++}
++
++static int block_cache_entry_flush(BlockDriverState *bs, BlockCache *c, int i)
++{
++    int ret = 0;
++
++    if (!c->entries[i].dirty || !c->entries[i].offset) {
++        return 0;
++    }
++
++    trace_block_cache_entry_flush(qemu_coroutine_self(), c->table_type, i);
++
++    if (c->depends) {
++        ret = block_cache_flush_dependency(bs, c);
++    } else if (c->depends_on_flush) {
++        ret = bdrv_flush(bs->file);
++        if (ret >= 0) {
++            c->depends_on_flush = false;
++        }
++    }
++
++    if (ret < 0) {
++        return ret;
++    }
++
++    if (c->table_type == BLOCK_TABLE_REF) {
++        BLKDBG_EVENT(bs->file, BLKDBG_REFBLOCK_UPDATE_PART);
++    } else if (c->table_type == BLOCK_TABLE_L2) {
++        BLKDBG_EVENT(bs->file, BLKDBG_L2_UPDATE);
++    } else if (c->table_type == BLOCK_TABLE_BITMAP) {
++        BLKDBG_EVENT(bs->file, BLKDBG_COW_WRITE);
++    }
++
++    ret = bdrv_pwrite(bs->file, c->entries[i].offset,
++                      c->entries[i].table, c->table_size);
++    if (ret < 0) {
++        return ret;
++    }
++
++    c->entries[i].dirty = false;
++
++    return 0;
++}
++
++int block_cache_flush(BlockDriverState *bs, BlockCache *c)
++{
++    int result = 0;
++    int ret;
++    int i;
++
++    trace_block_cache_flush(qemu_coroutine_self(), c->table_type);
++
++    for (i = 0; i < c->size; i++) {
++        ret = block_cache_entry_flush(bs, c, i);
++        if (ret < 0 && result != -ENOSPC) {
++            result = ret;
++        }
++    }
++
++    if (result == 0) {
++        ret = bdrv_flush(bs->file);
++        if (ret < 0) {
++            result = ret;
++        }
++    }
++
++    return result;
++}
++
++int block_cache_set_dependency(BlockDriverState *bs,
++                               BlockCache *c,
++                               BlockCache *dependency)
++{
++    int ret;
++
++    if (dependency->depends) {
++        ret = block_cache_flush_dependency(bs, dependency);
++        if (ret < 0) {
++            return ret;
++        }
++    }
++
++    if (c->depends && (c->depends != dependency)) {
++        ret = block_cache_flush_dependency(bs, c);
++        if (ret < 0) {
++            return ret;
++        }
++    }
++
++    c->depends = dependency;
++    return 0;
++}
++
++void block_cache_depends_on_flush(BlockCache *c)
++{
++    c->depends_on_flush = true;
++}
++
++static int block_cache_find_entry_to_replace(BlockCache *c)
++{
++    int i;
++    int min_count = INT_MAX;
++    int min_index = -1;
++
++
++    for (i = 0; i < c->size; i++) {
++        if (c->entries[i].ref) {
++            continue;
++        }
++
++        if (c->entries[i].cache_hits < min_count) {
++            min_index = i;
++            min_count = c->entries[i].cache_hits;
++        }
++
++        /* Give newer hits priority */
++        /* TODO Check how to optimize the replacement strategy */
++        c->entries[i].cache_hits /= 2;
++    }
++
++    if (min_index == -1) {
++        /* This can't happen in current synchronous code, but leave the check
++         * here as a reminder for whoever starts using AIO with the cache */
++        abort();
++    }
++    return min_index;
++}
++
++static int block_cache_do_get(BlockDriverState *bs, BlockCache *c,
++                              uint64_t offset, void **table,
++                              bool read_from_disk)
++{
++    int i;
++    int ret;
++
++    trace_block_cache_get(qemu_coroutine_self(), c->table_type,
++                          offset, read_from_disk);
++
++    /* Check if the table is already cached */
++    for (i = 0; i < c->size; i++) {
++        if (c->entries[i].offset == offset) {
++            goto found;
++        }
++    }
++
++    /* If not, write a table back and replace it */
++    i = block_cache_find_entry_to_replace(c);
++    trace_block_cache_get_replace_entry(qemu_coroutine_self(),
++                                        c->table_type, i);
++    if (i < 0) {
++        return i;
++    }
++
++    ret = block_cache_entry_flush(bs, c, i);
++    if (ret < 0) {
++        return ret;
++    }
++
++    trace_block_cache_get_read(qemu_coroutine_self(),
++                               c->table_type, i);
++    c->entries[i].offset = 0;
++    if (read_from_disk) {
++        if (c->table_type == BLOCK_TABLE_L2) {
++            BLKDBG_EVENT(bs->file, BLKDBG_L2_LOAD);
++        } else if (c->table_type == BLOCK_TABLE_BITMAP) {
++            BLKDBG_EVENT(bs->file, BLKDBG_COW_READ);
++        }
++
++        ret = bdrv_pread(bs->file, offset, c->entries[i].table,
++                         c->table_size);
++        if (ret < 0) {
++            return ret;
++        }
++    }
++
++    /* Give the table some hits for the start so that it won't be replaced
++     * immediately. The number 32 is completely arbitrary. */
++    c->entries[i].cache_hits = 32;
++    c->entries[i].offset = offset;
++
++    /* And return the right table */
++found:
++    c->entries[i].cache_hits++;
++    c->entries[i].ref++;
++    *table = c->entries[i].table;
++
++    trace_block_cache_get_done(qemu_coroutine_self(),
++                               c->table_type, i);
++
++    return 0;
++}
++
++int block_cache_get(BlockDriverState *bs, BlockCache *c, uint64_t offset,
++                    void **table)
++{
++    return block_cache_do_get(bs, c, offset, table, true);
++}
++
++int block_cache_get_empty(BlockDriverState *bs, BlockCache *c,
++                          uint64_t offset, void **table)
++{
++    return block_cache_do_get(bs, c, offset, table, false);
++}
++
++int block_cache_put(BlockDriverState *bs, BlockCache *c, void **table)
++{
++    int i;
++
++    for (i = 0; i < c->size; i++) {
++        if (c->entries[i].table == *table) {
++            goto found;
++        }
++    }
++    return -ENOENT;
++
++found:
++    c->entries[i].ref--;
++    *table = NULL;
++
++    assert(c->entries[i].ref >= 0);
++    return 0;
++}
++
++void block_cache_entry_mark_dirty(BlockCache *c, void *table)
++{
++    int i;
++
++    for (i = 0; i < c->size; i++) {
++        if (c->entries[i].table == table) {
++            goto found;
++        }
++    }
++    abort();
++
++found:
++    c->entries[i].dirty = true;
++}
+diff --git a/block/qcow2-cache.c b/block/qcow2-cache.c
+deleted file mode 100644
+index 2f3114e..0000000
+--- a/block/qcow2-cache.c
++++ /dev/null
+@@ -1,323 +0,0 @@
+-/*
+- * L2/refcount table cache for the QCOW2 format
+- *
+- * Copyright (c) 2010 Kevin Wolf <kwolf@redhat.com>
+- *
+- * Permission is hereby granted, free of charge, to any person obtaining a copy
+- * of this software and associated documentation files (the "Software"), to deal
+- * in the Software without restriction, including without limitation the rights
+- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+- * copies of the Software, and to permit persons to whom the Software is
+- * furnished to do so, subject to the following conditions:
+- *
+- * The above copyright notice and this permission notice shall be included in
+- * all copies or substantial portions of the Software.
+- *
+- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+- * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+- * THE SOFTWARE.
+- */
+-
+-#include "block/block_int.h"
+-#include "qemu-common.h"
+-#include "qcow2.h"
+-#include "trace.h"
+-
+-typedef struct Qcow2CachedTable {
+-    void*   table;
+-    int64_t offset;
+-    bool    dirty;
+-    int     cache_hits;
+-    int     ref;
+-} Qcow2CachedTable;
+-
+-struct Qcow2Cache {
+-    Qcow2CachedTable*       entries;
+-    struct Qcow2Cache*      depends;
+-    int                     size;
+-    bool                    depends_on_flush;
+-};
+-
+-Qcow2Cache *qcow2_cache_create(BlockDriverState *bs, int num_tables)
+-{
+-    BDRVQcowState *s = bs->opaque;
+-    Qcow2Cache *c;
+-    int i;
+-
+-    c = g_malloc0(sizeof(*c));
+-    c->size = num_tables;
+-    c->entries = g_malloc0(sizeof(*c->entries) * num_tables);
+-
+-    for (i = 0; i < c->size; i++) {
+-        c->entries[i].table = qemu_blockalign(bs, s->cluster_size);
+-    }
+-
+-    return c;
+-}
+-
+-int qcow2_cache_destroy(BlockDriverState* bs, Qcow2Cache *c)
+-{
+-    int i;
+-
+-    for (i = 0; i < c->size; i++) {
+-        assert(c->entries[i].ref == 0);
+-        qemu_vfree(c->entries[i].table);
+-    }
+-
+-    g_free(c->entries);
+-    g_free(c);
+-
+-    return 0;
+-}
+-
+-static int qcow2_cache_flush_dependency(BlockDriverState *bs, Qcow2Cache *c)
+-{
+-    int ret;
+-
+-    ret = qcow2_cache_flush(bs, c->depends);
+-    if (ret < 0) {
+-        return ret;
+-    }
+-
+-    c->depends = NULL;
+-    c->depends_on_flush = false;
+-
+-    return 0;
+-}
+-
+-static int qcow2_cache_entry_flush(BlockDriverState *bs, Qcow2Cache *c, int i)
+-{
+-    BDRVQcowState *s = bs->opaque;
+-    int ret = 0;
+-
+-    if (!c->entries[i].dirty || !c->entries[i].offset) {
+-        return 0;
+-    }
+-
+-    trace_qcow2_cache_entry_flush(qemu_coroutine_self(),
+-                                  c == s->l2_table_cache, i);
+-
+-    if (c->depends) {
+-        ret = qcow2_cache_flush_dependency(bs, c);
+-    } else if (c->depends_on_flush) {
+-        ret = bdrv_flush(bs->file);
+-        if (ret >= 0) {
+-            c->depends_on_flush = false;
+-        }
+-    }
+-
+-    if (ret < 0) {
+-        return ret;
+-    }
+-
+-    if (c == s->refcount_block_cache) {
+-        BLKDBG_EVENT(bs->file, BLKDBG_REFBLOCK_UPDATE_PART);
+-    } else if (c == s->l2_table_cache) {
+-        BLKDBG_EVENT(bs->file, BLKDBG_L2_UPDATE);
+-    }
+-
+-    ret = bdrv_pwrite(bs->file, c->entries[i].offset, c->entries[i].table,
+-        s->cluster_size);
+-    if (ret < 0) {
+-        return ret;
+-    }
+-
+-    c->entries[i].dirty = false;
+-
+-    return 0;
+-}
+-
+-int qcow2_cache_flush(BlockDriverState *bs, Qcow2Cache *c)
+-{
+-    BDRVQcowState *s = bs->opaque;
+-    int result = 0;
+-    int ret;
+-    int i;
+-
+-    trace_qcow2_cache_flush(qemu_coroutine_self(), c == s->l2_table_cache);
+-
+-    for (i = 0; i < c->size; i++) {
+-        ret = qcow2_cache_entry_flush(bs, c, i);
+-        if (ret < 0 && result != -ENOSPC) {
+-            result = ret;
+-        }
+-    }
+-
+-    if (result == 0) {
+-        ret = bdrv_flush(bs->file);
+-        if (ret < 0) {
+-            result = ret;
+-        }
+-    }
+-
+-    return result;
+-}
+-
+-int qcow2_cache_set_dependency(BlockDriverState *bs, Qcow2Cache *c,
+-    Qcow2Cache *dependency)
+-{
+-    int ret;
+-
+-    if (dependency->depends) {
+-        ret = qcow2_cache_flush_dependency(bs, dependency);
+-        if (ret < 0) {
+-            return ret;
+-        }
+-    }
+-
+-    if (c->depends && (c->depends != dependency)) {
+-        ret = qcow2_cache_flush_dependency(bs, c);
+-        if (ret < 0) {
+-            return ret;
+-        }
+-    }
+-
+-    c->depends = dependency;
+-    return 0;
+-}
+-
+-void qcow2_cache_depends_on_flush(Qcow2Cache *c)
+-{
+-    c->depends_on_flush = true;
+-}
+-
+-static int qcow2_cache_find_entry_to_replace(Qcow2Cache *c)
+-{
+-    int i;
+-    int min_count = INT_MAX;
+-    int min_index = -1;
+-
+-
+-    for (i = 0; i < c->size; i++) {
+-        if (c->entries[i].ref) {
+-            continue;
+-        }
+-
+-        if (c->entries[i].cache_hits < min_count) {
+-            min_index = i;
+-            min_count = c->entries[i].cache_hits;
+-        }
+-
+-        /* Give newer hits priority */
+-        /* TODO Check how to optimize the replacement strategy */
+-        c->entries[i].cache_hits /= 2;
+-    }
+-
+-    if (min_index == -1) {
+-        /* This can't happen in current synchronous code, but leave the check
+-         * here as a reminder for whoever starts using AIO with the cache */
+-        abort();
+-    }
+-    return min_index;
+-}
+-
+-static int qcow2_cache_do_get(BlockDriverState *bs, Qcow2Cache *c,
+-    uint64_t offset, void **table, bool read_from_disk)
+-{
+-    BDRVQcowState *s = bs->opaque;
+-    int i;
+-    int ret;
+-
+-    trace_qcow2_cache_get(qemu_coroutine_self(), c == s->l2_table_cache,
+-                          offset, read_from_disk);
+-
+-    /* Check if the table is already cached */
+-    for (i = 0; i < c->size; i++) {
+-        if (c->entries[i].offset == offset) {
+-            goto found;
+-        }
+-    }
+-
+-    /* If not, write a table back and replace it */
+-    i = qcow2_cache_find_entry_to_replace(c);
+-    trace_qcow2_cache_get_replace_entry(qemu_coroutine_self(),
+-                                        c == s->l2_table_cache, i);
+-    if (i < 0) {
+-        return i;
+-    }
+-
+-    ret = qcow2_cache_entry_flush(bs, c, i);
+-    if (ret < 0) {
+-        return ret;
+-    }
+-
+-    trace_qcow2_cache_get_read(qemu_coroutine_self(),
+-                               c == s->l2_table_cache, i);
+-    c->entries[i].offset = 0;
+-    if (read_from_disk) {
+-        if (c == s->l2_table_cache) {
+-            BLKDBG_EVENT(bs->file, BLKDBG_L2_LOAD);
+-        }
+-
+-        ret = bdrv_pread(bs->file, offset, c->entries[i].table, s->cluster_size);
+-        if (ret < 0) {
+-            return ret;
+-        }
+-    }
+-
+-    /* Give the table some hits for the start so that it won't be replaced
+-     * immediately. The number 32 is completely arbitrary. */
+-    c->entries[i].cache_hits = 32;
+-    c->entries[i].offset = offset;
+-
+-    /* And return the right table */
+-found:
+-    c->entries[i].cache_hits++;
+-    c->entries[i].ref++;
+-    *table = c->entries[i].table;
+-
+-    trace_qcow2_cache_get_done(qemu_coroutine_self(),
+-                               c == s->l2_table_cache, i);
+-
+-    return 0;
+-}
+-
+-int qcow2_cache_get(BlockDriverState *bs, Qcow2Cache *c, uint64_t offset,
+-    void **table)
+-{
+-    return qcow2_cache_do_get(bs, c, offset, table, true);
+-}
+-
+-int qcow2_cache_get_empty(BlockDriverState *bs, Qcow2Cache *c, uint64_t offset,
+-    void **table)
+-{
+-    return qcow2_cache_do_get(bs, c, offset, table, false);
+-}
+-
+-int qcow2_cache_put(BlockDriverState *bs, Qcow2Cache *c, void **table)
+-{
+-    int i;
+-
+-    for (i = 0; i < c->size; i++) {
+-        if (c->entries[i].table == *table) {
+-            goto found;
+-        }
+-    }
+-    return -ENOENT;
+-
+-found:
+-    c->entries[i].ref--;
+-    *table = NULL;
+-
+-    assert(c->entries[i].ref >= 0);
+-    return 0;
+-}
+-
+-void qcow2_cache_entry_mark_dirty(Qcow2Cache *c, void *table)
+-{
+-    int i;
+-
+-    for (i = 0; i < c->size; i++) {
+-        if (c->entries[i].table == table) {
+-            goto found;
+-        }
+-    }
+-    abort();
+-
+-found:
+-    c->entries[i].dirty = true;
+-}
+diff --git a/block/qcow2-cluster.c b/block/qcow2-cluster.c
+index c71470a..c238ee2 100644
+--- a/block/qcow2-cluster.c
++++ b/block/qcow2-cluster.c
+@@ -69,7 +69,7 @@ int qcow2_grow_l1_table(BlockDriverState *bs, int min_size, bool exact_size)
+         return new_l1_table_offset;
+     }
+ 
+-    ret = qcow2_cache_flush(bs, s->refcount_block_cache);
++    ret = block_cache_flush(bs, s->refcount_block_cache);
+     if (ret < 0) {
+         goto fail;
+     }
+@@ -119,7 +119,8 @@ static int l2_load(BlockDriverState *bs, uint64_t l2_offset,
+     BDRVQcowState *s = bs->opaque;
+     int ret;
+ 
+-    ret = qcow2_cache_get(bs, s->l2_table_cache, l2_offset, (void**) l2_table);
++    ret = block_cache_get(bs, s->l2_table_cache, l2_offset,
++                          (void **) l2_table);
+ 
+     return ret;
+ }
+@@ -180,7 +181,7 @@ static int l2_allocate(BlockDriverState *bs, int l1_index, uint64_t **table)
+         return l2_offset;
+     }
+ 
+-    ret = qcow2_cache_flush(bs, s->refcount_block_cache);
++    ret = block_cache_flush(bs, s->refcount_block_cache);
+     if (ret < 0) {
+         goto fail;
+     }
+@@ -188,7 +189,8 @@ static int l2_allocate(BlockDriverState *bs, int l1_index, uint64_t **table)
+     /* allocate a new entry in the l2 cache */
+ 
+     trace_qcow2_l2_allocate_get_empty(bs, l1_index);
+-    ret = qcow2_cache_get_empty(bs, s->l2_table_cache, l2_offset, (void**) table);
++    ret = block_cache_get_empty(bs, s->l2_table_cache, l2_offset,
++                                (void **) table);
+     if (ret < 0) {
+         return ret;
+     }
+@@ -203,16 +205,16 @@ static int l2_allocate(BlockDriverState *bs, int l1_index, uint64_t **table)
+ 
+         /* if there was an old l2 table, read it from the disk */
+         BLKDBG_EVENT(bs->file, BLKDBG_L2_ALLOC_COW_READ);
+-        ret = qcow2_cache_get(bs, s->l2_table_cache,
++        ret = block_cache_get(bs, s->l2_table_cache,
+             old_l2_offset & L1E_OFFSET_MASK,
+-            (void**) &old_table);
++            (void **) &old_table);
+         if (ret < 0) {
+             goto fail;
+         }
+ 
+         memcpy(l2_table, old_table, s->cluster_size);
+ 
+-        ret = qcow2_cache_put(bs, s->l2_table_cache, (void**) &old_table);
++        ret = block_cache_put(bs, s->l2_table_cache, (void **) &old_table);
+         if (ret < 0) {
+             goto fail;
+         }
+@@ -222,8 +224,8 @@ static int l2_allocate(BlockDriverState *bs, int l1_index, uint64_t **table)
+     BLKDBG_EVENT(bs->file, BLKDBG_L2_ALLOC_WRITE);
+ 
+     trace_qcow2_l2_allocate_write_l2(bs, l1_index);
+-    qcow2_cache_entry_mark_dirty(s->l2_table_cache, l2_table);
+-    ret = qcow2_cache_flush(bs, s->l2_table_cache);
++    block_cache_entry_mark_dirty(s->l2_table_cache, l2_table);
++    ret = block_cache_flush(bs, s->l2_table_cache);
+     if (ret < 0) {
+         goto fail;
+     }
+@@ -242,7 +244,7 @@ static int l2_allocate(BlockDriverState *bs, int l1_index, uint64_t **table)
+ 
+ fail:
+     trace_qcow2_l2_allocate_done(bs, l1_index, ret);
+-    qcow2_cache_put(bs, s->l2_table_cache, (void**) table);
++    block_cache_put(bs, s->l2_table_cache, (void **) table);
+     s->l1_table[l1_index] = old_l2_offset;
+     return ret;
+ }
+@@ -478,7 +480,7 @@ int qcow2_get_cluster_offset(BlockDriverState *bs, uint64_t offset,
+         abort();
+     }
+ 
+-    qcow2_cache_put(bs, s->l2_table_cache, (void**) &l2_table);
++    block_cache_put(bs, s->l2_table_cache, (void **) &l2_table);
+ 
+     nb_available = (c * s->cluster_sectors);
+ 
+@@ -587,13 +589,13 @@ uint64_t qcow2_alloc_compressed_cluster_offset(BlockDriverState *bs,
+      * allocated. */
+     cluster_offset = be64_to_cpu(l2_table[l2_index]);
+     if (cluster_offset & L2E_OFFSET_MASK) {
+-        qcow2_cache_put(bs, s->l2_table_cache, (void**) &l2_table);
++        block_cache_put(bs, s->l2_table_cache, (void **) &l2_table);
+         return 0;
+     }
+ 
+     cluster_offset = qcow2_alloc_bytes(bs, compressed_size);
+     if (cluster_offset < 0) {
+-        qcow2_cache_put(bs, s->l2_table_cache, (void**) &l2_table);
++        block_cache_put(bs, s->l2_table_cache, (void **) &l2_table);
+         return 0;
+     }
+ 
+@@ -608,9 +610,9 @@ uint64_t qcow2_alloc_compressed_cluster_offset(BlockDriverState *bs,
+     /* compressed clusters never have the copied flag */
+ 
+     BLKDBG_EVENT(bs->file, BLKDBG_L2_UPDATE_COMPRESSED);
+-    qcow2_cache_entry_mark_dirty(s->l2_table_cache, l2_table);
++    block_cache_entry_mark_dirty(s->l2_table_cache, l2_table);
+     l2_table[l2_index] = cpu_to_be64(cluster_offset);
+-    ret = qcow2_cache_put(bs, s->l2_table_cache, (void**) &l2_table);
++    ret = block_cache_put(bs, s->l2_table_cache, (void **) &l2_table);
+     if (ret < 0) {
+         return 0;
+     }
+@@ -642,7 +644,7 @@ static int perform_cow(BlockDriverState *bs, QCowL2Meta *m, Qcow2COWRegion *r)
+      * need to be sure that the refcounts have been increased and COW was
+      * handled.
+      */
+-    qcow2_cache_depends_on_flush(s->l2_table_cache);
++    block_cache_depends_on_flush(s->l2_table_cache);
+ 
+     return 0;
+ }
+@@ -675,7 +677,7 @@ int qcow2_alloc_cluster_link_l2(BlockDriverState *bs, QCowL2Meta *m)
+         qcow2_mark_dirty(bs);
+     }
+     if (qcow2_need_accurate_refcounts(s)) {
+-        qcow2_cache_set_dependency(bs, s->l2_table_cache,
++        block_cache_set_dependency(bs, s->l2_table_cache,
+                                    s->refcount_block_cache);
+     }
+ 
+@@ -683,7 +685,7 @@ int qcow2_alloc_cluster_link_l2(BlockDriverState *bs, QCowL2Meta *m)
+     if (ret < 0) {
+         goto err;
+     }
+-    qcow2_cache_entry_mark_dirty(s->l2_table_cache, l2_table);
++    block_cache_entry_mark_dirty(s->l2_table_cache, l2_table);
+ 
+     for (i = 0; i < m->nb_clusters; i++) {
+         /* if two concurrent writes happen to the same unallocated cluster
+@@ -700,7 +702,7 @@ int qcow2_alloc_cluster_link_l2(BlockDriverState *bs, QCowL2Meta *m)
+      }
+ 
+ 
+-    ret = qcow2_cache_put(bs, s->l2_table_cache, (void**) &l2_table);
++    ret = block_cache_put(bs, s->l2_table_cache, (void **) &l2_table);
+     if (ret < 0) {
+         goto err;
+     }
+@@ -909,7 +911,7 @@ static int handle_copied(BlockDriverState *bs, uint64_t guest_offset,
+ 
+     /* Cleanup */
+ out:
+-    pret = qcow2_cache_put(bs, s->l2_table_cache, (void**) &l2_table);
++    pret = block_cache_put(bs, s->l2_table_cache, (void **) &l2_table);
+     if (pret < 0) {
+         return pret;
+     }
+@@ -1037,7 +1039,7 @@ static int handle_alloc(BlockDriverState *bs, uint64_t guest_offset,
+      * wrong with our code. */
+     assert(nb_clusters > 0);
+ 
+-    ret = qcow2_cache_put(bs, s->l2_table_cache, (void**) &l2_table);
++    ret = block_cache_put(bs, s->l2_table_cache, (void **) &l2_table);
+     if (ret < 0) {
+         return ret;
+     }
+@@ -1328,14 +1330,14 @@ static int discard_single_l2(BlockDriverState *bs, uint64_t offset,
+         }
+ 
+         /* First remove L2 entries */
+-        qcow2_cache_entry_mark_dirty(s->l2_table_cache, l2_table);
++        block_cache_entry_mark_dirty(s->l2_table_cache, l2_table);
+         l2_table[l2_index + i] = cpu_to_be64(0);
+ 
+         /* Then decrease the refcount */
+         qcow2_free_any_clusters(bs, old_offset, 1);
+     }
+ 
+-    ret = qcow2_cache_put(bs, s->l2_table_cache, (void**) &l2_table);
++    ret = block_cache_put(bs, s->l2_table_cache, (void **) &l2_table);
+     if (ret < 0) {
+         return ret;
+     }
+@@ -1405,7 +1407,7 @@ static int zero_single_l2(BlockDriverState *bs, uint64_t offset,
+         old_offset = be64_to_cpu(l2_table[l2_index + i]);
+ 
+         /* Update L2 entries */
+-        qcow2_cache_entry_mark_dirty(s->l2_table_cache, l2_table);
++        block_cache_entry_mark_dirty(s->l2_table_cache, l2_table);
+         if (old_offset & QCOW_OFLAG_COMPRESSED) {
+             l2_table[l2_index + i] = cpu_to_be64(QCOW_OFLAG_ZERO);
+             qcow2_free_any_clusters(bs, old_offset, 1);
+@@ -1414,7 +1416,7 @@ static int zero_single_l2(BlockDriverState *bs, uint64_t offset,
+         }
+     }
+ 
+-    ret = qcow2_cache_put(bs, s->l2_table_cache, (void**) &l2_table);
++    ret = block_cache_put(bs, s->l2_table_cache, (void **) &l2_table);
+     if (ret < 0) {
+         return ret;
+     }
+diff --git a/block/qcow2-refcount.c b/block/qcow2-refcount.c
+index b32738f..c7427e8 100644
+--- a/block/qcow2-refcount.c
++++ b/block/qcow2-refcount.c
+@@ -71,7 +71,7 @@ static int load_refcount_block(BlockDriverState *bs,
+     int ret;
+ 
+     BLKDBG_EVENT(bs->file, BLKDBG_REFBLOCK_LOAD);
+-    ret = qcow2_cache_get(bs, s->refcount_block_cache, refcount_block_offset,
++    ret = block_cache_get(bs, s->refcount_block_cache, refcount_block_offset,
+         refcount_block);
+ 
+     return ret;
+@@ -98,8 +98,8 @@ static int get_refcount(BlockDriverState *bs, int64_t cluster_index)
+     if (!refcount_block_offset)
+         return 0;
+ 
+-    ret = qcow2_cache_get(bs, s->refcount_block_cache, refcount_block_offset,
+-        (void**) &refcount_block);
++    ret = block_cache_get(bs, s->refcount_block_cache, refcount_block_offset,
++        (void **) &refcount_block);
+     if (ret < 0) {
+         return ret;
+     }
+@@ -108,8 +108,8 @@ static int get_refcount(BlockDriverState *bs, int64_t cluster_index)
+         ((1 << (s->cluster_bits - REFCOUNT_SHIFT)) - 1);
+     refcount = be16_to_cpu(refcount_block[block_index]);
+ 
+-    ret = qcow2_cache_put(bs, s->refcount_block_cache,
+-        (void**) &refcount_block);
++    ret = block_cache_put(bs, s->refcount_block_cache,
++        (void **) &refcount_block);
+     if (ret < 0) {
+         return ret;
+     }
+@@ -172,7 +172,7 @@ static int alloc_refcount_block(BlockDriverState *bs,
+         /* If it's already there, we're done */
+         if (refcount_block_offset) {
+              return load_refcount_block(bs, refcount_block_offset,
+-                 (void**) refcount_block);
++                 (void **) refcount_block);
+         }
+     }
+ 
+@@ -201,7 +201,7 @@ static int alloc_refcount_block(BlockDriverState *bs,
+     *refcount_block = NULL;
+ 
+     /* We write to the refcount table, so we might depend on L2 tables */
+-    ret = qcow2_cache_flush(bs, s->l2_table_cache);
++    ret = block_cache_flush(bs, s->l2_table_cache);
+     if (ret < 0) {
+         return ret;
+     }
+@@ -220,8 +220,8 @@ static int alloc_refcount_block(BlockDriverState *bs,
+ 
+     if (in_same_refcount_block(s, new_block, cluster_index << s->cluster_bits)) {
+         /* Zero the new refcount block before updating it */
+-        ret = qcow2_cache_get_empty(bs, s->refcount_block_cache, new_block,
+-            (void**) refcount_block);
++        ret = block_cache_get_empty(bs, s->refcount_block_cache, new_block,
++            (void **) refcount_block);
+         if (ret < 0) {
+             goto fail_block;
+         }
+@@ -240,15 +240,15 @@ static int alloc_refcount_block(BlockDriverState *bs,
+             goto fail_block;
+         }
+ 
+-        ret = qcow2_cache_flush(bs, s->refcount_block_cache);
++        ret = block_cache_flush(bs, s->refcount_block_cache);
+         if (ret < 0) {
+             goto fail_block;
+         }
+ 
+         /* Initialize the new refcount block only after updating its refcount,
+          * update_refcount uses the refcount cache itself */
+-        ret = qcow2_cache_get_empty(bs, s->refcount_block_cache, new_block,
+-            (void**) refcount_block);
++        ret = block_cache_get_empty(bs, s->refcount_block_cache, new_block,
++            (void **) refcount_block);
+         if (ret < 0) {
+             goto fail_block;
+         }
+@@ -258,8 +258,8 @@ static int alloc_refcount_block(BlockDriverState *bs,
+ 
+     /* Now the new refcount block needs to be written to disk */
+     BLKDBG_EVENT(bs->file, BLKDBG_REFBLOCK_ALLOC_WRITE);
+-    qcow2_cache_entry_mark_dirty(s->refcount_block_cache, *refcount_block);
+-    ret = qcow2_cache_flush(bs, s->refcount_block_cache);
++    block_cache_entry_mark_dirty(s->refcount_block_cache, *refcount_block);
++    ret = block_cache_flush(bs, s->refcount_block_cache);
+     if (ret < 0) {
+         goto fail_block;
+     }
+@@ -279,7 +279,8 @@ static int alloc_refcount_block(BlockDriverState *bs,
+         return 0;
+     }
+ 
+-    ret = qcow2_cache_put(bs, s->refcount_block_cache, (void**) refcount_block);
++    ret = block_cache_put(bs, s->refcount_block_cache,
++                          (void **) refcount_block);
+     if (ret < 0) {
+         goto fail_block;
+     }
+@@ -402,7 +403,7 @@ static int alloc_refcount_block(BlockDriverState *bs,
+     qcow2_free_clusters(bs, old_table_offset, old_table_size * sizeof(uint64_t));
+     s->free_cluster_index = old_free_cluster_index;
+ 
+-    ret = load_refcount_block(bs, new_block, (void**) refcount_block);
++    ret = load_refcount_block(bs, new_block, (void **) refcount_block);
+     if (ret < 0) {
+         return ret;
+     }
+@@ -413,7 +414,7 @@ fail_table:
+     g_free(new_table);
+ fail_block:
+     if (*refcount_block != NULL) {
+-        qcow2_cache_put(bs, s->refcount_block_cache, (void**) refcount_block);
++        block_cache_put(bs, s->refcount_block_cache, (void **) refcount_block);
+     }
+     return ret;
+ }
+@@ -439,7 +440,7 @@ static int QEMU_WARN_UNUSED_RESULT update_refcount(BlockDriverState *bs,
+     }
+ 
+     if (addend < 0) {
+-        qcow2_cache_set_dependency(bs, s->refcount_block_cache,
++        block_cache_set_dependency(bs, s->refcount_block_cache,
+             s->l2_table_cache);
+     }
+ 
+@@ -456,8 +457,8 @@ static int QEMU_WARN_UNUSED_RESULT update_refcount(BlockDriverState *bs,
+         /* Load the refcount block and allocate it if needed */
+         if (table_index != old_table_index) {
+             if (refcount_block) {
+-                ret = qcow2_cache_put(bs, s->refcount_block_cache,
+-                    (void**) &refcount_block);
++                ret = block_cache_put(bs, s->refcount_block_cache,
++                    (void **) &refcount_block);
+                 if (ret < 0) {
+                     goto fail;
+                 }
+@@ -470,7 +471,7 @@ static int QEMU_WARN_UNUSED_RESULT update_refcount(BlockDriverState *bs,
+         }
+         old_table_index = table_index;
+ 
+-        qcow2_cache_entry_mark_dirty(s->refcount_block_cache, refcount_block);
++        block_cache_entry_mark_dirty(s->refcount_block_cache, refcount_block);
+ 
+         /* we can update the count and save it */
+         block_index = cluster_index &
+@@ -493,8 +494,8 @@ fail:
+     /* Write last changed block to disk */
+     if (refcount_block) {
+         int wret;
+-        wret = qcow2_cache_put(bs, s->refcount_block_cache,
+-            (void**) &refcount_block);
++        wret = block_cache_put(bs, s->refcount_block_cache,
++            (void **) &refcount_block);
+         if (wret < 0) {
+             return ret < 0 ? ret : wret;
+         }
+@@ -671,7 +672,7 @@ int64_t qcow2_alloc_bytes(BlockDriverState *bs, int size)
+      * or explicitly by update_cluster_refcount().  Refcount blocks must be
+      * flushed before the caller's L2 table updates.
+      */
+-    qcow2_cache_set_dependency(bs, s->l2_table_cache, s->refcount_block_cache);
++    block_cache_set_dependency(bs, s->l2_table_cache, s->refcount_block_cache);
+     return offset;
+ }
+ 
+@@ -767,8 +768,8 @@ int qcow2_update_snapshot_refcount(BlockDriverState *bs,
+             old_l2_offset = l2_offset;
+             l2_offset &= L1E_OFFSET_MASK;
+ 
+-            ret = qcow2_cache_get(bs, s->l2_table_cache, l2_offset,
+-                (void**) &l2_table);
++            ret = block_cache_get(bs, s->l2_table_cache, l2_offset,
++                (void **) &l2_table);
+             if (ret < 0) {
+                 goto fail;
+             }
+@@ -811,16 +812,17 @@ int qcow2_update_snapshot_refcount(BlockDriverState *bs,
+                     }
+                     if (offset != old_offset) {
+                         if (addend > 0) {
+-                            qcow2_cache_set_dependency(bs, s->l2_table_cache,
++                            block_cache_set_dependency(bs, s->l2_table_cache,
+                                 s->refcount_block_cache);
+                         }
+                         l2_table[j] = cpu_to_be64(offset);
+-                        qcow2_cache_entry_mark_dirty(s->l2_table_cache, l2_table);
++                        block_cache_entry_mark_dirty(s->l2_table_cache,
++                                                     l2_table);
+                     }
+                 }
+             }
+ 
+-            ret = qcow2_cache_put(bs, s->l2_table_cache, (void**) &l2_table);
++            ret = block_cache_put(bs, s->l2_table_cache, (void **) &l2_table);
+             if (ret < 0) {
+                 goto fail;
+             }
+@@ -847,7 +849,7 @@ int qcow2_update_snapshot_refcount(BlockDriverState *bs,
+     ret = bdrv_flush(bs);
+ fail:
+     if (l2_table) {
+-        qcow2_cache_put(bs, s->l2_table_cache, (void**) &l2_table);
++        block_cache_put(bs, s->l2_table_cache, (void **) &l2_table);
+     }
+ 
+     /* Update L1 only if it isn't deleted anyway (addend = -1) */
+diff --git a/block/qcow2.c b/block/qcow2.c
+index 5871192..3b1c416 100644
+--- a/block/qcow2.c
++++ b/block/qcow2.c
+@@ -446,8 +446,11 @@ static int qcow2_open(BlockDriverState *bs, QDict *options, int flags)
+     }
+ 
+     /* alloc L2 table/refcount block cache */
+-    s->l2_table_cache = qcow2_cache_create(bs, L2_CACHE_SIZE);
+-    s->refcount_block_cache = qcow2_cache_create(bs, REFCOUNT_CACHE_SIZE);
++    s->l2_table_cache = block_cache_create(bs, L2_CACHE_SIZE,
++                                           s->cluster_size, BLOCK_TABLE_L2);
++    s->refcount_block_cache = block_cache_create(bs, REFCOUNT_CACHE_SIZE,
++                                                 s->cluster_size,
++                                                 BLOCK_TABLE_REF);
+ 
+     s->cluster_cache = g_malloc(s->cluster_size);
+     /* one more sector for decompressed data alignment */
+@@ -548,7 +551,7 @@ static int qcow2_open(BlockDriverState *bs, QDict *options, int flags)
+     qcow2_refcount_close(bs);
+     g_free(s->l1_table);
+     if (s->l2_table_cache) {
+-        qcow2_cache_destroy(bs, s->l2_table_cache);
++        block_cache_destroy(bs, s->l2_table_cache);
+     }
+     g_free(s->cluster_cache);
+     qemu_vfree(s->cluster_data);
+@@ -913,13 +916,13 @@ static void qcow2_close(BlockDriverState *bs)
+     BDRVQcowState *s = bs->opaque;
+     g_free(s->l1_table);
+ 
+-    qcow2_cache_flush(bs, s->l2_table_cache);
+-    qcow2_cache_flush(bs, s->refcount_block_cache);
++    block_cache_flush(bs, s->l2_table_cache);
++    block_cache_flush(bs, s->refcount_block_cache);
+ 
+     qcow2_mark_clean(bs);
+ 
+-    qcow2_cache_destroy(bs, s->l2_table_cache);
+-    qcow2_cache_destroy(bs, s->refcount_block_cache);
++    block_cache_destroy(bs, s->l2_table_cache);
++    block_cache_destroy(bs, s->refcount_block_cache);
+ 
+     g_free(s->unknown_header_fields);
+     cleanup_unknown_header_ext(bs);
+@@ -1596,14 +1599,14 @@ static coroutine_fn int qcow2_co_flush_to_os(BlockDriverState *bs)
+     int ret;
+ 
+     qemu_co_mutex_lock(&s->lock);
+-    ret = qcow2_cache_flush(bs, s->l2_table_cache);
++    ret = block_cache_flush(bs, s->l2_table_cache);
+     if (ret < 0) {
+         qemu_co_mutex_unlock(&s->lock);
+         return ret;
+     }
+ 
+     if (qcow2_need_accurate_refcounts(s)) {
+-        ret = qcow2_cache_flush(bs, s->refcount_block_cache);
++        ret = block_cache_flush(bs, s->refcount_block_cache);
+         if (ret < 0) {
+             qemu_co_mutex_unlock(&s->lock);
+             return ret;
+diff --git a/block/qcow2.h b/block/qcow2.h
+index bf8db2a..e7f6aec 100644
+--- a/block/qcow2.h
++++ b/block/qcow2.h
+@@ -27,6 +27,7 @@
+ 
+ #include "block/aes.h"
+ #include "block/coroutine.h"
++#include "block/block-cache.h"
+ 
+ //#define DEBUG_ALLOC
+ //#define DEBUG_ALLOC2
+@@ -97,9 +98,6 @@ typedef struct QCowSnapshot {
+     uint64_t vm_clock_nsec;
+ } QCowSnapshot;
+ 
+-struct Qcow2Cache;
+-typedef struct Qcow2Cache Qcow2Cache;
+-
+ typedef struct Qcow2UnknownHeaderExtension {
+     uint32_t magic;
+     uint32_t len;
+@@ -149,8 +147,8 @@ typedef struct BDRVQcowState {
+     uint64_t l1_table_offset;
+     uint64_t *l1_table;
+ 
+-    Qcow2Cache* l2_table_cache;
+-    Qcow2Cache* refcount_block_cache;
++    BlockCache  *l2_table_cache;
++    BlockCache  *refcount_block_cache;
+ 
+     uint8_t *cluster_cache;
+     uint8_t *cluster_data;
+@@ -392,19 +390,6 @@ void qcow2_free_snapshots(BlockDriverState *bs);
+ int qcow2_read_snapshots(BlockDriverState *bs);
+ 
+ /* qcow2-cache.c functions */
+-Qcow2Cache *qcow2_cache_create(BlockDriverState *bs, int num_tables);
+-int qcow2_cache_destroy(BlockDriverState* bs, Qcow2Cache *c);
+-
+-void qcow2_cache_entry_mark_dirty(Qcow2Cache *c, void *table);
+-int qcow2_cache_flush(BlockDriverState *bs, Qcow2Cache *c);
+-int qcow2_cache_set_dependency(BlockDriverState *bs, Qcow2Cache *c,
+-    Qcow2Cache *dependency);
+-void qcow2_cache_depends_on_flush(Qcow2Cache *c);
+-
+-int qcow2_cache_get(BlockDriverState *bs, Qcow2Cache *c, uint64_t offset,
+-    void **table);
+-int qcow2_cache_get_empty(BlockDriverState *bs, Qcow2Cache *c, uint64_t offset,
+-    void **table);
+-int qcow2_cache_put(BlockDriverState *bs, Qcow2Cache *c, void **table);
++
+ 
+ #endif
+diff --git a/include/block/block-cache.h b/include/block/block-cache.h
+new file mode 100644
+index 0000000..0b9cb3f
+--- /dev/null
++++ b/include/block/block-cache.h
+@@ -0,0 +1,60 @@
++/*
++ * QEMU Block Layer Cache
++ *
++ * Copyright IBM, Corp. 2012
++ *
++ * Authors:
++ *  Dong Xu Wang <wdongxu@linux.vnet.ibm.com>
++ *
++ * This file is based on qcow2-cache.c, see its copyrights below:
++ *
++ * L2/refcount table cache for the QCOW2 format
++ *
++ * Copyright (c) 2010 Kevin Wolf <kwolf@redhat.com>
++ *
++ * Permission is hereby granted, free of charge, to any person obtaining a copy
++ * of this software and associated documentation files (the "Software"), to deal
++ * in the Software without restriction, including without limitation the rights
++ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
++ * copies of the Software, and to permit persons to whom the Software is
++ * furnished to do so, subject to the following conditions:
++ *
++ * The above copyright notice and this permission notice shall be included in
++ * all copies or substantial portions of the Software.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
++ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
++ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
++ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
++ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
++ * THE SOFTWARE.
++ */
++
++#ifndef BLOCK_CACHE_H
++#define BLOCK_CACHE_H
++
++typedef enum {
++    BLOCK_TABLE_REF,
++    BLOCK_TABLE_L2,
++    BLOCK_TABLE_BITMAP,
++} BlockTableType;
++
++struct BlockCache;
++typedef struct BlockCache BlockCache;
++
++BlockCache *block_cache_create(BlockDriverState *bs, int num_tables,
++                               size_t table_size, BlockTableType type);
++int block_cache_destroy(BlockDriverState *bs, BlockCache *c);
++int block_cache_flush(BlockDriverState *bs, BlockCache *c);
++int block_cache_set_dependency(BlockDriverState *bs,
++                               BlockCache *c,
++                               BlockCache *dependency);
++void block_cache_depends_on_flush(BlockCache *c);
++int block_cache_get(BlockDriverState *bs, BlockCache *c, uint64_t offset,
++                    void **table);
++int block_cache_get_empty(BlockDriverState *bs, BlockCache *c,
++                          uint64_t offset, void **table);
++int block_cache_put(BlockDriverState *bs, BlockCache *c, void **table);
++void block_cache_entry_mark_dirty(BlockCache *c, void *table);
++#endif /* BLOCK_CACHE_H */
+diff --git a/trace-events b/trace-events
+index 412f7e4..65124c1 100644
+--- a/trace-events
++++ b/trace-events
+@@ -497,12 +497,13 @@ qcow2_l2_allocate_write_l2(void *bs, int l1_index) "bs %p l1_index %d"
+ qcow2_l2_allocate_write_l1(void *bs, int l1_index) "bs %p l1_index %d"
+ qcow2_l2_allocate_done(void *bs, int l1_index, int ret) "bs %p l1_index %d ret %d"
+ 
+-qcow2_cache_get(void *co, int c, uint64_t offset, bool read_from_disk) "co %p is_l2_cache %d offset %" PRIx64 " read_from_disk %d"
+-qcow2_cache_get_replace_entry(void *co, int c, int i) "co %p is_l2_cache %d index %d"
+-qcow2_cache_get_read(void *co, int c, int i) "co %p is_l2_cache %d index %d"
+-qcow2_cache_get_done(void *co, int c, int i) "co %p is_l2_cache %d index %d"
+-qcow2_cache_flush(void *co, int c) "co %p is_l2_cache %d"
+-qcow2_cache_entry_flush(void *co, int c, int i) "co %p is_l2_cache %d index %d"
++# block/block-cache.c
++block_cache_get(void *co, int c, uint64_t offset, bool read_from_disk) "co %p is_l2_cache %d offset %" PRIx64 " read_from_disk %d"
++block_cache_get_replace_entry(void *co, int c, int i) "co %p is_l2_cache %d index %d"
++block_cache_get_read(void *co, int c, int i) "co %p is_l2_cache %d index %d"
++block_cache_get_done(void *co, int c, int i) "co %p is_l2_cache %d index %d"
++block_cache_flush(void *co, int c) "co %p is_l2_cache %d"
++block_cache_entry_flush(void *co, int c, int i) "co %p is_l2_cache %d index %d"
+ 
+ # block/qed-l2-cache.c
+ qed_alloc_l2_cache_entry(void *l2_cache, void *entry) "l2_cache %p entry %p"
+-- 
+1.7.11.7
+
+

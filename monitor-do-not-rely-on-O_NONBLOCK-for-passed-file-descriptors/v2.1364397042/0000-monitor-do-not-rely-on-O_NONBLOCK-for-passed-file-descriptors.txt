@@ -1,0 +1,81 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Stefan Hajnoczi <stefanha@redhat.com>
+To: Luiz Capitulino <lcapitulino@redhat.com>,
+ mdroth <mdroth@linux.vnet.ibm.com>, Stefan Hajnoczi <stefanha@redhat.com>,
+ qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, david.pravec@nethost.cz,
+ mdroth <mdroth@linux.vnet.ibm.com>, Eric Blake <eblake@redhat.com>,
+ mprivozn@redhat.com, coreyb@linux.vnet.ibm.com,
+ Juan Quintela <quintela@redhat.com>, qemu-devel@nongnu.org,
+ Luiz Capitulino <lcapitulino@redhat.com>, mjt@tls.msk.ru,
+ Stefan Hajnoczi <stefanha@redhat.com>, eblake@redhat.com
+Date: Wed, 27 Mar 2013 10:10:42 +0100
+Message-id: 1364375446-24180-1-git-send-email-stefanha@redhat.com
+Subject: [PATCH 0/4] monitor: do not rely on O_NONBLOCK for passed file
+ descriptors
+
+There are several places where QEMU accidentally relies on the O_NONBLOCK state
+of passed file descriptors.  Exposing O_NONBLOCK state makes it part of the QMP
+API whenever getfd or fdset_add_fd are used!
+
+Whether or not QEMU will use O_NONBLOCK is an implementation detail and should
+be hidden from QMP clients.
+
+This patch series addresses this in 3 steps:
+
+1. Fix callers of monitor_handle_fd_param(), monitor_fdset_get_fd(), and
+   monitor_get_fd() that depend on O_NONBLOCK being set.  Luckily there are
+   only two instances and they are fixed in Patches 1 & 2.
+
+2. Rename socket_set_nonblock() to qemu_set_nonblock() just like
+   qemu_set_cloexec().  This makes code cleaner when working with arbitrary
+   file descriptors that may not be sockets.  See Patch 3.
+
+3. Clear O_NONBLOCK when a chardev receives file descriptors.  From now on QEMU
+   can assume that passed file descriptors are in blocking mode.  Simply use
+   qemu_set_nonblock(fd) if you want to enable O_NONBLOCK.  See Patch 4.
+
+This fixes live migration with recent libvirt.  Libvirt checks if QEMU supports
+file descriptor passing and, if yes, hands QEMU a socket with O_NONBLOCK set.
+The migrate fd:<foo> code assumes the socket is in blocking mode.  The result
+is a corrupted migration stream.  For more info on this bug, see:
+
+https://bugzilla.redhat.com/show_bug.cgi?id=923124
+
+Note that Michal Privoznik <mprivozn@redhat.com> also sent a libvirt patch so
+that old QEMUs work with new libvirts:
+
+https://www.redhat.com/archives/libvir-list/2013-March/msg01486.html
+
+My patch series fixes the QMP API and allows old libvirts to work again with
+new QEMUs.
+
+v2:
+ * Rename socket_set_nonblock() in Patch 1 to avoid code churn [eblake]
+ * Avoid qemu_set_block(-1) calls that clobber errno [quintela]
+
+Stefan Hajnoczi (4):
+  oslib-posix: rename socket_set_nonblock() to qemu_set_nonblock()
+  net: ensure "socket" backend uses non-blocking fds
+  qemu-socket: set passed fd non-blocking in socket_connect()
+  chardev: clear O_NONBLOCK on SCM_RIGHTS file descriptors
+
+ block/nbd.c            |  2 +-
+ block/sheepdog.c       |  2 +-
+ include/qemu/sockets.h |  4 ++--
+ migration.c            |  2 +-
+ nbd.c                  |  8 ++++----
+ net/socket.c           | 13 +++++++++----
+ qemu-char.c            | 11 +++++++----
+ savevm.c               |  2 +-
+ slirp/misc.c           |  2 +-
+ slirp/tcp_subr.c       |  4 ++--
+ ui/vnc.c               |  2 +-
+ util/oslib-posix.c     |  4 ++--
+ util/oslib-win32.c     |  4 ++--
+ util/qemu-sockets.c    |  5 +++--
+ 14 files changed, 37 insertions(+), 28 deletions(-)
+
+-- 
+1.8.1.4
+

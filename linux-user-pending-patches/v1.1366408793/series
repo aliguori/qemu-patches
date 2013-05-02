@@ -1,0 +1,4 @@
+0000-linux-user-pending-patches.txt
+0001-linux-user-change-do_semop-to-return-target-errno-when-unsuccessful.patch
+0002-linux-user-fix-undefined-shift-in-copy_to_user_fdset.patch
+0003-linux-user-fix-setgroups-getgroups-for-non-UID16-archs.patch

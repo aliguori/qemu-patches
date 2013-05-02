@@ -1,0 +1,52 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Wenchao Xia <xiawenc@linux.vnet.ibm.com>
+To: qemu-devel@nongnu.org
+Cc: kwolf@redhat.com, phrdina@redhat.com,
+ Wenchao Xia <xiawenc@linux.vnet.ibm.com>, stefanha@gmail.com,
+ armbru@redhat.com, lcapitulino@redhat.com, pbonzini@redhat.com
+Date: Sat, 13 Apr 2013 16:56:36 +0800
+Message-id: 1365843407-16504-8-git-send-email-xiawenc@linux.vnet.ibm.com
+Subject: [PATCH 07/18] block: change VM snapshot checking logic
+
+  Original logic is different with load_vmstate(), this patch change it
+to be exactly the same with load_vmstate(), so any VM snapshot shown in
+qmp/hmp should succeed in load_vmstate().
+  Note that, runtime snapshot info maybe different with what is got
+in "qemu-img info" as static snapshot info, and this patch clearly
+tips it.
+
+Signed-off-by: Wenchao Xia <xiawenc@linux.vnet.ibm.com>
+Reviewed-by: Eric Blake <eblake@redhat.com>
+---
+ block/qapi.c |   13 ++++++++++++-
+ 1 files changed, 12 insertions(+), 1 deletions(-)
+
+diff --git a/block/qapi.c b/block/qapi.c
+index 97c5cd4..49c0eb0 100644
+--- a/block/qapi.c
++++ b/block/qapi.c
+@@ -46,7 +46,18 @@ static bool snapshot_valid_for_vm(const QEMUSnapshotInfo *sn,
+        take snapshot, for example, readonly ones, will be ignored in
+        load_vmstate(). */
+     while ((bs1 = bdrv_next(bs1))) {
+-        if (bs1 != bs && bdrv_can_snapshot(bs1)) {
++
++        if (!bdrv_is_inserted(bs1) || bdrv_is_read_only(bs1)) {
++            continue;
++        }
++
++        if (!bdrv_can_snapshot(bs1)) {
++            /* Device is writable but does not support snapshots, will be
++               rejected by load_vmstate(). */
++            return false;
++        }
++
++        if (bs1 != bs) {
+             ret = bdrv_snapshot_find(bs1, sn_info, sn->id_str, NULL);
+             if (ret < 0) {
+                 return false;
+-- 
+1.7.1
+
+
+

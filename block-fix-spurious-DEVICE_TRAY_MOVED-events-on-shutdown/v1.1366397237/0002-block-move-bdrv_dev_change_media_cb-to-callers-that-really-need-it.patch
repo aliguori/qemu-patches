@@ -1,0 +1,65 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Luiz Capitulino <lcapitulino@redhat.com>
+To: Luiz Capitulino <lcapitulino@redhat.com>, qemu-devel@nongnu.org,
+ Markus Armbruster <armbru@redhat.com>
+Cc: kwolf@redhat.com, phrdina@redhat.com, armbru@redhat.com,
+ qemu-devel@nongnu.org
+Date: Fri, 19 Apr 2013 13:47:19 -0400
+Message-id: 1366393639-20651-3-git-send-email-lcapitulino@redhat.com
+Subject: [PATCH 2/2] block: move bdrv_dev_change_media_cb() to callers that
+ really need it
+
+Commit 9ca111544c64b5abed2e79cf52e19a8f227b347b moved the call to
+bdrv_dev_change_media_cb() outside the media check in bdrv_close(),
+this added a regression where spurious DEVICE_TRAY_MOVED events
+are emitted at shutdown.
+
+To fix that this commit moves the bdrv_dev_change_media_cb() calls
+to the callers that really need to report a media change, which
+are eject_device() and do_drive_del(). This fixes the problem
+commit 9ca1115 intended to fix, plus the spurious events.
+
+Signed-off-by: Luiz Capitulino <lcapitulino@redhat.com>
+Reviewed-by: Eric Blake <eblake@redhat.com>
+---
+ block.c    | 2 --
+ blockdev.c | 2 ++
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/block.c b/block.c
+index 90d0ed1..7fc3014 100644
+--- a/block.c
++++ b/block.c
+@@ -1342,8 +1342,6 @@ void bdrv_close(BlockDriverState *bs)
+         }
+     }
+ 
+-    bdrv_dev_change_media_cb(bs, false);
+-
+     /*throttling disk I/O limits*/
+     if (bs->io_limits_enabled) {
+         bdrv_io_limits_disable(bs);
+diff --git a/blockdev.c b/blockdev.c
+index 8a1652b..f1f3b6e 100644
+--- a/blockdev.c
++++ b/blockdev.c
+@@ -950,6 +950,7 @@ static void eject_device(BlockDriverState *bs, int force, Error **errp)
+     }
+ 
+     bdrv_close(bs);
++    bdrv_dev_change_media_cb(bs, false);
+ }
+ 
+ void qmp_eject(const char *device, bool has_force, bool force, Error **errp)
+@@ -1100,6 +1101,7 @@ int do_drive_del(Monitor *mon, const QDict *qdict, QObject **ret_data)
+     bdrv_drain_all();
+     bdrv_flush(bs);
+     bdrv_close(bs);
++    bdrv_dev_change_media_cb(bs, false);
+ 
+     /* if we have a device attached to this BlockDriverState
+      * then we need to make the drive anonymous until the device
+-- 
+1.8.1.4
+
+

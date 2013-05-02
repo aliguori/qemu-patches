@@ -1,0 +1,1 @@
+../usb-redir-chardev-flowcontrol-patches-v4/v1.1365179418/0004-spice-qemu-char-Add-watch-support.patch

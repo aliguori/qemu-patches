@@ -1,0 +1,1 @@
+../Block-patches/v1.1366655474/0018-block-Remove-filename-parameter-from-bdrv_file_open.patch

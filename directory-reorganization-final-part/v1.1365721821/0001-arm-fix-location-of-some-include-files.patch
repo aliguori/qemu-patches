@@ -1,0 +1,740 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: peter.maydell@linaro.org, mst@redhat.com
+Date: Thu, 11 Apr 2013 18:10:22 +0200
+Message-id: 1365696633-30727-2-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 01/12] arm: fix location of some include files
+
+From: Peter Maydell <peter.maydell@linaro.org>
+
+The recent rearrangement of include files had some minor errors:
+ devices.h is not ARM specific and should not be in arm/
+ arm.h should be in arm/
+
+Move these two headers to correct this.
+
+Signed-off-by: Peter Maydell <peter.maydell@linaro.org>
+---
+ hw/alpha/typhoon.c                       | 2 +-
+ hw/arm/armv7m.c                          | 2 +-
+ hw/arm/boot.c                            | 2 +-
+ hw/arm/collie.c                          | 4 ++--
+ hw/arm/exynos4210.c                      | 2 +-
+ hw/arm/exynos4_boards.c                  | 2 +-
+ hw/arm/gumstix.c                         | 2 +-
+ hw/arm/highbank.c                        | 4 ++--
+ hw/arm/integratorcp.c                    | 4 ++--
+ hw/arm/kzm.c                             | 4 ++--
+ hw/arm/mainstone.c                       | 4 ++--
+ hw/arm/musicpal.c                        | 4 ++--
+ hw/arm/nseries.c                         | 4 ++--
+ hw/arm/omap1.c                           | 2 +-
+ hw/arm/omap2.c                           | 2 +-
+ hw/arm/omap_sx1.c                        | 2 +-
+ hw/arm/palm.c                            | 4 ++--
+ hw/arm/pic_cpu.c                         | 2 +-
+ hw/arm/realview.c                        | 4 ++--
+ hw/arm/spitz.c                           | 4 ++--
+ hw/arm/stellaris.c                       | 4 ++--
+ hw/arm/strongarm.c                       | 2 +-
+ hw/arm/tosa.c                            | 4 ++--
+ hw/arm/versatilepb.c                     | 4 ++--
+ hw/arm/vexpress.c                        | 4 ++--
+ hw/arm/xilinx_zynq.c                     | 2 +-
+ hw/arm/z2.c                              | 4 ++--
+ hw/block/m25p80.c                        | 2 +-
+ hw/display/blizzard.c                    | 2 +-
+ hw/display/sm501.c                       | 2 +-
+ hw/display/tc6393xb.c                    | 2 +-
+ hw/input/stellaris_input.c               | 2 +-
+ hw/input/tsc2005.c                       | 2 +-
+ hw/input/tsc210x.c                       | 2 +-
+ hw/intc/armv7m_nvic.c                    | 2 +-
+ hw/lm32/lm32_boards.c                    | 2 +-
+ hw/lm32/milkymist.c                      | 2 +-
+ hw/microblaze/petalogix_ml605_mmu.c      | 2 +-
+ hw/microblaze/petalogix_s3adsp1800_mmu.c | 2 +-
+ hw/misc/cbus.c                           | 2 +-
+ hw/net/lan9118.c                         | 2 +-
+ hw/net/smc91c111.c                       | 2 +-
+ hw/ppc/virtex_ml507.c                    | 2 +-
+ hw/sh4/r2d.c                             | 2 +-
+ hw/timer/tusb6010.c                      | 2 +-
+ include/hw/{ => arm}/arm.h               | 0
+ include/hw/{arm => }/devices.h           | 0
+ target-arm/arm-semi.c                    | 2 +-
+ target-arm/kvm.c                         | 2 +-
+ 49 files changed, 62 insertions(+), 62 deletions(-)
+ rename include/hw/{ => arm}/arm.h (100%)
+ rename include/hw/{arm => }/devices.h (100%)
+
+diff --git a/hw/alpha/typhoon.c b/hw/alpha/typhoon.c
+index faec8dc..68420f4 100644
+--- a/hw/alpha/typhoon.c
++++ b/hw/alpha/typhoon.c
+@@ -9,7 +9,7 @@
+ #include "cpu.h"
+ #include "exec/exec-all.h"
+ #include "hw/hw.h"
+-#include "hw/arm/devices.h"
++#include "hw/devices.h"
+ #include "sysemu/sysemu.h"
+ #include "alpha_sys.h"
+ #include "exec/address-spaces.h"
+diff --git a/hw/arm/armv7m.c b/hw/arm/armv7m.c
+index a4bdd5f..2ae3576 100644
+--- a/hw/arm/armv7m.c
++++ b/hw/arm/armv7m.c
+@@ -8,7 +8,7 @@
+  */
+ 
+ #include "hw/sysbus.h"
+-#include "hw/arm.h"
++#include "hw/arm/arm.h"
+ #include "hw/loader.h"
+ #include "elf.h"
+ 
+diff --git a/hw/arm/boot.c b/hw/arm/boot.c
+index c79c590..e9c0945 100644
+--- a/hw/arm/boot.c
++++ b/hw/arm/boot.c
+@@ -9,7 +9,7 @@
+ 
+ #include "config.h"
+ #include "hw/hw.h"
+-#include "hw/arm.h"
++#include "hw/arm/arm.h"
+ #include "sysemu/sysemu.h"
+ #include "hw/boards.h"
+ #include "hw/loader.h"
+diff --git a/hw/arm/collie.c b/hw/arm/collie.c
+index 5420bb4..a19857a 100644
+--- a/hw/arm/collie.c
++++ b/hw/arm/collie.c
+@@ -11,9 +11,9 @@
+ #include "hw/hw.h"
+ #include "hw/sysbus.h"
+ #include "hw/boards.h"
+-#include "hw/arm/devices.h"
++#include "hw/devices.h"
+ #include "strongarm.h"
+-#include "hw/arm.h"
++#include "hw/arm/arm.h"
+ #include "hw/block/flash.h"
+ #include "sysemu/blockdev.h"
+ #include "exec/address-spaces.h"
+diff --git a/hw/arm/exynos4210.c b/hw/arm/exynos4210.c
+index 78b8b74..c8101d3 100644
+--- a/hw/arm/exynos4210.c
++++ b/hw/arm/exynos4210.c
+@@ -24,7 +24,7 @@
+ #include "hw/boards.h"
+ #include "sysemu/sysemu.h"
+ #include "hw/sysbus.h"
+-#include "hw/arm.h"
++#include "hw/arm/arm.h"
+ #include "hw/loader.h"
+ #include "hw/arm/exynos4210.h"
+ #include "hw/usb/hcd-ehci.h"
+diff --git a/hw/arm/exynos4_boards.c b/hw/arm/exynos4_boards.c
+index ba14a1f..74f110b 100644
+--- a/hw/arm/exynos4_boards.c
++++ b/hw/arm/exynos4_boards.c
+@@ -24,7 +24,7 @@
+ #include "sysemu/sysemu.h"
+ #include "hw/sysbus.h"
+ #include "net/net.h"
+-#include "hw/arm.h"
++#include "hw/arm/arm.h"
+ #include "exec/address-spaces.h"
+ #include "hw/arm/exynos4210.h"
+ #include "hw/boards.h"
+diff --git a/hw/arm/gumstix.c b/hw/arm/gumstix.c
+index 4d800c9..b8cab10 100644
+--- a/hw/arm/gumstix.c
++++ b/hw/arm/gumstix.c
+@@ -38,7 +38,7 @@
+ #include "hw/arm/pxa.h"
+ #include "net/net.h"
+ #include "hw/block/flash.h"
+-#include "hw/arm/devices.h"
++#include "hw/devices.h"
+ #include "hw/boards.h"
+ #include "sysemu/blockdev.h"
+ #include "exec/address-spaces.h"
+diff --git a/hw/arm/highbank.c b/hw/arm/highbank.c
+index 58f73c1..0fd9465 100644
+--- a/hw/arm/highbank.c
++++ b/hw/arm/highbank.c
+@@ -18,8 +18,8 @@
+  */
+ 
+ #include "hw/sysbus.h"
+-#include "hw/arm.h"
+-#include "hw/arm/devices.h"
++#include "hw/arm/arm.h"
++#include "hw/devices.h"
+ #include "hw/loader.h"
+ #include "net/net.h"
+ #include "sysemu/sysemu.h"
+diff --git a/hw/arm/integratorcp.c b/hw/arm/integratorcp.c
+index 8d0fb75..cca2971 100644
+--- a/hw/arm/integratorcp.c
++++ b/hw/arm/integratorcp.c
+@@ -8,9 +8,9 @@
+  */
+ 
+ #include "hw/sysbus.h"
+-#include "hw/arm/devices.h"
++#include "hw/devices.h"
+ #include "hw/boards.h"
+-#include "hw/arm.h"
++#include "hw/arm/arm.h"
+ #include "net/net.h"
+ #include "exec/address-spaces.h"
+ #include "sysemu/sysemu.h"
+diff --git a/hw/arm/kzm.c b/hw/arm/kzm.c
+index 46264cd..cf90f5d 100644
+--- a/hw/arm/kzm.c
++++ b/hw/arm/kzm.c
+@@ -16,8 +16,8 @@
+ #include "hw/sysbus.h"
+ #include "exec/address-spaces.h"
+ #include "hw/hw.h"
+-#include "hw/arm.h"
+-#include "hw/arm/devices.h"
++#include "hw/arm/arm.h"
++#include "hw/devices.h"
+ #include "net/net.h"
+ #include "sysemu/sysemu.h"
+ #include "hw/boards.h"
+diff --git a/hw/arm/mainstone.c b/hw/arm/mainstone.c
+index b78e6f0..260e314 100644
+--- a/hw/arm/mainstone.c
++++ b/hw/arm/mainstone.c
+@@ -13,9 +13,9 @@
+  */
+ #include "hw/hw.h"
+ #include "hw/arm/pxa.h"
+-#include "hw/arm.h"
++#include "hw/arm/arm.h"
+ #include "net/net.h"
+-#include "hw/arm/devices.h"
++#include "hw/devices.h"
+ #include "hw/boards.h"
+ #include "hw/block/flash.h"
+ #include "sysemu/blockdev.h"
+diff --git a/hw/arm/musicpal.c b/hw/arm/musicpal.c
+index 97b1340..d2247fa 100644
+--- a/hw/arm/musicpal.c
++++ b/hw/arm/musicpal.c
+@@ -10,8 +10,8 @@
+  */
+ 
+ #include "hw/sysbus.h"
+-#include "hw/arm.h"
+-#include "hw/arm/devices.h"
++#include "hw/arm/arm.h"
++#include "hw/devices.h"
+ #include "net/net.h"
+ #include "sysemu/sysemu.h"
+ #include "hw/boards.h"
+diff --git a/hw/arm/nseries.c b/hw/arm/nseries.c
+index ba8dc3e..4976438 100644
+--- a/hw/arm/nseries.c
++++ b/hw/arm/nseries.c
+@@ -21,12 +21,12 @@
+ #include "qemu-common.h"
+ #include "sysemu/sysemu.h"
+ #include "hw/arm/omap.h"
+-#include "hw/arm.h"
++#include "hw/arm/arm.h"
+ #include "hw/irq.h"
+ #include "ui/console.h"
+ #include "hw/boards.h"
+ #include "hw/i2c/i2c.h"
+-#include "hw/arm/devices.h"
++#include "hw/devices.h"
+ #include "hw/block/flash.h"
+ #include "hw/hw.h"
+ #include "hw/bt.h"
+diff --git a/hw/arm/omap1.c b/hw/arm/omap1.c
+index 17caa61..f59f0f2 100644
+--- a/hw/arm/omap1.c
++++ b/hw/arm/omap1.c
+@@ -17,7 +17,7 @@
+  * with this program; if not, see <http://www.gnu.org/licenses/>.
+  */
+ #include "hw/hw.h"
+-#include "hw/arm.h"
++#include "hw/arm/arm.h"
+ #include "hw/arm/omap.h"
+ #include "sysemu/sysemu.h"
+ #include "hw/arm/soc_dma.h"
+diff --git a/hw/arm/omap2.c b/hw/arm/omap2.c
+index 010c483..a4b4146 100644
+--- a/hw/arm/omap2.c
++++ b/hw/arm/omap2.c
+@@ -20,7 +20,7 @@
+ 
+ #include "sysemu/blockdev.h"
+ #include "hw/hw.h"
+-#include "hw/arm.h"
++#include "hw/arm/arm.h"
+ #include "hw/arm/omap.h"
+ #include "sysemu/sysemu.h"
+ #include "qemu/timer.h"
+diff --git a/hw/arm/omap_sx1.c b/hw/arm/omap_sx1.c
+index aa85602..e421ece 100644
+--- a/hw/arm/omap_sx1.c
++++ b/hw/arm/omap_sx1.c
+@@ -29,7 +29,7 @@
+ #include "ui/console.h"
+ #include "hw/arm/omap.h"
+ #include "hw/boards.h"
+-#include "hw/arm.h"
++#include "hw/arm/arm.h"
+ #include "hw/block/flash.h"
+ #include "sysemu/blockdev.h"
+ #include "exec/address-spaces.h"
+diff --git a/hw/arm/palm.c b/hw/arm/palm.c
+index 0bc11ae..b13d810 100644
+--- a/hw/arm/palm.c
++++ b/hw/arm/palm.c
+@@ -22,8 +22,8 @@
+ #include "ui/console.h"
+ #include "hw/arm/omap.h"
+ #include "hw/boards.h"
+-#include "hw/arm.h"
+-#include "hw/arm/devices.h"
++#include "hw/arm/arm.h"
++#include "hw/devices.h"
+ #include "hw/loader.h"
+ #include "exec/address-spaces.h"
+ 
+diff --git a/hw/arm/pic_cpu.c b/hw/arm/pic_cpu.c
+index 787767f..875280a 100644
+--- a/hw/arm/pic_cpu.c
++++ b/hw/arm/pic_cpu.c
+@@ -8,7 +8,7 @@
+  */
+ 
+ #include "hw/hw.h"
+-#include "hw/arm.h"
++#include "hw/arm/arm.h"
+ #include "sysemu/kvm.h"
+ 
+ /* Input 0 is IRQ and input 1 is FIQ.  */
+diff --git a/hw/arm/realview.c b/hw/arm/realview.c
+index afd52d3..feabfc5 100644
+--- a/hw/arm/realview.c
++++ b/hw/arm/realview.c
+@@ -8,9 +8,9 @@
+  */
+ 
+ #include "hw/sysbus.h"
+-#include "hw/arm.h"
++#include "hw/arm/arm.h"
+ #include "hw/arm/primecell.h"
+-#include "hw/arm/devices.h"
++#include "hw/devices.h"
+ #include "hw/pci/pci.h"
+ #include "net/net.h"
+ #include "sysemu/sysemu.h"
+diff --git a/hw/arm/spitz.c b/hw/arm/spitz.c
+index fa434dc..c42668a 100644
+--- a/hw/arm/spitz.c
++++ b/hw/arm/spitz.c
+@@ -12,14 +12,14 @@
+ 
+ #include "hw/hw.h"
+ #include "hw/arm/pxa.h"
+-#include "hw/arm.h"
++#include "hw/arm/arm.h"
+ #include "sysemu/sysemu.h"
+ #include "hw/pcmcia.h"
+ #include "hw/i2c/i2c.h"
+ #include "hw/ssi.h"
+ #include "hw/block/flash.h"
+ #include "qemu/timer.h"
+-#include "hw/arm/devices.h"
++#include "hw/devices.h"
+ #include "hw/arm/sharpsl.h"
+ #include "ui/console.h"
+ #include "block/block.h"
+diff --git a/hw/arm/stellaris.c b/hw/arm/stellaris.c
+index 952087c..2b61e3c 100644
+--- a/hw/arm/stellaris.c
++++ b/hw/arm/stellaris.c
+@@ -9,8 +9,8 @@
+ 
+ #include "hw/sysbus.h"
+ #include "hw/ssi.h"
+-#include "hw/arm.h"
+-#include "hw/arm/devices.h"
++#include "hw/arm/arm.h"
++#include "hw/devices.h"
+ #include "qemu/timer.h"
+ #include "hw/i2c/i2c.h"
+ #include "net/net.h"
+diff --git a/hw/arm/strongarm.c b/hw/arm/strongarm.c
+index 5873a3c..75a813e 100644
+--- a/hw/arm/strongarm.c
++++ b/hw/arm/strongarm.c
+@@ -29,7 +29,7 @@
+ #include "hw/sysbus.h"
+ #include "strongarm.h"
+ #include "qemu/error-report.h"
+-#include "hw/arm.h"
++#include "hw/arm/arm.h"
+ #include "char/char.h"
+ #include "sysemu/sysemu.h"
+ #include "hw/ssi.h"
+diff --git a/hw/arm/tosa.c b/hw/arm/tosa.c
+index c4362d4..47818a5 100644
+--- a/hw/arm/tosa.c
++++ b/hw/arm/tosa.c
+@@ -13,8 +13,8 @@
+ 
+ #include "hw/hw.h"
+ #include "hw/arm/pxa.h"
+-#include "hw/arm.h"
+-#include "hw/arm/devices.h"
++#include "hw/arm/arm.h"
++#include "hw/devices.h"
+ #include "hw/arm/sharpsl.h"
+ #include "hw/pcmcia.h"
+ #include "block/block.h"
+diff --git a/hw/arm/versatilepb.c b/hw/arm/versatilepb.c
+index d9be604..25c665a 100644
+--- a/hw/arm/versatilepb.c
++++ b/hw/arm/versatilepb.c
+@@ -8,8 +8,8 @@
+  */
+ 
+ #include "hw/sysbus.h"
+-#include "hw/arm.h"
+-#include "hw/arm/devices.h"
++#include "hw/arm/arm.h"
++#include "hw/devices.h"
+ #include "net/net.h"
+ #include "sysemu/sysemu.h"
+ #include "hw/pci/pci.h"
+diff --git a/hw/arm/vexpress.c b/hw/arm/vexpress.c
+index 96e0985..a077c62 100644
+--- a/hw/arm/vexpress.c
++++ b/hw/arm/vexpress.c
+@@ -22,9 +22,9 @@
+  */
+ 
+ #include "hw/sysbus.h"
+-#include "hw/arm.h"
++#include "hw/arm/arm.h"
+ #include "hw/arm/primecell.h"
+-#include "hw/arm/devices.h"
++#include "hw/devices.h"
+ #include "net/net.h"
+ #include "sysemu/sysemu.h"
+ #include "hw/boards.h"
+diff --git a/hw/arm/xilinx_zynq.c b/hw/arm/xilinx_zynq.c
+index 8d65f79..41505c3 100644
+--- a/hw/arm/xilinx_zynq.c
++++ b/hw/arm/xilinx_zynq.c
+@@ -16,7 +16,7 @@
+  */
+ 
+ #include "hw/sysbus.h"
+-#include "hw/arm.h"
++#include "hw/arm/arm.h"
+ #include "net/net.h"
+ #include "exec/address-spaces.h"
+ #include "sysemu/sysemu.h"
+diff --git a/hw/arm/z2.c b/hw/arm/z2.c
+index 3e27208..07a127b 100644
+--- a/hw/arm/z2.c
++++ b/hw/arm/z2.c
+@@ -13,8 +13,8 @@
+ 
+ #include "hw/hw.h"
+ #include "hw/arm/pxa.h"
+-#include "hw/arm.h"
+-#include "hw/arm/devices.h"
++#include "hw/arm/arm.h"
++#include "hw/devices.h"
+ #include "hw/i2c/i2c.h"
+ #include "hw/ssi.h"
+ #include "hw/boards.h"
+diff --git a/hw/block/m25p80.c b/hw/block/m25p80.c
+index cd560e3..55e9d0d 100644
+--- a/hw/block/m25p80.c
++++ b/hw/block/m25p80.c
+@@ -24,7 +24,7 @@
+ #include "hw/hw.h"
+ #include "sysemu/blockdev.h"
+ #include "hw/ssi.h"
+-#include "hw/arm/devices.h"
++#include "hw/devices.h"
+ 
+ #ifdef M25P80_ERR_DEBUG
+ #define DB_PRINT(...) do { \
+diff --git a/hw/display/blizzard.c b/hw/display/blizzard.c
+index 175c5cd..de7ccf8 100644
+--- a/hw/display/blizzard.c
++++ b/hw/display/blizzard.c
+@@ -20,7 +20,7 @@
+ 
+ #include "qemu-common.h"
+ #include "ui/console.h"
+-#include "hw/arm/devices.h"
++#include "hw/devices.h"
+ #include "vga_int.h"
+ #include "ui/pixel_ops.h"
+ 
+diff --git a/hw/display/sm501.c b/hw/display/sm501.c
+index 6b660ac..9878df4 100644
+--- a/hw/display/sm501.c
++++ b/hw/display/sm501.c
+@@ -26,7 +26,7 @@
+ #include "hw/hw.h"
+ #include "hw/char/serial.h"
+ #include "ui/console.h"
+-#include "hw/arm/devices.h"
++#include "hw/devices.h"
+ #include "hw/sysbus.h"
+ #include "hw/qdev-addr.h"
+ #include "qemu/range.h"
+diff --git a/hw/display/tc6393xb.c b/hw/display/tc6393xb.c
+index e252ce9..178a21f 100644
+--- a/hw/display/tc6393xb.c
++++ b/hw/display/tc6393xb.c
+@@ -11,7 +11,7 @@
+  * GNU GPL, version 2 or (at your option) any later version.
+  */
+ #include "hw/hw.h"
+-#include "hw/arm/devices.h"
++#include "hw/devices.h"
+ #include "hw/block/flash.h"
+ #include "ui/console.h"
+ #include "ui/pixel_ops.h"
+diff --git a/hw/input/stellaris_input.c b/hw/input/stellaris_input.c
+index f83fc3f..4e40792 100644
+--- a/hw/input/stellaris_input.c
++++ b/hw/input/stellaris_input.c
+@@ -7,7 +7,7 @@
+  * This code is licensed under the GPL.
+  */
+ #include "hw/hw.h"
+-#include "hw/arm/devices.h"
++#include "hw/devices.h"
+ #include "ui/console.h"
+ 
+ typedef struct {
+diff --git a/hw/input/tsc2005.c b/hw/input/tsc2005.c
+index 34ee1fb..a771cd5 100644
+--- a/hw/input/tsc2005.c
++++ b/hw/input/tsc2005.c
+@@ -21,7 +21,7 @@
+ #include "hw/hw.h"
+ #include "qemu/timer.h"
+ #include "ui/console.h"
+-#include "hw/arm/devices.h"
++#include "hw/devices.h"
+ 
+ #define TSC_CUT_RESOLUTION(value, p)	((value) >> (16 - (p ? 12 : 10)))
+ 
+diff --git a/hw/input/tsc210x.c b/hw/input/tsc210x.c
+index e6c217c..9b854e7 100644
+--- a/hw/input/tsc210x.c
++++ b/hw/input/tsc210x.c
+@@ -24,7 +24,7 @@
+ #include "qemu/timer.h"
+ #include "ui/console.h"
+ #include "hw/arm/omap.h"	/* For I2SCodec and uWireSlave */
+-#include "hw/arm/devices.h"
++#include "hw/devices.h"
+ 
+ #define TSC_DATA_REGISTERS_PAGE		0x0
+ #define TSC_CONTROL_REGISTERS_PAGE	0x1
+diff --git a/hw/intc/armv7m_nvic.c b/hw/intc/armv7m_nvic.c
+index 566b4bf..8eae4fc 100644
+--- a/hw/intc/armv7m_nvic.c
++++ b/hw/intc/armv7m_nvic.c
+@@ -12,7 +12,7 @@
+ 
+ #include "hw/sysbus.h"
+ #include "qemu/timer.h"
+-#include "hw/arm.h"
++#include "hw/arm/arm.h"
+ #include "exec/address-spaces.h"
+ #include "gic_internal.h"
+ 
+diff --git a/hw/lm32/lm32_boards.c b/hw/lm32/lm32_boards.c
+index 6555a97..1ca9498 100644
+--- a/hw/lm32/lm32_boards.c
++++ b/hw/lm32/lm32_boards.c
+@@ -20,7 +20,7 @@
+ #include "hw/sysbus.h"
+ #include "hw/hw.h"
+ #include "hw/block/flash.h"
+-#include "hw/arm/devices.h"
++#include "hw/devices.h"
+ #include "hw/boards.h"
+ #include "hw/loader.h"
+ #include "sysemu/blockdev.h"
+diff --git a/hw/lm32/milkymist.c b/hw/lm32/milkymist.c
+index d02ca0c..cca9374 100644
+--- a/hw/lm32/milkymist.c
++++ b/hw/lm32/milkymist.c
+@@ -21,7 +21,7 @@
+ #include "hw/hw.h"
+ #include "hw/block/flash.h"
+ #include "sysemu/sysemu.h"
+-#include "hw/arm/devices.h"
++#include "hw/devices.h"
+ #include "hw/boards.h"
+ #include "hw/loader.h"
+ #include "elf.h"
+diff --git a/hw/microblaze/petalogix_ml605_mmu.c b/hw/microblaze/petalogix_ml605_mmu.c
+index f61818b..ae7ff44 100644
+--- a/hw/microblaze/petalogix_ml605_mmu.c
++++ b/hw/microblaze/petalogix_ml605_mmu.c
+@@ -30,7 +30,7 @@
+ #include "net/net.h"
+ #include "hw/block/flash.h"
+ #include "sysemu/sysemu.h"
+-#include "hw/arm/devices.h"
++#include "hw/devices.h"
+ #include "hw/boards.h"
+ #include "hw/xilinx.h"
+ #include "sysemu/blockdev.h"
+diff --git a/hw/microblaze/petalogix_s3adsp1800_mmu.c b/hw/microblaze/petalogix_s3adsp1800_mmu.c
+index eedd60e..7c258f0 100644
+--- a/hw/microblaze/petalogix_s3adsp1800_mmu.c
++++ b/hw/microblaze/petalogix_s3adsp1800_mmu.c
+@@ -28,7 +28,7 @@
+ #include "net/net.h"
+ #include "hw/block/flash.h"
+ #include "sysemu/sysemu.h"
+-#include "hw/arm/devices.h"
++#include "hw/devices.h"
+ #include "hw/boards.h"
+ #include "hw/xilinx.h"
+ #include "sysemu/blockdev.h"
+diff --git a/hw/misc/cbus.c b/hw/misc/cbus.c
+index 3d9027f..29b467b 100644
+--- a/hw/misc/cbus.c
++++ b/hw/misc/cbus.c
+@@ -22,7 +22,7 @@
+ 
+ #include "qemu-common.h"
+ #include "hw/irq.h"
+-#include "hw/arm/devices.h"
++#include "hw/devices.h"
+ #include "sysemu/sysemu.h"
+ 
+ //#define DEBUG
+diff --git a/hw/net/lan9118.c b/hw/net/lan9118.c
+index 04cf267..403fb86 100644
+--- a/hw/net/lan9118.c
++++ b/hw/net/lan9118.c
+@@ -12,7 +12,7 @@
+ 
+ #include "hw/sysbus.h"
+ #include "net/net.h"
+-#include "hw/arm/devices.h"
++#include "hw/devices.h"
+ #include "sysemu/sysemu.h"
+ #include "hw/ptimer.h"
+ /* For crc32 */
+diff --git a/hw/net/smc91c111.c b/hw/net/smc91c111.c
+index f659256..c2feae6 100644
+--- a/hw/net/smc91c111.c
++++ b/hw/net/smc91c111.c
+@@ -9,7 +9,7 @@
+ 
+ #include "hw/sysbus.h"
+ #include "net/net.h"
+-#include "hw/arm/devices.h"
++#include "hw/devices.h"
+ /* For crc32 */
+ #include <zlib.h>
+ 
+diff --git a/hw/ppc/virtex_ml507.c b/hw/ppc/virtex_ml507.c
+index 92b4394..6728ba7 100644
+--- a/hw/ppc/virtex_ml507.c
++++ b/hw/ppc/virtex_ml507.c
+@@ -27,7 +27,7 @@
+ #include "hw/char/serial.h"
+ #include "hw/block/flash.h"
+ #include "sysemu/sysemu.h"
+-#include "hw/arm/devices.h"
++#include "hw/devices.h"
+ #include "hw/boards.h"
+ #include "sysemu/device_tree.h"
+ #include "hw/loader.h"
+diff --git a/hw/sh4/r2d.c b/hw/sh4/r2d.c
+index 256a58c..4986dae 100644
+--- a/hw/sh4/r2d.c
++++ b/hw/sh4/r2d.c
+@@ -26,7 +26,7 @@
+ #include "hw/sysbus.h"
+ #include "hw/hw.h"
+ #include "hw/sh4/sh.h"
+-#include "hw/arm/devices.h"
++#include "hw/devices.h"
+ #include "sysemu/sysemu.h"
+ #include "hw/boards.h"
+ #include "hw/pci/pci.h"
+diff --git a/hw/timer/tusb6010.c b/hw/timer/tusb6010.c
+index 533938a..50edc06 100644
+--- a/hw/timer/tusb6010.c
++++ b/hw/timer/tusb6010.c
+@@ -23,7 +23,7 @@
+ #include "hw/usb.h"
+ #include "hw/arm/omap.h"
+ #include "hw/irq.h"
+-#include "hw/arm/devices.h"
++#include "hw/devices.h"
+ #include "hw/sysbus.h"
+ 
+ typedef struct TUSBState {
+diff --git a/include/hw/arm.h b/include/hw/arm/arm.h
+similarity index 100%
+rename from include/hw/arm.h
+rename to include/hw/arm/arm.h
+diff --git a/include/hw/arm/devices.h b/include/hw/devices.h
+similarity index 100%
+rename from include/hw/arm/devices.h
+rename to include/hw/devices.h
+diff --git a/target-arm/arm-semi.c b/target-arm/arm-semi.c
+index 77718c4..f0637a4 100644
+--- a/target-arm/arm-semi.c
++++ b/target-arm/arm-semi.c
+@@ -34,7 +34,7 @@
+ #else
+ #include "qemu-common.h"
+ #include "exec/gdbstub.h"
+-#include "hw/arm.h"
++#include "hw/arm/arm.h"
+ #endif
+ 
+ #define TARGET_SYS_OPEN        0x01
+diff --git a/target-arm/kvm.c b/target-arm/kvm.c
+index 6bfb103..d8acace 100644
+--- a/target-arm/kvm.c
++++ b/target-arm/kvm.c
+@@ -21,7 +21,7 @@
+ #include "sysemu/kvm.h"
+ #include "kvm_arm.h"
+ #include "cpu.h"
+-#include "hw/arm.h"
++#include "hw/arm/arm.h"
+ 
+ const KVMCapabilityInfo kvm_arch_required_capabilities[] = {
+     KVM_CAP_LAST_INFO
+-- 
+1.8.1.4
+
+
+

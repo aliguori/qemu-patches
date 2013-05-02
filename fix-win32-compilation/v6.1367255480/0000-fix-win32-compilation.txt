@@ -1,0 +1,44 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: blauwirbel@gmail.com, sw@weilnetz.de, Anthony Liguori <aliguori@us.ibm.com>
+Date: Mon, 29 Apr 2013 12:11:20 +0200
+Message-id: 1367230284-24612-1-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 0/4] fix win32 compilation
+
+Here is a fix for the Win32 compilation problem that Blue reported,
+and another two nits I found while testing.  After these patches, a
+cross libtool is not needed anymore to build on Win32.
+
+The following changes since commit 75f6e8b0f121beeee6a95eb9e35d88ec1f01824f:
+
+  virtio-rng-s390: add properties. (2013-04-26 20:18:25 +0200)
+
+are available in the git repository at:
+
+  git://github.com/bonzini/qemu.git migration-writev
+
+for you to fetch changes up to 9adea5f7f7a23ef4a1231289a36a94c52347b142:
+
+  win32: add readv/writev emulation (2013-04-29 10:52:36 +0200)
+
+v5->v6: just include config-host.h in osdep.h [Peter]
+
+----------------------------------------------------------------
+Paolo Bonzini (4):
+      win32: add generic RC rules to rules.mak
+      win32: move Makefile dependencies on version-obj-y to rules.mak
+      win32: generate console executable again
+      win32: add readv/writev emulation
+
+ Makefile              |  5 +----
+ Makefile.target       |  2 +-
+ include/qemu-common.h | 22 ++--------------------
+ include/qemu/osdep.h  | 17 +++++++++++++++++
+ rules.mak             |  7 +++++++
+ util/iov.c            |  2 +-
+ util/osdep.c          | 43 +++++++++++++++++++++++++++++++++++++++++++
+ 7 files changed, 72 insertions(+), 26 deletions(-)
+-- 
+1.8.2
+

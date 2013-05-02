@@ -1,0 +1,81 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Jason Wang <jasowang@redhat.com>
+To: Anthony Liguori <aliguori@us.ibm.com>, qemu-devel@nongnu.org,
+ Jason Wang <jasowang@redhat.com>
+Cc: Anthony Liguori <aliguori@us.ibm.com>, Jason Wang <jasowang@redhat.com>,
+ Aurelien Jarno <aurelien@aurel32.net>, qemu-devel@nongnu.org, mst@redhat.com
+Date: Thu, 25 Apr 2013 15:24:23 +0800
+Message-id: 1366874663-2566-1-git-send-email-jasowang@redhat.com
+Subject: [PATCH 1/1] virtio-net: unbreak the minix guest
+
+Multiqueue patchset conditionally add control vq only when guest negotiate the
+feature. Though the spec is not clear on this but it breaks the minix guest
+since it will identify the ctrl vq even if it does not support it. Though this
+behavior seems a violation on the spec "If the VIRTIO_NET_F_CTRL_VQ feature bit
+is negotiated, identify the control virtqueue.", to keep the backward
+compatibility, always add the ctrl vq at end of the queues.
+
+Reported-by: Aurelien Jarno <aurelien@aurel32.net>
+Cc: Aurelien Jarno <aurelien@aurel32.net>
+Signed-off-by: Jason Wang <jasowang@redhat.com>
+
+Tested-by: Aurelien Jarno <aurelien@aurel32.net>
+Acked-by: Michael S. Tsirkin <mst@redhat.com>
+---
+Changes from V1:
+- Drop the unrelated cleanups
+- Drop the meaningless ctrl parameter of virtio_net_set_multiqueue()
+---
+ hw/net/virtio-net.c |   15 ++++++++-------
+ 1 files changed, 8 insertions(+), 7 deletions(-)
+
+diff --git a/hw/net/virtio-net.c b/hw/net/virtio-net.c
+index 4d2cdd2..1662f46 100644
+--- a/hw/net/virtio-net.c
++++ b/hw/net/virtio-net.c
+@@ -309,7 +309,7 @@ static void virtio_net_set_queues(VirtIONet *n)
+     }
+ }
+ 
+-static void virtio_net_set_multiqueue(VirtIONet *n, int multiqueue, int ctrl);
++static void virtio_net_set_multiqueue(VirtIONet *n, int multiqueue);
+ 
+ static uint32_t virtio_net_get_features(VirtIODevice *vdev, uint32_t features)
+ {
+@@ -364,8 +364,7 @@ static void virtio_net_set_features(VirtIODevice *vdev, uint32_t features)
+     VirtIONet *n = VIRTIO_NET(vdev);
+     int i;
+ 
+-    virtio_net_set_multiqueue(n, !!(features & (1 << VIRTIO_NET_F_MQ)),
+-                              !!(features & (1 << VIRTIO_NET_F_CTRL_VQ)));
++    virtio_net_set_multiqueue(n, !!(features & (1 << VIRTIO_NET_F_MQ)));
+ 
+     virtio_net_set_mrg_rx_bufs(n, !!(features & (1 << VIRTIO_NET_F_MRG_RXBUF)));
+ 
+@@ -1038,7 +1037,7 @@ static void virtio_net_tx_bh(void *opaque)
+     }
+ }
+ 
+-static void virtio_net_set_multiqueue(VirtIONet *n, int multiqueue, int ctrl)
++static void virtio_net_set_multiqueue(VirtIONet *n, int multiqueue)
+ {
+     VirtIODevice *vdev = VIRTIO_DEVICE(n);
+     int i, max = multiqueue ? n->max_queues : 1;
+@@ -1067,9 +1066,11 @@ static void virtio_net_set_multiqueue(VirtIONet *n, int multiqueue, int ctrl)
+         n->vqs[i].n = n;
+     }
+ 
+-    if (ctrl) {
+-        n->ctrl_vq = virtio_add_queue(vdev, 64, virtio_net_handle_ctrl);
+-    }
++    /* Note: Minux Guests (version 3.2.1) use ctrl vq but don't ack
++     * VIRTIO_NET_F_CTRL_VQ. Create ctrl vq unconditionally to avoid
++     * breaking them.
++     */
++    n->ctrl_vq = virtio_add_queue(vdev, 64, virtio_net_handle_ctrl);
+ 
+     virtio_net_set_queues(n);
+ }
+-- 
+1.7.1
+

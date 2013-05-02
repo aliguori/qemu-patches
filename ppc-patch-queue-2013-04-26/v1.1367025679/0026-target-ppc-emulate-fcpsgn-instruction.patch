@@ -1,0 +1,56 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Alexander Graf <agraf@suse.de>
+To: qemu-ppc@nongnu.org
+Cc: Blue Swirl <blauwirbel@gmail.com>, Aurelien Jarno <aurelien@aurel32.net>,
+ qemu-devel@nongnu.org
+Date: Fri, 26 Apr 2013 20:21:45 +0200
+Message-id: 1367000509-8833-27-git-send-email-agraf@suse.de
+Subject: [PATCH 26/30] target-ppc: emulate fcpsgn instruction
+
+From: Aurelien Jarno <aurelien@aurel32.net>
+
+Needed for Power ISA version 2.05 compliance.
+
+Reviewed-by: Richard Henderson <rth@twiddle.net>
+Signed-off-by: Aurelien Jarno <aurelien@aurel32.net>
+Signed-off-by: Alexander Graf <agraf@suse.de>
+---
+ target-ppc/translate.c |   14 ++++++++++++++
+ 1 files changed, 14 insertions(+), 0 deletions(-)
+
+diff --git a/target-ppc/translate.c b/target-ppc/translate.c
+index 2fabbaf..1989818 100644
+--- a/target-ppc/translate.c
++++ b/target-ppc/translate.c
+@@ -2258,6 +2258,19 @@ static void gen_fneg(DisasContext *ctx)
+     gen_compute_fprf(cpu_fpr[rD(ctx->opcode)], 0, Rc(ctx->opcode) != 0);
+ }
+ 
++/* fcpsgn: PowerPC 2.05 specification */
++/* XXX: beware that fcpsgn never checks for NaNs nor update FPSCR */
++static void gen_fcpsgn(DisasContext *ctx)
++{
++    if (unlikely(!ctx->fpu_enabled)) {
++        gen_exception(ctx, POWERPC_EXCP_FPU);
++        return;
++    }
++    tcg_gen_deposit_i64(cpu_fpr[rD(ctx->opcode)], cpu_fpr[rA(ctx->opcode)],
++                        cpu_fpr[rB(ctx->opcode)], 0, 63);
++    gen_compute_fprf(cpu_fpr[rD(ctx->opcode)], 0, Rc(ctx->opcode) != 0);
++}
++
+ /***                  Floating-Point status & ctrl register                ***/
+ 
+ /* mcrfs */
+@@ -8559,6 +8572,7 @@ GEN_HANDLER(fabs, 0x3F, 0x08, 0x08, 0x001F0000, PPC_FLOAT),
+ GEN_HANDLER(fmr, 0x3F, 0x08, 0x02, 0x001F0000, PPC_FLOAT),
+ GEN_HANDLER(fnabs, 0x3F, 0x08, 0x04, 0x001F0000, PPC_FLOAT),
+ GEN_HANDLER(fneg, 0x3F, 0x08, 0x01, 0x001F0000, PPC_FLOAT),
++GEN_HANDLER_E(fcpsgn, 0x3F, 0x08, 0x00, 0x00000000, PPC_NONE, PPC2_ISA205),
+ GEN_HANDLER(mcrfs, 0x3F, 0x00, 0x02, 0x0063F801, PPC_FLOAT),
+ GEN_HANDLER(mffs, 0x3F, 0x07, 0x12, 0x001FF800, PPC_FLOAT),
+ GEN_HANDLER(mtfsb0, 0x3F, 0x06, 0x02, 0x001FF800, PPC_FLOAT),
+-- 
+1.6.0.2
+
+

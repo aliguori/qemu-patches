@@ -1,0 +1,1 @@
+../QMP-queue/v1.1365778700/0003-qapi-use-valid-JSON-in-schema.patch

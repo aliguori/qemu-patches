@@ -1,0 +1,157 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Seiji Aguchi <seiji.aguchi@hds.com>
+To: Laszlo Ersek <lersek@redhat.com>, Seiji Aguchi <seiji.aguchi@hds.com>,
+ Stefan Hajnoczi <stefanha@gmail.com>,
+ "qemu-devel@nongnu.org" <qemu-devel@nongnu.org>,
+ Eric Blake <eblake@redhat.com>, Markus Armbruster <armbru@redhat.com>,
+ "pbonzini@redhat.com" <pbonzini@redhat.com>
+Cc: Laszlo Ersek <lersek@redhat.com>, Seiji Aguchi <seiji.aguchi@hds.com>,
+ "qemu-devel@nongnu.org" <qemu-devel@nongnu.org>,
+ Satoru Moriya <satoru.moriya@hds.com>,
+ "dle-develop@lists.sourceforge.net" <dle-develop@lists.sourceforge.net>,
+ Markus Armbruster <armbru@redhat.com>,
+ "pbonzini@redhat.com" <pbonzini@redhat.com>
+Date: Fri, 1 Feb 2013 14:53:08 +0000
+Message-id: A5ED84D3BB3A384992CBB9C77DEDA4D414A5F112@USINDEM103.corp.hds.com
+Subject: [PATCH 1/1] Add timestamp to error message
+
+[Issue]
+When we offer a customer support service and a problem happens 
+in a customer's system, we try to understand the problem by 
+comparing what the customer reports with message logs of the 
+customer's system.
+
+In this case, we often need to know when the problem happens.
+
+But, currently, there is no timestamp in qemu's error messages.
+Therefore, we may not be able to understand the problem based on
+error messages.
+
+[Solution]
+This patch adds a timestamp to qemu's error message logged by
+error_report().
+
+A logic calculating a time is copied from libvirt, src/util/virtime.c.
+
+[TODO]
+Other functions below are used to output error messages in qemu.
+ - qerror_report() is called in many source codes.
+ - fprintf() is called in vl.c.
+
+A timestamp should be added to these messages as well.
+
+Signed-off-by: Seiji Aguchi <seiji.aguchi@hds.com>
+---
+ util/qemu-error.c |   90 +++++++++++++++++++++++++++++++++++++++++++++++++++++
+ 1 files changed, 90 insertions(+), 0 deletions(-)
+
+diff --git a/util/qemu-error.c b/util/qemu-error.c
+index 08a36f4..44d0fc1 100644
+--- a/util/qemu-error.c
++++ b/util/qemu-error.c
+@@ -196,6 +196,95 @@ void error_print_loc(void)
+     }
+ }
+ 
++
++#define SECS_PER_HOUR   (60 * 60)
++#define SECS_PER_DAY    (SECS_PER_HOUR * 24)
++#define DIV(a, b) ((a) / (b) - ((a) % (b) < 0))
++#define LEAPS_THRU_END_OF(y) (DIV(y, 4) - DIV(y, 100) + DIV(y, 400))
++
++const unsigned short int __mon_yday[2][13] = {
++    /* Normal years.  */
++    { 0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334, 365 },
++    /* Leap years.  */
++    { 0, 31, 60, 91, 121, 152, 182, 213, 244, 274, 305, 335, 366 }
++};
++
++#define is_leap_year(y) \
++    ((y) % 4 == 0 && ((y) % 100 != 0 || (y) % 400 == 0))
++
++static void error_print_timestamp(void)
++{
++    struct timespec ts;
++    unsigned long long now;
++
++    struct tm fields;
++    long int days, rem, y;
++    const unsigned short int *ip;
++    unsigned long long whenSecs;
++    unsigned int offset = 0; /* We hardcoded GMT */
++
++    if (clock_gettime(CLOCK_REALTIME, &ts) < 0) {
++        return;
++    }
++
++    now = (ts.tv_sec * 1000ull) + (ts.tv_nsec / (1000ull * 1000ull));
++    /* This code is taken from GLibC under terms of LGPLv2+ */
++
++    whenSecs = now / 1000ull;
++
++    days = whenSecs / SECS_PER_DAY;
++    rem = whenSecs % SECS_PER_DAY;
++    rem += offset;
++    while (rem < 0) {
++        rem += SECS_PER_DAY;
++        --days;
++    }
++    while (rem >= SECS_PER_DAY) {
++        rem -= SECS_PER_DAY;
++        ++days;
++    }
++    fields.tm_hour = rem / SECS_PER_HOUR;
++    rem %= SECS_PER_HOUR;
++    fields.tm_min = rem / 60;
++    fields.tm_sec = rem % 60;
++    /* January 1, 1970 was a Thursday.  */
++    fields.tm_wday = (4 + days) % 7;
++    if (fields.tm_wday < 0) {
++        fields.tm_wday += 7;
++    }
++    y = 1970;
++
++    while (days < 0 || days >= (is_leap_year(y) ? 366 : 365)) {
++        /* Guess a corrected year, assuming 365 days per year.  */
++        long int yg = y + days / 365 - (days % 365 < 0);
++
++      /* Adjust DAYS and Y to match the guessed year.  */
++      days -= ((yg - y) * 365
++               + LEAPS_THRU_END_OF(yg - 1)
++               - LEAPS_THRU_END_OF(y - 1));
++      y = yg;
++    }
++    fields.tm_year = y - 1900;
++
++    fields.tm_yday = days;
++    ip = __mon_yday[is_leap_year(y)];
++    for (y = 11; days < (long int) ip[y]; --y) {
++        continue;
++    }
++
++    days -= ip[y];
++    fields.tm_mon = y;
++    fields.tm_mday = days + 1;
++
++    error_printf(
++           "%4d-%02d-%02d %02d:%02d:%02d.%03lld+0000 ",
++           fields.tm_year + 1900, fields.tm_mon + 1, fields.tm_mday,
++           fields.tm_hour, fields.tm_min, fields.tm_sec,
++           now % 1000);
++
++    return;
++}
++
+ /*
+  * Print an error message to current monitor if we have one, else to stderr.
+  * Format arguments like sprintf().  The result should not contain
+@@ -207,6 +296,7 @@ void error_report(const char *fmt, ...)
+ {
+     va_list ap;
+ 
++    error_print_timestamp();
+     error_print_loc();
+     va_start(ap, fmt);
+     error_vprintf(fmt, ap);
+-- 1.7.1
+

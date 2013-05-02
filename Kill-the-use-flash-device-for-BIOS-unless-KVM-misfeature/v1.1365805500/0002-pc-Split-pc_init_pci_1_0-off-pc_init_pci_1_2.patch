@@ -1,0 +1,74 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Markus Armbruster <armbru@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: aliguori@us.ibm.com, jljusten@gmail.com
+Date: Fri, 12 Apr 2013 17:25:02 +0200
+Message-id: 1365780303-26398-3-git-send-email-armbru@redhat.com
+Subject: [PATCH 2/3] pc: Split pc_init_pci_1_0() off pc_init_pci_1_2()
+
+Just to make the next commit easier to review.
+
+Signed-off-by: Markus Armbruster <armbru@redhat.com>
+---
+ hw/i386/pc_piix.c | 16 ++++++++++++----
+ 1 file changed, 12 insertions(+), 4 deletions(-)
+
+diff --git a/hw/i386/pc_piix.c b/hw/i386/pc_piix.c
+index da34d3b..f2d3d27 100644
+--- a/hw/i386/pc_piix.c
++++ b/hw/i386/pc_piix.c
+@@ -240,7 +240,7 @@ static void pc_init_pci_1_3(QEMUMachineInitArgs *args)
+     pc_init_pci(args);
+ }
+ 
+-/* PC machine init function for pc-0.14 to pc-1.2 */
++/* PC machine init function for pc-1.1 to pc-1.2 */
+ static void pc_init_pci_1_2(QEMUMachineInitArgs *args)
+ {
+     disable_kvm_pv_eoi();
+@@ -248,6 +248,14 @@ static void pc_init_pci_1_2(QEMUMachineInitArgs *args)
+     pc_init_pci(args);
+ }
+ 
++/* PC machine init function for pc-0.14 to pc-1.0 */
++static void pc_init_pci_1_0(QEMUMachineInitArgs *args)
++{
++    disable_kvm_pv_eoi();
++    enable_compat_apic_id_mode();
++    pc_init_pci(args);
++}
++
+ /* PC init function for pc-0.10 to pc-0.13, and reused by xenfv */
+ static void pc_init_pci_no_kvmclock(QEMUMachineInitArgs *args)
+ {
+@@ -461,7 +469,7 @@ static QEMUMachine pc_machine_v1_1 = {
+ static QEMUMachine pc_machine_v1_0 = {
+     .name = "pc-1.0",
+     .desc = "Standard PC",
+-    .init = pc_init_pci_1_2,
++    .init = pc_init_pci_1_0,
+     .max_cpus = 255,
+     .compat_props = (GlobalProperty[]) {
+         PC_COMPAT_1_0,
+@@ -477,7 +485,7 @@ static QEMUMachine pc_machine_v1_0 = {
+ static QEMUMachine pc_machine_v0_15 = {
+     .name = "pc-0.15",
+     .desc = "Standard PC",
+-    .init = pc_init_pci_1_2,
++    .init = pc_init_pci_1_0,
+     .max_cpus = 255,
+     .compat_props = (GlobalProperty[]) {
+         PC_COMPAT_0_15,
+@@ -510,7 +518,7 @@ static QEMUMachine pc_machine_v0_15 = {
+ static QEMUMachine pc_machine_v0_14 = {
+     .name = "pc-0.14",
+     .desc = "Standard PC",
+-    .init = pc_init_pci_1_2,
++    .init = pc_init_pci_1_0,
+     .max_cpus = 255,
+     .compat_props = (GlobalProperty[]) {
+         PC_COMPAT_0_14, 
+-- 
+1.7.11.7
+
+

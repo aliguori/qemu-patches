@@ -1,0 +1,55 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+To: edgar.iglesias@gmail.com, qemu-devel@nongnu.org
+Cc: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+Date: Wed,  3 Apr 2013 15:17:03 +1000
+Message-id: 9e364d0eced1bc0335ec6bc3d41bfb143a4223a4.1364965814.git.peter.crosthwaite@xilinx.com
+Subject: [PATCH 03/16] xilinx_axienet: Register reset properly
+
+Register the reset function and the Device::reset function rather than
+explicitly call it from the sysbus::init.
+
+Signed-off-by: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+Reviewed-by: Andreas Färber <afaerber@suse.de>
+Acked-by: Edgar E. Iglesias <edgar.iglesias@xilinx.com>
+---
+
+ hw/xilinx_axienet.c |    6 ++++--
+ 1 files changed, 4 insertions(+), 2 deletions(-)
+
+diff --git a/hw/xilinx_axienet.c b/hw/xilinx_axienet.c
+index 4c7d390..35b4e4f 100644
+--- a/hw/xilinx_axienet.c
++++ b/hw/xilinx_axienet.c
+@@ -402,8 +402,10 @@ static inline int axienet_newfunc_enabled(XilinxAXIEnet *s)
+     return !!(s->regs[R_RAF] & RAF_NEWFUNC_EN);
+ }
+ 
+-static void axienet_reset(XilinxAXIEnet *s)
++static void xilinx_axienet_reset(DeviceState *d)
+ {
++    XilinxAXIEnet *s = XILINX_AXI_ENET(d);
++
+     axienet_rx_reset(s);
+     axienet_tx_reset(s);
+ 
+@@ -869,7 +871,6 @@ static int xilinx_enet_init(SysBusDevice *dev)
+     s->TEMAC.parent = s;
+ 
+     s->rxmem = g_malloc(s->c_rxmem);
+-    axienet_reset(s);
+ 
+     return 0;
+ }
+@@ -900,6 +901,7 @@ static void xilinx_enet_class_init(ObjectClass *klass, void *data)
+ 
+     k->init = xilinx_enet_init;
+     dc->props = xilinx_enet_properties;
++    dc->reset = xilinx_axienet_reset;
+     ssc->push = axienet_stream_push;
+ }
+ 
+-- 
+1.7.0.4
+
+

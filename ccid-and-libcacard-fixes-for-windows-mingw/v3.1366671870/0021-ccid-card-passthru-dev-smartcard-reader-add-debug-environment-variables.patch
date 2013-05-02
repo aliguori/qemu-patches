@@ -1,0 +1,106 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Alon Levy <alevy@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: mlureau@redhat.com
+Date: Mon, 22 Apr 2013 18:04:51 +0300
+Message-id: 1366643098-2566-22-git-send-email-alevy@redhat.com
+Subject: [PATCH 21/28] ccid-card-passthru,
+ dev-smartcard-reader: add debug environment variables
+
+Introduces a new utility function: parse_debug_env to avoid code
+duplication.
+
+This overrides whatever debug value is set on the corresponding devices
+from the command line, and is meant to ease the usage with any
+management stack. For libvirt you can set environment variables by
+extending the dom namespace, i.e:
+
+<domain type='kvm' id='3' xmlns:qemu='http://libvirt.org/schemas/domain/qemu/1.0'>
+  <qemu:commandline>
+    <qemu:env name='QEMU_CCID_PASSTHRU_DEBUG' value='4'/>
+    <qemu:env name='QEMU_CCID_DEBUG' value='4'/>
+  </qemu:commandline>
+</domain>
+
+Signed-off-by: Alon Levy <alevy@redhat.com>
+---
+ hw/usb/ccid-card-passthru.c   |  2 ++
+ hw/usb/dev-smartcard-reader.c |  1 +
+ include/qemu-common.h         |  5 +++++
+ util/cutils.c                 | 23 +++++++++++++++++++++++
+ 4 files changed, 31 insertions(+)
+
+diff --git a/hw/usb/ccid-card-passthru.c b/hw/usb/ccid-card-passthru.c
+index 16d51c9..01c7e6f 100644
+--- a/hw/usb/ccid-card-passthru.c
++++ b/hw/usb/ccid-card-passthru.c
+@@ -350,6 +350,8 @@ static int passthru_initfn(CCIDCardState *base)
+         error_report("missing chardev");
+         return -1;
+     }
++    card->debug = parse_debug_env("QEMU_CCID_PASSTHRU_DEBUG", D_VERBOSE,
++                                  card->debug);
+     assert(sizeof(DEFAULT_ATR) <= MAX_ATR_SIZE);
+     memcpy(card->atr, DEFAULT_ATR, sizeof(DEFAULT_ATR));
+     card->atr_length = sizeof(DEFAULT_ATR);
+diff --git a/hw/usb/dev-smartcard-reader.c b/hw/usb/dev-smartcard-reader.c
+index 98f3be1..35f234e 100644
+--- a/hw/usb/dev-smartcard-reader.c
++++ b/hw/usb/dev-smartcard-reader.c
+@@ -1260,6 +1260,7 @@ static int ccid_initfn(USBDevice *dev)
+     s->bulk_out_pos = 0;
+     ccid_reset_parameters(s);
+     ccid_reset(s);
++    s->debug = parse_debug_env("QEMU_CCID_DEBUG", D_VERBOSE, s->debug);
+     return 0;
+ }
+ 
+diff --git a/include/qemu-common.h b/include/qemu-common.h
+index 3b1873e..a39cdba 100644
+--- a/include/qemu-common.h
++++ b/include/qemu-common.h
+@@ -482,4 +482,9 @@ can_use_buffer_find_nonzero_offset(const void *buf, size_t len)
+ }
+ size_t buffer_find_nonzero_offset(const void *buf, size_t len);
+ 
++/*
++ * helper to parse debug environment variables
++ */
++int parse_debug_env(const char *name, int max, int initial);
++
+ #endif
+diff --git a/util/cutils.c b/util/cutils.c
+index 5024253..a165819 100644
+--- a/util/cutils.c
++++ b/util/cutils.c
+@@ -482,3 +482,26 @@ int uleb128_decode_small(const uint8_t *in, uint32_t *n)
+         return 2;
+     }
+ }
++
++/*
++ * helper to parse debug environment variables
++ */
++int parse_debug_env(const char *name, int max, int initial)
++{
++    char *debug_env = getenv(name);
++    char *inv = NULL;
++    int debug;
++
++    if (!debug_env) {
++        return initial;
++    }
++    debug = strtol(debug_env, &inv, 10);
++    if (inv == debug_env) {
++        return initial;
++    }
++    if (debug < 0 || debug > max) {
++        fprintf(stderr, "warning: %s not in [0, %d]", name, max);
++        return initial;
++    }
++    return debug;
++}
+-- 
+1.8.2
+
+

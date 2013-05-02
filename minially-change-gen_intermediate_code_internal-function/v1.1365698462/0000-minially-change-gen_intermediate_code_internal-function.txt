@@ -1,0 +1,59 @@
+From patches Mon Sep 17 00:00:00 2001
+From: li guang <lig.fnst@cn.fujitsu.com>
+To: qemu-devel <qemu-devel@nongnu.org>, li guang <lig.fnst@cn.fujitsu.com>
+Cc: qemu-devel <qemu-devel@nongnu.org>
+Date: Thu, 11 Apr 2013 11:41:02 +0800
+Message-id: 1365651662.9553.161.camel@liguang.fnst.cn.fujitsu.com
+Subject: [PATCH 00/16] minially change gen_intermediate_code_internal function
+
+here are instructions in the finial qemu-system-x86
+before and after my chanage, you can easily find a 
+redundant 'addl' was removed
+
+this patch-set is v2 of previous 'translate: cleanup
+gen_intermediate_code_internal patch'
+
+v2: Keep variable 'num_insns' initailization
+    spotted by 	陳韋任 (Wei-Ren Chen) <chenwj@iis.sinica.edu.tw>
+
+
+before change:
+
+  38c415:       3b 45 d4                cmp    -0x2c(%ebp),%eax
+  38c418:       7d 23                   jge    38c43d
+<gen_intermediate_code_internal+0x58f>
+------------------------------------------------------------------
+  38c41a:       83 45 d0 01             addl   $0x1,-0x30(%ebp) 
+------------------------------------------------------------------
+  38c41e:       eb 15                   jmp    38c435
+<gen_intermediate_code_internal+0x587>
+  38c420:       8b 45 d0                mov    -0x30(%ebp),%eax
+  38c423:       8b 93 48 15 00 00       mov    0x1548(%ebx),%edx
+  38c429:       c6 84 02 a8 0e 01 00    movb   $0x0,0x10ea8(%edx,%eax,1)
+  38c430:       00 
+  38c431:       83 45 d0 01             addl   $0x1,-0x30(%ebp)
+  38c435:       8b 45 d0                mov    -0x30(%ebp),%eax
+  38c438:       3b 45 d4                cmp    -0x2c(%ebp),%eax
+  38c43b:       7c e3                   jl     38c420
+<gen_intermediate_code_internal+0x572>
+
+
+after change:
+
+  38c415:       3b 45 d4                cmp    -0x2c(%ebp),%eax
+  38c418:       7d 1f                   jge    38c439
+<gen_intermediate_code_internal+0x58b>
+  38c41a:       eb 11                   jmp    38c42d
+<gen_intermediate_code_internal+0x57f>
+  38c41c:       8b 45 d0                mov    -0x30(%ebp),%eax
+  38c41f:       8b 93 48 15 00 00       mov    0x1548(%ebx),%edx
+  38c425:       c6 84 02 a8 0e 01 00    movb   $0x0,0x10ea8(%edx,%eax,1)
+  38c42c:       00 
+  38c42d:       83 45 d0 01             addl   $0x1,-0x30(%ebp)
+  38c431:       8b 45 d0                mov    -0x30(%ebp),%eax
+  38c434:       3b 45 d4                cmp    -0x2c(%ebp),%eax
+  38c437:       7c e3                   jl     38c41c
+<gen_intermediate_code_internal+0x56e>
+
+
+

@@ -1,0 +1,69 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Stefan Hajnoczi <stefanha@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, Paolo Bonzini <pbonzini@redhat.com>,
+ Stefan Hajnoczi <stefanha@redhat.com>, pingfank@linux.vnet.ibm.com,
+ Kevin Wolf <kwolf@redhat.com>
+Date: Wed, 17 Apr 2013 15:07:50 +0200
+Message-id: 1366204073-8468-15-git-send-email-stefanha@redhat.com
+Subject: [PATCH 14/17] dataplane/virtio-blk: drop flush_true() and flush_io()
+
+.io_flush() is no longer called so drop flush_true() and flush_io().
+
+Signed-off-by: Stefan Hajnoczi <stefanha@redhat.com>
+---
+ hw/block/dataplane/virtio-blk.c | 17 ++---------------
+ 1 file changed, 2 insertions(+), 15 deletions(-)
+
+diff --git a/hw/block/dataplane/virtio-blk.c b/hw/block/dataplane/virtio-blk.c
+index 982896c..56b80b2 100644
+--- a/hw/block/dataplane/virtio-blk.c
++++ b/hw/block/dataplane/virtio-blk.c
+@@ -263,11 +263,6 @@ static int process_request(IOQueue *ioq, struct iovec iov[],
+     }
+ }
+ 
+-static int flush_true(EventNotifier *e)
+-{
+-    return true;
+-}
+-
+ static void handle_notify(EventNotifier *e)
+ {
+     VirtIOBlockDataPlane *s = container_of(e, VirtIOBlockDataPlane,
+@@ -347,14 +342,6 @@ static void handle_notify(EventNotifier *e)
+     }
+ }
+ 
+-static int flush_io(EventNotifier *e)
+-{
+-    VirtIOBlockDataPlane *s = container_of(e, VirtIOBlockDataPlane,
+-                                           io_notifier);
+-
+-    return s->num_reqs > 0;
+-}
+-
+ static void handle_io(EventNotifier *e)
+ {
+     VirtIOBlockDataPlane *s = container_of(e, VirtIOBlockDataPlane,
+@@ -485,7 +472,7 @@ void virtio_blk_data_plane_start(VirtIOBlockDataPlane *s)
+         exit(1);
+     }
+     s->host_notifier = *virtio_queue_get_host_notifier(vq);
+-    aio_set_event_notifier(s->ctx, &s->host_notifier, handle_notify, flush_true);
++    aio_set_event_notifier(s->ctx, &s->host_notifier, handle_notify, NULL);
+ 
+     /* Set up ioqueue */
+     ioq_init(&s->ioqueue, s->fd, REQ_MAX);
+@@ -493,7 +480,7 @@ void virtio_blk_data_plane_start(VirtIOBlockDataPlane *s)
+         ioq_put_iocb(&s->ioqueue, &s->requests[i].iocb);
+     }
+     s->io_notifier = *ioq_get_notifier(&s->ioqueue);
+-    aio_set_event_notifier(s->ctx, &s->io_notifier, handle_io, flush_io);
++    aio_set_event_notifier(s->ctx, &s->io_notifier, handle_io, NULL);
+ 
+     s->started = true;
+     trace_virtio_blk_data_plane_start(s);
+-- 
+1.8.1.4
+

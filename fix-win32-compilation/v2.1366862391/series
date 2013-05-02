@@ -1,0 +1,4 @@
+0000-fix-win32-compilation.txt
+0001-add-missing-inclusions-of-config-hosth.patch
+0002-win32-add-readv-writev-emulation.patch
+0003-win32-generate-console-executable-again.patch

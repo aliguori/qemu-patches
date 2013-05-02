@@ -1,0 +1,1 @@
+../target-i386-CPU-hot-add-with-cpu-add-QMP-command/v5.1366730974/0007-cpu-introduce-get_arch_id-method-and-override-it-for-target-i386.patch

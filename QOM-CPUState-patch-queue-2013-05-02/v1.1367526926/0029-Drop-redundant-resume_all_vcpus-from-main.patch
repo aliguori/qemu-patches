@@ -1,0 +1,37 @@
+From patches Mon Sep 17 00:00:00 2001
+From: =?utf-8?q?Andreas_F=C3=A4rber_=3Cafaerber=40suse=2Ede=3E?=
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>,
+ =?utf-8?b?IkFuZHJlYXMgRsOkcmJlciI=?= <afaerber@suse.de>,
+ Jan Kiszka <jan.kiszka@siemens.com>
+Date: Thu, 2 May 2013 15:35:55 +0200
+Message-id: 1367501755-32272-30-git-send-email-afaerber@suse.de
+Subject: [PATCH 29/29] Drop redundant resume_all_vcpus() from main()
+
+From: Jan Kiszka <jan.kiszka@siemens.com>
+
+VCPUs are either resumed directly via vm_start(), after the incoming
+migration is done, or when a continue command is issued. We don't need
+the explicit resume before entering main_loop().
+
+Signed-off-by: Jan Kiszka <jan.kiszka@siemens.com>
+Signed-off-by: Andreas Färber <afaerber@suse.de>
+---
+ vl.c | 1 -
+ 1 file changed, 1 deletion(-)
+
+diff --git a/vl.c b/vl.c
+index 41c367d..6e6225f 100644
+--- a/vl.c
++++ b/vl.c
+@@ -4415,7 +4415,6 @@ int main(int argc, char **argv, char **envp)
+ 
+     os_setup_post();
+ 
+-    resume_all_vcpus();
+     main_loop();
+     bdrv_close_all();
+     pause_all_vcpus();
+-- 
+1.8.1.4
+

@@ -1,0 +1,1 @@
+../qemu-img-support-compression-regardless-of-cluster-size/v1.1366064250/0002-qcow-allow-sub-cluster-compressed-write-to-last-cluster.patch

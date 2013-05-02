@@ -1,0 +1,47 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Dong Xu Wang <wdongxu@linux.vnet.ibm.com>
+To: qemu-devel@nongnu.org
+Cc: kwol@redhat.com, wdongxu@cn.ibm.com,
+ Dong Xu Wang <wdongxu@linux.vnet.ibm.com>, stefanha@redhat.com
+Date: Wed, 10 Apr 2013 16:11:49 +0800
+Message-id: 1365581513-3475-3-git-send-email-wdongxu@linux.vnet.ibm.com
+Subject: [PATCH 2/6] make path_has_protocol non static
+
+We will use path_has_protocol outside block.c, so just make it public.
+
+Reviewed-by: Michael Roth <mdroth@linux.vnet.ibm.com>
+Signed-off-by: Dong Xu Wang <wdongxu@linux.vnet.ibm.com>
+---
+ block.c               | 2 +-
+ include/block/block.h | 1 +
+ 2 files changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/block.c b/block.c
+index 45e1d96..1e7dab5 100644
+--- a/block.c
++++ b/block.c
+@@ -193,7 +193,7 @@ static void bdrv_io_limits_intercept(BlockDriverState *bs,
+ }
+ 
+ /* check if the path starts with "<protocol>:" */
+-static int path_has_protocol(const char *path)
++int path_has_protocol(const char *path)
+ {
+     const char *p;
+ 
+diff --git a/include/block/block.h b/include/block/block.h
+index 6e73277..7d34aa2 100644
+--- a/include/block/block.h
++++ b/include/block/block.h
+@@ -343,6 +343,7 @@ char *bdrv_snapshot_dump(char *buf, int buf_size, QEMUSnapshotInfo *sn);
+ 
+ char *get_human_readable_size(char *buf, int buf_size, int64_t size);
+ int path_is_absolute(const char *path);
++int path_has_protocol(const char *path);
+ void path_combine(char *dest, int dest_size,
+                   const char *base_path,
+                   const char *filename);
+-- 
+1.7.11.7
+
+

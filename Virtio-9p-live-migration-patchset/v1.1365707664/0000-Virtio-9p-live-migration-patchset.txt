@@ -1,0 +1,37 @@
+From patches Mon Sep 17 00:00:00 2001
+From: =?utf-8?q?Beno=C3=AEt_Canet_=3Cbenoit=40irqsave=2Enet=3E?=
+To: qemu-devel@nongnu.org
+Cc: =?UTF-8?q?Beno=C3=AEt=20Canet?= <benoit@irqsave.net>,
+ aneesh.kumar@linux.vnet.ibm.com, quintela@redhat.com
+Date: Thu, 11 Apr 2013 14:14:24 +0200
+Message-id: 1365682468-12301-1-git-send-email-benoit@irqsave.net
+Subject: [PATCH 0/4] Virtio-9p live migration patchset
+
+This patchset is a rework of the 9p live migration patchs made a few years ago
+by Aneesh.
+As the new vmstate API doesn't support linked list so the old API is used.
+
+Benoît Canet (4):
+  migration: Create the pre migration flush hook infrastructure.
+  virtio-9p: Add support for 9p migration.
+  virtio-9p: Wait for 9p operations to complete before migration.
+  virtio-9p: Remove migration blockers.
+
+ Makefile                                  |    6 +-
+ Makefile.objs                             |    2 +-
+ block.c                                   |    8 ++
+ cpus.c                                    |    6 +-
+ hw/9pfs/virtio-9p-device.c                |  154 +++++++++++++++++++++++++++++
+ hw/9pfs/virtio-9p.c                       |   93 ++++++++++++-----
+ hw/9pfs/virtio-9p.h                       |    4 +-
+ include/migration/migration-flush-hooks.h |   30 ++++++
+ migration-flush-hooks.c                   |   62 ++++++++++++
+ vl.c                                      |    6 ++
+ 10 files changed, 340 insertions(+), 31 deletions(-)
+ create mode 100644 include/migration/migration-flush-hooks.h
+ create mode 100644 migration-flush-hooks.c
+
+-- 
+1.7.10.4
+
+

@@ -1,0 +1,1 @@
+../hw--reorganization-part-2/v3.1365128560/0008-hw-make-all-of-hw-usb--configurable-via-default-configs-.patch

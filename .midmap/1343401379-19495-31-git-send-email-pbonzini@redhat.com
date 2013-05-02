@@ -1,0 +1,1 @@
+../SCSI-patches-for-2012-08-27/v1.1343426547/0030-virtio-scsi-report-parameter-change-events.patch

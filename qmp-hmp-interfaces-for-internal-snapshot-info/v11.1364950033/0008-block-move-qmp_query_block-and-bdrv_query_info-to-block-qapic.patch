@@ -1,0 +1,231 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Wenchao Xia <xiawenc@linux.vnet.ibm.com>
+To: qemu-devel@nongnu.org
+Cc: kwolf@redhat.com, Wenchao Xia <xiawenc@linux.vnet.ibm.com>,
+ stefanha@gmail.com, armbru@redhat.com, lcapitulino@redhat.com,
+ pbonzini@redhat.com
+Date: Tue,  2 Apr 2013 19:47:21 +0800
+Message-id: 1364903250-10429-9-git-send-email-xiawenc@linux.vnet.ibm.com
+Subject: [PATCH 08/17] block: move qmp_query_block() and bdrv_query_info() to
+ block/qapi.c
+
+  This is a code move patch, except in qmp_query_block bdrv_next(bs)
+is used instead of direct traverse of global array 'bdrv_states'.
+  This patch also fix code style error reported by check script.
+
+Signed-off-by: Wenchao Xia <xiawenc@linux.vnet.ibm.com>
+Reviewed-by: Kevin Wolf <kwolf@redhat.com>
+Reviewed-by: Eric Blake <eblake@redhat.com>
+---
+ block.c               |   76 ------------------------------------------------
+ block/qapi.c          |   77 +++++++++++++++++++++++++++++++++++++++++++++++++
+ include/block/block.h |    1 -
+ include/block/qapi.h  |    1 +
+ 4 files changed, 78 insertions(+), 77 deletions(-)
+
+diff --git a/block.c b/block.c
+index 0ae2e93..288cacd 100644
+--- a/block.c
++++ b/block.c
+@@ -3019,82 +3019,6 @@ int bdrv_is_allocated_above(BlockDriverState *top, BlockDriverState *base,
+     return data.ret;
+ }
+ 
+-BlockInfo *bdrv_query_info(BlockDriverState *bs)
+-{
+-    BlockInfo *info = g_malloc0(sizeof(*info));
+-    info->device = g_strdup(bs->device_name);
+-    info->type = g_strdup("unknown");
+-    info->locked = bdrv_dev_is_medium_locked(bs);
+-    info->removable = bdrv_dev_has_removable_media(bs);
+-
+-    if (bdrv_dev_has_removable_media(bs)) {
+-        info->has_tray_open = true;
+-        info->tray_open = bdrv_dev_is_tray_open(bs);
+-    }
+-
+-    if (bdrv_iostatus_is_enabled(bs)) {
+-        info->has_io_status = true;
+-        info->io_status = bs->iostatus;
+-    }
+-
+-    if (bs->dirty_bitmap) {
+-        info->has_dirty = true;
+-        info->dirty = g_malloc0(sizeof(*info->dirty));
+-        info->dirty->count = bdrv_get_dirty_count(bs) * BDRV_SECTOR_SIZE;
+-        info->dirty->granularity =
+-            ((int64_t) BDRV_SECTOR_SIZE << hbitmap_granularity(bs->dirty_bitmap));
+-    }
+-
+-    if (bs->drv) {
+-        info->has_inserted = true;
+-        info->inserted = g_malloc0(sizeof(*info->inserted));
+-        info->inserted->file = g_strdup(bs->filename);
+-        info->inserted->ro = bs->read_only;
+-        info->inserted->drv = g_strdup(bs->drv->format_name);
+-        info->inserted->encrypted = bs->encrypted;
+-        info->inserted->encryption_key_missing = bdrv_key_required(bs);
+-
+-        if (bs->backing_file[0]) {
+-            info->inserted->has_backing_file = true;
+-            info->inserted->backing_file = g_strdup(bs->backing_file);
+-        }
+-
+-        info->inserted->backing_file_depth = bdrv_get_backing_file_depth(bs);
+-
+-        if (bs->io_limits_enabled) {
+-            info->inserted->bps =
+-                           bs->io_limits.bps[BLOCK_IO_LIMIT_TOTAL];
+-            info->inserted->bps_rd =
+-                           bs->io_limits.bps[BLOCK_IO_LIMIT_READ];
+-            info->inserted->bps_wr =
+-                           bs->io_limits.bps[BLOCK_IO_LIMIT_WRITE];
+-            info->inserted->iops =
+-                           bs->io_limits.iops[BLOCK_IO_LIMIT_TOTAL];
+-            info->inserted->iops_rd =
+-                           bs->io_limits.iops[BLOCK_IO_LIMIT_READ];
+-            info->inserted->iops_wr =
+-                           bs->io_limits.iops[BLOCK_IO_LIMIT_WRITE];
+-        }
+-    }
+-    return info;
+-}
+-
+-BlockInfoList *qmp_query_block(Error **errp)
+-{
+-    BlockInfoList *head = NULL, **p_next = &head;
+-    BlockDriverState *bs;
+-
+-    QTAILQ_FOREACH(bs, &bdrv_states, list) {
+-        BlockInfoList *info = g_malloc0(sizeof(*info));
+-        info->value = bdrv_query_info(bs);
+-
+-        *p_next = info;
+-        p_next = &info->next;
+-    }
+-
+-    return head;
+-}
+-
+ BlockStats *bdrv_query_stats(const BlockDriverState *bs)
+ {
+     BlockStats *s;
+diff --git a/block/qapi.c b/block/qapi.c
+index 176a479..6e0c7c3 100644
+--- a/block/qapi.c
++++ b/block/qapi.c
+@@ -25,6 +25,7 @@
+ #include "block/qapi.h"
+ #include "block/snapshot.h"
+ #include "block/block_int.h"
++#include "qmp-commands.h"
+ 
+ /*
+  * check whether the snapshot is valid for whole vm.
+@@ -196,3 +197,79 @@ int bdrv_query_image_info(BlockDriverState *bs,
+     *p_info = info;
+     return 0;
+ }
++
++BlockInfo *bdrv_query_info(BlockDriverState *bs)
++{
++    BlockInfo *info = g_malloc0(sizeof(*info));
++    info->device = g_strdup(bs->device_name);
++    info->type = g_strdup("unknown");
++    info->locked = bdrv_dev_is_medium_locked(bs);
++    info->removable = bdrv_dev_has_removable_media(bs);
++
++    if (bdrv_dev_has_removable_media(bs)) {
++        info->has_tray_open = true;
++        info->tray_open = bdrv_dev_is_tray_open(bs);
++    }
++
++    if (bdrv_iostatus_is_enabled(bs)) {
++        info->has_io_status = true;
++        info->io_status = bs->iostatus;
++    }
++
++    if (bs->dirty_bitmap) {
++        info->has_dirty = true;
++        info->dirty = g_malloc0(sizeof(*info->dirty));
++        info->dirty->count = bdrv_get_dirty_count(bs) * BDRV_SECTOR_SIZE;
++        info->dirty->granularity =
++         ((int64_t) BDRV_SECTOR_SIZE << hbitmap_granularity(bs->dirty_bitmap));
++    }
++
++    if (bs->drv) {
++        info->has_inserted = true;
++        info->inserted = g_malloc0(sizeof(*info->inserted));
++        info->inserted->file = g_strdup(bs->filename);
++        info->inserted->ro = bs->read_only;
++        info->inserted->drv = g_strdup(bs->drv->format_name);
++        info->inserted->encrypted = bs->encrypted;
++        info->inserted->encryption_key_missing = bdrv_key_required(bs);
++
++        if (bs->backing_file[0]) {
++            info->inserted->has_backing_file = true;
++            info->inserted->backing_file = g_strdup(bs->backing_file);
++        }
++
++        info->inserted->backing_file_depth = bdrv_get_backing_file_depth(bs);
++
++        if (bs->io_limits_enabled) {
++            info->inserted->bps =
++                           bs->io_limits.bps[BLOCK_IO_LIMIT_TOTAL];
++            info->inserted->bps_rd =
++                           bs->io_limits.bps[BLOCK_IO_LIMIT_READ];
++            info->inserted->bps_wr =
++                           bs->io_limits.bps[BLOCK_IO_LIMIT_WRITE];
++            info->inserted->iops =
++                           bs->io_limits.iops[BLOCK_IO_LIMIT_TOTAL];
++            info->inserted->iops_rd =
++                           bs->io_limits.iops[BLOCK_IO_LIMIT_READ];
++            info->inserted->iops_wr =
++                           bs->io_limits.iops[BLOCK_IO_LIMIT_WRITE];
++        }
++    }
++    return info;
++}
++
++BlockInfoList *qmp_query_block(Error **errp)
++{
++    BlockInfoList *head = NULL, **p_next = &head;
++    BlockDriverState *bs = NULL;
++
++    while ((bs = bdrv_next(bs))) {
++        BlockInfoList *info = g_malloc0(sizeof(*info));
++        info->value = bdrv_query_info(bs);
++
++        *p_next = info;
++        p_next = &info->next;
++    }
++
++    return head;
++}
+diff --git a/include/block/block.h b/include/block/block.h
+index 9dc6aad..a319f0a 100644
+--- a/include/block/block.h
++++ b/include/block/block.h
+@@ -326,7 +326,6 @@ void bdrv_get_backing_filename(BlockDriverState *bs,
+                                char *filename, int filename_size);
+ void bdrv_get_full_backing_filename(BlockDriverState *bs,
+                                     char *dest, size_t sz);
+-BlockInfo *bdrv_query_info(BlockDriverState *s);
+ BlockStats *bdrv_query_stats(const BlockDriverState *bs);
+ int bdrv_can_snapshot(BlockDriverState *bs);
+ int bdrv_is_snapshot(BlockDriverState *bs);
+diff --git a/include/block/qapi.h b/include/block/qapi.h
+index 2c62fdf..0039a70 100644
+--- a/include/block/qapi.h
++++ b/include/block/qapi.h
+@@ -35,4 +35,5 @@ int bdrv_query_snapshot_info_list(BlockDriverState *bs,
+ int bdrv_query_image_info(BlockDriverState *bs,
+                           ImageInfo **p_info,
+                           Error **errp);
++BlockInfo *bdrv_query_info(BlockDriverState *bs);
+ #endif
+-- 
+1.7.1
+
+
+

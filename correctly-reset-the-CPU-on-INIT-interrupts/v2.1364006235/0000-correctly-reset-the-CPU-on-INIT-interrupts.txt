@@ -1,0 +1,47 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Marcelo Tosatti <mtosatti@redhat.com>, kvm@vger.kernel.org,
+ Gleb Natapov <gnatapov@redhat.com>
+Date: Fri, 22 Mar 2013 21:37:15 +0100
+Message-id: 1363984637-18132-1-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 0/2] correctly reset the CPU on INIT interrupts
+
+These patches finally implement INIT entirely in userspace.  The problem
+here was that the CPU was being reset after kvm_arch_reset_vcpu is called.
+This made it harder to hook into the reset process and put APs into
+KVM_MP_STATE_INIT_RECEIVED state (instead of KVM_MP_STATE_UNINITIALIZED
+which is the state after a system reset).
+
+In this series, patch 1 removes the kvm_arch_reset_vcpu from the generic
+code, and moves it into each architecture's CPU reset callback (half of
+our supported architectures do not need the callback anyway).
+
+With this in place, patch 2 can add a similar x86-specific callback that
+is used after an INIT reset.  Apart from this callback, the code for
+INITs is shared entirely between the userspace irqchip and in-kernel
+irqchip cases.
+
+Paolo Bonzini (2):
+  kvm: remove generic kvm_arch_reset_vcpu callback
+  kvm: forward INIT signals coming from the chipset
+
+ include/sysemu/kvm.h   |  2 --
+ kvm-all.c              | 11 -----------
+ target-arm/kvm.c       |  4 ----
+ target-i386/cpu.c      |  5 +++++
+ target-i386/helper.c   |  4 ++++
+ target-i386/kvm.c      | 37 ++++++++++++++++++++++++++-----------
+ target-i386/kvm_i386.h |  2 ++
+ target-ppc/kvm.c       |  4 ----
+ target-s390x/cpu.c     |  4 ++++
+ target-s390x/cpu.h     |  1 +
+ 10 files changed, 42 insertions(+), 32 deletions(-)
+
+-- 
+1.8.1.4
+
+--
+To unsubscribe from this list: send the line "unsubscribe kvm" in
+the body of a message to majordomo@vger.kernel.org
+More majordomo info at  http://vger.kernel.org/majordomo-info.html

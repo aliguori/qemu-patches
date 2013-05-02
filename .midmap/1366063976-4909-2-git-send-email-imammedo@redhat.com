@@ -1,0 +1,1 @@
+../target-i386-CPU-hot-add-with-cpu-add-QMP-command/v4.1366089160/0001-cpu-make-kvm-stubo-a-part-of-CPU-library.patch

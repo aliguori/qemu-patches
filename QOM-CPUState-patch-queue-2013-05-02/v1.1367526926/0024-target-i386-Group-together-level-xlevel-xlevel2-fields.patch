@@ -1,0 +1,77 @@
+From patches Mon Sep 17 00:00:00 2001
+From: =?utf-8?q?Andreas_F=C3=A4rber_=3Cafaerber=40suse=2Ede=3E?=
+To: qemu-devel@nongnu.org
+Cc: Eduardo Habkost <ehabkost@redhat.com>,
+ =?UTF-8?q?Andreas=20F=C3=A4rber?= <afaerber@suse.de>
+Date: Thu,  2 May 2013 15:35:50 +0200
+Message-id: 1367501755-32272-25-git-send-email-afaerber@suse.de
+Subject: [PATCH 24/29] target-i386: Group together level, xlevel,
+ xlevel2 fields
+
+From: Eduardo Habkost <ehabkost@redhat.com>
+
+Consolidate level, xlevel, xlevel2 fields in x86_def_t and CPUX86State.
+
+Signed-off-by: Eduardo Habkost <ehabkost@redhat.com>
+Reviewed-by: Igor Mammedov <imammedo@redhat.com>
+Signed-off-by: Andreas Färber <afaerber@suse.de>
+---
+ target-i386/cpu.c | 4 ++--
+ target-i386/cpu.h | 4 ++--
+ 2 files changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/target-i386/cpu.c b/target-i386/cpu.c
+index bba41fe..081b579 100644
+--- a/target-i386/cpu.c
++++ b/target-i386/cpu.c
+@@ -350,6 +350,8 @@ static void add_flagname_to_bitmaps(const char *flagname,
+ typedef struct x86_def_t {
+     const char *name;
+     uint32_t level;
++    uint32_t xlevel;
++    uint32_t xlevel2;
+     /* vendor is zero-terminated, 12 character ASCII string */
+     char vendor[CPUID_VENDOR_SZ + 1];
+     int family;
+@@ -357,11 +359,9 @@ typedef struct x86_def_t {
+     int stepping;
+     uint32_t features, ext_features, ext2_features, ext3_features;
+     uint32_t kvm_features, svm_features;
+-    uint32_t xlevel;
+     char model_id[48];
+     /* Store the results of Centaur's CPUID instructions */
+     uint32_t ext4_features;
+-    uint32_t xlevel2;
+     /* The feature bits on CPUID[EAX=7,ECX=0].EBX */
+     uint32_t cpuid_7_0_ebx_features;
+ } x86_def_t;
+diff --git a/target-i386/cpu.h b/target-i386/cpu.h
+index f193752..5d16428 100644
+--- a/target-i386/cpu.h
++++ b/target-i386/cpu.h
+@@ -836,19 +836,19 @@ typedef struct CPUX86State {
+ 
+     /* processor features (e.g. for CPUID insn) */
+     uint32_t cpuid_level;
++    uint32_t cpuid_xlevel;
++    uint32_t cpuid_xlevel2;
+     uint32_t cpuid_vendor1;
+     uint32_t cpuid_vendor2;
+     uint32_t cpuid_vendor3;
+     uint32_t cpuid_version;
+     uint32_t cpuid_features;
+     uint32_t cpuid_ext_features;
+-    uint32_t cpuid_xlevel;
+     uint32_t cpuid_model[12];
+     uint32_t cpuid_ext2_features;
+     uint32_t cpuid_ext3_features;
+     uint32_t cpuid_apic_id;
+     /* Store the results of Centaur's CPUID instructions */
+-    uint32_t cpuid_xlevel2;
+     uint32_t cpuid_ext4_features;
+     /* Flags from CPUID[EAX=7,ECX=0].EBX */
+     uint32_t cpuid_7_0_ebx_features;
+-- 
+1.8.1.4
+
+

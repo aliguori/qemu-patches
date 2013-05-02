@@ -1,0 +1,38 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Richard Henderson <rth@twiddle.net>
+To: qemu-devel@nongnu.org, Richard Henderson <rth@twiddle.net>
+Cc: Aurelien Jarno <aurelien@aurel32.net>, av1474@comtv.ru,
+ qemu-devel@nongnu.org
+Date: Thu,  4 Apr 2013 17:56:18 -0500
+Message-id: 1365116186-19382-26-git-send-email-rth@twiddle.net
+Subject: [PATCH 25/33] tcg-ppc64: Cleanup i32 constants to tcg_out_cmp
+
+Nothing else in the call chain ensures that these
+constants don't have garbage in the high bits.
+
+Signed-off-by: Richard Henderson <rth@twiddle.net>
+Reviewed-by: Aurelien Jarno <aurelien@aurel32.net>
+---
+ tcg/ppc64/tcg-target.c | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/tcg/ppc64/tcg-target.c b/tcg/ppc64/tcg-target.c
+index edb2b6c..27d5ea5 100644
+--- a/tcg/ppc64/tcg-target.c
++++ b/tcg/ppc64/tcg-target.c
+@@ -1059,6 +1059,11 @@ static void tcg_out_cmp (TCGContext *s, int cond, TCGArg arg1, TCGArg arg2,
+     int imm;
+     uint32_t op;
+ 
++    /* Simplify the comparisons below wrt CMPI.  */
++    if (type == TCG_TYPE_I32) {
++        arg2 = (int32_t)arg2;
++    }
++
+     switch (cond) {
+     case TCG_COND_EQ:
+     case TCG_COND_NE:
+-- 
+1.8.1.4
+
+

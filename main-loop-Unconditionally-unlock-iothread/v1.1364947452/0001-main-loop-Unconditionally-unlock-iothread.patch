@@ -1,0 +1,80 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+To: Anthony Liguori <aliguori@us.ibm.com>, Paolo Bonzini <pbonzini@redhat.com>,
+ Peter Maydell <peter.maydell@linaro.org>, qemu-devel@nongnu.org,
+ Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+Cc: Anthony Liguori <aliguori@us.ibm.com>, Paolo Bonzini <pbonzini@redhat.com>,
+ aliguori@us.ibm.com, gson@gson.org, qemu-devel@nongnu.org,
+ Peter Crosthwaite <peter.crosthwaite@xilinx.com>,
+ Amit Shah <amit.shah@redhat.com>, Jan Kiszka <jan.kiszka@siemens.com>,
+ aurelien@aurel32.net
+Date: Tue, 2 Apr 2013 19:04:12 +1000
+Message-id: 1364893452-10604-1-git-send-email-peter.crosthwaite@xilinx.com
+Subject: [PATCH 1/1] main-loop: Unconditionally unlock iothread
+
+Public bug: 1154328
+Broken Commit: a29753f8aa79a34a324afebe340182a51a5aef11
+
+ATM, the timeout from g_pollfds_fill is inhibiting unlocking of the
+iothread. This is capable of causing a total deadlock when hw/serial
+is used as a device. The bug manifests when you go -nographic -serial
+mon:stdio and then paste 40 or more chars into the terminal.
+
+My knowledge of this g_foo is vague at best, but my best working
+theory is this:
+
+- First 8 chars are recieved by the serial device no complaints.
+- The next 32 chars, serial returns false for can_receive() so they
+	are buffered by the MuxDriver object - mux_chr_read()
+- Buffer is full, so 41st char causes false return from Muxes own
+	can_read()
+- This propagates all the way up to glib_pollfds_fill and manifests
+	as a timeout
+- Timeout means no unlock of IOthread. Device land never sees any more
+	cycles so the serial port never progresses - no flushing of
+	buffer
+- Deadlock
+
+Tested on petalogix_ml605 microblazeel machine model, which was faulty
+due to 1154328.
+
+Fix by removing the conditions on unlocking the iothread. Don't know
+what else this will break but the timeout is certainly the wrong
+condition for the unlock. Probably the real solution is to have a more
+selective unlock policy.
+
+I'm happy for someone to take this patch off my hands, or educate me on
+the correct implementation. For the peeps doing automated testing on
+nographic platforms this will get your build working again.
+
+Signed-off-by: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+Reviewed-by: Anthony Liguori <aliguori@us.ibm.com>
+---
+ main-loop.c |    8 ++------
+ 1 files changed, 2 insertions(+), 6 deletions(-)
+
+diff --git a/main-loop.c b/main-loop.c
+index eb80ff3..a376898 100644
+--- a/main-loop.c
++++ b/main-loop.c
+@@ -194,15 +194,11 @@ static int os_host_main_loop_wait(uint32_t timeout)
+ 
+     glib_pollfds_fill(&timeout);
+ 
+-    if (timeout > 0) {
+-        qemu_mutex_unlock_iothread();
+-    }
++    qemu_mutex_unlock_iothread();
+ 
+     ret = g_poll((GPollFD *)gpollfds->data, gpollfds->len, timeout);
+ 
+-    if (timeout > 0) {
+-        qemu_mutex_lock_iothread();
+-    }
++    qemu_mutex_lock_iothread();
+ 
+     glib_pollfds_poll();
+     return ret;
+-- 
+1.7.0.4
+

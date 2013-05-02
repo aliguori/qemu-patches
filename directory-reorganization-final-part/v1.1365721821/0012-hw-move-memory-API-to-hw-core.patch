@@ -1,0 +1,65 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: Paolo Bonzini <pbonzini@redhat.com>, qemu-devel@nongnu.org,
+ Peter Maydell <peter.maydell@linaro.org>
+Cc: Paolo Bonzini <pbonzini@redhat.com>, peter.maydell@linaro.org,
+ Peter Maydell <peter.maydell@linaro.org>, qemu-devel@nongnu.org,
+ mst@redhat.com
+Date: Thu, 11 Apr 2013 18:10:33 +0200
+Message-id: 1365696633-30727-13-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 12/12] hw: move memory API to hw/core
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ Makefile.target              | 4 ++--
+ hw/core/Makefile.objs        | 3 +++
+ ioport.c => hw/core/ioport.c | 0
+ memory.c => hw/core/memory.c | 0
+ 4 files changed, 5 insertions(+), 2 deletions(-)
+ rename ioport.c => hw/core/ioport.c (100%)
+ rename memory.c => hw/core/memory.c (100%)
+
+diff --git a/Makefile.target b/Makefile.target
+index 2bd6d14..9ddb9fa 100644
+--- a/Makefile.target
++++ b/Makefile.target
+@@ -108,13 +108,13 @@ CONFIG_NO_XEN = $(if $(subst n,,$(CONFIG_XEN)),n,y)
+ CONFIG_NO_GET_MEMORY_MAPPING = $(if $(subst n,,$(CONFIG_HAVE_GET_MEMORY_MAPPING)),n,y)
+ CONFIG_NO_CORE_DUMP = $(if $(subst n,,$(CONFIG_HAVE_CORE_DUMP)),n,y)
+ 
+-obj-y += arch_init.o cpus.o monitor.o gdbstub.o balloon.o ioport.o
++obj-y += arch_init.o cpus.o monitor.o gdbstub.o balloon.o
+ obj-y += qtest.o
+ obj-y += hw/
+ obj-$(CONFIG_FDT) += device_tree.o
+ obj-$(CONFIG_KVM) += kvm-all.o
+ obj-$(CONFIG_NO_KVM) += kvm-stub.o
+-obj-y += memory.o savevm.o cputlb.o
++obj-y += savevm.o cputlb.o
+ obj-$(CONFIG_HAVE_GET_MEMORY_MAPPING) += memory_mapping.o
+ obj-$(CONFIG_HAVE_CORE_DUMP) += dump.o
+ obj-$(CONFIG_NO_GET_MEMORY_MAPPING) += memory_mapping-stub.o
+diff --git a/hw/core/Makefile.objs b/hw/core/Makefile.objs
+index 94109f3..b9e96ca 100644
+--- a/hw/core/Makefile.objs
++++ b/hw/core/Makefile.objs
+@@ -11,4 +11,7 @@ common-obj-$(CONFIG_SOFTMMU) += null-machine.o
+ common-obj-$(CONFIG_SOFTMMU) += loader.o
+ common-obj-$(CONFIG_SOFTMMU) += qdev-addr.o
+ common-obj-$(CONFIG_SOFTMMU) += qdev-properties-system.o
++common-obj-$(CONFIG_SOFTMMU) += ioport.o
++obj-$(CONFIG_SOFTMMU) += memory.o
++
+ 
+diff --git a/ioport.c b/hw/core/ioport.c
+similarity index 100%
+rename from ioport.c
+rename to hw/core/ioport.c
+diff --git a/memory.c b/hw/core/memory.c
+similarity index 100%
+rename from memory.c
+rename to hw/core/memory.c
+-- 
+1.8.1.4
+
+

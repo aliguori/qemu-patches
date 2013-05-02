@@ -1,0 +1,38 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Rabin Vincent <rabin@rab.in>
+To: Rabin Vincent <rabin@rab.in>, qemu-devel@nongnu.org
+Cc: Rabin Vincent <rabin@rab.in>, qemu-devel@nongnu.org
+Date: Sun, 24 Mar 2013 18:27:16 +0100
+Message-id: 1364146041-27041-2-git-send-email-rabin@rab.in
+Subject: [PATCH 1/6] dump: create writable files
+
+The files dump-guest-memory are created as read-only even for the owner.
+This non-standard behaviour makes it annoying to deal with the dump
+files (eg. rm -f is needed to delete them or saving a new dump by
+overwriting the previous one is not possible).  Change the code to
+generate files with write permissions set.  If someone requires
+read-only files to be created, they can achieve it by setting umask.
+
+Signed-off-by: Rabin Vincent <rabin@rab.in>
+---
+ dump.c |    3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/dump.c b/dump.c
+index a25f509..8dd86b4 100644
+--- a/dump.c
++++ b/dump.c
+@@ -841,7 +841,8 @@ void qmp_dump_guest_memory(bool paging, const char *file, bool has_begin,
+ #endif
+ 
+     if  (strstart(file, "file:", &p)) {
+-        fd = qemu_open(p, O_WRONLY | O_CREAT | O_TRUNC | O_BINARY, S_IRUSR);
++        fd = qemu_open(p, O_WRONLY | O_CREAT | O_TRUNC | O_BINARY,
++                       S_IRUSR | S_IWUSR);
+         if (fd < 0) {
+             error_set(errp, QERR_OPEN_FILE_FAILED, p);
+             return;
+-- 
+1.7.10.4
+
+

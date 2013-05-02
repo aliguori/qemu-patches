@@ -1,0 +1,118 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Stefan Weil <sw@weilnetz.de>
+To: qemu-trivial@nongnu.org, Stefan Weil <sw@weilnetz.de>
+Cc: qemu-trivial@nongnu.org, Alexander Graf <agraf@suse.de>,
+ qemu-devel@nongnu.org, Richard Henderson <rth@twiddle.net>,
+ Stefan Weil <sw@weilnetz.de>
+Date: Sun, 28 Apr 2013 11:49:57 +0200
+Message-id: 1367142597-28810-1-git-send-email-sw@weilnetz.de
+Subject: [PATCH 1/1] Trivial grammar and spelling fixes
+
+similiar -> similar
+recieve -> receive
+transfered -> transferred
+preperation -> preparation
+
+Most changes are in comments, one modifies a parameter name in a function
+prototype.
+
+The spelling fixes were made using codespell.
+
+Signed-off-by: Stefan Weil <sw@weilnetz.de>
+Acked-by: Richard Henderson <rth@twiddle.net>
+---
+
+More improvements are needed for include/hw/stream.h.
+Maybe the author or a native speaker can have a look.
+
+Regards,
+Stefan W.
+
+ hw/moxie/moxiesim.c      |    2 +-
+ include/hw/stream.h      |    6 +++---
+ include/sysemu/rng.h     |    2 +-
+ qmp-commands.hx          |    2 +-
+ target-s390x/translate.c |    2 +-
+ 5 files changed, 7 insertions(+), 7 deletions(-)
+
+diff --git a/hw/moxie/moxiesim.c b/hw/moxie/moxiesim.c
+index 70bf28f..649f9a7 100644
+--- a/hw/moxie/moxiesim.c
++++ b/hw/moxie/moxiesim.c
+@@ -1,7 +1,7 @@
+ /*
+  * QEMU/moxiesim emulation
+  *
+- * Emulates a very simple machine model similiar to the one use by the
++ * Emulates a very simple machine model similar to the one used by the
+  * GDB moxie simulator.
+  *
+  * Copyright (c) 2008, 2009, 2010, 2013 Anthony Green
+diff --git a/include/hw/stream.h b/include/hw/stream.h
+index 35eb083..30ccc56 100644
+--- a/include/hw/stream.h
++++ b/include/hw/stream.h
+@@ -25,9 +25,9 @@ typedef struct StreamSlaveClass {
+     /**
+      * can push - determine if a stream slave is capable of accepting at least
+      * one byte of data. Returns false if cannot accept. If not implemented, the
+-     * slave is assumed to always be capable of recieveing.
++     * slave is assumed to always be capable of receiving.
+      * @notify: Optional callback that the slave will call when the slave is
+-     * capable of recieving again. Only called if false is returned.
++     * capable of receiving again. Only called if false is returned.
+      * @notify_opaque: opaque data to pass to notify call.
+      */
+     bool (*can_push)(StreamSlave *obj, StreamCanPushNotifyFn notify,
+@@ -37,7 +37,7 @@ typedef struct StreamSlaveClass {
+      * returned. If the slave short returns, the master must wait before trying
+      * again, the slave may continue to just return 0 waiting for the vm time to
+      * advance. The can_push() function can be used to trap the point in time
+-     * where the slave is ready to recieve again, otherwise polling on a QEMU
++     * where the slave is ready to receive again, otherwise polling on a QEMU
+      * timer will work.
+      * @obj: Stream slave to push to
+      * @buf: Data to write
+diff --git a/include/sysemu/rng.h b/include/sysemu/rng.h
+index 509abd0..7637fac 100644
+--- a/include/sysemu/rng.h
++++ b/include/sysemu/rng.h
+@@ -37,7 +37,7 @@ struct RngBackendClass
+     ObjectClass parent_class;
+ 
+     void (*request_entropy)(RngBackend *s, size_t size,
+-                            EntropyReceiveFunc *recieve_entropy, void *opaque);
++                            EntropyReceiveFunc *receive_entropy, void *opaque);
+     void (*cancel_requests)(RngBackend *s);
+ 
+     void (*opened)(RngBackend *s, Error **errp);
+diff --git a/qmp-commands.hx b/qmp-commands.hx
+index 0e89132..d15bec1 100644
+--- a/qmp-commands.hx
++++ b/qmp-commands.hx
+@@ -2493,7 +2493,7 @@ The main json-object contains the following:
+             byte (json-int)
+             These are sent over the wire much more efficiently.
+          - "skipped": number of skipped zero pages (json-int)
+-         - "normal" : number of whole pages transfered.  I.e. they
++         - "normal" : number of whole pages transferred.  I.e. they
+             were not sent as duplicate or xbzrle pages (json-int)
+          - "normal-bytes" : number of bytes transferred in whole
+             pages. This is just normal pages times size of one page,
+diff --git a/target-s390x/translate.c b/target-s390x/translate.c
+index 0c3cf68..f97e431 100644
+--- a/target-s390x/translate.c
++++ b/target-s390x/translate.c
+@@ -3806,7 +3806,7 @@ static void cout_tm64(DisasContext *s, DisasOps *o)
+ }
+ 
+ /* ====================================================================== */
+-/* The "PREPeration" generators.  These initialize the DisasOps.OUT fields
++/* The "PREParation" generators.  These initialize the DisasOps.OUT fields
+    with the TCG register to which we will write.  Used in combination with
+    the "wout" generators, in some cases we need a new temporary, and in
+    some cases we can write to a TCG global.  */
+-- 
+1.7.10.4
+
+

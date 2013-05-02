@@ -1,0 +1,335 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Alexander Graf <agraf@suse.de>
+To: qemu-ppc@nongnu.org
+Cc: Blue Swirl <blauwirbel@gmail.com>,
+ David Gibson <david@gibson.dropbear.id.au>,
+ Aurelien Jarno <aurelien@aurel32.net>, qemu-devel@nongnu.org
+Date: Fri, 26 Apr 2013 20:21:36 +0200
+Message-id: 1367000509-8833-18-git-send-email-agraf@suse.de
+Subject: [PATCH 17/30] pseries: Convert VIO code to QOM style type safe(ish)
+ casts
+
+From: David Gibson <david@gibson.dropbear.id.au>
+
+Curerntly the pseries VIO device code contains quite a few explicit
+uses of DO_UPCAST and plain C casts.  This is (obviously) type unsafe,
+and not the conventional way of doing things in the QOM model.  This
+patch converts the code to use the QOM convention of per-type macros
+to do verified casts with OBJECT_CHECK().
+
+Signed-off-by: David Gibson <david@gibson.dropbear.id.au>
+Signed-off-by: Alexander Graf <agraf@suse.de>
+---
+ hw/char/spapr_vty.c    |   18 +++++++++++-------
+ hw/net/spapr_llan.c    |   24 ++++++++++++++----------
+ hw/nvram/spapr_nvram.c |   10 +++++++---
+ hw/ppc/spapr_vio.c     |    4 ++--
+ hw/scsi/spapr_vscsi.c  |   15 +++++++++------
+ 5 files changed, 43 insertions(+), 28 deletions(-)
+
+diff --git a/hw/char/spapr_vty.c b/hw/char/spapr_vty.c
+index afcec1f..2993848 100644
+--- a/hw/char/spapr_vty.c
++++ b/hw/char/spapr_vty.c
+@@ -12,16 +12,20 @@ typedef struct VIOsPAPRVTYDevice {
+     uint8_t buf[VTERM_BUFSIZE];
+ } VIOsPAPRVTYDevice;
+ 
++#define TYPE_VIO_SPAPR_VTY_DEVICE "spapr-vty"
++#define VIO_SPAPR_VTY_DEVICE(obj) \
++     OBJECT_CHECK(VIOsPAPRVTYDevice, (obj), TYPE_VIO_SPAPR_VTY_DEVICE)
++
+ static int vty_can_receive(void *opaque)
+ {
+-    VIOsPAPRVTYDevice *dev = (VIOsPAPRVTYDevice *)opaque;
++    VIOsPAPRVTYDevice *dev = VIO_SPAPR_VTY_DEVICE(opaque);
+ 
+     return (dev->in - dev->out) < VTERM_BUFSIZE;
+ }
+ 
+ static void vty_receive(void *opaque, const uint8_t *buf, int size)
+ {
+-    VIOsPAPRVTYDevice *dev = (VIOsPAPRVTYDevice *)opaque;
++    VIOsPAPRVTYDevice *dev = VIO_SPAPR_VTY_DEVICE(opaque);
+     int i;
+ 
+     if ((dev->in == dev->out) && size) {
+@@ -36,7 +40,7 @@ static void vty_receive(void *opaque, const uint8_t *buf, int size)
+ 
+ static int vty_getchars(VIOsPAPRDevice *sdev, uint8_t *buf, int max)
+ {
+-    VIOsPAPRVTYDevice *dev = (VIOsPAPRVTYDevice *)sdev;
++    VIOsPAPRVTYDevice *dev = VIO_SPAPR_VTY_DEVICE(sdev);
+     int n = 0;
+ 
+     while ((n < max) && (dev->out != dev->in)) {
+@@ -48,7 +52,7 @@ static int vty_getchars(VIOsPAPRDevice *sdev, uint8_t *buf, int max)
+ 
+ void vty_putchars(VIOsPAPRDevice *sdev, uint8_t *buf, int len)
+ {
+-    VIOsPAPRVTYDevice *dev = (VIOsPAPRVTYDevice *)sdev;
++    VIOsPAPRVTYDevice *dev = VIO_SPAPR_VTY_DEVICE(sdev);
+ 
+     /* FIXME: should check the qemu_chr_fe_write() return value */
+     qemu_chr_fe_write(dev->chardev, buf, len);
+@@ -56,7 +60,7 @@ void vty_putchars(VIOsPAPRDevice *sdev, uint8_t *buf, int len)
+ 
+ static int spapr_vty_init(VIOsPAPRDevice *sdev)
+ {
+-    VIOsPAPRVTYDevice *dev = (VIOsPAPRVTYDevice *)sdev;
++    VIOsPAPRVTYDevice *dev = VIO_SPAPR_VTY_DEVICE(sdev);
+ 
+     if (!dev->chardev) {
+         fprintf(stderr, "spapr-vty: Can't create vty without a chardev!\n");
+@@ -151,7 +155,7 @@ static void spapr_vty_class_init(ObjectClass *klass, void *data)
+ }
+ 
+ static const TypeInfo spapr_vty_info = {
+-    .name          = "spapr-vty",
++    .name          = TYPE_VIO_SPAPR_VTY_DEVICE,
+     .parent        = TYPE_VIO_SPAPR_DEVICE,
+     .instance_size = sizeof(VIOsPAPRVTYDevice),
+     .class_init    = spapr_vty_class_init,
+@@ -177,7 +181,7 @@ VIOsPAPRDevice *spapr_vty_get_default(VIOsPAPRBus *bus)
+             continue;
+         }
+ 
+-        sdev = DO_UPCAST(VIOsPAPRDevice, qdev, iter);
++        sdev = VIO_SPAPR_DEVICE(iter);
+ 
+         /* First VTY we've found, so it is selected for now */
+         if (!selected) {
+diff --git a/hw/net/spapr_llan.c b/hw/net/spapr_llan.c
+index 34332f2..3150add 100644
+--- a/hw/net/spapr_llan.c
++++ b/hw/net/spapr_llan.c
+@@ -73,6 +73,10 @@ typedef uint64_t vlan_bd_t;
+ #define VLAN_RX_BDS_OFF      16
+ #define VLAN_MAX_BUFS        ((SPAPR_TCE_PAGE_SIZE - VLAN_RX_BDS_OFF) / 8)
+ 
++#define TYPE_VIO_SPAPR_VLAN_DEVICE "spapr-vlan"
++#define VIO_SPAPR_VLAN_DEVICE(obj) \
++     OBJECT_CHECK(VIOsPAPRVLANDevice, (obj), TYPE_VIO_SPAPR_VLAN_DEVICE)
++
+ typedef struct VIOsPAPRVLANDevice {
+     VIOsPAPRDevice sdev;
+     NICConf nicconf;
+@@ -93,8 +97,8 @@ static int spapr_vlan_can_receive(NetClientState *nc)
+ static ssize_t spapr_vlan_receive(NetClientState *nc, const uint8_t *buf,
+                                   size_t size)
+ {
+-    VIOsPAPRDevice *sdev = qemu_get_nic_opaque(nc);
+-    VIOsPAPRVLANDevice *dev = (VIOsPAPRVLANDevice *)sdev;
++    VIOsPAPRVLANDevice *dev = qemu_get_nic_opaque(nc);
++    VIOsPAPRDevice *sdev = VIO_SPAPR_DEVICE(dev);
+     vlan_bd_t rxq_bd = vio_ldq(sdev, dev->buf_list + VLAN_RXQ_BD_OFF);
+     vlan_bd_t bd;
+     int buf_ptr = dev->use_buf_ptr;
+@@ -192,7 +196,7 @@ static NetClientInfo net_spapr_vlan_info = {
+ 
+ static void spapr_vlan_reset(VIOsPAPRDevice *sdev)
+ {
+-    VIOsPAPRVLANDevice *dev = DO_UPCAST(VIOsPAPRVLANDevice, sdev, sdev);
++    VIOsPAPRVLANDevice *dev = VIO_SPAPR_VLAN_DEVICE(sdev);
+ 
+     dev->buf_list = 0;
+     dev->rx_bufs = 0;
+@@ -201,7 +205,7 @@ static void spapr_vlan_reset(VIOsPAPRDevice *sdev)
+ 
+ static int spapr_vlan_init(VIOsPAPRDevice *sdev)
+ {
+-    VIOsPAPRVLANDevice *dev = (VIOsPAPRVLANDevice *)sdev;
++    VIOsPAPRVLANDevice *dev = VIO_SPAPR_VLAN_DEVICE(sdev);
+ 
+     qemu_macaddr_default_if_unset(&dev->nicconf.macaddr);
+ 
+@@ -225,7 +229,7 @@ void spapr_vlan_create(VIOsPAPRBus *bus, NICInfo *nd)
+ 
+ static int spapr_vlan_devnode(VIOsPAPRDevice *dev, void *fdt, int node_off)
+ {
+-    VIOsPAPRVLANDevice *vdev = (VIOsPAPRVLANDevice *)dev;
++    VIOsPAPRVLANDevice *vdev = VIO_SPAPR_VLAN_DEVICE(dev);
+     uint8_t padded_mac[8] = {0, 0};
+     int ret;
+ 
+@@ -282,7 +286,7 @@ static target_ulong h_register_logical_lan(PowerPCCPU *cpu,
+     target_ulong rec_queue = args[2];
+     target_ulong filter_list = args[3];
+     VIOsPAPRDevice *sdev = spapr_vio_find_by_reg(spapr->vio_bus, reg);
+-    VIOsPAPRVLANDevice *dev = (VIOsPAPRVLANDevice *)sdev;
++    VIOsPAPRVLANDevice *dev = VIO_SPAPR_VLAN_DEVICE(sdev);
+     vlan_bd_t filter_list_bd;
+ 
+     if (!dev) {
+@@ -341,7 +345,7 @@ static target_ulong h_free_logical_lan(PowerPCCPU *cpu, sPAPREnvironment *spapr,
+ {
+     target_ulong reg = args[0];
+     VIOsPAPRDevice *sdev = spapr_vio_find_by_reg(spapr->vio_bus, reg);
+-    VIOsPAPRVLANDevice *dev = (VIOsPAPRVLANDevice *)sdev;
++    VIOsPAPRVLANDevice *dev = VIO_SPAPR_VLAN_DEVICE(sdev);
+ 
+     if (!dev) {
+         return H_PARAMETER;
+@@ -365,7 +369,7 @@ static target_ulong h_add_logical_lan_buffer(PowerPCCPU *cpu,
+     target_ulong reg = args[0];
+     target_ulong buf = args[1];
+     VIOsPAPRDevice *sdev = spapr_vio_find_by_reg(spapr->vio_bus, reg);
+-    VIOsPAPRVLANDevice *dev = (VIOsPAPRVLANDevice *)sdev;
++    VIOsPAPRVLANDevice *dev = VIO_SPAPR_VLAN_DEVICE(sdev);
+     vlan_bd_t bd;
+ 
+     dprintf("H_ADD_LOGICAL_LAN_BUFFER(0x" TARGET_FMT_lx
+@@ -413,7 +417,7 @@ static target_ulong h_send_logical_lan(PowerPCCPU *cpu, sPAPREnvironment *spapr,
+     target_ulong *bufs = args + 1;
+     target_ulong continue_token = args[7];
+     VIOsPAPRDevice *sdev = spapr_vio_find_by_reg(spapr->vio_bus, reg);
+-    VIOsPAPRVLANDevice *dev = (VIOsPAPRVLANDevice *)sdev;
++    VIOsPAPRVLANDevice *dev = VIO_SPAPR_VLAN_DEVICE(sdev);
+     unsigned total_len;
+     uint8_t *lbuf, *p;
+     int i, nbufs;
+@@ -511,7 +515,7 @@ static void spapr_vlan_class_init(ObjectClass *klass, void *data)
+ }
+ 
+ static const TypeInfo spapr_vlan_info = {
+-    .name          = "spapr-vlan",
++    .name          = TYPE_VIO_SPAPR_VLAN_DEVICE,
+     .parent        = TYPE_VIO_SPAPR_DEVICE,
+     .instance_size = sizeof(VIOsPAPRVLANDevice),
+     .class_init    = spapr_vlan_class_init,
+diff --git a/hw/nvram/spapr_nvram.c b/hw/nvram/spapr_nvram.c
+index 0cc6cba..1eb05c9 100644
+--- a/hw/nvram/spapr_nvram.c
++++ b/hw/nvram/spapr_nvram.c
+@@ -36,6 +36,10 @@ typedef struct sPAPRNVRAM {
+     BlockDriverState *drive;
+ } sPAPRNVRAM;
+ 
++#define TYPE_VIO_SPAPR_NVRAM "spapr-nvram"
++#define VIO_SPAPR_NVRAM(obj) \
++     OBJECT_CHECK(sPAPRNVRAM, (obj), TYPE_VIO_SPAPR_NVRAM)
++
+ #define MIN_NVRAM_SIZE 8192
+ #define DEFAULT_NVRAM_SIZE 65536
+ #define MAX_NVRAM_SIZE (UINT16_MAX * 16)
+@@ -134,7 +138,7 @@ static void rtas_nvram_store(sPAPREnvironment *spapr,
+ 
+ static int spapr_nvram_init(VIOsPAPRDevice *dev)
+ {
+-    sPAPRNVRAM *nvram = (sPAPRNVRAM *)dev;
++    sPAPRNVRAM *nvram = VIO_SPAPR_NVRAM(dev);
+ 
+     if (nvram->drive) {
+         nvram->size = bdrv_getlength(nvram->drive);
+@@ -157,7 +161,7 @@ static int spapr_nvram_init(VIOsPAPRDevice *dev)
+ 
+ static int spapr_nvram_devnode(VIOsPAPRDevice *dev, void *fdt, int node_off)
+ {
+-    sPAPRNVRAM *nvram = (sPAPRNVRAM *)dev;
++    sPAPRNVRAM *nvram = VIO_SPAPR_NVRAM(dev);
+ 
+     return fdt_setprop_cell(fdt, node_off, "#bytes", nvram->size);
+ }
+@@ -182,7 +186,7 @@ static void spapr_nvram_class_init(ObjectClass *klass, void *data)
+ }
+ 
+ static const TypeInfo spapr_nvram_type_info = {
+-    .name          = "spapr-nvram",
++    .name          = TYPE_VIO_SPAPR_NVRAM,
+     .parent        = TYPE_VIO_SPAPR_DEVICE,
+     .instance_size = sizeof(sPAPRNVRAM),
+     .class_init    = spapr_nvram_class_init,
+diff --git a/hw/ppc/spapr_vio.c b/hw/ppc/spapr_vio.c
+index 4dbc315..ccc794d 100644
+--- a/hw/ppc/spapr_vio.c
++++ b/hw/ppc/spapr_vio.c
+@@ -379,7 +379,7 @@ static VIOsPAPRDevice *reg_conflict(VIOsPAPRDevice *dev)
+      * the given dev might already be in the list.
+      */
+     QTAILQ_FOREACH(kid, &bus->bus.children, sibling) {
+-        other = DO_UPCAST(VIOsPAPRDevice, qdev, kid->child);
++        other = VIO_SPAPR_DEVICE(kid->child);
+ 
+         if (other != dev && other->reg == dev->reg) {
+             return other;
+@@ -391,7 +391,7 @@ static VIOsPAPRDevice *reg_conflict(VIOsPAPRDevice *dev)
+ 
+ static void spapr_vio_busdev_reset(DeviceState *qdev)
+ {
+-    VIOsPAPRDevice *dev = DO_UPCAST(VIOsPAPRDevice, qdev, qdev);
++    VIOsPAPRDevice *dev = VIO_SPAPR_DEVICE(qdev);
+     VIOsPAPRDeviceClass *pc = VIO_SPAPR_DEVICE_GET_CLASS(dev);
+ 
+     /* Shut down the request queue and TCEs if necessary */
+diff --git a/hw/scsi/spapr_vscsi.c b/hw/scsi/spapr_vscsi.c
+index 999a463..3d322d5 100644
+--- a/hw/scsi/spapr_vscsi.c
++++ b/hw/scsi/spapr_vscsi.c
+@@ -91,6 +91,9 @@ typedef struct vscsi_req {
+     int                     total_desc;
+ } vscsi_req;
+ 
++#define TYPE_VIO_SPAPR_VSCSI_DEVICE "spapr-vscsi"
++#define VIO_SPAPR_VSCSI_DEVICE(obj) \
++     OBJECT_CHECK(VSCSIState, (obj), TYPE_VIO_SPAPR_VSCSI_DEVICE)
+ 
+ typedef struct {
+     VIOsPAPRDevice vdev;
+@@ -461,7 +464,7 @@ static int vscsi_preprocess_desc(vscsi_req *req)
+ /* Callback to indicate that the SCSI layer has completed a transfer.  */
+ static void vscsi_transfer_data(SCSIRequest *sreq, uint32_t len)
+ {
+-    VSCSIState *s = DO_UPCAST(VSCSIState, vdev.qdev, sreq->bus->qbus.parent);
++    VSCSIState *s = VIO_SPAPR_VSCSI_DEVICE(sreq->bus->qbus.parent);
+     vscsi_req *req = sreq->hba_private;
+     uint8_t *buf;
+     int rc = 0;
+@@ -492,7 +495,7 @@ static void vscsi_transfer_data(SCSIRequest *sreq, uint32_t len)
+ /* Callback to indicate that the SCSI layer has completed a transfer.  */
+ static void vscsi_command_complete(SCSIRequest *sreq, uint32_t status, size_t resid)
+ {
+-    VSCSIState *s = DO_UPCAST(VSCSIState, vdev.qdev, sreq->bus->qbus.parent);
++    VSCSIState *s = VIO_SPAPR_VSCSI_DEVICE(sreq->bus->qbus.parent);
+     vscsi_req *req = sreq->hba_private;
+     int32_t res_in = 0, res_out = 0;
+ 
+@@ -827,7 +830,7 @@ static void vscsi_got_payload(VSCSIState *s, vscsi_crq *crq)
+ 
+ static int vscsi_do_crq(struct VIOsPAPRDevice *dev, uint8_t *crq_data)
+ {
+-    VSCSIState *s = DO_UPCAST(VSCSIState, vdev, dev);
++    VSCSIState *s = VIO_SPAPR_VSCSI_DEVICE(dev);
+     vscsi_crq crq;
+ 
+     memcpy(crq.raw, crq_data, 16);
+@@ -897,7 +900,7 @@ static const struct SCSIBusInfo vscsi_scsi_info = {
+ 
+ static void spapr_vscsi_reset(VIOsPAPRDevice *dev)
+ {
+-    VSCSIState *s = DO_UPCAST(VSCSIState, vdev, dev);
++    VSCSIState *s = VIO_SPAPR_VSCSI_DEVICE(dev);
+     int i;
+ 
+     memset(s->reqs, 0, sizeof(s->reqs));
+@@ -908,7 +911,7 @@ static void spapr_vscsi_reset(VIOsPAPRDevice *dev)
+ 
+ static int spapr_vscsi_init(VIOsPAPRDevice *dev)
+ {
+-    VSCSIState *s = DO_UPCAST(VSCSIState, vdev, dev);
++    VSCSIState *s = VIO_SPAPR_VSCSI_DEVICE(dev);
+ 
+     dev->crq.SendFunc = vscsi_do_crq;
+ 
+@@ -968,7 +971,7 @@ static void spapr_vscsi_class_init(ObjectClass *klass, void *data)
+ }
+ 
+ static const TypeInfo spapr_vscsi_info = {
+-    .name          = "spapr-vscsi",
++    .name          = TYPE_VIO_SPAPR_VSCSI_DEVICE,
+     .parent        = TYPE_VIO_SPAPR_DEVICE,
+     .instance_size = sizeof(VSCSIState),
+     .class_init    = spapr_vscsi_class_init,
+-- 
+1.6.0.2
+
+

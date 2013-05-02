@@ -1,0 +1,51 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Jason Wang <jasowang@redhat.com>
+To: Anthony Liguori <aliguori@us.ibm.com>,
+ KONRAD =?iso-8859-1?Q?Fr=E9d=E9ric?= <fred.konrad@greensocs.com>,
+ qemu-devel@nongnu.org, "Michael S. Tsirkin" <mst@redhat.com>,
+ Jason Wang <jasowang@redhat.com>, Jesse Larrew <jlarrew@linux.vnet.ibm.com>,
+ =?ISO-8859-1?Q?KONRAD_Fr=E9d=E9ric?= <fred.konrad@greensocs.com>
+Cc: Anthony Liguori <aliguori@us.ibm.com>, agraf@suse.de, mst@redhat.com,
+ qemu-devel@nongnu.org, "Michael S. Tsirkin" <mst@redhat.com>,
+ Jason Wang <jasowang@redhat.com>, Jesse Larrew <jlarrew@linux.vnet.ibm.com>,
+ cornelia.huck@de.ibm.com,
+ =?utf-8?b?IktPTlJBRCBGcsOpZMOpcmljIg==?= <fred.konrad@greensocs.com>,
+ Michael Roth <mdroth@linux.vnet.ibm.com>
+Date: Thu, 25 Apr 2013 14:21:29 +0800
+Message-id: 1366870889-950-1-git-send-email-jasowang@redhat.com
+Subject: [PATCH 1/1] virtio-net: count VIRTIO_NET_F_MAC when calculating
+ config_len
+
+Commit 14f9b664 (hw/virtio-net.c: set config size using host features) tries to
+calculate config size based on the host features. But it forgets the
+VIRTIO_NET_F_MAC were always set for qemu later. This will lead a zero config
+len for virtio-net device when both VIRTIO_NET_F_STATUS and VIRTIO_NET_F_MQ were
+disabled form command line. Then qemu will crash when user tries to read the
+config of virtio-net.
+
+Fix this by counting VIRTIO_NET_F_MAC and make sure the config at least contains
+the mac address.
+
+Cc: Jesse Larrew <jlarrew@linux.vnet.ibm.com>
+Signed-off-by: Jason Wang <jasowang@redhat.com>
+---
+ hw/net/virtio-net.c |    3 ++-
+ 1 files changed, 2 insertions(+), 1 deletions(-)
+
+diff --git a/hw/net/virtio-net.c b/hw/net/virtio-net.c
+index 70c8fce..33a70ef 100644
+--- a/hw/net/virtio-net.c
++++ b/hw/net/virtio-net.c
+@@ -1264,7 +1264,8 @@ static void virtio_net_guest_notifier_mask(VirtIODevice *vdev, int idx,
+ 
+ void virtio_net_set_config_size(VirtIONet *n, uint32_t host_features)
+ {
+-    int i, config_size = 0;
++    /* VIRTIO_NET_F_MAC can't be disabled from qemu side */
++    int i, config_size = feature_sizes[0].end;
+     for (i = 0; feature_sizes[i].flags != 0; i++) {
+         if (host_features & feature_sizes[i].flags) {
+             config_size = MAX(feature_sizes[i].end, config_size);
+-- 
+1.7.1
+

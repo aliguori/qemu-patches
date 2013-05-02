@@ -1,0 +1,1 @@
+../Fix-versatile_pci-without-breaking-linux/v3.1365101902/0011-hw-versatile_pci-Drop-unnecessary-vpb_pci_config_addr.patch

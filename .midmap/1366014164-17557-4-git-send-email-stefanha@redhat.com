@@ -1,0 +1,1 @@
+../Block-patches/v1.1366039353/0003-block-Introduce-bdrv_pwritev-for-qcow2_save_vmstate.patch

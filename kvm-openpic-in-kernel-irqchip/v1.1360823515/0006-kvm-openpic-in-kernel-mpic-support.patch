@@ -1,0 +1,384 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Scott Wood <scottwood@freescale.com>
+To: Alexander Graf <agraf@suse.de>, Scott Wood <scottwood@freescale.com>
+Cc: "<qemu-devel@nongnu.org>" <qemu-devel@nongnu.org>,
+ "<qemu-ppc@nongnu.org>" <qemu-ppc@nongnu.org>, qemu-ppc@nongnu.org,
+ qemu-devel@nongnu.org, Scott Wood <scottwood@freescale.com>
+Date: Thu, 14 Feb 2013 00:32:01 -0600
+Message-id: 1360823521-32306-7-git-send-email-scottwood@freescale.com
+Subject: [PATCH 6/6] kvm/openpic: in-kernel mpic support
+
+This depends on RFC kernel interfaces proposed at:
+http://patchwork.ozlabs.org/patch/220359/
+http://patchwork.ozlabs.org/patch/220362/
+
+Signed-off-by: Scott Wood <scottwood@freescale.com>
+---
+ hw/kvm/Makefile.objs |    1 +
+ hw/kvm/openpic.c     |  295 ++++++++++++++++++++++++++++++++++++++++++++++++++
+ hw/ppc/e500.c        |   28 +++--
+ 3 files changed, 317 insertions(+), 7 deletions(-)
+ create mode 100644 hw/kvm/openpic.c
+
+diff --git a/hw/kvm/Makefile.objs b/hw/kvm/Makefile.objs
+index 6ccb6ed..8df0fe1 100644
+--- a/hw/kvm/Makefile.objs
++++ b/hw/kvm/Makefile.objs
+@@ -1 +1,2 @@
+ obj-$(TARGET_I386) += clock.o apic.o i8259.o ioapic.o i8254.o pci-assign.o
++obj-$(TARGET_PPC) += openpic.o
+diff --git a/hw/kvm/openpic.c b/hw/kvm/openpic.c
+new file mode 100644
+index 0000000..aabc4a6
+--- /dev/null
++++ b/hw/kvm/openpic.c
+@@ -0,0 +1,295 @@
++/*
++ * KVM in-kernel OpenPIC
++ *
++ * Copyright 2013 Freescale Semiconductor, Inc.
++ *
++ * Permission is hereby granted, free of charge, to any person obtaining a copy
++ * of this software and associated documentation files (the "Software"), to deal
++ * in the Software without restriction, including without limitation the rights
++ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
++ * copies of the Software, and to permit persons to whom the Software is
++ * furnished to do so, subject to the following conditions:
++ *
++ * The above copyright notice and this permission notice shall be included in
++ * all copies or substantial portions of the Software.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
++ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
++ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
++ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
++ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
++ * THE SOFTWARE.
++ */
++
++#include "exec/address-spaces.h"
++#include "hw/hw.h"
++#include "hw/openpic.h"
++#include "hw/pci/msi.h"
++#include "hw/sysbus.h"
++#include "sysemu/kvm.h"
++
++typedef struct KVMOpenPICState {
++    SysBusDevice busdev;
++    MemoryRegion mem;
++    MemoryListener mem_listener;
++    hwaddr reg_base;
++    uint32_t kern_id;
++    uint32_t model;
++} KVMOpenPICState;
++
++static void kvm_openpic_set_irq(void *opaque, int n_IRQ, int level)
++{
++    KVMOpenPICState *opp = opaque;
++    struct kvm_device_attr attr;
++    uint32_t val32 = level;
++    int ret;
++
++    attr.dev = opp->kern_id;
++    attr.group = KVM_DEV_MPIC_GRP_IRQ_ACTIVE;
++    attr.attr = n_IRQ;
++    attr.addr = (uint64_t)(long)&val32;
++
++    ret = kvm_vm_ioctl(kvm_state, KVM_SET_DEVICE_ATTR, &attr);
++    if (ret < 0) {
++        fprintf(stderr, "%s: %s %llx\n", __func__, strerror(errno), attr.attr);
++    }
++}
++
++static void kvm_openpic_reset(DeviceState *d)
++{
++#if 0
++    OpenPICState *opp = FROM_SYSBUS(typeof(*opp), SYS_BUS_DEVICE(d));
++    int i;
++
++    opp->gcr = GCR_RESET;
++    /* Initialise controller registers */
++    opp->frr = ((opp->nb_irqs - 1) << FRR_NIRQ_SHIFT) |
++               ((opp->nb_cpus - 1) << FRR_NCPU_SHIFT) |
++               (opp->vid << FRR_VID_SHIFT);
++
++    opp->pir = 0;
++    opp->spve = -1 & opp->vector_mask;
++    opp->tfrr = opp->tfrr_reset;
++    /* Initialise IRQ sources */
++    for (i = 0; i < opp->max_irq; i++) {
++        opp->src[i].ivpr = opp->ivpr_reset;
++        opp->src[i].idr  = opp->idr_reset;
++
++        switch (opp->src[i].type) {
++        case IRQ_TYPE_NORMAL:
++            opp->src[i].level = !!(opp->ivpr_reset & IVPR_SENSE_MASK);
++            break;
++
++        case IRQ_TYPE_FSLINT:
++            opp->src[i].ivpr |= IVPR_POLARITY_MASK;
++            break;
++
++        case IRQ_TYPE_FSLSPECIAL:
++            break;
++        }
++    }
++    /* Initialise IRQ destinations */
++    for (i = 0; i < MAX_CPU; i++) {
++        opp->dst[i].ctpr      = 15;
++        memset(&opp->dst[i].raised, 0, sizeof(IRQQueue));
++        opp->dst[i].raised.next = -1;
++        memset(&opp->dst[i].servicing, 0, sizeof(IRQQueue));
++        opp->dst[i].servicing.next = -1;
++    }
++    /* Initialise timers */
++    for (i = 0; i < OPENPIC_MAX_TMR; i++) {
++        opp->timers[i].tccr = 0;
++        opp->timers[i].tbcr = TBCR_CI;
++    }
++    /* Go out of RESET state */
++    opp->gcr = 0;
++#endif
++}
++
++static void kvm_openpic_write(void *opaque, hwaddr addr, uint64_t val,
++                              unsigned size)
++{
++    KVMOpenPICState *opp = opaque;
++    struct kvm_device_attr attr;
++    uint32_t val32 = val;
++    int ret;
++
++    attr.dev = opp->kern_id;
++    attr.group = KVM_DEV_MPIC_GRP_REGISTER;
++    attr.attr = addr;
++    attr.addr = (uint64_t)(long)&val32;
++
++    ret = kvm_vm_ioctl(kvm_state, KVM_SET_DEVICE_ATTR, &attr);
++    if (ret < 0) {
++        qemu_log_mask(LOG_UNIMP, "%s: %s %llx\n", __func__,
++                      strerror(errno), attr.attr);
++    }
++}
++
++static uint64_t kvm_openpic_read(void *opaque, hwaddr addr, unsigned size)
++{
++    KVMOpenPICState *opp = opaque;
++    struct kvm_device_attr attr;
++    uint32_t val = 0xdeadbeef;
++    int ret;
++
++    attr.dev = opp->kern_id;
++    attr.group = KVM_DEV_MPIC_GRP_REGISTER;
++    attr.attr = addr;
++    attr.addr = (uint64_t)(long)&val;
++
++    ret = kvm_vm_ioctl(kvm_state, KVM_GET_DEVICE_ATTR, &attr);
++    if (ret < 0) {
++        qemu_log_mask(LOG_UNIMP, "%s: %s %llx\n", __func__,
++                      strerror(errno), attr.attr);
++        return 0;
++    }
++
++    return val;
++}
++
++static const MemoryRegionOps kvm_openpic_mem_ops = {
++    .write = kvm_openpic_write,
++    .read  = kvm_openpic_read,
++    .endianness = DEVICE_BIG_ENDIAN,
++    .impl = {
++        .min_access_size = 4,
++        .max_access_size = 4,
++    },
++};
++
++static void kvm_openpic_update_reg_base(MemoryListener *listener)
++{
++    KVMOpenPICState *opp = container_of(listener, KVMOpenPICState,
++                                        mem_listener);
++    struct kvm_device_attr attr;
++    uint64_t reg_base;
++    AddressSpace *as;
++    int ret;
++
++    reg_base = memory_region_to_address(&opp->mem, &as);
++    if (!as) {
++        reg_base = 0;
++    } else if (as != &address_space_memory) {
++        abort();
++    }
++
++    if (reg_base == opp->reg_base) {
++        return;
++    }
++
++    opp->reg_base = reg_base;
++
++    attr.dev = opp->kern_id;
++    attr.group = KVM_DEV_MPIC_GRP_MISC;
++    attr.attr = KVM_DEV_MPIC_BASE_ADDR;
++    attr.addr = (uint64_t)(long)&reg_base;
++
++    ret = kvm_vm_ioctl(kvm_state, KVM_SET_DEVICE_ATTR, &attr);
++    if (ret < 0) {
++        fprintf(stderr, "%s: %s %llx\n", __func__, strerror(errno), reg_base);
++    }
++}
++
++static int kvm_openpic_init(SysBusDevice *dev)
++{
++    KVMOpenPICState *opp = FROM_SYSBUS(typeof(*opp), dev);
++    int kvm_openpic_model;
++
++    memory_region_init_io(&opp->mem, &kvm_openpic_mem_ops, opp,
++                          "kvm-openpic", 0x40000);
++
++    switch (opp->model) {
++    case OPENPIC_MODEL_FSL_MPIC_20:
++        kvm_openpic_model = KVM_DEV_TYPE_FSL_MPIC_20;
++        break;
++
++    case OPENPIC_MODEL_FSL_MPIC_42:
++        kvm_openpic_model = KVM_DEV_TYPE_FSL_MPIC_42;
++        break;
++
++    default:
++        return -EINVAL;
++    }
++
++    sysbus_init_mmio(dev, &opp->mem);
++    qdev_init_gpio_in(&dev->qdev, kvm_openpic_set_irq, OPENPIC_MAX_IRQ);
++
++    opp->mem_listener.commit = kvm_openpic_update_reg_base;
++    memory_listener_register(&opp->mem_listener, &address_space_memory);
++
++    msi_supported = true;
++    return 0;
++}
++
++DeviceState *kvm_openpic_create(BusState *bus, int model)
++{
++    KVMState *s = kvm_state;
++    DeviceState *dev;
++    struct kvm_create_device cd = {0};
++    int ret;
++
++    if (!kvm_check_extension(s, KVM_CAP_DEVICE_CTRL)) {
++        return NULL;
++    }
++
++    switch (model) {
++    case OPENPIC_MODEL_FSL_MPIC_20:
++        cd.type = KVM_DEV_TYPE_FSL_MPIC_20;
++        break;
++
++    case OPENPIC_MODEL_FSL_MPIC_42:
++        cd.type = KVM_DEV_TYPE_FSL_MPIC_42;
++        break;
++
++    default:
++        qemu_log_mask(LOG_UNIMP, "%s: unknown openpic model %d\n",
++                      __func__, model);
++        return NULL;
++    }
++
++    ret = kvm_vm_ioctl(s, KVM_CREATE_DEVICE, &cd);
++    if (ret < 0) {
++        fprintf(stderr, "%s: can't create device %d: %s\n", __func__, cd.type,
++                strerror(errno));
++        return NULL;
++    }
++
++    dev = qdev_create(NULL, "kvm-openpic");
++    qdev_prop_set_uint32(dev, "model", model);
++    qdev_prop_set_uint32(dev, "kernel-id", cd.id);
++
++    return dev;
++}
++
++static Property kvm_openpic_properties[] = {
++    DEFINE_PROP_UINT32("model", KVMOpenPICState, model,
++                       OPENPIC_MODEL_FSL_MPIC_20),
++    DEFINE_PROP_UINT32("kernel-id", KVMOpenPICState, kern_id, 0),
++    DEFINE_PROP_END_OF_LIST(),
++};
++
++static void kvm_openpic_class_init(ObjectClass *klass, void *data)
++{
++    DeviceClass *dc = DEVICE_CLASS(klass);
++    SysBusDeviceClass *k = SYS_BUS_DEVICE_CLASS(klass);
++
++    k->init = kvm_openpic_init;
++    dc->props = kvm_openpic_properties;
++    dc->reset = kvm_openpic_reset;
++}
++
++static const TypeInfo kvm_openpic_info = {
++    .name          = "kvm-openpic",
++    .parent        = TYPE_SYS_BUS_DEVICE,
++    .instance_size = sizeof(KVMOpenPICState),
++    .class_init    = kvm_openpic_class_init,
++};
++
++static void kvm_openpic_register_types(void)
++{
++    type_register_static(&kvm_openpic_info);
++}
++
++type_init(kvm_openpic_register_types)
+diff --git a/hw/ppc/e500.c b/hw/ppc/e500.c
+index b7474c0..9cfcc1d 100644
+--- a/hw/ppc/e500.c
++++ b/hw/ppc/e500.c
+@@ -474,6 +474,7 @@ void ppce500_init(PPCE500Params *params)
+     MemoryRegion *ccsr_addr_space;
+     SysBusDevice *s;
+     PPCE500CCSRState *ccsr;
++    bool kvm_irqchip = false;
+ 
+     /* Setup CPUs */
+     if (params->cpu_model == NULL) {
+@@ -543,16 +544,29 @@ void ppce500_init(PPCE500Params *params)
+ 
+     /* MPIC */
+     mpic = g_new(qemu_irq, 256);
+-    dev = qdev_create(NULL, "openpic");
+-    qdev_prop_set_uint32(dev, "nb_cpus", smp_cpus);
+-    qdev_prop_set_uint32(dev, "model", params->mpic_version);
++
++    if (kvm_irqchip_wanted()) {
++        dev = kvm_openpic_create(NULL, params->mpic_version);
++        if (dev) {
++            kvm_irqchip = true;
++        }
++    }
++
++    if (!kvm_irqchip) {
++        dev = qdev_create(NULL, "openpic");
++        qdev_prop_set_uint32(dev, "model", params->mpic_version);
++        qdev_prop_set_uint32(dev, "nb_cpus", smp_cpus);
++    }
++
+     qdev_init_nofail(dev);
+     s = SYS_BUS_DEVICE(dev);
+ 
+-    k = 0;
+-    for (i = 0; i < smp_cpus; i++) {
+-        for (j = 0; j < OPENPIC_OUTPUT_NB; j++) {
+-            sysbus_connect_irq(s, k++, irqs[i][j]);
++    if (!kvm_irqchip) {
++        k = 0;
++        for (i = 0; i < smp_cpus; i++) {
++            for (j = 0; j < OPENPIC_OUTPUT_NB; j++) {
++                sysbus_connect_irq(s, k++, irqs[i][j]);
++            }
+         }
+     }
+ 
+-- 
+1.7.9.5
+
+
+

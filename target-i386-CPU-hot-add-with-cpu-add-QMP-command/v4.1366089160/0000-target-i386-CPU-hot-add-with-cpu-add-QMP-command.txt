@@ -1,0 +1,142 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Igor Mammedov <imammedo@redhat.com>
+To: Igor Mammedov <imammedo@redhat.com>, Jan Kiszka <jan.kiszka@siemens.com>,
+ qemu-devel@nongnu.org
+Cc: "lig.fnst@cn.fujitsu.com" <lig.fnst@cn.fujitsu.com>, mst@redhat.com,
+ jan.kiszka@siemens.com, lcapitulino@redhat.com,
+ "afaerber@suse.de" <afaerber@suse.de>, Jan Kiszka <jan.kiszka@siemens.com>,
+ "claudio.fontana@huawei.com" <claudio.fontana@huawei.com>, eblake@redhat.com,
+ Anthony Liguori <aliguori@us.ibm.com>,
+ "qemu-devel@nongnu.org" <qemu-devel@nongnu.org>, jfrei@linux.vnet.ibm.com,
+ yang.z.zhang@intel.com, "pbonzini@redhat.com" <pbonzini@redhat.com>,
+ "aliguori@us.ibm.com" <aliguori@us.ibm.com>, ehabkost@redhat.com,
+ "lcapitulino@redhat.com" <lcapitulino@redhat.com>, aderumier@odiso.com,
+ "aderumier@odiso.com" <aderumier@odiso.com>, pbonzini@redhat.com,
+ rth@twiddle.net, "eblake@redhat.com" <eblake@redhat.com>,
+ "rth@twiddle.net" <rth@twiddle.net>,
+ "jfrei@linux.vnet.ibm.com" <jfrei@linux.vnet.ibm.com>,
+ claudio.fontana@huawei.com, "mst@redhat.com" <mst@redhat.com>,
+ "yang.z.zhang@intel.com" <yang.z.zhang@intel.com>,
+ "ehabkost@redhat.com" <ehabkost@redhat.com>, afaerber@suse.de,
+ lig.fnst@cn.fujitsu.com
+Date: Tue, 16 Apr 2013 00:12:40 +0200
+Message-id: 1366063976-4909-1-git-send-email-imammedo@redhat.com
+Subject: [PATCH 00/16] target-i386: CPU hot-add with cpu-add QMP command
+
+Implements alternative way for hot-adding CPU using cpu-add QMP command,
+wich could be useful until it would be possible to add CPUs via device_add.
+
+All patches except the last are also applicable to device_add aprroach.
+
+To hot-add CPU use following command from qmp-shell:
+ cpu-add id=[0..max-cpus - 1)
+
+git tree for testing: https://github.com/imammedo/qemu/tree/cpu_add.v4
+
+based on qom-cpu tree
+
+v4->v3:
+  * 'id' in cpu-add command will be a thread number instead of APIC ID
+  * split off resume_vcpu() into separate patch
+  * move notifier from rtc code into pc.c
+
+v2->v3:
+  * use local error & propagate_error() instead of operating on
+    passed in errp in several places
+  * replace CPUClass.get_firmware_id() with CPUClass.get_arch_id()
+  * leave IOAPIC creation to board and just set bus to icc-bus
+  * include kvm-stub.o in cpu libary if no KVM is configured
+  * create resume_vcpu() stub and include it in libqemustub,
+    and use it directly instead of CPU method
+  * acpi_piix4: s/cpu_add_notifier/cpu_added_notifier/
+
+v1->v2:
+  * generalize cpu sync to KVM, resume and hot-plug notification and
+    invoke them form CPUClass, to make available to all targets.
+  * introduce cpu_exists() and CPUClass.get_firmware_id() and use
+    the last one in acpi_piix to make code target independent.
+  * move IOAPIC to ICC bus, it was suggested and easy to convert.
+  * leave kvmvapic as SysBusDevice, it doesn't affect hot-plug and
+    created only once for all APIC instances. I haven't found yet
+    good/clean enough way to convert it to ICCDevice. May be follow-up
+    though.
+  * split one big ICC patch into several, one per converted device
+  * add cpu_hot_add hook to machine and implement it for target-i386,
+    instead of adding stabs. Could be used by other targets to
+    implement cpu-add.
+  * pre-allocate links<CPU> for all possible CPUs and make them available
+    at /machine/icc-bridge/cpu[0..N] QOM path, so users could find out
+    possible/free CPU IDs to use in cpu-add command.
+
+CC: pbonzini@redhat.com
+CC: afaerber@suse.de
+CC: ehabkost@redhat.com
+
+Igor Mammedov (16):
+  cpu: make kvm-stub.o a part of CPU library
+  cpu: call cpu_synchronize_post_init() from CPUClass.realize() if
+    hotplugged
+  introduce resume_vcpu(), for single CPU
+  cpu: resume CPU from CPUClass.cpu_common_realizefn() when it is
+    hot-plugged
+  introduce CPU hot-plug notifier
+  target-i386: pc: update rtc_cmos on CPU hot-plug
+  cpu: introduce get_arch_id() method and override it for target-i386
+  cpu: add helper cpu_exists(), to check if CPU with specified id exists
+  acpi_piix4: add infrastructure to send CPU hot-plug GPE to guest
+  target-i386: introduce apic-id property
+  introduce ICC bus/device/bridge
+  target-i386: cpu: attach ICC bus to CPU on its creation
+  target-i386: replace MSI_SPACE_SIZE with APIC_SPACE_SIZE
+  target-i386: move APIC to ICC bus
+  target-i386: move IOAPIC to ICC bus
+  add cpu-add qmp command and implement CPU hot-add for target-i386
+
+ Makefile.target                    |  14 ++---
+ cpus.c                             |  11 +++-
+ default-configs/i386-softmmu.mak   |   1 +
+ default-configs/x86_64-softmmu.mak |   1 +
+ hw/acpi/piix4.c                    | 114 ++++++++++++++++++++++++++++++++++++-
+ hw/cpu/Makefile.objs               |   1 +
+ hw/cpu/icc_bus.c                   | 104 +++++++++++++++++++++++++++++++++
+ hw/i386/kvm/apic.c                 |   2 +-
+ hw/i386/kvm/ioapic.c               |   2 +-
+ hw/i386/kvmvapic.c                 |   1 +
+ hw/i386/pc.c                       |  91 +++++++++++++++++++++++++++--
+ hw/i386/pc_piix.c                  |   7 +++
+ hw/i386/pc_q35.c                   |   7 +++
+ hw/intc/apic.c                     |   2 +-
+ hw/intc/apic_common.c              |  17 ++++--
+ hw/intc/ioapic_common.c            |  15 +++--
+ hw/timer/mc146818rtc.c             |   7 +++
+ hw/xen/xen_apic.c                  |   2 +-
+ include/exec/memory.h              |  10 ++++
+ include/hw/boards.h                |   3 +
+ include/hw/i386/apic_internal.h    |   8 +--
+ include/hw/i386/icc_bus.h          |  53 +++++++++++++++++
+ include/hw/i386/ioapic_internal.h  |   6 +-
+ include/hw/pci/msi.h               |   2 +
+ include/hw/timer/mc146818rtc.h     |   1 +
+ include/qom/cpu.h                  |  21 +++++++
+ include/sysemu/kvm.h               |  22 +++----
+ include/sysemu/sysemu.h            |   3 +
+ kvm-all.c                          |   1 +
+ kvm-stub.c                         |   3 +
+ memory.c                           |  11 ++++
+ qapi-schema.json                   |  11 ++++
+ qmp-commands.hx                    |  23 ++++++++
+ qmp.c                              |  10 ++++
+ qom/cpu.c                          |  44 ++++++++++++++
+ stubs/Makefile.objs                |   1 +
+ stubs/cpus.c                       |   5 ++
+ target-i386/cpu.c                  |  75 +++++++++++++++++++-----
+ target-i386/cpu.h                  |   1 +
+ vl.c                               |   7 ++-
+ 40 files changed, 656 insertions(+), 64 deletions(-)
+ create mode 100644 hw/cpu/icc_bus.c
+ create mode 100644 include/hw/i386/icc_bus.h
+ create mode 100644 stubs/cpus.c
+
+-- 
+1.8.2
+

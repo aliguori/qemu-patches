@@ -1,0 +1,41 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Jason Wang <jasowang@redhat.com>
+To: Anthony Liguori <aliguori@us.ibm.com>, qemu-devel@nongnu.org,
+ stefanha@redhat.com, Jason Wang <jasowang@redhat.com>
+Cc: aliguori@us.ibm.com, qemu-devel@nongnu.org, qemu-stable@nongnu.org,
+ Michal Privoznik <mprivozn@redhat.com>, stefanha@redhat.com,
+ Jason Wang <jasowang@redhat.com>
+Date: Fri, 19 Apr 2013 15:11:15 +0800
+Message-id: 1366355475-7243-1-git-send-email-jasowang@redhat.com
+Subject: [PATCH 1/1] tap: properly initialize vhostfds
+
+Only tap->vhostfd were checked net_init_tap_one(), but tap->vhostfds were
+forgot, this will lead qemu to ignore all fds passed by management through
+vhostfds, and tries to create vhost_net device itself. Fix by adding this check
+also.
+
+Reportyed-by: Michal Privoznik <mprivozn@redhat.com>
+Cc: Michal Privoznik <mprivozn@redhat.com>
+Cc: qemu-stable@nongnu.org
+Signed-off-by: Jason Wang <jasowang@redhat.com>
+Reviewed-by: Michal Privoznik <mprivozn@redhat.com>
+---
+ net/tap.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+diff --git a/net/tap.c b/net/tap.c
+index 17bdf01..e0b7a2a 100644
+--- a/net/tap.c
++++ b/net/tap.c
+@@ -623,7 +623,7 @@ static int net_init_tap_one(const NetdevTapOptions *tap, NetClientState *peer,
+         vhostfdname || (tap->has_vhostforce && tap->vhostforce)) {
+         int vhostfd;
+ 
+-        if (tap->has_vhostfd) {
++        if (tap->has_vhostfd || tap->has_vhostfds) {
+             vhostfd = monitor_handle_fd_param(cur_mon, vhostfdname);
+             if (vhostfd == -1) {
+                 return -1;
+-- 
+1.7.1
+

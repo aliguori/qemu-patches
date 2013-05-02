@@ -1,0 +1,137 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: asias@redhat.com, "Michael S. Tsirkin" <mst@redhat.com>,
+ nab@linux-iscsi.org
+Date: Fri, 19 Apr 2013 16:24:20 +0200
+Message-id: 1366381460-6041-10-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 9/9] vhost-scsi-s390: new device supporting the tcm_vhost
+ Linux kernel module
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+Signed-off-by: Asias He <asias@redhat.com>
+Cc: Michael S. Tsirkin <mst@redhat.com>
+Signed-off-by: Nicholas Bellinger <nab@linux-iscsi.org>
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ hw/s390x/s390-virtio-bus.c | 49 ++++++++++++++++++++++++++++++++++++++++++++++
+ hw/s390x/s390-virtio-bus.h | 16 +++++++++++++++
+ 2 files changed, 65 insertions(+)
+
+diff --git a/hw/s390x/s390-virtio-bus.c b/hw/s390x/s390-virtio-bus.c
+index 8f29b5e..dabbc2e 100644
+--- a/hw/s390x/s390-virtio-bus.c
++++ b/hw/s390x/s390-virtio-bus.c
+@@ -28,6 +28,7 @@
+ #include "hw/virtio/virtio-rng.h"
+ #include "hw/virtio/virtio-serial.h"
+ #include "hw/virtio/virtio-net.h"
++#include "hw/virtio/vhost-scsi.h"
+ #include "hw/sysbus.h"
+ #include "sysemu/kvm.h"
+ 
+@@ -239,6 +240,28 @@ static void s390_virtio_scsi_instance_init(Object *obj)
+     object_property_add_child(obj, "virtio-backend", OBJECT(&dev->vdev), NULL);
+ }
+ 
++#ifdef CONFIG_VHOST_SCSI
++static int s390_vhost_scsi_init(VirtIOS390Device *s390_dev)
++{
++    VHostSCSIS390 *dev = VHOST_SCSI_S390(s390_dev);
++    DeviceState *vdev = DEVICE(&dev->vdev);
++
++    qdev_set_parent_bus(vdev, BUS(&s390_dev->bus));
++    if (qdev_init(vdev) < 0) {
++        return -1;
++    }
++
++    return s390_virtio_device_init(s390_dev, VIRTIO_DEVICE(vdev));
++}
++
++static void s390_vhost_scsi_instance_init(Object *obj)
++{
++    VHostSCSIS390 *dev = VHOST_SCSI_S390(obj);
++    object_initialize(OBJECT(&dev->vdev), TYPE_VHOST_SCSI);
++    object_property_add_child(obj, "virtio-backend", OBJECT(&dev->vdev), NULL);
++}
++#endif
++
+ static int s390_virtio_rng_init(VirtIOS390Device *dev)
+ {
+     VirtIODevice *vdev;
+@@ -582,6 +605,31 @@ static const TypeInfo s390_virtio_scsi = {
+     .class_init    = s390_virtio_scsi_class_init,
+ };
+ 
++#ifdef CONFIG_VHOST_SCSI
++static Property s390_vhost_scsi_properties[] = {
++    DEFINE_VIRTIO_COMMON_FEATURES(VirtIOS390Device, host_features),
++    DEFINE_VHOST_SCSI_PROPERTIES(VHostSCSIS390, vdev.parent_obj.conf),
++    DEFINE_PROP_END_OF_LIST(),
++};
++
++static void s390_vhost_scsi_class_init(ObjectClass *klass, void *data)
++{
++    DeviceClass *dc = DEVICE_CLASS(klass);
++    VirtIOS390DeviceClass *k = VIRTIO_S390_DEVICE_CLASS(klass);
++
++    k->init = s390_vhost_scsi_init;
++    dc->props = s390_vhost_scsi_properties;
++}
++
++static const TypeInfo s390_vhost_scsi = {
++    .name          = TYPE_VHOST_SCSI_S390,
++    .parent        = TYPE_VIRTIO_S390_DEVICE,
++    .instance_size = sizeof(VHostSCSIS390),
++    .instance_init = s390_vhost_scsi_instance_init,
++    .class_init    = s390_vhost_scsi_class_init,
++};
++#endif
++
+ /***************** S390 Virtio Bus Bridge Device *******************/
+ /* Only required to have the virtio bus as child in the system bus */
+ 
+@@ -643,6 +691,7 @@ static void s390_virtio_register_types(void)
+     type_register_static(&s390_virtio_blk);
+     type_register_static(&s390_virtio_net);
+     type_register_static(&s390_virtio_scsi);
++    type_register_static(&s390_vhost_scsi);
+     type_register_static(&s390_virtio_rng);
+     type_register_static(&s390_virtio_bridge_info);
+ }
+diff --git a/hw/s390x/s390-virtio-bus.h b/hw/s390x/s390-virtio-bus.h
+index 925ed2b..d7c47db 100644
+--- a/hw/s390x/s390-virtio-bus.h
++++ b/hw/s390x/s390-virtio-bus.h
+@@ -25,6 +25,9 @@
+ #include "hw/virtio/virtio-serial.h"
+ #include "hw/virtio/virtio-scsi.h"
+ #include "hw/virtio/virtio-bus.h"
++#ifdef CONFIG_VHOST_SCSI
++#include "hw/virtio/vhost-scsi.h"
++#endif
+ 
+ #define VIRTIO_DEV_OFFS_TYPE		0	/* 8 bits */
+ #define VIRTIO_DEV_OFFS_NUM_VQ		1	/* 8 bits */
+@@ -160,4 +163,17 @@ typedef struct VirtIONetS390 {
+     VirtIONet vdev;
+ } VirtIONetS390;
+ 
++/* vhost-scsi-s390 */
++
++#ifdef CONFIG_VHOST_SCSI
++#define TYPE_VHOST_SCSI_S390 "vhost-scsi-s390"
++#define VHOST_SCSI_S390(obj) \
++        OBJECT_CHECK(VHostSCSIS390, (obj), TYPE_VHOST_SCSI_S390)
++
++typedef struct VHostSCSIS390 {
++    VirtIOS390Device parent_obj;
++    VHostSCSI vdev;
++} VHostSCSIS390;
++#endif
++
+ #endif
+-- 
+1.8.1.4
+
+

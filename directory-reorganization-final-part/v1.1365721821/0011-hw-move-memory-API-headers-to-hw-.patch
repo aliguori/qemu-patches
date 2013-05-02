@@ -1,0 +1,2267 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: peter.maydell@linaro.org, mst@redhat.com
+Date: Thu, 11 Apr 2013 18:10:32 +0200
+Message-id: 1365696633-30727-12-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 11/12] hw: move memory API headers to hw/
+
+These are the only parts of include/exec/ that is used in hardware models.
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ arch_init.c                              | 2 +-
+ cputlb.c                                 | 4 ++--
+ exec.c                                   | 4 ++--
+ hw/acpi/ich9.c                           | 2 +-
+ hw/acpi/piix4.c                          | 4 ++--
+ hw/alpha/typhoon.c                       | 2 +-
+ hw/arm/collie.c                          | 2 +-
+ hw/arm/exynos4_boards.c                  | 2 +-
+ hw/arm/gumstix.c                         | 2 +-
+ hw/arm/highbank.c                        | 2 +-
+ hw/arm/integratorcp.c                    | 2 +-
+ hw/arm/kzm.c                             | 2 +-
+ hw/arm/mainstone.c                       | 2 +-
+ hw/arm/musicpal.c                        | 2 +-
+ hw/arm/nseries.c                         | 2 +-
+ hw/arm/omap_sx1.c                        | 2 +-
+ hw/arm/palm.c                            | 2 +-
+ hw/arm/realview.c                        | 2 +-
+ hw/arm/spitz.c                           | 2 +-
+ hw/arm/stellaris.c                       | 2 +-
+ hw/arm/strongarm.h                       | 2 +-
+ hw/arm/tosa.c                            | 2 +-
+ hw/arm/versatilepb.c                     | 2 +-
+ hw/arm/vexpress.c                        | 2 +-
+ hw/arm/xilinx_zynq.c                     | 2 +-
+ hw/arm/z2.c                              | 2 +-
+ hw/block/onenand.c                       | 4 ++--
+ hw/block/pflash_cfi01.c                  | 2 +-
+ hw/block/pflash_cfi02.c                  | 2 +-
+ hw/char/mcf_uart.c                       | 2 +-
+ hw/char/omap_uart.c                      | 2 +-
+ hw/char/serial.c                         | 2 +-
+ hw/char/sh_serial.c                      | 2 +-
+ hw/core/loader.c                         | 4 ++--
+ hw/core/sysbus.c                         | 2 +-
+ hw/cris/axis_dev88.c                     | 2 +-
+ hw/display/framebuffer.h                 | 2 +-
+ hw/display/vga_int.h                     | 2 +-
+ hw/dma/etraxfs_dma.c                     | 2 +-
+ hw/i386/pc.c                             | 4 ++--
+ hw/i386/pc_piix.c                        | 4 ++--
+ hw/i386/pc_q35.c                         | 2 +-
+ hw/intc/armv7m_nvic.c                    | 2 +-
+ hw/isa/isa-bus.c                         | 2 +-
+ hw/isa/isa_mmio.c                        | 2 +-
+ hw/isa/lpc_ich9.c                        | 2 +-
+ hw/isa/vt82c686.c                        | 2 +-
+ hw/lm32/lm32_boards.c                    | 2 +-
+ hw/lm32/milkymist.c                      | 2 +-
+ hw/m68k/an5206.c                         | 2 +-
+ hw/m68k/dummy_m68k.c                     | 2 +-
+ hw/m68k/mcf5206.c                        | 2 +-
+ hw/m68k/mcf5208.c                        | 2 +-
+ hw/m68k/mcf_intc.c                       | 2 +-
+ hw/microblaze/petalogix_ml605_mmu.c      | 2 +-
+ hw/microblaze/petalogix_s3adsp1800_mmu.c | 2 +-
+ hw/mips/gt64xxx_pci.c                    | 2 +-
+ hw/mips/mips_fulong2e.c                  | 2 +-
+ hw/mips/mips_jazz.c                      | 2 +-
+ hw/mips/mips_malta.c                     | 2 +-
+ hw/mips/mips_mipssim.c                   | 2 +-
+ hw/mips/mips_r4k.c                       | 2 +-
+ hw/misc/omap_gpmc.c                      | 4 ++--
+ hw/misc/vfio.c                           | 4 ++--
+ hw/moxie/moxiesim.c                      | 2 +-
+ hw/net/mcf_fec.c                         | 2 +-
+ hw/net/ne2000-isa.c                      | 2 +-
+ hw/net/pcnet.h                           | 2 +-
+ hw/openrisc/openrisc_sim.c               | 2 +-
+ hw/pci-bridge/pci_bridge_dev.c           | 2 +-
+ hw/pci-host/apb.c                        | 2 +-
+ hw/pci-host/bonito.c                     | 2 +-
+ hw/pci-host/ppce500.c                    | 2 +-
+ hw/pci-host/prep.c                       | 2 +-
+ hw/pci-host/versatile.c                  | 2 +-
+ hw/pci/pci.c                             | 2 +-
+ hw/pci/pcie_host.c                       | 2 +-
+ hw/ppc/e500.c                            | 2 +-
+ hw/ppc/mac.h                             | 2 +-
+ hw/ppc/mac_newworld.c                    | 2 +-
+ hw/ppc/mac_oldworld.c                    | 2 +-
+ hw/ppc/ppc405_boards.c                   | 2 +-
+ hw/ppc/ppc405_uc.c                       | 2 +-
+ hw/ppc/ppc440_bamboo.c                   | 2 +-
+ hw/ppc/ppc4xx_devs.c                     | 2 +-
+ hw/ppc/ppc4xx_pci.c                      | 2 +-
+ hw/ppc/prep.c                            | 2 +-
+ hw/ppc/spapr.c                           | 2 +-
+ hw/ppc/spapr_iommu.c                     | 2 +-
+ hw/ppc/spapr_pci.c                       | 2 +-
+ hw/ppc/virtex_ml507.c                    | 2 +-
+ hw/s390x/s390-virtio-ccw.c               | 2 +-
+ hw/s390x/s390-virtio.c                   | 2 +-
+ hw/s390x/sclp.c                          | 2 +-
+ hw/sh4/r2d.c                             | 2 +-
+ hw/sh4/sh7750.c                          | 2 +-
+ hw/sh4/sh_pci.c                          | 2 +-
+ hw/sh4/shix.c                            | 2 +-
+ hw/sparc/leon3.c                         | 2 +-
+ hw/sparc64/sun4u.c                       | 2 +-
+ hw/timer/m48t59.c                        | 2 +-
+ hw/timer/sh_timer.c                      | 2 +-
+ hw/tpm/tpm_int.h                         | 2 +-
+ hw/tpm/tpm_tis.c                         | 2 +-
+ hw/unicore32/puv3.c                      | 2 +-
+ hw/virtio/dataplane/hostmem.c            | 2 +-
+ hw/virtio/vhost.c                        | 2 +-
+ hw/virtio/virtio-balloon.c               | 2 +-
+ hw/xen/xen_platform.c                    | 2 +-
+ hw/xen/xen_pt.c                          | 2 +-
+ hw/xtensa/xtensa_lx60.c                  | 4 ++--
+ hw/xtensa/xtensa_sim.c                   | 4 ++--
+ include/exec/softmmu_template.h          | 2 +-
+ include/{exec => hw}/address-spaces.h    | 2 +-
+ include/hw/arm/arm.h                     | 2 +-
+ include/hw/arm/exynos4210.h              | 2 +-
+ include/hw/arm/omap.h                    | 2 +-
+ include/hw/arm/pxa.h                     | 2 +-
+ include/hw/arm/soc_dma.h                 | 2 +-
+ include/hw/block/flash.h                 | 2 +-
+ include/hw/char/serial.h                 | 2 +-
+ include/hw/hw.h                          | 2 +-
+ include/hw/i386/apic_internal.h          | 2 +-
+ include/hw/i386/ioapic_internal.h        | 2 +-
+ include/hw/i386/pc.h                     | 6 +++---
+ include/hw/ide.h                         | 2 +-
+ include/{exec => hw}/ioport.h            | 2 +-
+ include/{exec => hw}/iorange.h           | 0
+ include/hw/isa/apm.h                     | 2 +-
+ include/hw/isa/isa.h                     | 4 ++--
+ include/{exec => hw}/memory.h            | 4 ++--
+ include/hw/mips/mips.h                   | 2 +-
+ include/hw/pci-host/pam.h                | 2 +-
+ include/hw/pci/pci.h                     | 2 +-
+ include/hw/pci/pcie_host.h               | 2 +-
+ include/hw/pci/shpc.h                    | 2 +-
+ include/hw/ppc/mac_dbdma.h               | 2 +-
+ include/hw/sh4/sh_intc.h                 | 2 +-
+ include/hw/sysbus.h                      | 2 +-
+ include/hw/virtio/dataplane/hostmem.h    | 2 +-
+ include/hw/virtio/vhost.h                | 2 +-
+ include/sysemu/dma.h                     | 2 +-
+ ioport.c                                 | 4 ++--
+ kvm-all.c                                | 4 ++--
+ memory.c                                 | 6 +++---
+ monitor.c                                | 2 +-
+ qtest.c                                  | 4 ++--
+ savevm.c                                 | 2 +-
+ target-arm/kvm_arm.h                     | 2 +-
+ target-i386/ioport-user.c                | 2 +-
+ target-i386/kvm.c                        | 2 +-
+ target-i386/misc_helper.c                | 2 +-
+ target-s390x/misc_helper.c               | 2 +-
+ target-sparc/mmu_helper.c                | 2 +-
+ translate-all.c                          | 2 +-
+ xen-all.c                                | 2 +-
+ xen-stub.c                               | 2 +-
+ 157 files changed, 176 insertions(+), 176 deletions(-)
+ rename include/{exec => hw}/address-spaces.h (97%)
+ rename include/{exec => hw}/ioport.h (99%)
+ rename include/{exec => hw}/iorange.h (100%)
+ rename include/{exec => hw}/memory.h (99%)
+
+diff --git a/arch_init.c b/arch_init.c
+index 0de3e7e..f8070e1 100644
+--- a/arch_init.c
++++ b/arch_init.c
+@@ -41,7 +41,7 @@
+ #include "sysemu/kvm.h"
+ #include "migration/migration.h"
+ #include "hw/i386/smbios.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ #include "hw/audio/pcspk.h"
+ #include "migration/page_cache.h"
+ #include "qemu/config-file.h"
+diff --git a/cputlb.c b/cputlb.c
+index aba7e44..e44f2da 100644
+--- a/cputlb.c
++++ b/cputlb.c
+@@ -20,8 +20,8 @@
+ #include "config.h"
+ #include "cpu.h"
+ #include "exec/exec-all.h"
+-#include "exec/memory.h"
+-#include "exec/address-spaces.h"
++#include "hw/memory.h"
++#include "hw/address-spaces.h"
+ 
+ #include "exec/cputlb.h"
+ 
+diff --git a/exec.c b/exec.c
+index fa1e0c3..9ea06be 100644
+--- a/exec.c
++++ b/exec.c
+@@ -34,9 +34,9 @@
+ #include "hw/xen/xen.h"
+ #include "qemu/timer.h"
+ #include "qemu/config-file.h"
+-#include "exec/memory.h"
++#include "hw/memory.h"
+ #include "sysemu/dma.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ #if defined(CONFIG_USER_ONLY)
+ #include <qemu.h>
+ #else /* !CONFIG_USER_ONLY */
+diff --git a/hw/acpi/ich9.c b/hw/acpi/ich9.c
+index e663d29..e09285a 100644
+--- a/hw/acpi/ich9.c
++++ b/hw/acpi/ich9.c
+@@ -30,7 +30,7 @@
+ #include "sysemu/sysemu.h"
+ #include "hw/acpi/acpi.h"
+ #include "sysemu/kvm.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ 
+ #include "hw/i386/ich9.h"
+ 
+diff --git a/hw/acpi/piix4.c b/hw/acpi/piix4.c
+index 88386d7..8bb0ccf 100644
+--- a/hw/acpi/piix4.c
++++ b/hw/acpi/piix4.c
+@@ -26,9 +26,9 @@
+ #include "hw/acpi/acpi.h"
+ #include "sysemu/sysemu.h"
+ #include "qemu/range.h"
+-#include "exec/ioport.h"
++#include "hw/ioport.h"
+ #include "hw/nvram/fw_cfg.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ 
+ //#define DEBUG
+ 
+diff --git a/hw/alpha/typhoon.c b/hw/alpha/typhoon.c
+index 1ead187..81fd565 100644
+--- a/hw/alpha/typhoon.c
++++ b/hw/alpha/typhoon.c
+@@ -11,7 +11,7 @@
+ #include "hw/devices.h"
+ #include "sysemu/sysemu.h"
+ #include "alpha_sys.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ 
+ 
+ #define TYPE_TYPHOON_PCI_HOST_BRIDGE "typhoon-pcihost"
+diff --git a/hw/arm/collie.c b/hw/arm/collie.c
+index a19857a..380445a 100644
+--- a/hw/arm/collie.c
++++ b/hw/arm/collie.c
+@@ -16,7 +16,7 @@
+ #include "hw/arm/arm.h"
+ #include "hw/block/flash.h"
+ #include "sysemu/blockdev.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ 
+ static struct arm_boot_info collie_binfo = {
+     .loader_start = SA_SDCS0,
+diff --git a/hw/arm/exynos4_boards.c b/hw/arm/exynos4_boards.c
+index 74f110b..d278a4b 100644
+--- a/hw/arm/exynos4_boards.c
++++ b/hw/arm/exynos4_boards.c
+@@ -25,7 +25,7 @@
+ #include "hw/sysbus.h"
+ #include "net/net.h"
+ #include "hw/arm/arm.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ #include "hw/arm/exynos4210.h"
+ #include "hw/boards.h"
+ 
+diff --git a/hw/arm/gumstix.c b/hw/arm/gumstix.c
+index b8cab10..4c47710 100644
+--- a/hw/arm/gumstix.c
++++ b/hw/arm/gumstix.c
+@@ -41,7 +41,7 @@
+ #include "hw/devices.h"
+ #include "hw/boards.h"
+ #include "sysemu/blockdev.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ 
+ static const int sector_len = 128 * 1024;
+ 
+diff --git a/hw/arm/highbank.c b/hw/arm/highbank.c
+index 0fd9465..d76500c 100644
+--- a/hw/arm/highbank.c
++++ b/hw/arm/highbank.c
+@@ -26,7 +26,7 @@
+ #include "hw/boards.h"
+ #include "hw/sysbus.h"
+ #include "sysemu/blockdev.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ 
+ #define SMP_BOOT_ADDR 0x100
+ #define SMP_BOOT_REG  0x40
+diff --git a/hw/arm/integratorcp.c b/hw/arm/integratorcp.c
+index cca2971..bb5e681 100644
+--- a/hw/arm/integratorcp.c
++++ b/hw/arm/integratorcp.c
+@@ -12,7 +12,7 @@
+ #include "hw/boards.h"
+ #include "hw/arm/arm.h"
+ #include "net/net.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ #include "sysemu/sysemu.h"
+ 
+ typedef struct {
+diff --git a/hw/arm/kzm.c b/hw/arm/kzm.c
+index cf90f5d..e9f32e2 100644
+--- a/hw/arm/kzm.c
++++ b/hw/arm/kzm.c
+@@ -14,7 +14,7 @@
+  */
+ 
+ #include "hw/sysbus.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ #include "hw/hw.h"
+ #include "hw/arm/arm.h"
+ #include "hw/devices.h"
+diff --git a/hw/arm/mainstone.c b/hw/arm/mainstone.c
+index 260e314..bd210c3 100644
+--- a/hw/arm/mainstone.c
++++ b/hw/arm/mainstone.c
+@@ -20,7 +20,7 @@
+ #include "hw/block/flash.h"
+ #include "sysemu/blockdev.h"
+ #include "hw/sysbus.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ 
+ /* Device addresses */
+ #define MST_FPGA_PHYS	0x08000000
+diff --git a/hw/arm/musicpal.c b/hw/arm/musicpal.c
+index d2247fa..5efbde4 100644
+--- a/hw/arm/musicpal.c
++++ b/hw/arm/musicpal.c
+@@ -23,7 +23,7 @@
+ #include "ui/console.h"
+ #include "hw/i2c/i2c.h"
+ #include "sysemu/blockdev.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ #include "ui/pixel_ops.h"
+ 
+ #define MP_MISC_BASE            0x80002000
+diff --git a/hw/arm/nseries.c b/hw/arm/nseries.c
+index 4976438..3728fc1 100644
+--- a/hw/arm/nseries.c
++++ b/hw/arm/nseries.c
+@@ -33,7 +33,7 @@
+ #include "hw/loader.h"
+ #include "sysemu/blockdev.h"
+ #include "hw/sysbus.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ 
+ /* Nokia N8x0 support */
+ struct n800_s {
+diff --git a/hw/arm/omap_sx1.c b/hw/arm/omap_sx1.c
+index e421ece..a9eb1f0 100644
+--- a/hw/arm/omap_sx1.c
++++ b/hw/arm/omap_sx1.c
+@@ -32,7 +32,7 @@
+ #include "hw/arm/arm.h"
+ #include "hw/block/flash.h"
+ #include "sysemu/blockdev.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ 
+ /*****************************************************************************/
+ /* Siemens SX1 Cellphone V1 */
+diff --git a/hw/arm/palm.c b/hw/arm/palm.c
+index b13d810..d9338a5 100644
+--- a/hw/arm/palm.c
++++ b/hw/arm/palm.c
+@@ -25,7 +25,7 @@
+ #include "hw/arm/arm.h"
+ #include "hw/devices.h"
+ #include "hw/loader.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ 
+ static uint32_t static_readb(void *opaque, hwaddr offset)
+ {
+diff --git a/hw/arm/realview.c b/hw/arm/realview.c
+index feabfc5..aee0530 100644
+--- a/hw/arm/realview.c
++++ b/hw/arm/realview.c
+@@ -17,7 +17,7 @@
+ #include "hw/boards.h"
+ #include "hw/i2c/i2c.h"
+ #include "sysemu/blockdev.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ 
+ #define SMP_BOOT_ADDR 0xe0000000
+ #define SMP_BOOTREG_ADDR 0x10000030
+diff --git a/hw/arm/spitz.c b/hw/arm/spitz.c
+index c42668a..b20cb03 100644
+--- a/hw/arm/spitz.c
++++ b/hw/arm/spitz.c
+@@ -27,7 +27,7 @@
+ #include "hw/boards.h"
+ #include "sysemu/blockdev.h"
+ #include "hw/sysbus.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ 
+ #undef REG_FMT
+ #define REG_FMT			"0x%02lx"
+diff --git a/hw/arm/stellaris.c b/hw/arm/stellaris.c
+index 2b61e3c..508d72d 100644
+--- a/hw/arm/stellaris.c
++++ b/hw/arm/stellaris.c
+@@ -15,7 +15,7 @@
+ #include "hw/i2c/i2c.h"
+ #include "net/net.h"
+ #include "hw/boards.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ 
+ #define GPIO_A 0
+ #define GPIO_B 1
+diff --git a/hw/arm/strongarm.h b/hw/arm/strongarm.h
+index 2893f94..ffa8c90 100644
+--- a/hw/arm/strongarm.h
++++ b/hw/arm/strongarm.h
+@@ -1,7 +1,7 @@
+ #ifndef _STRONGARM_H
+ #define _STRONGARM_H
+ 
+-#include "exec/memory.h"
++#include "hw/memory.h"
+ 
+ #define SA_CS0          0x00000000
+ #define SA_CS1          0x08000000
+diff --git a/hw/arm/tosa.c b/hw/arm/tosa.c
+index 47818a5..395d281 100644
+--- a/hw/arm/tosa.c
++++ b/hw/arm/tosa.c
+@@ -23,7 +23,7 @@
+ #include "hw/ssi.h"
+ #include "sysemu/blockdev.h"
+ #include "hw/sysbus.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ 
+ #define TOSA_RAM    0x04000000
+ #define TOSA_ROM	0x00800000
+diff --git a/hw/arm/versatilepb.c b/hw/arm/versatilepb.c
+index 25c665a..bc53aad 100644
+--- a/hw/arm/versatilepb.c
++++ b/hw/arm/versatilepb.c
+@@ -16,7 +16,7 @@
+ #include "hw/i2c/i2c.h"
+ #include "hw/boards.h"
+ #include "sysemu/blockdev.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ #include "hw/block/flash.h"
+ 
+ #define VERSATILE_FLASH_ADDR 0x34000000
+diff --git a/hw/arm/vexpress.c b/hw/arm/vexpress.c
+index a077c62..9585aaf 100644
+--- a/hw/arm/vexpress.c
++++ b/hw/arm/vexpress.c
+@@ -28,7 +28,7 @@
+ #include "net/net.h"
+ #include "sysemu/sysemu.h"
+ #include "hw/boards.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ #include "sysemu/blockdev.h"
+ #include "hw/block/flash.h"
+ 
+diff --git a/hw/arm/xilinx_zynq.c b/hw/arm/xilinx_zynq.c
+index 41505c3..f1f878d 100644
+--- a/hw/arm/xilinx_zynq.c
++++ b/hw/arm/xilinx_zynq.c
+@@ -18,7 +18,7 @@
+ #include "hw/sysbus.h"
+ #include "hw/arm/arm.h"
+ #include "net/net.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ #include "sysemu/sysemu.h"
+ #include "hw/boards.h"
+ #include "hw/block/flash.h"
+diff --git a/hw/arm/z2.c b/hw/arm/z2.c
+index 07a127b..f4a4731 100644
+--- a/hw/arm/z2.c
++++ b/hw/arm/z2.c
+@@ -23,7 +23,7 @@
+ #include "sysemu/blockdev.h"
+ #include "ui/console.h"
+ #include "audio/audio.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ 
+ #ifdef DEBUG_Z2
+ #define DPRINTF(fmt, ...) \
+diff --git a/hw/block/onenand.c b/hw/block/onenand.c
+index 8b511a7..dd264d0 100644
+--- a/hw/block/onenand.c
++++ b/hw/block/onenand.c
+@@ -23,8 +23,8 @@
+ #include "hw/block/flash.h"
+ #include "hw/irq.h"
+ #include "sysemu/blockdev.h"
+-#include "exec/memory.h"
+-#include "exec/address-spaces.h"
++#include "hw/memory.h"
++#include "hw/address-spaces.h"
+ #include "hw/sysbus.h"
+ #include "qemu/error-report.h"
+ 
+diff --git a/hw/block/pflash_cfi01.c b/hw/block/pflash_cfi01.c
+index 3ff20e0..8bf61bf 100644
+--- a/hw/block/pflash_cfi01.c
++++ b/hw/block/pflash_cfi01.c
+@@ -40,7 +40,7 @@
+ #include "hw/block/flash.h"
+ #include "block/block.h"
+ #include "qemu/timer.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ #include "qemu/host-utils.h"
+ #include "hw/sysbus.h"
+ 
+diff --git a/hw/block/pflash_cfi02.c b/hw/block/pflash_cfi02.c
+index 9a7fa70..c5c68c9 100644
+--- a/hw/block/pflash_cfi02.c
++++ b/hw/block/pflash_cfi02.c
+@@ -39,7 +39,7 @@
+ #include "hw/block/flash.h"
+ #include "qemu/timer.h"
+ #include "block/block.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ #include "qemu/host-utils.h"
+ #include "hw/sysbus.h"
+ 
+diff --git a/hw/char/mcf_uart.c b/hw/char/mcf_uart.c
+index 3ec4705..2228fcf 100644
+--- a/hw/char/mcf_uart.c
++++ b/hw/char/mcf_uart.c
+@@ -8,7 +8,7 @@
+ #include "hw/hw.h"
+ #include "hw/m68k/mcf.h"
+ #include "sysemu/char.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ 
+ typedef struct {
+     MemoryRegion iomem;
+diff --git a/hw/char/omap_uart.c b/hw/char/omap_uart.c
+index 5bb36ed..bdf29a9 100644
+--- a/hw/char/omap_uart.c
++++ b/hw/char/omap_uart.c
+@@ -21,7 +21,7 @@
+ #include "hw/hw.h"
+ #include "hw/arm/omap.h"
+ #include "hw/char/serial.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ 
+ /* UARTs */
+ struct omap_uart_s {
+diff --git a/hw/char/serial.c b/hw/char/serial.c
+index 66b6348..96b2ba2 100644
+--- a/hw/char/serial.c
++++ b/hw/char/serial.c
+@@ -26,7 +26,7 @@
+ #include "hw/char/serial.h"
+ #include "sysemu/char.h"
+ #include "qemu/timer.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ 
+ //#define DEBUG_SERIAL
+ 
+diff --git a/hw/char/sh_serial.c b/hw/char/sh_serial.c
+index b328643..a54cf00 100644
+--- a/hw/char/sh_serial.c
++++ b/hw/char/sh_serial.c
+@@ -27,7 +27,7 @@
+ #include "hw/hw.h"
+ #include "hw/sh4/sh.h"
+ #include "sysemu/char.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ 
+ //#define DEBUG_SERIAL
+ 
+diff --git a/hw/core/loader.c b/hw/core/loader.c
+index 7507914..ab576f8 100644
+--- a/hw/core/loader.c
++++ b/hw/core/loader.c
+@@ -49,8 +49,8 @@
+ #include "uboot_image.h"
+ #include "hw/loader.h"
+ #include "hw/nvram/fw_cfg.h"
+-#include "exec/memory.h"
+-#include "exec/address-spaces.h"
++#include "hw/memory.h"
++#include "hw/address-spaces.h"
+ 
+ #include <zlib.h>
+ 
+diff --git a/hw/core/sysbus.c b/hw/core/sysbus.c
+index 9004d8c..241767b 100644
+--- a/hw/core/sysbus.c
++++ b/hw/core/sysbus.c
+@@ -19,7 +19,7 @@
+ 
+ #include "hw/sysbus.h"
+ #include "monitor/monitor.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ 
+ static void sysbus_dev_print(Monitor *mon, DeviceState *dev, int indent);
+ static char *sysbus_get_fw_dev_path(DeviceState *dev);
+diff --git a/hw/cris/axis_dev88.c b/hw/cris/axis_dev88.c
+index 7475671..2420269 100644
+--- a/hw/cris/axis_dev88.c
++++ b/hw/cris/axis_dev88.c
+@@ -31,7 +31,7 @@
+ #include "elf.h"
+ #include "boot.h"
+ #include "sysemu/blockdev.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ 
+ #define D(x)
+ #define DNAND(x)
+diff --git a/hw/display/framebuffer.h b/hw/display/framebuffer.h
+index 6eae035..d3221ab 100644
+--- a/hw/display/framebuffer.h
++++ b/hw/display/framebuffer.h
+@@ -1,7 +1,7 @@
+ #ifndef QEMU_FRAMEBUFFER_H
+ #define QEMU_FRAMEBUFFER_H
+ 
+-#include "exec/memory.h"
++#include "hw/memory.h"
+ 
+ /* Framebuffer device helper routines.  */
+ 
+diff --git a/hw/display/vga_int.h b/hw/display/vga_int.h
+index 260f7d6..0dc6198 100644
+--- a/hw/display/vga_int.h
++++ b/hw/display/vga_int.h
+@@ -26,7 +26,7 @@
+ 
+ #include <hw/hw.h>
+ #include "qapi/error.h"
+-#include "exec/memory.h"
++#include "hw/memory.h"
+ 
+ #define ST01_V_RETRACE      0x08
+ #define ST01_DISP_ENABLE    0x01
+diff --git a/hw/dma/etraxfs_dma.c b/hw/dma/etraxfs_dma.c
+index 6a8c222..3e50074 100644
+--- a/hw/dma/etraxfs_dma.c
++++ b/hw/dma/etraxfs_dma.c
+@@ -24,7 +24,7 @@
+ #include <stdio.h>
+ #include <sys/time.h>
+ #include "hw/hw.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ #include "qemu-common.h"
+ #include "sysemu/sysemu.h"
+ 
+diff --git a/hw/i386/pc.c b/hw/i386/pc.c
+index 8d75b34..d6e9124 100644
+--- a/hw/i386/pc.c
++++ b/hw/i386/pc.c
+@@ -47,8 +47,8 @@
+ #include "sysemu/blockdev.h"
+ #include "hw/block/block.h"
+ #include "ui/qemu-spice.h"
+-#include "exec/memory.h"
+-#include "exec/address-spaces.h"
++#include "hw/memory.h"
++#include "hw/address-spaces.h"
+ #include "sysemu/arch_init.h"
+ #include "qemu/bitmap.h"
+ #include "qemu/config-file.h"
+diff --git a/hw/i386/pc_piix.c b/hw/i386/pc_piix.c
+index cff8013..9633eaa 100644
+--- a/hw/i386/pc_piix.c
++++ b/hw/i386/pc_piix.c
+@@ -41,8 +41,8 @@
+ #include "sysemu/blockdev.h"
+ #include "hw/i2c/smbus.h"
+ #include "hw/xen/xen.h"
+-#include "exec/memory.h"
+-#include "exec/address-spaces.h"
++#include "hw/memory.h"
++#include "hw/address-spaces.h"
+ #include "cpu.h"
+ #ifdef CONFIG_XEN
+ #  include <xen/hvm/hvm_info_table.h>
+diff --git a/hw/i386/pc_q35.c b/hw/i386/pc_q35.c
+index 6ac1a89..b08c7b5 100644
+--- a/hw/i386/pc_q35.c
++++ b/hw/i386/pc_q35.c
+@@ -36,7 +36,7 @@
+ #include "sysemu/kvm.h"
+ #include "hw/kvm/clock.h"
+ #include "hw/pci-host/q35.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ #include "hw/i386/ich9.h"
+ #include "hw/ide/pci.h"
+ #include "hw/ide/ahci.h"
+diff --git a/hw/intc/armv7m_nvic.c b/hw/intc/armv7m_nvic.c
+index 8eae4fc..68712a7 100644
+--- a/hw/intc/armv7m_nvic.c
++++ b/hw/intc/armv7m_nvic.c
+@@ -13,7 +13,7 @@
+ #include "hw/sysbus.h"
+ #include "qemu/timer.h"
+ #include "hw/arm/arm.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ #include "gic_internal.h"
+ 
+ typedef struct {
+diff --git a/hw/isa/isa-bus.c b/hw/isa/isa-bus.c
+index 7860b17..da05fbf 100644
+--- a/hw/isa/isa-bus.c
++++ b/hw/isa/isa-bus.c
+@@ -21,7 +21,7 @@
+ #include "hw/sysbus.h"
+ #include "sysemu/sysemu.h"
+ #include "hw/isa/isa.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ 
+ static ISABus *isabus;
+ hwaddr isa_mem_base = 0;
+diff --git a/hw/isa/isa_mmio.c b/hw/isa/isa_mmio.c
+index d4dbf13..7f40dde 100644
+--- a/hw/isa/isa_mmio.c
++++ b/hw/isa/isa_mmio.c
+@@ -24,7 +24,7 @@
+ 
+ #include "hw/hw.h"
+ #include "hw/isa/isa.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ 
+ static void isa_mmio_writeb (void *opaque, hwaddr addr,
+                                   uint32_t val)
+diff --git a/hw/isa/lpc_ich9.c b/hw/isa/lpc_ich9.c
+index d116075..ae39431 100644
+--- a/hw/isa/lpc_ich9.c
++++ b/hw/isa/lpc_ich9.c
+@@ -42,7 +42,7 @@
+ #include "hw/acpi/acpi.h"
+ #include "hw/acpi/ich9.h"
+ #include "hw/pci/pci_bus.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ #include "sysemu/sysemu.h"
+ 
+ static int ich9_lpc_sci_irq(ICH9LPCState *lpc);
+diff --git a/hw/isa/vt82c686.c b/hw/isa/vt82c686.c
+index 5261927..9aaff67 100644
+--- a/hw/isa/vt82c686.c
++++ b/hw/isa/vt82c686.c
+@@ -24,7 +24,7 @@
+ #include "hw/i2c/pm_smbus.h"
+ #include "sysemu/sysemu.h"
+ #include "qemu/timer.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ 
+ //#define DEBUG_VT82C686B
+ 
+diff --git a/hw/lm32/lm32_boards.c b/hw/lm32/lm32_boards.c
+index 1ca9498..2c7d8a4 100644
+--- a/hw/lm32/lm32_boards.c
++++ b/hw/lm32/lm32_boards.c
+@@ -27,7 +27,7 @@
+ #include "elf.h"
+ #include "lm32_hwsetup.h"
+ #include "lm32.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ 
+ typedef struct {
+     LM32CPU *cpu;
+diff --git a/hw/lm32/milkymist.c b/hw/lm32/milkymist.c
+index cca9374..5f94fbe 100644
+--- a/hw/lm32/milkymist.c
++++ b/hw/lm32/milkymist.c
+@@ -28,7 +28,7 @@
+ #include "sysemu/blockdev.h"
+ #include "milkymist-hw.h"
+ #include "lm32.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ 
+ #define BIOS_FILENAME    "mmone-bios.bin"
+ #define BIOS_OFFSET      0x00860000
+diff --git a/hw/m68k/an5206.c b/hw/m68k/an5206.c
+index c4a5626..197040b 100644
+--- a/hw/m68k/an5206.c
++++ b/hw/m68k/an5206.c
+@@ -11,7 +11,7 @@
+ #include "hw/boards.h"
+ #include "hw/loader.h"
+ #include "elf.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ 
+ #define KERNEL_LOAD_ADDR 0x10000
+ #define AN5206_MBAR_ADDR 0x10000000
+diff --git a/hw/m68k/dummy_m68k.c b/hw/m68k/dummy_m68k.c
+index 544d56b..5bc46ec 100644
+--- a/hw/m68k/dummy_m68k.c
++++ b/hw/m68k/dummy_m68k.c
+@@ -10,7 +10,7 @@
+ #include "hw/boards.h"
+ #include "hw/loader.h"
+ #include "elf.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ 
+ #define KERNEL_LOAD_ADDR 0x10000
+ 
+diff --git a/hw/m68k/mcf5206.c b/hw/m68k/mcf5206.c
+index bcc619d..3a28c69 100644
+--- a/hw/m68k/mcf5206.c
++++ b/hw/m68k/mcf5206.c
+@@ -10,7 +10,7 @@
+ #include "qemu/timer.h"
+ #include "hw/ptimer.h"
+ #include "sysemu/sysemu.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ 
+ /* General purpose timer module.  */
+ typedef struct {
+diff --git a/hw/m68k/mcf5208.c b/hw/m68k/mcf5208.c
+index 05efde7..63c15c3 100644
+--- a/hw/m68k/mcf5208.c
++++ b/hw/m68k/mcf5208.c
+@@ -14,7 +14,7 @@
+ #include "hw/boards.h"
+ #include "hw/loader.h"
+ #include "elf.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ 
+ #define SYS_FREQ 66000000
+ 
+diff --git a/hw/m68k/mcf_intc.c b/hw/m68k/mcf_intc.c
+index cfe660d..c952489 100644
+--- a/hw/m68k/mcf_intc.c
++++ b/hw/m68k/mcf_intc.c
+@@ -7,7 +7,7 @@
+  */
+ #include "hw/hw.h"
+ #include "hw/m68k/mcf.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ 
+ typedef struct {
+     MemoryRegion iomem;
+diff --git a/hw/microblaze/petalogix_ml605_mmu.c b/hw/microblaze/petalogix_ml605_mmu.c
+index ae7ff44..aa6015e 100644
+--- a/hw/microblaze/petalogix_ml605_mmu.c
++++ b/hw/microblaze/petalogix_ml605_mmu.c
+@@ -35,7 +35,7 @@
+ #include "hw/xilinx.h"
+ #include "sysemu/blockdev.h"
+ #include "hw/char/serial.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ #include "hw/ssi.h"
+ 
+ #include "boot.h"
+diff --git a/hw/microblaze/petalogix_s3adsp1800_mmu.c b/hw/microblaze/petalogix_s3adsp1800_mmu.c
+index 7c258f0..389fa44 100644
+--- a/hw/microblaze/petalogix_s3adsp1800_mmu.c
++++ b/hw/microblaze/petalogix_s3adsp1800_mmu.c
+@@ -32,7 +32,7 @@
+ #include "hw/boards.h"
+ #include "hw/xilinx.h"
+ #include "sysemu/blockdev.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ 
+ #include "boot.h"
+ #include "pic_cpu.h"
+diff --git a/hw/mips/gt64xxx_pci.c b/hw/mips/gt64xxx_pci.c
+index 189e865..6d37720 100644
+--- a/hw/mips/gt64xxx_pci.c
++++ b/hw/mips/gt64xxx_pci.c
+@@ -27,7 +27,7 @@
+ #include "hw/pci/pci.h"
+ #include "hw/pci/pci_host.h"
+ #include "hw/i386/pc.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ 
+ //#define DEBUG
+ 
+diff --git a/hw/mips/mips_fulong2e.c b/hw/mips/mips_fulong2e.c
+index 1aac93a..2779304 100644
+--- a/hw/mips/mips_fulong2e.c
++++ b/hw/mips/mips_fulong2e.c
+@@ -42,7 +42,7 @@
+ #include "hw/timer/mc146818rtc.h"
+ #include "hw/timer/i8254.h"
+ #include "sysemu/blockdev.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ 
+ #define DEBUG_FULONG2E_INIT
+ 
+diff --git a/hw/mips/mips_jazz.c b/hw/mips/mips_jazz.c
+index fd3a5f9..766adfd 100644
+--- a/hw/mips/mips_jazz.c
++++ b/hw/mips/mips_jazz.c
+@@ -41,7 +41,7 @@
+ #include "hw/audio/pcspk.h"
+ #include "sysemu/blockdev.h"
+ #include "hw/sysbus.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ 
+ enum jazz_model_e
+ {
+diff --git a/hw/mips/mips_malta.c b/hw/mips/mips_malta.c
+index 86f42b2..c49b4bf 100644
+--- a/hw/mips/mips_malta.c
++++ b/hw/mips/mips_malta.c
+@@ -46,7 +46,7 @@
+ #include "hw/timer/mc146818rtc.h"
+ #include "hw/timer/i8254.h"
+ #include "sysemu/blockdev.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ #include "hw/sysbus.h"             /* SysBusDevice */
+ 
+ //#define DEBUG_BOARD_INIT
+diff --git a/hw/mips/mips_mipssim.c b/hw/mips/mips_mipssim.c
+index d1681ec..9e6697b 100644
+--- a/hw/mips/mips_mipssim.c
++++ b/hw/mips/mips_mipssim.c
+@@ -36,7 +36,7 @@
+ #include "hw/loader.h"
+ #include "elf.h"
+ #include "hw/sysbus.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ 
+ static struct _loaderparams {
+     int ram_size;
+diff --git a/hw/mips/mips_r4k.c b/hw/mips/mips_r4k.c
+index 4646ab6..41fa527 100644
+--- a/hw/mips/mips_r4k.c
++++ b/hw/mips/mips_r4k.c
+@@ -25,7 +25,7 @@
+ #include "hw/timer/mc146818rtc.h"
+ #include "hw/timer/i8254.h"
+ #include "sysemu/blockdev.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ 
+ #define MAX_IDE_BUS 2
+ 
+diff --git a/hw/misc/omap_gpmc.c b/hw/misc/omap_gpmc.c
+index 91adb66..8d936a7 100644
+--- a/hw/misc/omap_gpmc.c
++++ b/hw/misc/omap_gpmc.c
+@@ -21,8 +21,8 @@
+ #include "hw/hw.h"
+ #include "hw/block/flash.h"
+ #include "hw/arm/omap.h"
+-#include "exec/memory.h"
+-#include "exec/address-spaces.h"
++#include "hw/memory.h"
++#include "hw/address-spaces.h"
+ 
+ /* General-Purpose Memory Controller */
+ struct omap_gpmc_s {
+diff --git a/hw/misc/vfio.c b/hw/misc/vfio.c
+index 693a9ff..601e260 100644
+--- a/hw/misc/vfio.c
++++ b/hw/misc/vfio.c
+@@ -27,8 +27,8 @@
+ #include <unistd.h>
+ 
+ #include "config.h"
+-#include "exec/address-spaces.h"
+-#include "exec/memory.h"
++#include "hw/address-spaces.h"
++#include "hw/memory.h"
+ #include "hw/pci/msi.h"
+ #include "hw/pci/msix.h"
+ #include "hw/pci/pci.h"
+diff --git a/hw/moxie/moxiesim.c b/hw/moxie/moxiesim.c
+index 70bf28f..791b62d 100644
+--- a/hw/moxie/moxiesim.c
++++ b/hw/moxie/moxiesim.c
+@@ -33,7 +33,7 @@
+ #include "hw/boards.h"
+ #include "hw/loader.h"
+ #include "hw/char/serial.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ 
+ #define PHYS_MEM_BASE 0x80000000
+ 
+diff --git a/hw/net/mcf_fec.c b/hw/net/mcf_fec.c
+index 9b68052..d845fe6 100644
+--- a/hw/net/mcf_fec.c
++++ b/hw/net/mcf_fec.c
+@@ -10,7 +10,7 @@
+ #include "hw/m68k/mcf.h"
+ /* For crc32 */
+ #include <zlib.h>
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ 
+ //#define DEBUG_FEC 1
+ 
+diff --git a/hw/net/ne2000-isa.c b/hw/net/ne2000-isa.c
+index a093aa8..3618fc7 100644
+--- a/hw/net/ne2000-isa.c
++++ b/hw/net/ne2000-isa.c
+@@ -27,7 +27,7 @@
+ #include "hw/qdev.h"
+ #include "net/net.h"
+ #include "ne2000.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ 
+ typedef struct ISANE2000State {
+     ISADevice dev;
+diff --git a/hw/net/pcnet.h b/hw/net/pcnet.h
+index 9dee6f3..867fade 100644
+--- a/hw/net/pcnet.h
++++ b/hw/net/pcnet.h
+@@ -7,7 +7,7 @@
+ #define PCNET_LOOPTEST_CRC	1
+ #define PCNET_LOOPTEST_NOCRC	2
+ 
+-#include "exec/memory.h"
++#include "hw/memory.h"
+ 
+ /* BUS CONFIGURATION REGISTERS */
+ #define BCR_MSRDA    0
+diff --git a/hw/openrisc/openrisc_sim.c b/hw/openrisc/openrisc_sim.c
+index 49bab1f..ab2985b 100644
+--- a/hw/openrisc/openrisc_sim.c
++++ b/hw/openrisc/openrisc_sim.c
+@@ -24,7 +24,7 @@
+ #include "hw/char/serial.h"
+ #include "net/net.h"
+ #include "hw/loader.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ #include "sysemu/sysemu.h"
+ #include "hw/sysbus.h"
+ #include "sysemu/qtest.h"
+diff --git a/hw/pci-bridge/pci_bridge_dev.c b/hw/pci-bridge/pci_bridge_dev.c
+index 971b432..9c11b61 100644
+--- a/hw/pci-bridge/pci_bridge_dev.c
++++ b/hw/pci-bridge/pci_bridge_dev.c
+@@ -24,7 +24,7 @@
+ #include "hw/pci/msi.h"
+ #include "hw/pci/shpc.h"
+ #include "hw/pci/slotid_cap.h"
+-#include "exec/memory.h"
++#include "hw/memory.h"
+ #include "hw/pci/pci_bus.h"
+ 
+ struct PCIBridgeDev {
+diff --git a/hw/pci-host/apb.c b/hw/pci-host/apb.c
+index b4981d7..c24ce10 100644
+--- a/hw/pci-host/apb.c
++++ b/hw/pci-host/apb.c
+@@ -33,7 +33,7 @@
+ #include "hw/pci/pci_bus.h"
+ #include "hw/pci-host/apb.h"
+ #include "sysemu/sysemu.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ 
+ /* debug APB */
+ //#define DEBUG_APB
+diff --git a/hw/pci-host/bonito.c b/hw/pci-host/bonito.c
+index 974150b..89df920 100644
+--- a/hw/pci-host/bonito.c
++++ b/hw/pci-host/bonito.c
+@@ -45,7 +45,7 @@
+ #include "hw/mips/mips.h"
+ #include "hw/pci/pci_host.h"
+ #include "sysemu/sysemu.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ 
+ //#define DEBUG_BONITO
+ 
+diff --git a/hw/pci-host/ppce500.c b/hw/pci-host/ppce500.c
+index 5e7ad94..a2353cb 100644
+--- a/hw/pci-host/ppce500.c
++++ b/hw/pci-host/ppce500.c
+@@ -317,7 +317,7 @@ static const VMStateDescription vmstate_ppce500_pci = {
+     }
+ };
+ 
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ 
+ static int e500_pcihost_bridge_initfn(PCIDevice *d)
+ {
+diff --git a/hw/pci-host/prep.c b/hw/pci-host/prep.c
+index 6130253..48ec673 100644
+--- a/hw/pci-host/prep.c
++++ b/hw/pci-host/prep.c
+@@ -28,7 +28,7 @@
+ #include "hw/pci/pci_bus.h"
+ #include "hw/pci/pci_host.h"
+ #include "hw/i386/pc.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ 
+ #define TYPE_RAVEN_PCI_DEVICE "raven"
+ #define TYPE_RAVEN_PCI_HOST_BRIDGE "raven-pcihost"
+diff --git a/hw/pci-host/versatile.c b/hw/pci-host/versatile.c
+index d67ca79..b9c4baf 100644
+--- a/hw/pci-host/versatile.c
++++ b/hw/pci-host/versatile.c
+@@ -10,7 +10,7 @@
+ #include "hw/sysbus.h"
+ #include "hw/pci/pci.h"
+ #include "hw/pci/pci_host.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ 
+ typedef struct {
+     SysBusDevice busdev;
+diff --git a/hw/pci/pci.c b/hw/pci/pci.c
+index d5257ed..5158fe4 100644
+--- a/hw/pci/pci.c
++++ b/hw/pci/pci.c
+@@ -33,7 +33,7 @@
+ #include "qmp-commands.h"
+ #include "hw/pci/msi.h"
+ #include "hw/pci/msix.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ 
+ //#define DEBUG_PCI
+ #ifdef DEBUG_PCI
+diff --git a/hw/pci/pcie_host.c b/hw/pci/pcie_host.c
+index b2d942b..314dc31 100644
+--- a/hw/pci/pcie_host.c
++++ b/hw/pci/pcie_host.c
+@@ -22,7 +22,7 @@
+ #include "hw/hw.h"
+ #include "hw/pci/pci.h"
+ #include "hw/pci/pcie_host.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ 
+ /*
+  * PCI express mmcfig address
+diff --git a/hw/ppc/e500.c b/hw/ppc/e500.c
+index c1bdb6b..625f74f 100644
+--- a/hw/ppc/e500.c
++++ b/hw/ppc/e500.c
+@@ -33,7 +33,7 @@
+ #include "hw/loader.h"
+ #include "elf.h"
+ #include "hw/sysbus.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ #include "qemu/host-utils.h"
+ #include "hw/pci-host/ppce500.h"
+ 
+diff --git a/hw/ppc/mac.h b/hw/ppc/mac.h
+index 54efaed..92b08b2 100644
+--- a/hw/ppc/mac.h
++++ b/hw/ppc/mac.h
+@@ -25,7 +25,7 @@
+ #if !defined(__PPC_MAC_H__)
+ #define __PPC_MAC_H__
+ 
+-#include "exec/memory.h"
++#include "hw/memory.h"
+ #include "hw/sysbus.h"
+ #include "hw/ide/internal.h"
+ #include "hw/input/adb.h"
+diff --git a/hw/ppc/mac_newworld.c b/hw/ppc/mac_newworld.c
+index 4a9b883..10716c8 100644
+--- a/hw/ppc/mac_newworld.c
++++ b/hw/ppc/mac_newworld.c
+@@ -66,7 +66,7 @@
+ #include "kvm_ppc.h"
+ #include "hw/usb.h"
+ #include "sysemu/blockdev.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ #include "hw/sysbus.h"
+ 
+ #define MAX_IDE_BUS 2
+diff --git a/hw/ppc/mac_oldworld.c b/hw/ppc/mac_oldworld.c
+index 3acca94..daea0b2 100644
+--- a/hw/ppc/mac_oldworld.c
++++ b/hw/ppc/mac_oldworld.c
+@@ -41,7 +41,7 @@
+ #include "sysemu/kvm.h"
+ #include "kvm_ppc.h"
+ #include "sysemu/blockdev.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ 
+ #define MAX_IDE_BUS 2
+ #define CFG_ADDR 0xf0000510
+diff --git a/hw/ppc/ppc405_boards.c b/hw/ppc/ppc405_boards.c
+index 8e56b16..71e9111 100644
+--- a/hw/ppc/ppc405_boards.c
++++ b/hw/ppc/ppc405_boards.c
+@@ -32,7 +32,7 @@
+ #include "qemu/log.h"
+ #include "hw/loader.h"
+ #include "sysemu/blockdev.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ 
+ #define BIOS_FILENAME "ppc405_rom.bin"
+ #define BIOS_SIZE (2048 * 1024)
+diff --git a/hw/ppc/ppc405_uc.c b/hw/ppc/ppc405_uc.c
+index c6c909e..dc7010a 100644
+--- a/hw/ppc/ppc405_uc.c
++++ b/hw/ppc/ppc405_uc.c
+@@ -28,7 +28,7 @@
+ #include "qemu/timer.h"
+ #include "sysemu/sysemu.h"
+ #include "qemu/log.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ 
+ #define DEBUG_OPBA
+ #define DEBUG_SDRAM
+diff --git a/hw/ppc/ppc440_bamboo.c b/hw/ppc/ppc440_bamboo.c
+index a55e717..56b63be 100644
+--- a/hw/ppc/ppc440_bamboo.c
++++ b/hw/ppc/ppc440_bamboo.c
+@@ -22,7 +22,7 @@
+ #include "sysemu/device_tree.h"
+ #include "hw/loader.h"
+ #include "elf.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ #include "hw/char/serial.h"
+ #include "hw/ppc/ppc.h"
+ #include "ppc405.h"
+diff --git a/hw/ppc/ppc4xx_devs.c b/hw/ppc/ppc4xx_devs.c
+index d8e3dae..3ec50bf 100644
+--- a/hw/ppc/ppc4xx_devs.c
++++ b/hw/ppc/ppc4xx_devs.c
+@@ -25,7 +25,7 @@
+ #include "hw/ppc/ppc.h"
+ #include "hw/ppc/ppc4xx.h"
+ #include "qemu/log.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ 
+ //#define DEBUG_MMIO
+ //#define DEBUG_UNASSIGNED
+diff --git a/hw/ppc/ppc4xx_pci.c b/hw/ppc/ppc4xx_pci.c
+index 599539b..964b64f 100644
+--- a/hw/ppc/ppc4xx_pci.c
++++ b/hw/ppc/ppc4xx_pci.c
+@@ -24,7 +24,7 @@
+ #include "hw/ppc/ppc4xx.h"
+ #include "hw/pci/pci.h"
+ #include "hw/pci/pci_host.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ 
+ #undef DEBUG
+ #ifdef DEBUG
+diff --git a/hw/ppc/prep.c b/hw/ppc/prep.c
+index cceab3e..e204c77 100644
+--- a/hw/ppc/prep.c
++++ b/hw/ppc/prep.c
+@@ -40,7 +40,7 @@
+ #include "hw/isa/pc87312.h"
+ #include "sysemu/blockdev.h"
+ #include "sysemu/arch_init.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ 
+ //#define HARD_DEBUG_PPC_IO
+ //#define DEBUG_PPC_IO
+diff --git a/hw/ppc/spapr.c b/hw/ppc/spapr.c
+index 7a42501..bdbdcdf 100644
+--- a/hw/ppc/spapr.c
++++ b/hw/ppc/spapr.c
+@@ -47,7 +47,7 @@
+ #include "kvm_ppc.h"
+ #include "hw/pci/pci.h"
+ 
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ #include "hw/usb.h"
+ #include "qemu/config-file.h"
+ 
+diff --git a/hw/ppc/spapr_iommu.c b/hw/ppc/spapr_iommu.c
+index d2782cf..d12edb6 100644
+--- a/hw/ppc/spapr_iommu.c
++++ b/hw/ppc/spapr_iommu.c
+@@ -21,7 +21,7 @@
+ #include "hw/qdev.h"
+ #include "kvm_ppc.h"
+ #include "sysemu/dma.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ 
+ #include "hw/ppc/spapr.h"
+ 
+diff --git a/hw/ppc/spapr_pci.c b/hw/ppc/spapr_pci.c
+index 62ff323..74e426c 100644
+--- a/hw/ppc/spapr_pci.c
++++ b/hw/ppc/spapr_pci.c
+@@ -29,7 +29,7 @@
+ #include "hw/pci/pci_host.h"
+ #include "hw/ppc/spapr.h"
+ #include "hw/pci-host/spapr.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ #include <libfdt.h>
+ #include "trace.h"
+ 
+diff --git a/hw/ppc/virtex_ml507.c b/hw/ppc/virtex_ml507.c
+index 6728ba7..85d072b 100644
+--- a/hw/ppc/virtex_ml507.c
++++ b/hw/ppc/virtex_ml507.c
+@@ -33,7 +33,7 @@
+ #include "hw/loader.h"
+ #include "elf.h"
+ #include "qemu/log.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ 
+ #include "hw/ppc/ppc.h"
+ #include "hw/ppc/ppc4xx.h"
+diff --git a/hw/s390x/s390-virtio-ccw.c b/hw/s390x/s390-virtio-ccw.c
+index 76b63e2..31f25dc 100644
+--- a/hw/s390x/s390-virtio-ccw.c
++++ b/hw/s390x/s390-virtio-ccw.c
+@@ -10,7 +10,7 @@
+  */
+ 
+ #include "hw/boards.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ #include "s390-virtio.h"
+ #include "hw/s390x/sclp.h"
+ #include "ioinst.h"
+diff --git a/hw/s390x/s390-virtio.c b/hw/s390x/s390-virtio.c
+index f82c0e1..6a35e28 100644
+--- a/hw/s390x/s390-virtio.c
++++ b/hw/s390x/s390-virtio.c
+@@ -32,7 +32,7 @@
+ #include "hw/virtio/virtio.h"
+ #include "hw/sysbus.h"
+ #include "sysemu/kvm.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ 
+ #include "hw/s390x/s390-virtio-bus.h"
+ #include "hw/s390x/sclp.h"
+diff --git a/hw/s390x/sclp.c b/hw/s390x/sclp.c
+index 86d6ae0..b6cc448 100644
+--- a/hw/s390x/sclp.c
++++ b/hw/s390x/sclp.c
+@@ -14,7 +14,7 @@
+ 
+ #include "cpu.h"
+ #include "sysemu/kvm.h"
+-#include "exec/memory.h"
++#include "hw/memory.h"
+ 
+ #include "hw/s390x/sclp.h"
+ 
+diff --git a/hw/sh4/r2d.c b/hw/sh4/r2d.c
+index 4986dae..a6a6b5b 100644
+--- a/hw/sh4/r2d.c
++++ b/hw/sh4/r2d.c
+@@ -37,7 +37,7 @@
+ #include "hw/usb.h"
+ #include "hw/block/flash.h"
+ #include "sysemu/blockdev.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ 
+ #define FLASH_BASE 0x00000000
+ #define FLASH_SIZE 0x02000000
+diff --git a/hw/sh4/sh7750.c b/hw/sh4/sh7750.c
+index 2218b9c..e3620d8 100644
+--- a/hw/sh4/sh7750.c
++++ b/hw/sh4/sh7750.c
+@@ -30,7 +30,7 @@
+ #include "sh7750_regnames.h"
+ #include "hw/sh4/sh_intc.h"
+ #include "cpu.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ 
+ #define NB_DEVICES 4
+ 
+diff --git a/hw/sh4/sh_pci.c b/hw/sh4/sh_pci.c
+index d213a90..3cdcb94 100644
+--- a/hw/sh4/sh_pci.c
++++ b/hw/sh4/sh_pci.c
+@@ -26,7 +26,7 @@
+ #include "hw/pci/pci.h"
+ #include "hw/pci/pci_host.h"
+ #include "qemu/bswap.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ 
+ typedef struct SHPCIState {
+     SysBusDevice busdev;
+diff --git a/hw/sh4/shix.c b/hw/sh4/shix.c
+index c23d4af..f35979f 100644
+--- a/hw/sh4/shix.c
++++ b/hw/sh4/shix.c
+@@ -32,7 +32,7 @@
+ #include "sysemu/sysemu.h"
+ #include "hw/boards.h"
+ #include "hw/loader.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ 
+ #define BIOS_FILENAME "shix_bios.bin"
+ #define BIOS_ADDRESS 0xA0000000
+diff --git a/hw/sparc/leon3.c b/hw/sparc/leon3.c
+index 78c77ef..431ffbd 100644
+--- a/hw/sparc/leon3.c
++++ b/hw/sparc/leon3.c
+@@ -30,7 +30,7 @@
+ #include "hw/loader.h"
+ #include "elf.h"
+ #include "trace.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ 
+ #include "hw/sparc/grlib.h"
+ 
+diff --git a/hw/sparc64/sun4u.c b/hw/sparc64/sun4u.c
+index 0d29620..f588b47 100644
+--- a/hw/sparc64/sun4u.c
++++ b/hw/sparc64/sun4u.c
+@@ -39,7 +39,7 @@
+ #include "hw/loader.h"
+ #include "elf.h"
+ #include "sysemu/blockdev.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ 
+ //#define DEBUG_IRQ
+ //#define DEBUG_EBUS
+diff --git a/hw/timer/m48t59.c b/hw/timer/m48t59.c
+index 5019e06..fa65755 100644
+--- a/hw/timer/m48t59.c
++++ b/hw/timer/m48t59.c
+@@ -27,7 +27,7 @@
+ #include "sysemu/sysemu.h"
+ #include "hw/sysbus.h"
+ #include "hw/isa/isa.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ 
+ //#define DEBUG_NVRAM
+ 
+diff --git a/hw/timer/sh_timer.c b/hw/timer/sh_timer.c
+index f92ff4f..5bb0cd7 100644
+--- a/hw/timer/sh_timer.c
++++ b/hw/timer/sh_timer.c
+@@ -11,7 +11,7 @@
+ #include "hw/hw.h"
+ #include "hw/sh4/sh.h"
+ #include "qemu/timer.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ #include "hw/ptimer.h"
+ 
+ //#define DEBUG_TIMER
+diff --git a/hw/tpm/tpm_int.h b/hw/tpm/tpm_int.h
+index 08f87cb..44d5463 100644
+--- a/hw/tpm/tpm_int.h
++++ b/hw/tpm/tpm_int.h
+@@ -12,7 +12,7 @@
+ #ifndef TPM_TPM_INT_H
+ #define TPM_TPM_INT_H
+ 
+-#include "exec/memory.h"
++#include "hw/memory.h"
+ #include "tpm_tis.h"
+ 
+ /* overall state of the TPM interface */
+diff --git a/hw/tpm/tpm_tis.c b/hw/tpm/tpm_tis.c
+index d4d8152..da1c3bc 100644
+--- a/hw/tpm/tpm_tis.c
++++ b/hw/tpm/tpm_tis.c
+@@ -22,7 +22,7 @@
+ #include "sysemu/tpm_backend.h"
+ #include "tpm_int.h"
+ #include "block/block.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ #include "hw/hw.h"
+ #include "hw/i386/pc.h"
+ #include "hw/pci/pci_ids.h"
+diff --git a/hw/unicore32/puv3.c b/hw/unicore32/puv3.c
+index 7c8fc36..37dd9b0 100644
+--- a/hw/unicore32/puv3.c
++++ b/hw/unicore32/puv3.c
+@@ -12,7 +12,7 @@
+ #include "qemu-common.h"
+ #include "ui/console.h"
+ #include "elf.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ #include "hw/sysbus.h"
+ #include "hw/boards.h"
+ #include "hw/loader.h"
+diff --git a/hw/virtio/dataplane/hostmem.c b/hw/virtio/dataplane/hostmem.c
+index 37292ff..4491f03 100644
+--- a/hw/virtio/dataplane/hostmem.c
++++ b/hw/virtio/dataplane/hostmem.c
+@@ -11,7 +11,7 @@
+  *
+  */
+ 
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ #include "hw/virtio/dataplane/hostmem.h"
+ 
+ static int hostmem_lookup_cmp(const void *phys_, const void *region_)
+diff --git a/hw/virtio/vhost.c b/hw/virtio/vhost.c
+index 636fad0..bc2c85a 100644
+--- a/hw/virtio/vhost.c
++++ b/hw/virtio/vhost.c
+@@ -18,7 +18,7 @@
+ #include "hw/hw.h"
+ #include "qemu/range.h"
+ #include <linux/vhost.h>
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ 
+ static void vhost_dev_sync_region(struct vhost_dev *dev,
+                                   MemoryRegionSection *section,
+diff --git a/hw/virtio/virtio-balloon.c b/hw/virtio/virtio-balloon.c
+index c2c446e..5052347 100644
+--- a/hw/virtio/virtio-balloon.c
++++ b/hw/virtio/virtio-balloon.c
+@@ -22,7 +22,7 @@
+ #include "sysemu/balloon.h"
+ #include "hw/virtio/virtio-balloon.h"
+ #include "sysemu/kvm.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ #include "qapi/visitor.h"
+ 
+ #if defined(__linux__)
+diff --git a/hw/xen/xen_platform.c b/hw/xen/xen_platform.c
+index b6c6793..5d6f661 100644
+--- a/hw/xen/xen_platform.c
++++ b/hw/xen/xen_platform.c
+@@ -32,7 +32,7 @@
+ #include "hw/xen/xen_common.h"
+ #include "hw/xen/xen_backend.h"
+ #include "trace.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ 
+ #include <xenguest.h>
+ 
+diff --git a/hw/xen/xen_pt.c b/hw/xen/xen_pt.c
+index c199818..224b633 100644
+--- a/hw/xen/xen_pt.c
++++ b/hw/xen/xen_pt.c
+@@ -59,7 +59,7 @@
+ #include "hw/xen/xen_backend.h"
+ #include "xen_pt.h"
+ #include "qemu/range.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ 
+ #define XEN_PT_NR_IRQS (256)
+ static uint8_t xen_pt_mapped_machine_irq[XEN_PT_NR_IRQS] = {0};
+diff --git a/hw/xtensa/xtensa_lx60.c b/hw/xtensa/xtensa_lx60.c
+index 650dd31..34f397e 100644
+--- a/hw/xtensa/xtensa_lx60.c
++++ b/hw/xtensa/xtensa_lx60.c
+@@ -29,8 +29,8 @@
+ #include "hw/boards.h"
+ #include "hw/loader.h"
+ #include "elf.h"
+-#include "exec/memory.h"
+-#include "exec/address-spaces.h"
++#include "hw/memory.h"
++#include "hw/address-spaces.h"
+ #include "hw/char/serial.h"
+ #include "net/net.h"
+ #include "hw/sysbus.h"
+diff --git a/hw/xtensa/xtensa_sim.c b/hw/xtensa/xtensa_sim.c
+index 5241f8d..bbf44f7 100644
+--- a/hw/xtensa/xtensa_sim.c
++++ b/hw/xtensa/xtensa_sim.c
+@@ -29,8 +29,8 @@
+ #include "hw/boards.h"
+ #include "hw/loader.h"
+ #include "elf.h"
+-#include "exec/memory.h"
+-#include "exec/address-spaces.h"
++#include "hw/memory.h"
++#include "hw/address-spaces.h"
+ 
+ static uint64_t translate_phys_addr(void *env, uint64_t addr)
+ {
+diff --git a/include/exec/softmmu_template.h b/include/exec/softmmu_template.h
+index b219191..aaa4469 100644
+--- a/include/exec/softmmu_template.h
++++ b/include/exec/softmmu_template.h
+@@ -22,7 +22,7 @@
+  * License along with this library; if not, see <http://www.gnu.org/licenses/>.
+  */
+ #include "qemu/timer.h"
+-#include "exec/memory.h"
++#include "hw/memory.h"
+ 
+ #define DATA_SIZE (1 << SHIFT)
+ 
+diff --git a/include/exec/address-spaces.h b/include/hw/address-spaces.h
+similarity index 97%
+rename from include/exec/address-spaces.h
+rename to include/hw/address-spaces.h
+index 3d12cdd..d88a4c3 100644
+--- a/include/exec/address-spaces.h
++++ b/include/hw/address-spaces.h
+@@ -19,7 +19,7 @@
+  * you're one of them.
+  */
+ 
+-#include "exec/memory.h"
++#include "hw/memory.h"
+ 
+ #ifndef CONFIG_USER_ONLY
+ 
+diff --git a/include/hw/arm/arm.h b/include/hw/arm/arm.h
+index 7b2b02d..ff4de5a 100644
+--- a/include/hw/arm/arm.h
++++ b/include/hw/arm/arm.h
+@@ -11,7 +11,7 @@
+ #ifndef ARM_MISC_H
+ #define ARM_MISC_H 1
+ 
+-#include "exec/memory.h"
++#include "hw/memory.h"
+ #include "hw/irq.h"
+ 
+ /* The CPU is also modelled as an interrupt controller.  */
+diff --git a/include/hw/arm/exynos4210.h b/include/hw/arm/exynos4210.h
+index bb9a1dd..3010baa 100644
+--- a/include/hw/arm/exynos4210.h
++++ b/include/hw/arm/exynos4210.h
+@@ -27,7 +27,7 @@
+ #define EXYNOS4210_H_
+ 
+ #include "qemu-common.h"
+-#include "exec/memory.h"
++#include "hw/memory.h"
+ 
+ #define EXYNOS4210_NCPUS                    2
+ 
+diff --git a/include/hw/arm/omap.h b/include/hw/arm/omap.h
+index 188cda8..31b0f04 100644
+--- a/include/hw/arm/omap.h
++++ b/include/hw/arm/omap.h
+@@ -17,7 +17,7 @@
+  * with this program; if not, see <http://www.gnu.org/licenses/>.
+  */
+ #ifndef hw_omap_h
+-#include "exec/memory.h"
++#include "hw/memory.h"
+ # define hw_omap_h		"omap.h"
+ #include "hw/irq.h"
+ 
+diff --git a/include/hw/arm/pxa.h b/include/hw/arm/pxa.h
+index 668232c..2769b6c 100644
+--- a/include/hw/arm/pxa.h
++++ b/include/hw/arm/pxa.h
+@@ -9,7 +9,7 @@
+ #ifndef PXA_H
+ # define PXA_H			"pxa.h"
+ 
+-#include "exec/memory.h"
++#include "hw/memory.h"
+ 
+ /* Interrupt numbers */
+ # define PXA2XX_PIC_SSP3	0
+diff --git a/include/hw/arm/soc_dma.h b/include/hw/arm/soc_dma.h
+index 7379731..86d241b 100644
+--- a/include/hw/arm/soc_dma.h
++++ b/include/hw/arm/soc_dma.h
+@@ -22,7 +22,7 @@
+ #define HW_SOC_DMA_H 1
+ 
+ 
+-#include "exec/memory.h"
++#include "hw/memory.h"
+ #include "hw/irq.h"
+ 
+ struct soc_dma_s;
+diff --git a/include/hw/block/flash.h b/include/hw/block/flash.h
+index 920d759..12d5025 100644
+--- a/include/hw/block/flash.h
++++ b/include/hw/block/flash.h
+@@ -3,7 +3,7 @@
+ 
+ /* NOR flash devices */
+ 
+-#include "exec/memory.h"
++#include "hw/memory.h"
+ 
+ typedef struct pflash_t pflash_t;
+ 
+diff --git a/include/hw/char/serial.h b/include/hw/char/serial.h
+index e884499..83798f1 100644
+--- a/include/hw/char/serial.h
++++ b/include/hw/char/serial.h
+@@ -27,7 +27,7 @@
+ 
+ #include "hw/hw.h"
+ #include "sysemu/sysemu.h"
+-#include "exec/memory.h"
++#include "hw/memory.h"
+ 
+ #define UART_FIFO_LENGTH    16      /* 16550A Fifo Length */
+ 
+diff --git a/include/hw/hw.h b/include/hw/hw.h
+index 1fb9afa..d7c0503 100644
+--- a/include/hw/hw.h
++++ b/include/hw/hw.h
+@@ -8,7 +8,7 @@
+ #include "exec/cpu-common.h"
+ #endif
+ 
+-#include "exec/ioport.h"
++#include "hw/ioport.h"
+ #include "hw/irq.h"
+ #include "block/aio.h"
+ #include "migration/qemu-file.h"
+diff --git a/include/hw/i386/apic_internal.h b/include/hw/i386/apic_internal.h
+index 578241f..9b715ec 100644
+--- a/include/hw/i386/apic_internal.h
++++ b/include/hw/i386/apic_internal.h
+@@ -20,7 +20,7 @@
+ #ifndef QEMU_APIC_INTERNAL_H
+ #define QEMU_APIC_INTERNAL_H
+ 
+-#include "exec/memory.h"
++#include "hw/memory.h"
+ #include "hw/sysbus.h"
+ #include "qemu/timer.h"
+ 
+diff --git a/include/hw/i386/ioapic_internal.h b/include/hw/i386/ioapic_internal.h
+index 25576c8..6dc7fe8 100644
+--- a/include/hw/i386/ioapic_internal.h
++++ b/include/hw/i386/ioapic_internal.h
+@@ -23,7 +23,7 @@
+ #define QEMU_IOAPIC_INTERNAL_H
+ 
+ #include "hw/hw.h"
+-#include "exec/memory.h"
++#include "hw/memory.h"
+ #include "hw/sysbus.h"
+ 
+ #define MAX_IOAPICS                     1
+diff --git a/include/hw/i386/pc.h b/include/hw/i386/pc.h
+index 5d40914..ee77e39 100644
+--- a/include/hw/i386/pc.h
++++ b/include/hw/i386/pc.h
+@@ -2,12 +2,12 @@
+ #define HW_PC_H
+ 
+ #include "qemu-common.h"
+-#include "exec/memory.h"
+-#include "exec/ioport.h"
++#include "hw/memory.h"
++#include "hw/ioport.h"
+ #include "hw/isa/isa.h"
+ #include "hw/block/fdc.h"
+ #include "net/net.h"
+-#include "exec/memory.h"
++#include "hw/memory.h"
+ #include "hw/i386/ioapic.h"
+ 
+ /* PC-style peripherals (also used by other machines).  */
+diff --git a/include/hw/ide.h b/include/hw/ide.h
+index 507e6d3..7e4bf18 100644
+--- a/include/hw/ide.h
++++ b/include/hw/ide.h
+@@ -3,7 +3,7 @@
+ 
+ #include "hw/isa/isa.h"
+ #include "hw/pci/pci.h"
+-#include "exec/memory.h"
++#include "hw/memory.h"
+ 
+ #define MAX_IDE_DEVS	2
+ 
+diff --git a/include/exec/ioport.h b/include/hw/ioport.h
+similarity index 99%
+rename from include/exec/ioport.h
+rename to include/hw/ioport.h
+index fc28350..465a0f2 100644
+--- a/include/exec/ioport.h
++++ b/include/hw/ioport.h
+@@ -25,7 +25,7 @@
+ #define IOPORT_H
+ 
+ #include "qemu-common.h"
+-#include "exec/iorange.h"
++#include "hw/iorange.h"
+ 
+ typedef uint32_t pio_addr_t;
+ #define FMT_pioaddr     PRIx32
+diff --git a/include/exec/iorange.h b/include/hw/iorange.h
+similarity index 100%
+rename from include/exec/iorange.h
+rename to include/hw/iorange.h
+diff --git a/include/hw/isa/apm.h b/include/hw/isa/apm.h
+index 3edea5f..e77ced3 100644
+--- a/include/hw/isa/apm.h
++++ b/include/hw/isa/apm.h
+@@ -4,7 +4,7 @@
+ #include <stdint.h>
+ #include "qemu-common.h"
+ #include "hw/hw.h"
+-#include "exec/memory.h"
++#include "hw/memory.h"
+ 
+ typedef void (*apm_ctrl_changed_t)(uint32_t val, void *arg);
+ 
+diff --git a/include/hw/isa/isa.h b/include/hw/isa/isa.h
+index 82da37c..a922900 100644
+--- a/include/hw/isa/isa.h
++++ b/include/hw/isa/isa.h
+@@ -3,8 +3,8 @@
+ 
+ /* ISA bus */
+ 
+-#include "exec/ioport.h"
+-#include "exec/memory.h"
++#include "hw/ioport.h"
++#include "hw/memory.h"
+ #include "hw/qdev.h"
+ 
+ #define ISA_NUM_IRQS 16
+diff --git a/include/exec/memory.h b/include/hw/memory.h
+similarity index 99%
+rename from include/exec/memory.h
+rename to include/hw/memory.h
+index 9e88320..963814f 100644
+--- a/include/exec/memory.h
++++ b/include/hw/memory.h
+@@ -22,8 +22,8 @@
+ #include "exec/cpu-common.h"
+ #include "exec/hwaddr.h"
+ #include "qemu/queue.h"
+-#include "exec/iorange.h"
+-#include "exec/ioport.h"
++#include "hw/iorange.h"
++#include "hw/ioport.h"
+ #include "qemu/int128.h"
+ 
+ typedef struct MemoryRegionOps MemoryRegionOps;
+diff --git a/include/hw/mips/mips.h b/include/hw/mips/mips.h
+index 291e85f..42ab968 100644
+--- a/include/hw/mips/mips.h
++++ b/include/hw/mips/mips.h
+@@ -2,7 +2,7 @@
+ #define HW_MIPS_H
+ /* Definitions for mips board emulation.  */
+ 
+-#include "exec/memory.h"
++#include "hw/memory.h"
+ 
+ /* gt64xxx.c */
+ PCIBus *gt64120_register(qemu_irq *pic);
+diff --git a/include/hw/pci-host/pam.h b/include/hw/pci-host/pam.h
+index 8e9e349..0f10c32 100644
+--- a/include/hw/pci-host/pam.h
++++ b/include/hw/pci-host/pam.h
+@@ -51,7 +51,7 @@
+  */
+ 
+ #include "qemu-common.h"
+-#include "exec/memory.h"
++#include "hw/memory.h"
+ 
+ #define SMRAM_C_BASE    0xa0000
+ #define SMRAM_C_END     0xc0000
+diff --git a/include/hw/pci/pci.h b/include/hw/pci/pci.h
+index 05315c0..1c56173 100644
+--- a/include/hw/pci/pci.h
++++ b/include/hw/pci/pci.h
+@@ -4,7 +4,7 @@
+ #include "qemu-common.h"
+ 
+ #include "hw/qdev.h"
+-#include "exec/memory.h"
++#include "hw/memory.h"
+ #include "sysemu/dma.h"
+ 
+ /* PCI includes legacy ISA access.  */
+diff --git a/include/hw/pci/pcie_host.h b/include/hw/pci/pcie_host.h
+index 1228e36..c1c0b6b 100644
+--- a/include/hw/pci/pcie_host.h
++++ b/include/hw/pci/pcie_host.h
+@@ -22,7 +22,7 @@
+ #define PCIE_HOST_H
+ 
+ #include "hw/pci/pci_host.h"
+-#include "exec/memory.h"
++#include "hw/memory.h"
+ 
+ #define TYPE_PCIE_HOST_BRIDGE "pcie-host-bridge"
+ #define PCIE_HOST_BRIDGE(obj) \
+diff --git a/include/hw/pci/shpc.h b/include/hw/pci/shpc.h
+index 467911a..39e63c4 100644
+--- a/include/hw/pci/shpc.h
++++ b/include/hw/pci/shpc.h
+@@ -2,7 +2,7 @@
+ #define SHPC_H
+ 
+ #include "qemu-common.h"
+-#include "exec/memory.h"
++#include "hw/memory.h"
+ #include "migration/vmstate.h"
+ 
+ struct SHPCDevice {
+diff --git a/include/hw/ppc/mac_dbdma.h b/include/hw/ppc/mac_dbdma.h
+index 691263e..85664ef 100644
+--- a/include/hw/ppc/mac_dbdma.h
++++ b/include/hw/ppc/mac_dbdma.h
+@@ -22,7 +22,7 @@
+ #ifndef HW_MAC_DBDMA_H
+ #define HW_MAC_DBDMA_H 1
+ 
+-#include "exec/memory.h"
++#include "hw/memory.h"
+ 
+ typedef struct DBDMA_io DBDMA_io;
+ 
+diff --git a/include/hw/sh4/sh_intc.h b/include/hw/sh4/sh_intc.h
+index b7ddcb0..e517593 100644
+--- a/include/hw/sh4/sh_intc.h
++++ b/include/hw/sh4/sh_intc.h
+@@ -3,7 +3,7 @@
+ 
+ #include "qemu-common.h"
+ #include "hw/irq.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ 
+ typedef unsigned char intc_enum;
+ 
+diff --git a/include/hw/sysbus.h b/include/hw/sysbus.h
+index 7c2e316..a517232 100644
+--- a/include/hw/sysbus.h
++++ b/include/hw/sysbus.h
+@@ -4,7 +4,7 @@
+ /* Devices attached directly to the main system bus.  */
+ 
+ #include "hw/qdev.h"
+-#include "exec/memory.h"
++#include "hw/memory.h"
+ 
+ #define QDEV_MAX_MMIO 32
+ #define QDEV_MAX_PIO 32
+diff --git a/include/hw/virtio/dataplane/hostmem.h b/include/hw/virtio/dataplane/hostmem.h
+index b2cf093..01b7ef9 100644
+--- a/include/hw/virtio/dataplane/hostmem.h
++++ b/include/hw/virtio/dataplane/hostmem.h
+@@ -14,7 +14,7 @@
+ #ifndef HOSTMEM_H
+ #define HOSTMEM_H
+ 
+-#include "exec/memory.h"
++#include "hw/memory.h"
+ #include "qemu/thread.h"
+ 
+ typedef struct {
+diff --git a/include/hw/virtio/vhost.h b/include/hw/virtio/vhost.h
+index b373be0..cdf1b19 100644
+--- a/include/hw/virtio/vhost.h
++++ b/include/hw/virtio/vhost.h
+@@ -3,7 +3,7 @@
+ 
+ #include "hw/hw.h"
+ #include "hw/virtio/virtio.h"
+-#include "exec/memory.h"
++#include "hw/memory.h"
+ 
+ /* Generic structures common for any vhost based device. */
+ struct vhost_virtqueue {
+diff --git a/include/sysemu/dma.h b/include/sysemu/dma.h
+index a52c93a..75bd44a 100644
+--- a/include/sysemu/dma.h
++++ b/include/sysemu/dma.h
+@@ -11,7 +11,7 @@
+ #define DMA_H
+ 
+ #include <stdio.h>
+-#include "exec/memory.h"
++#include "hw/memory.h"
+ #include "hw/hw.h"
+ #include "block/block.h"
+ #include "sysemu/kvm.h"
+diff --git a/ioport.c b/ioport.c
+index a0ac2a0..e08958c 100644
+--- a/ioport.c
++++ b/ioport.c
+@@ -25,9 +25,9 @@
+  * splitted out ioport related stuffs from vl.c.
+  */
+ 
+-#include "exec/ioport.h"
++#include "hw/ioport.h"
+ #include "trace.h"
+-#include "exec/memory.h"
++#include "hw/memory.h"
+ 
+ /***********************************************************/
+ /* IO Port */
+diff --git a/kvm-all.c b/kvm-all.c
+index 9b433d3..74cf461 100644
+--- a/kvm-all.c
++++ b/kvm-all.c
+@@ -30,8 +30,8 @@
+ #include "exec/gdbstub.h"
+ #include "sysemu/kvm.h"
+ #include "qemu/bswap.h"
+-#include "exec/memory.h"
+-#include "exec/address-spaces.h"
++#include "hw/memory.h"
++#include "hw/address-spaces.h"
+ #include "qemu/event_notifier.h"
+ 
+ /* This check must be after config-host.h is included */
+diff --git a/memory.c b/memory.c
+index 75ca281..ec4b1c0 100644
+--- a/memory.c
++++ b/memory.c
+@@ -13,9 +13,9 @@
+  * GNU GPL, version 2 or (at your option) any later version.
+  */
+ 
+-#include "exec/memory.h"
+-#include "exec/address-spaces.h"
+-#include "exec/ioport.h"
++#include "hw/memory.h"
++#include "hw/address-spaces.h"
++#include "hw/ioport.h"
+ #include "qemu/bitops.h"
+ #include "sysemu/kvm.h"
+ #include <assert.h>
+diff --git a/monitor.c b/monitor.c
+index 2909ca1..58fef7f 100644
+--- a/monitor.c
++++ b/monitor.c
+@@ -64,7 +64,7 @@
+ #include "trace/simple.h"
+ #endif
+ #include "ui/qemu-spice.h"
+-#include "exec/memory.h"
++#include "hw/memory.h"
+ #include "qmp-commands.h"
+ #include "hmp.h"
+ #include "qemu/thread.h"
+diff --git a/qtest.c b/qtest.c
+index 3bba3e5..52e7362 100644
+--- a/qtest.c
++++ b/qtest.c
+@@ -14,8 +14,8 @@
+ #include "sysemu/qtest.h"
+ #include "hw/qdev.h"
+ #include "sysemu/char.h"
+-#include "exec/ioport.h"
+-#include "exec/memory.h"
++#include "hw/ioport.h"
++#include "hw/memory.h"
+ #include "hw/irq.h"
+ #include "sysemu/sysemu.h"
+ #include "sysemu/cpus.h"
+diff --git a/savevm.c b/savevm.c
+index b1d8988..4820c83 100644
+--- a/savevm.c
++++ b/savevm.c
+@@ -35,7 +35,7 @@
+ #include "qemu/sockets.h"
+ #include "qemu/queue.h"
+ #include "sysemu/cpus.h"
+-#include "exec/memory.h"
++#include "hw/memory.h"
+ #include "qmp-commands.h"
+ #include "trace.h"
+ #include "qemu/bitops.h"
+diff --git a/target-arm/kvm_arm.h b/target-arm/kvm_arm.h
+index b1c54ff..256e289 100644
+--- a/target-arm/kvm_arm.h
++++ b/target-arm/kvm_arm.h
+@@ -12,7 +12,7 @@
+ #define QEMU_KVM_ARM_H
+ 
+ #include "sysemu/kvm.h"
+-#include "exec/memory.h"
++#include "hw/memory.h"
+ 
+ /**
+  * kvm_arm_register_device:
+diff --git a/target-i386/ioport-user.c b/target-i386/ioport-user.c
+index f7636e0..f3b2a96 100644
+--- a/target-i386/ioport-user.c
++++ b/target-i386/ioport-user.c
+@@ -21,7 +21,7 @@
+ 
+ #include "qemu.h"
+ #include "qemu-common.h"
+-#include "exec/ioport.h"
++#include "hw/ioport.h"
+ 
+ void cpu_outb(pio_addr_t addr, uint8_t val)
+ {
+diff --git a/target-i386/kvm.c b/target-i386/kvm.c
+index 397afeb..e75969c 100644
+--- a/target-i386/kvm.c
++++ b/target-i386/kvm.c
+@@ -30,7 +30,7 @@
+ #include "qemu/config-file.h"
+ #include "hw/i386/pc.h"
+ #include "hw/i386/apic.h"
+-#include "exec/ioport.h"
++#include "hw/ioport.h"
+ #include "hyperv.h"
+ #include "hw/pci/pci.h"
+ 
+diff --git a/target-i386/misc_helper.c b/target-i386/misc_helper.c
+index dfbc07b..ca5b8b0 100644
+--- a/target-i386/misc_helper.c
++++ b/target-i386/misc_helper.c
+@@ -18,7 +18,7 @@
+  */
+ 
+ #include "cpu.h"
+-#include "exec/ioport.h"
++#include "hw/ioport.h"
+ #include "helper.h"
+ 
+ #if !defined(CONFIG_USER_ONLY)
+diff --git a/target-s390x/misc_helper.c b/target-s390x/misc_helper.c
+index 09301d0..d564011 100644
+--- a/target-s390x/misc_helper.c
++++ b/target-s390x/misc_helper.c
+@@ -19,7 +19,7 @@
+  */
+ 
+ #include "cpu.h"
+-#include "exec/memory.h"
++#include "hw/memory.h"
+ #include "qemu/host-utils.h"
+ #include "helper.h"
+ #include <string.h>
+diff --git a/target-sparc/mmu_helper.c b/target-sparc/mmu_helper.c
+index a9649ae..da930ad 100644
+--- a/target-sparc/mmu_helper.c
++++ b/target-sparc/mmu_helper.c
+@@ -19,7 +19,7 @@
+ 
+ #include "cpu.h"
+ #include "trace.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ 
+ /* Sparc MMU emulation */
+ 
+diff --git a/translate-all.c b/translate-all.c
+index 08dd038..7c67c6b 100644
+--- a/translate-all.c
++++ b/translate-all.c
+@@ -53,7 +53,7 @@
+ #endif
+ #endif
+ #else
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ #endif
+ 
+ #include "exec/cputlb.h"
+diff --git a/xen-all.c b/xen-all.c
+index 539a154..6cf32a4 100644
+--- a/xen-all.c
++++ b/xen-all.c
+@@ -20,7 +20,7 @@
+ #include "qemu/range.h"
+ #include "sysemu/xen-mapcache.h"
+ #include "trace.h"
+-#include "exec/address-spaces.h"
++#include "hw/address-spaces.h"
+ 
+ #include <xen/hvm/ioreq.h>
+ #include <xen/hvm/params.h>
+diff --git a/xen-stub.c b/xen-stub.c
+index 6f0516a..6282018 100644
+--- a/xen-stub.c
++++ b/xen-stub.c
+@@ -10,7 +10,7 @@
+ 
+ #include "qemu-common.h"
+ #include "hw/xen/xen.h"
+-#include "exec/memory.h"
++#include "hw/memory.h"
+ #include "qmp-commands.h"
+ 
+ void xenstore_store_pv_console_info(int i, CharDriverState *chr)
+-- 
+1.8.1.4
+
+
+

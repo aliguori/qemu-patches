@@ -1,0 +1,1 @@
+../qcow2py-dump-metadata/v1.1366323444/0003-qcow2py-add-load_image-method.patch

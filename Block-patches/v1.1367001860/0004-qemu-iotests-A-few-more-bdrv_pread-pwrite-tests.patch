@@ -1,0 +1,88 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Stefan Hajnoczi <stefanha@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>,
+ Stefan Hajnoczi <stefanha@redhat.com>, Kevin Wolf <kwolf@redhat.com>
+Date: Fri, 26 Apr 2013 13:44:27 +0200
+Message-id: 1366976682-10251-8-git-send-email-stefanha@redhat.com
+Subject: [PATCH 04/11] qemu-iotests: A few more bdrv_pread/pwrite tests
+
+From: Kevin Wolf <kwolf@redhat.com>
+
+Signed-off-by: Kevin Wolf <kwolf@redhat.com>
+Signed-off-by: Stefan Hajnoczi <stefanha@redhat.com>
+---
+ tests/qemu-iotests/002     | 13 +++++++++++++
+ tests/qemu-iotests/002.out | 26 ++++++++++++++++++++++++++
+ 2 files changed, 39 insertions(+)
+
+diff --git a/tests/qemu-iotests/002 b/tests/qemu-iotests/002
+index bebed84..51d0a8f 100755
+--- a/tests/qemu-iotests/002
++++ b/tests/qemu-iotests/002
+@@ -61,10 +61,23 @@ $QEMU_IO -c "read -pP 0xa 0 $size" $TEST_IMG | _filter_qemu_io
+ echo
+ echo "unaligned pwrite"
+ $QEMU_IO -c 'write -pP 0xab 66 42' $TEST_IMG | _filter_qemu_io
++$QEMU_IO -c 'write -pP 0xac 512 288' $TEST_IMG | _filter_qemu_io
++$QEMU_IO -c 'write -pP 0xad 800 224' $TEST_IMG | _filter_qemu_io
++$QEMU_IO -c 'write -pP 0xae 66000 128k' $TEST_IMG | _filter_qemu_io
++$QEMU_IO -c 'write -pP 0xaf 256k 42' $TEST_IMG | _filter_qemu_io
+ 
+ echo
+ echo "verify pattern"
++$QEMU_IO -c 'read -pP 0xa 0 66' $TEST_IMG | _filter_qemu_io
+ $QEMU_IO -c 'read -pP 0xab 66 42' $TEST_IMG | _filter_qemu_io
++$QEMU_IO -c 'read -pP 0xa 108 404' $TEST_IMG | _filter_qemu_io
++$QEMU_IO -c 'read -pP 0xac 512 288' $TEST_IMG | _filter_qemu_io
++$QEMU_IO -c 'read -pP 0xad 800 224' $TEST_IMG | _filter_qemu_io
++$QEMU_IO -c 'read -pP 0xa 1k 64976' $TEST_IMG | _filter_qemu_io
++$QEMU_IO -c 'read -pP 0xae 66000 128k' $TEST_IMG | _filter_qemu_io
++$QEMU_IO -c 'read -pP 0xa 197072 65072' $TEST_IMG | _filter_qemu_io
++$QEMU_IO -c 'read -pP 0xaf 256k 42' $TEST_IMG | _filter_qemu_io
++$QEMU_IO -c 'read -pP 0xa 262186 470' $TEST_IMG | _filter_qemu_io
+ 
+ # success, all done
+ echo "*** done"
+diff --git a/tests/qemu-iotests/002.out b/tests/qemu-iotests/002.out
+index 75f5876..cd6aa0f 100644
+--- a/tests/qemu-iotests/002.out
++++ b/tests/qemu-iotests/002.out
+@@ -16,8 +16,34 @@ read 134217728/134217728 bytes at offset 0
+ unaligned pwrite
+ wrote 42/42 bytes at offset 66
+ 42 bytes, X ops; XX:XX:XX.X (XXX YYY/sec and XXX ops/sec)
++wrote 288/288 bytes at offset 512
++288 bytes, X ops; XX:XX:XX.X (XXX YYY/sec and XXX ops/sec)
++wrote 224/224 bytes at offset 800
++224 bytes, X ops; XX:XX:XX.X (XXX YYY/sec and XXX ops/sec)
++wrote 131072/131072 bytes at offset 66000
++128 KiB, X ops; XX:XX:XX.X (XXX YYY/sec and XXX ops/sec)
++wrote 42/42 bytes at offset 262144
++42 bytes, X ops; XX:XX:XX.X (XXX YYY/sec and XXX ops/sec)
+ 
+ verify pattern
++read 66/66 bytes at offset 0
++66 bytes, X ops; XX:XX:XX.X (XXX YYY/sec and XXX ops/sec)
+ read 42/42 bytes at offset 66
+ 42 bytes, X ops; XX:XX:XX.X (XXX YYY/sec and XXX ops/sec)
++read 404/404 bytes at offset 108
++404 bytes, X ops; XX:XX:XX.X (XXX YYY/sec and XXX ops/sec)
++read 288/288 bytes at offset 512
++288 bytes, X ops; XX:XX:XX.X (XXX YYY/sec and XXX ops/sec)
++read 224/224 bytes at offset 800
++224 bytes, X ops; XX:XX:XX.X (XXX YYY/sec and XXX ops/sec)
++read 64976/64976 bytes at offset 1024
++63.453 KiB, X ops; XX:XX:XX.X (XXX YYY/sec and XXX ops/sec)
++read 131072/131072 bytes at offset 66000
++128 KiB, X ops; XX:XX:XX.X (XXX YYY/sec and XXX ops/sec)
++read 65072/65072 bytes at offset 197072
++63.547 KiB, X ops; XX:XX:XX.X (XXX YYY/sec and XXX ops/sec)
++read 42/42 bytes at offset 262144
++42 bytes, X ops; XX:XX:XX.X (XXX YYY/sec and XXX ops/sec)
++read 470/470 bytes at offset 262186
++470 bytes, X ops; XX:XX:XX.X (XXX YYY/sec and XXX ops/sec)
+ *** done
+-- 
+1.8.1.4
+

@@ -1,0 +1,1 @@
+../rdma-core-rdma-logic/v1.1365749523/0003-rdma-new-QEMUFileOps-hooks.patch

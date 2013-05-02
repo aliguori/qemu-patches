@@ -1,0 +1,161 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: kwolf@redhat.com, stefanha@redhat.com
+Date: Thu, 18 Apr 2013 17:17:26 +0200
+Message-id: 1366298249-11739-3-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 2/5] qcow2.py: add ImageFile superclass
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ tests/qemu-iotests/qcow2.py | 60 +++++++++++++++++++++++++++------------------
+ 1 file changed, 36 insertions(+), 24 deletions(-)
+
+diff --git a/tests/qemu-iotests/qcow2.py b/tests/qemu-iotests/qcow2.py
+index 40241b1..773c947 100755
+--- a/tests/qemu-iotests/qcow2.py
++++ b/tests/qemu-iotests/qcow2.py
+@@ -15,7 +15,20 @@ class QcowHeaderExtension:
+     def create(cls, magic, data):
+         return QcowHeaderExtension(magic, len(data), data)
+ 
+-class Qcow:
++class ImageFile:
++    def __init__(self, fd, fields):
++        self.__dict__ = fields
++        self.fd = fd
++
++    def raw_pread(self, offset, size):
++        self.fd.seek(offset)
++        return self.fd.read(size)
++
++    def raw_pwrite(self, offset, data):
++        self.fd.seek(offset)
++        return self.fd.write(data)
++
++class Qcow(ImageFile):
+ 
+     uint32_t = 'I'
+     uint64_t = 'Q'
+@@ -54,18 +67,19 @@ class Qcow:
+         buf = fd.read(buf_size)
+ 
+         header = struct.unpack(Qcow.HEADER_FMT, buf)
+-        self.__dict__ = dict((field[2], header[i])
++        fields = dict((field[2], header[i])
+             for i, field in enumerate(Qcow.fields))
+ 
++        ImageFile.__init__(self, fd, fields)
+         self.set_defaults()
+         self.cluster_size = 1 << self.cluster_bits
+ 
+         fd.seek(self.header_length)
+-        self.load_extensions(fd)
++        self.load_extensions()
+ 
+         if self.backing_file_offset:
+-            fd.seek(self.backing_file_offset)
+-            self.backing_file = fd.read(self.backing_file_size)
++            self.backing_file = self.raw_pread(self.backing_file_offset,
++                                               self.backing_file_size)
+         else:
+             self.backing_file = None
+ 
+@@ -77,7 +91,7 @@ class Qcow:
+             self.refcount_order = 4
+             self.header_length = 72
+ 
+-    def load_extensions(self, fd):
++    def load_extensions(self):
+         self.extensions = []
+ 
+         if self.backing_file_offset != 0:
+@@ -85,43 +99,41 @@ class Qcow:
+         else:
+             end = self.cluster_size
+ 
+-        while fd.tell() < end:
+-            (magic, length) = struct.unpack('>II', fd.read(8))
++        while self.fd.tell() < end:
++            (magic, length) = struct.unpack('>II', self.fd.read(8))
+             if magic == 0:
+                 break
+             else:
+                 padded = (length + 7) & ~7
+-                data = fd.read(padded)
++                data = self.fd.read(padded)
+                 self.extensions.append(QcowHeaderExtension(magic, length, data))
+ 
+-    def update_extensions(self, fd):
++    def update_extensions(self):
+ 
+-        fd.seek(self.header_length)
++        self.fd.seek(self.header_length)
+         extensions = self.extensions
+         extensions.append(QcowHeaderExtension(0, 0, ""))
+         for ex in extensions:
+             buf = struct.pack('>II', ex.magic, ex.length)
+-            fd.write(buf)
+-            fd.write(ex.data)
++            self.fd.write(buf)
++            self.fd.write(ex.data)
+ 
+         if self.backing_file != None:
+-            self.backing_file_offset = fd.tell()
+-            fd.write(self.backing_file)
++            self.backing_file_offset = self.fd.tell()
++            self.fd.write(self.backing_file)
+ 
+-        if fd.tell() > self.cluster_size:
++        if self.fd.tell() > self.cluster_size:
+             raise Exception("I think I just broke the image...")
+ 
+-
+-    def update(self, fd):
++    def update(self):
+         header_bytes = self.header_length
+ 
+-        self.update_extensions(fd)
++        self.update_extensions()
+ 
+-        fd.seek(0)
+         header = tuple(self.__dict__[f] for t, p, f in Qcow.fields)
+         buf = struct.pack(Qcow.HEADER_FMT, *header)
+         buf = buf[0:header_bytes-1]
+-        fd.write(buf)
++        self.raw_pwrite(0, buf)
+ 
+     def dump(self):
+         for f in Qcow.fields:
+@@ -158,7 +170,7 @@ def cmd_add_header_ext(fd, magic, data):
+ 
+     h = Qcow(fd)
+     h.extensions.append(QcowHeaderExtension.create(magic, data))
+-    h.update(fd)
++    h.update()
+ 
+ def cmd_del_header_ext(fd, magic):
+     try:
+@@ -179,7 +191,7 @@ def cmd_del_header_ext(fd, magic):
+         print "No such header extension"
+         return
+ 
+-    h.update(fd)
++    h.update()
+ 
+ def cmd_set_feature_bit(fd, group, bit):
+     try:
+@@ -201,7 +213,7 @@ def cmd_set_feature_bit(fd, group, bit):
+         print "'%s' is not a valid group, try 'incompatible', 'compatible', or 'autoclear'" % group
+         sys.exit(1)
+ 
+-    h.update(fd)
++    h.update()
+ 
+ cmds = [
+     [ 'dump-header',    cmd_dump_header,    0, 'Dump image header and header extensions' ],
+-- 
+1.8.2
+
+
+

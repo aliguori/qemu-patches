@@ -1,0 +1,30 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Artyom Tarasenko <atar4qemu@gmail.com>
+To: qemu-devel@nongnu.org, Artyom Tarasenko <atar4qemu@gmail.com>
+Cc: blauwirbel@gmail.com, Artyom Tarasenko <atar4qemu@gmail.com>,
+ qemu-devel@nongnu.org
+Date: Sat, 27 Apr 2013 07:55:10 +0200
+Message-id: cover.1366987353.git.atar4qemu@gmail.com
+Subject: [PATCH 0/3] sparc64 fixes
+
+Various fixes:
+On the real hardware IRQ lines of the PCI bus are not shared.
+In the previous QEMU implementation before this series, all PCI devices
+used the IRQ line 0. Combined with auto-clearing interrupts this made
+the guest OS extremely unstable. The test case is installing
+Debian Wheezy / sparc64:
+http://tyom.blogspot.de/2013/03/debiansparc64-wheezy-under-qemu-how-to.html
+Without the patches the install process hangs at random places between 6% and 60%.
+With this series the installation succeeds.
+Please note that the patch 3/3 requires updating OpenBIOS.
+
+Artyom Tarasenko (3):
+  sparc64: allow 64 IRQ lines
+  sparc64: fix loosing interrupts
+  sparc64: use direct interrupt mapping for PCI devices
+
+ hw/pci-host/apb.c  |  118 +++++++++++++++++++++++++++++++++++++++++++---------
+ hw/sparc64/sun4u.c |    2 +-
+ 2 files changed, 99 insertions(+), 21 deletions(-)
+
+

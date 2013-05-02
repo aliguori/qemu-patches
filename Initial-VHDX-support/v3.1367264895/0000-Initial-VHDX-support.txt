@@ -1,0 +1,68 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Jeff Cody <jcody@redhat.com>
+To: Stefan Hajnoczi <stefanha@gmail.com>, qemu-devel@nongnu.org,
+ Jeff Cody <jcody@redhat.com>
+Cc: kwolf@redhat.com, Stefan Hajnoczi <stefanha@gmail.com>, famz@redhat.com,
+ qemu-devel@nongnu.org, stefanha@redhat.com
+Date: Mon, 29 Apr 2013 14:48:15 -0400
+Message-id: cover.1367261038.git.jcody@redhat.com
+Subject: [PATCH 0/4] Initial VHDX support
+
+
+Differences from v2:
+
+
+Patch 2/4:  changed 2 uint8_t[16] to MSGUID (Kevin)
+            renamed all strucs to proper style (Kevin)
+            indentations / style (Kevin)
+            Removed/fixed outdated comments (Stefan)
+            dropped vhdx_header_padded (Kevin)            
+            
+Patch 3/4:  removed hunk that was meant for old patch 5/5 (Fam)
+            check VHDX header version field (Fam)
+            validate file type id in open and not just probe (Kevin)
+            allow headers with seq # of 0 if other header is invalid (Kevin)
+            fixed masking typo for parent meta present (Kevin)
+            removed error check for 512-byte sectors (Kevin)
+            verify region and metadata table guid are unique (Kevin)
+            removed signed/unsigned comparisons (Stefan)
+            sanity checking on rt.entry_count (Stefan)
+            use clz_() instead of inline code (Stefan)
+            bat_rt.length sanity check - compute it rather
+               than trust the entry length (Stefan)
+
+Patch 5 (v2): Dropped
+
+This adds the initial support for VHDX image files.  
+
+It currently only supports read operations of VHDX, for fixed and dynamic files.
+
+Notably, the following is not yet supported:
+    * Differencing files
+    * Log replay (so we will refuse to open any images that are not 'clean')
+    * .bdrv_create()
+    * write operations other than to the header
+
+
+Jeff Cody (4):
+  qemu: add castagnoli crc32c checksum algorithm
+  block: vhdx header for the QEMU support of VHDX images
+  block: initial VHDX driver support framework - supports open and probe
+  block: add read-only support to VHDX image format.
+
+ block/Makefile.objs   |   1 +
+ block/vhdx.c          | 972 ++++++++++++++++++++++++++++++++++++++++++++++++++
+ block/vhdx.h          | 325 +++++++++++++++++
+ include/qemu/crc32c.h |  35 ++
+ util/Makefile.objs    |   1 +
+ util/crc32c.c         | 115 ++++++
+ 6 files changed, 1449 insertions(+)
+ create mode 100644 block/vhdx.c
+ create mode 100644 block/vhdx.h
+ create mode 100644 include/qemu/crc32c.h
+ create mode 100644 util/crc32c.c
+
+-- 
+1.8.1.4
+
+

@@ -1,0 +1,216 @@
+From patches Mon Sep 17 00:00:00 2001
+From: peter.crosthwaite@xilinx.com
+To: qemu-devel@nongnu.org
+Cc: edgar.iglesias@gmail.com
+Date: Tue, 16 Apr 2013 10:27:55 +1000
+Message-id: 2805449fede87e84546feaff28a2cb4dffcbf0e0.1366069170.git.peter.crosthwaite@xilinx.com
+Subject: [PATCH 15/16] xilinx_axienet/dma: Implement rx path flow control
+
+From: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+
+Implement flow control for the RX data path from xilinx_axienet->xilinx_axidma.
+On short return from axidma, then ethernet sets up the notify callback to resume
+transfer from where it left off.
+
+This also allows the ethernet to track whether there is an in progress transaction
+and return false from ethernet can_receive() as appropriate.
+
+If the DMA backs up or is disabled it waits for enablement. When the rx stream IO
+region is touched, the can_push() notify function is called if set.
+
+Signed-off-by: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+---
+Fix notify control logic
+
+ hw/dma/xilinx_axidma.c  |   49 +++++++++++++++++++++++++++++++++++++++-------
+ hw/net/xilinx_axienet.c |   28 ++++++++++++++++++++++++--
+ 2 files changed, 66 insertions(+), 11 deletions(-)
+
+diff --git a/hw/dma/xilinx_axidma.c b/hw/dma/xilinx_axidma.c
+index 80ce57f..a5bf102 100644
+--- a/hw/dma/xilinx_axidma.c
++++ b/hw/dma/xilinx_axidma.c
+@@ -117,6 +117,9 @@ struct XilinxAXIDMA {
+     XilinxAXIDMAStreamSlave rx_data_dev;
+ 
+     struct Stream streams[2];
++
++    StreamCanPushNotifyFn notify;
++    void *notify_opaque;
+ };
+ 
+ /*
+@@ -315,16 +318,16 @@ static void stream_process_mem2s(struct Stream *s,
+     }
+ }
+ 
+-static void stream_process_s2mem(struct Stream *s,
+-                                 unsigned char *buf, size_t len, uint32_t *app)
++static size_t stream_process_s2mem(struct Stream *s, unsigned char *buf,
++                                   size_t len, uint32_t *app)
+ {
+     uint32_t prev_d;
+     unsigned int rxlen;
+-    int pos = 0;
++    size_t pos = 0;
+     int sof = 1;
+ 
+     if (!stream_running(s) || stream_idle(s)) {
+-        return;
++        return 0;
+     }
+ 
+     while (len) {
+@@ -369,6 +372,8 @@ static void stream_process_s2mem(struct Stream *s,
+             break;
+         }
+     }
++
++    return pos;
+ }
+ 
+ static void xilinx_axidma_reset(DeviceState *dev)
+@@ -381,19 +386,37 @@ static void xilinx_axidma_reset(DeviceState *dev)
+     }
+ }
+ 
++static bool
++xilinx_axidma_data_stream_can_push(StreamSlave *obj,
++                                   StreamCanPushNotifyFn notify,
++                                   void *notify_opaque)
++{
++    XilinxAXIDMAStreamSlave *ds = XILINX_AXI_DMA_DATA_STREAM(obj);
++    struct Stream *s = &ds->dma->streams[1];
++
++    if (!stream_running(s) || stream_idle(s)) {
++        ds->dma->notify = notify;
++        ds->dma->notify_opaque = notify_opaque;
++        return false;
++    }
++
++    return true;
++}
++
+ static size_t
+ xilinx_axidma_data_stream_push(StreamSlave *obj, unsigned char *buf, size_t len,
+                                uint32_t *app)
+ {
+     XilinxAXIDMAStreamSlave *ds = XILINX_AXI_DMA_DATA_STREAM(obj);
+     struct Stream *s = &ds->dma->streams[1];
++    size_t ret;
+ 
+     if (!app) {
+         hw_error("No stream app data!\n");
+     }
+-    stream_process_s2mem(s, buf, len, app);
++    ret = stream_process_s2mem(s, buf, len, app);
+     stream_update_irq(s);
+-    return len;
++    return ret;
+ }
+ 
+ static uint64_t axidma_read(void *opaque, hwaddr addr,
+@@ -481,6 +504,10 @@ static void axidma_write(void *opaque, hwaddr addr,
+             s->regs[addr] = value;
+             break;
+     }
++    if (sid == 1 && d->notify) {
++        d->notify(d->notify_opaque);
++        d->notify = NULL;
++    }
+     stream_update_irq(s);
+ }
+ 
+@@ -558,11 +585,17 @@ static void axidma_class_init(ObjectClass *klass, void *data)
+     dc->props = axidma_properties;
+ }
+ 
++static StreamSlaveClass xilinx_axidma_data_stream_class = {
++    .push = xilinx_axidma_data_stream_push,
++    .can_push = xilinx_axidma_data_stream_can_push,
++};
++
+ static void xilinx_axidma_stream_class_init(ObjectClass *klass, void *data)
+ {
+     StreamSlaveClass *ssc = STREAM_SLAVE_CLASS(klass);
+ 
+-    ssc->push = data;
++    ssc->push = ((StreamSlaveClass *)data)->push;
++    ssc->can_push = ((StreamSlaveClass *)data)->can_push;
+ }
+ 
+ static const TypeInfo axidma_info = {
+@@ -578,7 +611,7 @@ static const TypeInfo xilinx_axidma_data_stream_info = {
+     .parent        = TYPE_OBJECT,
+     .instance_size = sizeof(struct XilinxAXIDMAStreamSlave),
+     .class_init    = xilinx_axidma_stream_class_init,
+-    .class_data    = xilinx_axidma_data_stream_push,
++    .class_data    = &xilinx_axidma_data_stream_class,
+     .interfaces = (InterfaceInfo[]) {
+         { TYPE_STREAM_SLAVE },
+         { }
+diff --git a/hw/net/xilinx_axienet.c b/hw/net/xilinx_axienet.c
+index 6d27546..544c3ec 100644
+--- a/hw/net/xilinx_axienet.c
++++ b/hw/net/xilinx_axienet.c
+@@ -383,6 +383,9 @@ struct XilinxAXIEnet {
+ 
+ 
+     uint8_t *rxmem;
++    uint32_t *rxapp;
++    uint32_t rxsize;
++    uint32_t rxpos;
+ };
+ 
+ static void axienet_rx_reset(XilinxAXIEnet *s)
+@@ -645,7 +648,7 @@ static int eth_can_rx(NetClientState *nc)
+     XilinxAXIEnet *s = qemu_get_nic_opaque(nc);
+ 
+     /* RX enabled?  */
+-    return !axienet_rx_resetting(s) && axienet_rx_enabled(s);
++    return !s->rxsize && !axienet_rx_resetting(s) && axienet_rx_enabled(s);
+ }
+ 
+ static int enet_match_addr(const uint8_t *buf, uint32_t f0, uint32_t f1)
+@@ -663,6 +666,23 @@ static int enet_match_addr(const uint8_t *buf, uint32_t f0, uint32_t f1)
+     return match;
+ }
+ 
++static void axienet_eth_rx_notify(void *opaque)
++{
++    XilinxAXIEnet *s = XILINX_AXI_ENET(opaque);
++
++    while (s->rxsize && stream_can_push(s->tx_dev, axienet_eth_rx_notify, s)) {
++        size_t ret = stream_push(s->tx_dev, (void *)s->rxmem + s->rxpos,
++                                 s->rxsize, s->rxapp);
++        s->rxsize -= ret;
++        s->rxpos += ret;
++        if (!s->rxsize) {
++            s->regs[R_IS] |= IS_RX_COMPLETE;
++            g_free(s->rxapp);
++        }
++    }
++    enet_update_irq(s);
++}
++
+ static ssize_t eth_rx(NetClientState *nc, const uint8_t *buf, size_t size)
+ {
+     XilinxAXIEnet *s = qemu_get_nic_opaque(nc);
+@@ -800,9 +820,11 @@ static ssize_t eth_rx(NetClientState *nc, const uint8_t *buf, size_t size)
+     /* Good frame.  */
+     app[2] |= 1 << 6;
+ 
+-    stream_push(s->tx_dev, (void *)s->rxmem, size, app);
++    s->rxsize = size;
++    s->rxpos = 0;
++    s->rxapp = g_memdup(app, sizeof(app));
++    axienet_eth_rx_notify(s);
+ 
+-    s->regs[R_IS] |= IS_RX_COMPLETE;
+     enet_update_irq(s);
+     return size;
+ }
+-- 
+1.7.0.4
+
+

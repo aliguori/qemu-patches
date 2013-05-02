@@ -1,0 +1,1 @@
+../console-data-structures-overhaul/v1.1363105951/0005-qxl-better-vga-init-in-enter_vga_mode.patch

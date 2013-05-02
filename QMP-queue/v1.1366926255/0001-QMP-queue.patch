@@ -1,0 +1,26 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Luiz Capitulino <lcapitulino@redhat.com>
+To: Luiz Capitulino <lcapitulino@redhat.com>, qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, aliguori@us.ibm.com
+Date: Thu, 25 Apr 2013 16:44:15 -0400
+Message-id: 1366922656-32545-1-git-send-email-lcapitulino@redhat.com
+Subject: [PATCH 1/1] QMP queue
+
+Our lovely new command to query command-line options by Amos.
+
+The changes (since 9953f8822cc316eec9962f0a2858c3439a80adec) are available
+in the following repository:
+
+    git://repo.or.cz/qemu/qmp-unstable.git queue/qmp
+
+Amos Kong (1):
+  monitor: introduce query-command-line-options
+
+ qapi-schema.json   | 66 +++++++++++++++++++++++++++++++++++++++++++++++++++++
+ qmp-commands.hx    | 47 ++++++++++++++++++++++++++++++++++++++
+ util/qemu-config.c | 67 ++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ 3 files changed, 180 insertions(+)
+
+-- 
+1.8.1.4
+

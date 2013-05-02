@@ -1,0 +1,551 @@
+From patches Mon Sep 17 00:00:00 2001
+From: fred.konrad@greensocs.com
+To: Anthony Liguori <aliguori@us.ibm.com>, qemu-devel@nongnu.org
+Cc: peter.maydell@linaro.org, Alexander Graf <agraf@suse.de>,
+ Paolo Bonzini <pbonzini@redhat.com>, mark.burton@greensocs.com,
+ "Aneesh Kumar K.V" <aneesh.kumar@linux.vnet.ibm.com>,
+ Kevin Wolf <kwolf@redhat.com>, Richard Henderson <rth@twiddle.net>,
+ Amit Shah <amit.shah@redhat.com>, cornelia.huck@de.ibm.com,
+ Stefan Hajnoczi <stefanha@redhat.com>, fred.konrad@greensocs.com
+Date: Sun, 14 Apr 2013 23:26:35 +0200
+Message-id: 1365974797-13217-7-git-send-email-fred.konrad@greensocs.com
+Subject: [PATCH 6/8] virtio: remove the function pointer.
+
+From: KONRAD Frederic <fred.konrad@greensocs.com>
+
+This remove the function pointer in VirtIODevice, and use only
+VirtioDeviceClass function pointer.
+
+Signed-off-by: KONRAD Frederic <fred.konrad@greensocs.com>
+---
+ hw/9pfs/virtio-9p-device.c  |  2 --
+ hw/block/virtio-blk.c       |  5 -----
+ hw/char/virtio-serial-bus.c |  6 ------
+ hw/net/virtio-net.c         |  9 ---------
+ hw/s390x/s390-virtio-bus.c  | 11 +++++------
+ hw/s390x/virtio-ccw.c       | 14 +++++---------
+ hw/scsi/virtio-scsi.c       |  6 ------
+ hw/virtio/virtio-balloon.c  |  4 ----
+ hw/virtio/virtio-pci.c      | 41 ++++++++++++++++++++++++-----------------
+ hw/virtio/virtio-rng.c      |  2 --
+ hw/virtio/virtio.c          | 43 ++++++++++++++++++++++++++++---------------
+ include/hw/virtio/virtio.h  | 24 ------------------------
+ 12 files changed, 62 insertions(+), 105 deletions(-)
+
+diff --git a/hw/9pfs/virtio-9p-device.c b/hw/9pfs/virtio-9p-device.c
+index 62a291b..dc6f4e4 100644
+--- a/hw/9pfs/virtio-9p-device.c
++++ b/hw/9pfs/virtio-9p-device.c
+@@ -92,9 +92,7 @@ static int virtio_9p_device_init(VirtIODevice *vdev)
+     s->ctx.uid = -1;
+ 
+     s->ops = fse->ops;
+-    vdev->get_features = virtio_9p_get_features;
+     s->config_size = sizeof(struct virtio_9p_config) + len;
+-    vdev->get_config = virtio_9p_get_config;
+     s->fid_list = NULL;
+     qemu_co_rwlock_init(&s->rename_lock);
+ 
+diff --git a/hw/block/virtio-blk.c b/hw/block/virtio-blk.c
+index 6efb2f0..e25a03e 100644
+--- a/hw/block/virtio-blk.c
++++ b/hw/block/virtio-blk.c
+@@ -652,11 +652,6 @@ static int virtio_blk_device_init(VirtIODevice *vdev)
+     virtio_init(vdev, "virtio-blk", VIRTIO_ID_BLOCK,
+                 sizeof(struct virtio_blk_config));
+ 
+-    vdev->get_config = virtio_blk_update_config;
+-    vdev->set_config = virtio_blk_set_config;
+-    vdev->get_features = virtio_blk_get_features;
+-    vdev->set_status = virtio_blk_set_status;
+-    vdev->reset = virtio_blk_reset;
+     s->bs = blk->conf.bs;
+     s->conf = &blk->conf;
+     memcpy(&(s->blk), blk, sizeof(struct VirtIOBlkConf));
+diff --git a/hw/char/virtio-serial-bus.c b/hw/char/virtio-serial-bus.c
+index 35c996d..6a5b8b6 100644
+--- a/hw/char/virtio-serial-bus.c
++++ b/hw/char/virtio-serial-bus.c
+@@ -954,12 +954,6 @@ static int virtio_serial_device_init(VirtIODevice *vdev)
+      */
+     mark_port_added(vser, 0);
+ 
+-    vdev->get_features = get_features;
+-    vdev->get_config = get_config;
+-    vdev->set_config = set_config;
+-    vdev->set_status = set_status;
+-    vdev->reset = vser_reset;
+-
+     vser->post_load = NULL;
+ 
+     /*
+diff --git a/hw/net/virtio-net.c b/hw/net/virtio-net.c
+index 4d2cdd2..0a0d516 100644
+--- a/hw/net/virtio-net.c
++++ b/hw/net/virtio-net.c
+@@ -1283,15 +1283,6 @@ static int virtio_net_device_init(VirtIODevice *vdev)
+     virtio_init(VIRTIO_DEVICE(n), "virtio-net", VIRTIO_ID_NET,
+                                   n->config_size);
+ 
+-    vdev->get_config = virtio_net_get_config;
+-    vdev->set_config = virtio_net_set_config;
+-    vdev->get_features = virtio_net_get_features;
+-    vdev->set_features = virtio_net_set_features;
+-    vdev->bad_features = virtio_net_bad_features;
+-    vdev->reset = virtio_net_reset;
+-    vdev->set_status = virtio_net_set_status;
+-    vdev->guest_notifier_mask = virtio_net_guest_notifier_mask;
+-    vdev->guest_notifier_pending = virtio_net_guest_notifier_pending;
+     n->max_queues = MAX(n->nic_conf.queues, 1);
+     n->vqs = g_malloc0(sizeof(VirtIONetQueue) * n->max_queues);
+     n->vqs[0].rx_vq = virtio_add_queue(vdev, 256, virtio_net_handle_rx);
+diff --git a/hw/s390x/s390-virtio-bus.c b/hw/s390x/s390-virtio-bus.c
+index 64bd961..28e2db4 100644
+--- a/hw/s390x/s390-virtio-bus.c
++++ b/hw/s390x/s390-virtio-bus.c
+@@ -137,12 +137,13 @@ static void s390_virtio_device_plugged(DeviceState *d)
+     dev_len = VIRTIO_DEV_OFFS_CONFIG;
+     dev_len += s390_virtio_device_num_vq(dev) * VIRTIO_VQCONFIG_LEN;
+     dev_len += dev->feat_len * 2;
+-    dev_len += dev->vdev->config_len;
++    dev_len += virtio_bus_get_vdev_config_len(&dev->bus);
+ 
+     bus->dev_offs += dev_len;
+ 
+-    virtio_bind_device(dev->vdev, &virtio_s390_bindings, DEVICE(dev));
+-    dev->host_features = dev->vdev->get_features(dev->vdev, dev->host_features);
++    dev->host_features = virtio_bus_get_vdev_features(&dev->bus,
++                         dev->host_features);
++
+     s390_virtio_device_sync(dev);
+     s390_virtio_reset_idx(dev);
+     if (dev->qdev.hotplugged) {
+@@ -336,9 +337,7 @@ void s390_virtio_device_sync(VirtIOS390Device *dev)
+     cur_offs += dev->feat_len * 2;
+ 
+     /* Sync config space */
+-    if (dev->vdev->get_config) {
+-        dev->vdev->get_config(dev->vdev, dev->vdev->config);
+-    }
++    virtio_bus_get_vdev_config(&dev->bus, dev->vdev->config);
+ 
+     cpu_physical_memory_write(cur_offs,
+                               dev->vdev->config, dev->vdev->config_len);
+diff --git a/hw/s390x/virtio-ccw.c b/hw/s390x/virtio-ccw.c
+index 4857f97..8f4f997 100644
+--- a/hw/s390x/virtio-ccw.c
++++ b/hw/s390x/virtio-ccw.c
+@@ -235,9 +235,7 @@ static int virtio_ccw_cb(SubchDev *sch, CCW1 ccw)
+             features.index = ldub_phys(ccw.cda + sizeof(features.features));
+             features.features = ldl_le_phys(ccw.cda);
+             if (features.index < ARRAY_SIZE(dev->host_features)) {
+-                if (dev->vdev->set_features) {
+-                    dev->vdev->set_features(dev->vdev, features.features);
+-                }
++                virtio_bus_set_vdev_features(&dev->bus, features.features);
+                 dev->vdev->guest_features = features.features;
+             } else {
+                 /*
+@@ -265,7 +263,7 @@ static int virtio_ccw_cb(SubchDev *sch, CCW1 ccw)
+         if (!ccw.cda) {
+             ret = -EFAULT;
+         } else {
+-            dev->vdev->get_config(dev->vdev, dev->vdev->config);
++            virtio_bus_get_vdev_config(&dev->bus, dev->vdev->config);
+             /* XXX config space endianness */
+             cpu_physical_memory_write(ccw.cda, dev->vdev->config, len);
+             sch->curr_status.scsw.count = ccw.count - len;
+@@ -292,9 +290,7 @@ static int virtio_ccw_cb(SubchDev *sch, CCW1 ccw)
+                 /* XXX config space endianness */
+                 memcpy(dev->vdev->config, config, len);
+                 cpu_physical_memory_unmap(config, hw_len, 0, hw_len);
+-                if (dev->vdev->set_config) {
+-                    dev->vdev->set_config(dev->vdev, dev->vdev->config);
+-                }
++                virtio_bus_set_vdev_config(&dev->bus, dev->vdev->config);
+                 sch->curr_status.scsw.count = ccw.count - len;
+                 ret = 0;
+             }
+@@ -520,8 +516,8 @@ static void virtio_ccw_device_plugged(DeviceState *d)
+     sch->id.cu_model = dev->vdev->device_id;
+ 
+     /* Only the first 32 feature bits are used. */
+-    dev->host_features[0] = dev->vdev->get_features(dev->vdev,
+-                                                    dev->host_features[0]);
++    dev->host_features[0] = virtio_bus_get_vdev_features(&dev->bus,
++                                                         dev->host_features[0]);
+     dev->host_features[0] |= 0x1 << VIRTIO_F_NOTIFY_ON_EMPTY;
+     dev->host_features[0] |= 0x1 << VIRTIO_F_BAD_FEATURE;
+ 
+diff --git a/hw/scsi/virtio-scsi.c b/hw/scsi/virtio-scsi.c
+index ead7cda..de8cbbe 100644
+--- a/hw/scsi/virtio-scsi.c
++++ b/hw/scsi/virtio-scsi.c
+@@ -704,12 +704,6 @@ static int virtio_scsi_device_init(VirtIODevice *vdev)
+ 
+     s->cmd_vqs = g_malloc0(s->conf.num_queues * sizeof(VirtQueue *));
+ 
+-    /* TODO set up vdev function pointers */
+-    vdev->get_config = virtio_scsi_get_config;
+-    vdev->set_config = virtio_scsi_set_config;
+-    vdev->get_features = virtio_scsi_get_features;
+-    vdev->reset = virtio_scsi_reset;
+-
+     s->ctrl_vq = virtio_add_queue(vdev, VIRTIO_SCSI_VQ_SIZE,
+                                   virtio_scsi_handle_ctrl);
+     s->event_vq = virtio_add_queue(vdev, VIRTIO_SCSI_VQ_SIZE,
+diff --git a/hw/virtio/virtio-balloon.c b/hw/virtio/virtio-balloon.c
+index c2c446e..eaaa1ed 100644
+--- a/hw/virtio/virtio-balloon.c
++++ b/hw/virtio/virtio-balloon.c
+@@ -344,10 +344,6 @@ static int virtio_balloon_device_init(VirtIODevice *vdev)
+ 
+     virtio_init(vdev, "virtio-balloon", VIRTIO_ID_BALLOON, 8);
+ 
+-    vdev->get_config = virtio_balloon_get_config;
+-    vdev->set_config = virtio_balloon_set_config;
+-    vdev->get_features = virtio_balloon_get_features;
+-
+     ret = qemu_add_balloon_handler(virtio_balloon_to_target,
+                                    virtio_balloon_stat, s);
+ 
+diff --git a/hw/virtio/virtio-pci.c b/hw/virtio/virtio-pci.c
+index c330ebb..a5fd085 100644
+--- a/hw/virtio/virtio-pci.c
++++ b/hw/virtio/virtio-pci.c
+@@ -266,10 +266,10 @@ static void virtio_ioport_write(void *opaque, uint32_t addr, uint32_t val)
+ 
+     switch (addr) {
+     case VIRTIO_PCI_GUEST_FEATURES:
+-	/* Guest does not negotiate properly?  We have to assume nothing. */
+-	if (val & (1 << VIRTIO_F_BAD_FEATURE)) {
+-            val = vdev->bad_features ? vdev->bad_features(vdev) : 0;
+-	}
++        /* Guest does not negotiate properly?  We have to assume nothing. */
++        if (val & (1 << VIRTIO_F_BAD_FEATURE)) {
++            val = virtio_bus_get_vdev_bad_features(&proxy->bus);
++        }
+         virtio_set_features(vdev, val);
+         break;
+     case VIRTIO_PCI_QUEUE_PFN:
+@@ -534,6 +534,7 @@ static int kvm_virtio_pci_vector_use(VirtIOPCIProxy *proxy, int nvqs)
+ {
+     PCIDevice *dev = &proxy->pci_dev;
+     VirtIODevice *vdev = proxy->vdev;
++    VirtioDeviceClass *k = VIRTIO_DEVICE_GET_CLASS(vdev);
+     unsigned int vector;
+     int ret, queue_no;
+     MSIMessage msg;
+@@ -554,7 +555,7 @@ static int kvm_virtio_pci_vector_use(VirtIOPCIProxy *proxy, int nvqs)
+         /* If guest supports masking, set up irqfd now.
+          * Otherwise, delay until unmasked in the frontend.
+          */
+-        if (proxy->vdev->guest_notifier_mask) {
++        if (k->guest_notifier_mask) {
+             ret = kvm_virtio_pci_irqfd_use(proxy, queue_no, vector);
+             if (ret < 0) {
+                 kvm_virtio_pci_vq_vector_release(proxy, vector);
+@@ -570,7 +571,7 @@ undo:
+         if (vector >= msix_nr_vectors_allocated(dev)) {
+             continue;
+         }
+-        if (proxy->vdev->guest_notifier_mask) {
++        if (k->guest_notifier_mask) {
+             kvm_virtio_pci_irqfd_release(proxy, queue_no, vector);
+         }
+         kvm_virtio_pci_vq_vector_release(proxy, vector);
+@@ -584,6 +585,7 @@ static void kvm_virtio_pci_vector_release(VirtIOPCIProxy *proxy, int nvqs)
+     VirtIODevice *vdev = proxy->vdev;
+     unsigned int vector;
+     int queue_no;
++    VirtioDeviceClass *k = VIRTIO_DEVICE_GET_CLASS(vdev);
+ 
+     for (queue_no = 0; queue_no < nvqs; queue_no++) {
+         if (!virtio_queue_get_num(vdev, queue_no)) {
+@@ -596,7 +598,7 @@ static void kvm_virtio_pci_vector_release(VirtIOPCIProxy *proxy, int nvqs)
+         /* If guest supports masking, clean up irqfd now.
+          * Otherwise, it was cleaned when masked in the frontend.
+          */
+-        if (proxy->vdev->guest_notifier_mask) {
++        if (k->guest_notifier_mask) {
+             kvm_virtio_pci_irqfd_release(proxy, queue_no, vector);
+         }
+         kvm_virtio_pci_vq_vector_release(proxy, vector);
+@@ -608,6 +610,7 @@ static int virtio_pci_vq_vector_unmask(VirtIOPCIProxy *proxy,
+                                        unsigned int vector,
+                                        MSIMessage msg)
+ {
++    VirtioDeviceClass *k = VIRTIO_DEVICE_GET_CLASS(proxy->vdev);
+     VirtQueue *vq = virtio_get_queue(proxy->vdev, queue_no);
+     EventNotifier *n = virtio_queue_get_guest_notifier(vq);
+     VirtIOIRQFD *irqfd;
+@@ -626,11 +629,11 @@ static int virtio_pci_vq_vector_unmask(VirtIOPCIProxy *proxy,
+     /* If guest supports masking, irqfd is already setup, unmask it.
+      * Otherwise, set it up now.
+      */
+-    if (proxy->vdev->guest_notifier_mask) {
+-        proxy->vdev->guest_notifier_mask(proxy->vdev, queue_no, false);
++    if (k->guest_notifier_mask) {
++        k->guest_notifier_mask(proxy->vdev, queue_no, false);
+         /* Test after unmasking to avoid losing events. */
+-        if (proxy->vdev->guest_notifier_pending &&
+-            proxy->vdev->guest_notifier_pending(proxy->vdev, queue_no)) {
++        if (k->guest_notifier_pending &&
++            k->guest_notifier_pending(proxy->vdev, queue_no)) {
+             event_notifier_set(n);
+         }
+     } else {
+@@ -643,11 +646,13 @@ static void virtio_pci_vq_vector_mask(VirtIOPCIProxy *proxy,
+                                              unsigned int queue_no,
+                                              unsigned int vector)
+ {
++    VirtioDeviceClass *k = VIRTIO_DEVICE_GET_CLASS(proxy->vdev);
++
+     /* If guest supports masking, keep irqfd but mask it.
+      * Otherwise, clean it up now.
+      */ 
+-    if (proxy->vdev->guest_notifier_mask) {
+-        proxy->vdev->guest_notifier_mask(proxy->vdev, queue_no, true);
++    if (k->guest_notifier_mask) {
++        k->guest_notifier_mask(proxy->vdev, queue_no, true);
+     } else {
+         kvm_virtio_pci_irqfd_release(proxy, queue_no, vector);
+     }
+@@ -707,6 +712,7 @@ static void virtio_pci_vector_poll(PCIDevice *dev,
+ {
+     VirtIOPCIProxy *proxy = container_of(dev, VirtIOPCIProxy, pci_dev);
+     VirtIODevice *vdev = proxy->vdev;
++    VirtioDeviceClass *k = VIRTIO_DEVICE_GET_CLASS(vdev);
+     int queue_no;
+     unsigned int vector;
+     EventNotifier *notifier;
+@@ -723,8 +729,8 @@ static void virtio_pci_vector_poll(PCIDevice *dev,
+         }
+         vq = virtio_get_queue(vdev, queue_no);
+         notifier = virtio_queue_get_guest_notifier(vq);
+-        if (vdev->guest_notifier_pending) {
+-            if (vdev->guest_notifier_pending(vdev, queue_no)) {
++        if (k->guest_notifier_pending) {
++            if (k->guest_notifier_pending(vdev, queue_no)) {
+                 msix_set_pending(dev, vector);
+             }
+         } else if (event_notifier_test_and_clear(notifier)) {
+@@ -764,6 +770,7 @@ static int virtio_pci_set_guest_notifiers(DeviceState *d, int nvqs, bool assign)
+ {
+     VirtIOPCIProxy *proxy = to_virtio_pci_proxy(d);
+     VirtIODevice *vdev = proxy->vdev;
++    VirtioDeviceClass *k = VIRTIO_DEVICE_GET_CLASS(vdev);
+     int r, n;
+     bool with_irqfd = msix_enabled(&proxy->pci_dev) &&
+         kvm_msi_via_irqfd_enabled();
+@@ -778,7 +785,7 @@ static int virtio_pci_set_guest_notifiers(DeviceState *d, int nvqs, bool assign)
+     proxy->nvqs_with_notifiers = nvqs;
+ 
+     /* Must unset vector notifier while guest notifier is still assigned */
+-    if ((proxy->vector_irqfd || vdev->guest_notifier_mask) && !assign) {
++    if ((proxy->vector_irqfd || k->guest_notifier_mask) && !assign) {
+         msix_unset_vector_notifiers(&proxy->pci_dev);
+         if (proxy->vector_irqfd) {
+             kvm_virtio_pci_vector_release(proxy, nvqs);
+@@ -800,7 +807,7 @@ static int virtio_pci_set_guest_notifiers(DeviceState *d, int nvqs, bool assign)
+     }
+ 
+     /* Must set vector notifier after guest notifier has been assigned */
+-    if ((with_irqfd || vdev->guest_notifier_mask) && assign) {
++    if ((with_irqfd || k->guest_notifier_mask) && assign) {
+         if (with_irqfd) {
+             proxy->vector_irqfd =
+                 g_malloc0(sizeof(*proxy->vector_irqfd) *
+diff --git a/hw/virtio/virtio-rng.c b/hw/virtio/virtio-rng.c
+index 1acbe18..da10935 100644
+--- a/hw/virtio/virtio-rng.c
++++ b/hw/virtio/virtio-rng.c
+@@ -169,8 +169,6 @@ static int virtio_rng_device_init(VirtIODevice *vdev)
+ 
+     vrng->vq = virtio_add_queue(vdev, 8, handle_input);
+ 
+-    vdev->get_features = get_features;
+-
+     assert(vrng->conf.max_bytes <= INT64_MAX);
+     vrng->quota_remaining = vrng->conf.max_bytes;
+ 
+diff --git a/hw/virtio/virtio.c b/hw/virtio/virtio.c
+index 1c2282c..de54b41 100644
+--- a/hw/virtio/virtio.c
++++ b/hw/virtio/virtio.c
+@@ -519,10 +519,11 @@ void virtio_update_irq(VirtIODevice *vdev)
+ 
+ void virtio_set_status(VirtIODevice *vdev, uint8_t val)
+ {
++    VirtioDeviceClass *k = VIRTIO_DEVICE_GET_CLASS(vdev);
+     trace_virtio_set_status(vdev, val);
+ 
+-    if (vdev->set_status) {
+-        vdev->set_status(vdev, val);
++    if (k->set_status) {
++        k->set_status(vdev, val);
+     }
+     vdev->status = val;
+ }
+@@ -530,12 +531,14 @@ void virtio_set_status(VirtIODevice *vdev, uint8_t val)
+ void virtio_reset(void *opaque)
+ {
+     VirtIODevice *vdev = opaque;
++    VirtioDeviceClass *k = VIRTIO_DEVICE_GET_CLASS(vdev);
+     int i;
+ 
+     virtio_set_status(vdev, 0);
+ 
+-    if (vdev->reset)
+-        vdev->reset(vdev);
++    if (k->reset) {
++        k->reset(vdev);
++    }
+ 
+     vdev->guest_features = 0;
+     vdev->queue_sel = 0;
+@@ -559,9 +562,10 @@ void virtio_reset(void *opaque)
+ 
+ uint32_t virtio_config_readb(VirtIODevice *vdev, uint32_t addr)
+ {
++    VirtioDeviceClass *k = VIRTIO_DEVICE_GET_CLASS(vdev);
+     uint8_t val;
+ 
+-    vdev->get_config(vdev, vdev->config);
++    k->get_config(vdev, vdev->config);
+ 
+     if (addr > (vdev->config_len - sizeof(val)))
+         return (uint32_t)-1;
+@@ -572,9 +576,10 @@ uint32_t virtio_config_readb(VirtIODevice *vdev, uint32_t addr)
+ 
+ uint32_t virtio_config_readw(VirtIODevice *vdev, uint32_t addr)
+ {
++    VirtioDeviceClass *k = VIRTIO_DEVICE_GET_CLASS(vdev);
+     uint16_t val;
+ 
+-    vdev->get_config(vdev, vdev->config);
++    k->get_config(vdev, vdev->config);
+ 
+     if (addr > (vdev->config_len - sizeof(val)))
+         return (uint32_t)-1;
+@@ -585,9 +590,10 @@ uint32_t virtio_config_readw(VirtIODevice *vdev, uint32_t addr)
+ 
+ uint32_t virtio_config_readl(VirtIODevice *vdev, uint32_t addr)
+ {
++    VirtioDeviceClass *k = VIRTIO_DEVICE_GET_CLASS(vdev);
+     uint32_t val;
+ 
+-    vdev->get_config(vdev, vdev->config);
++    k->get_config(vdev, vdev->config);
+ 
+     if (addr > (vdev->config_len - sizeof(val)))
+         return (uint32_t)-1;
+@@ -598,6 +604,7 @@ uint32_t virtio_config_readl(VirtIODevice *vdev, uint32_t addr)
+ 
+ void virtio_config_writeb(VirtIODevice *vdev, uint32_t addr, uint32_t data)
+ {
++    VirtioDeviceClass *k = VIRTIO_DEVICE_GET_CLASS(vdev);
+     uint8_t val = data;
+ 
+     if (addr > (vdev->config_len - sizeof(val)))
+@@ -605,12 +612,14 @@ void virtio_config_writeb(VirtIODevice *vdev, uint32_t addr, uint32_t data)
+ 
+     stb_p(vdev->config + addr, val);
+ 
+-    if (vdev->set_config)
+-        vdev->set_config(vdev, vdev->config);
++    if (k->set_config) {
++        k->set_config(vdev, vdev->config);
++    }
+ }
+ 
+ void virtio_config_writew(VirtIODevice *vdev, uint32_t addr, uint32_t data)
+ {
++    VirtioDeviceClass *k = VIRTIO_DEVICE_GET_CLASS(vdev);
+     uint16_t val = data;
+ 
+     if (addr > (vdev->config_len - sizeof(val)))
+@@ -618,12 +627,14 @@ void virtio_config_writew(VirtIODevice *vdev, uint32_t addr, uint32_t data)
+ 
+     stw_p(vdev->config + addr, val);
+ 
+-    if (vdev->set_config)
+-        vdev->set_config(vdev, vdev->config);
++    if (k->set_config) {
++        k->set_config(vdev, vdev->config);
++    }
+ }
+ 
+ void virtio_config_writel(VirtIODevice *vdev, uint32_t addr, uint32_t data)
+ {
++    VirtioDeviceClass *k = VIRTIO_DEVICE_GET_CLASS(vdev);
+     uint32_t val = data;
+ 
+     if (addr > (vdev->config_len - sizeof(val)))
+@@ -631,8 +642,9 @@ void virtio_config_writel(VirtIODevice *vdev, uint32_t addr, uint32_t data)
+ 
+     stl_p(vdev->config + addr, val);
+ 
+-    if (vdev->set_config)
+-        vdev->set_config(vdev, vdev->config);
++    if (k->set_config) {
++        k->set_config(vdev, vdev->config);
++    }
+ }
+ 
+ void virtio_queue_set_addr(VirtIODevice *vdev, int n, hwaddr addr)
+@@ -810,13 +822,14 @@ void virtio_save(VirtIODevice *vdev, QEMUFile *f)
+ 
+ int virtio_set_features(VirtIODevice *vdev, uint32_t val)
+ {
++    VirtioDeviceClass *k = VIRTIO_DEVICE_GET_CLASS(vdev);
+     uint32_t supported_features =
+         vdev->binding->get_features(vdev->binding_opaque);
+     bool bad = (val & ~supported_features) != 0;
+ 
+     val &= supported_features;
+-    if (vdev->set_features) {
+-        vdev->set_features(vdev, val);
++    if (k->set_features) {
++        k->set_features(vdev, val);
+     }
+     vdev->guest_features = val;
+     return bad ? -1 : 0;
+diff --git a/include/hw/virtio/virtio.h b/include/hw/virtio/virtio.h
+index c94ee34..9257532 100644
+--- a/include/hw/virtio/virtio.h
++++ b/include/hw/virtio/virtio.h
+@@ -128,30 +128,6 @@ struct VirtIODevice
+     void *config;
+     uint16_t config_vector;
+     int nvectors;
+-    /*
+-     * Function pointers will be removed at the end of the series as they are in
+-     * VirtioDeviceClass.
+-     */
+-    uint32_t (*get_features)(VirtIODevice *vdev, uint32_t requested_features);
+-    uint32_t (*bad_features)(VirtIODevice *vdev);
+-    void (*set_features)(VirtIODevice *vdev, uint32_t val);
+-    void (*get_config)(VirtIODevice *vdev, uint8_t *config);
+-    void (*set_config)(VirtIODevice *vdev, const uint8_t *config);
+-    void (*reset)(VirtIODevice *vdev);
+-    void (*set_status)(VirtIODevice *vdev, uint8_t val);
+-    /* Test and clear event pending status.
+-     * Should be called after unmask to avoid losing events.
+-     * If backend does not support masking,
+-     * must check in frontend instead.
+-     */
+-    bool (*guest_notifier_pending)(VirtIODevice *vdev, int n);
+-    /* Mask/unmask events from this vq. Any events reported
+-     * while masked will become pending.
+-     * If backend does not support masking,
+-     * must mask in frontend instead.
+-     */
+-    void (*guest_notifier_mask)(VirtIODevice *vdev, int n, bool mask);
+-
+     VirtQueue *vq;
+     const VirtIOBindings *binding;
+     DeviceState *binding_opaque;
+-- 
+1.7.11.7
+

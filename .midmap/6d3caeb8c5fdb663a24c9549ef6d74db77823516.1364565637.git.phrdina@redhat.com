@@ -1,0 +1,1 @@
+../convert-savevm-to-use-qapi-and-introduce-qmp-command/v4.1364587947/0008-qemu-img-introduce-qemu_img_handle_error.patch

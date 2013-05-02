@@ -1,0 +1,57 @@
+From patches Mon Sep 17 00:00:00 2001
+From: =?utf-8?q?Andreas_F=C3=A4rber_=3Cafaerber=40suse=2Ede=3E?=
+To: qemu-devel@nongnu.org
+Cc: Igor Mammedov <imammedo@redhat.com>,
+ =?UTF-8?q?Andreas=20F=C3=A4rber?= <afaerber@suse.de>
+Date: Tue, 16 Apr 2013 02:46:48 +0200
+Message-id: 1366073209-27119-12-git-send-email-afaerber@suse.de
+Subject: [PATCH 11/12] qdev: Set device's parent before calling realize() down
+ inheritance chain
+
+From: Igor Mammedov <imammedo@redhat.com>
+
+Currently device_set_realized() sets parent only after device was realized,
+but qdev_device_add() sets it before device is realized.
+Make behavior consistent and alter device_set_realized() to behave like
+qdev_device_add().
+
+It will allow to set link<> properties in realize() method in classes
+inherited from DEVICE.
+
+Signed-off-by: Igor Mammedov <imammedo@redhat.com>
+Reviewed-by: Paolo Bonzini <pbonzini@redhat.com>
+Signed-off-by: Andreas Färber <afaerber@suse.de>
+---
+ hw/core/qdev.c | 8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/hw/core/qdev.c b/hw/core/qdev.c
+index bab4ed7..4eb0134 100644
+--- a/hw/core/qdev.c
++++ b/hw/core/qdev.c
+@@ -684,10 +684,6 @@ static void device_set_realized(Object *obj, bool value, Error **err)
+     Error *local_err = NULL;
+ 
+     if (value && !dev->realized) {
+-        if (dc->realize) {
+-            dc->realize(dev, &local_err);
+-        }
+-
+         if (!obj->parent && local_err == NULL) {
+             static int unattached_count;
+             gchar *name = g_strdup_printf("device[%d]", unattached_count++);
+@@ -698,6 +694,10 @@ static void device_set_realized(Object *obj, bool value, Error **err)
+             g_free(name);
+         }
+ 
++        if (dc->realize) {
++            dc->realize(dev, &local_err);
++        }
++
+         if (qdev_get_vmsd(dev) && local_err == NULL) {
+             vmstate_register_with_alias_id(dev, -1, qdev_get_vmsd(dev), dev,
+                                            dev->instance_id_alias,
+-- 
+1.8.1.4
+
+

@@ -1,0 +1,35 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Jesse Larrew <jlarrew@linux.vnet.ibm.com>
+To: Jesse Larrew <jlarrew@linux.vnet.ibm.com>, qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, qemu-trivial@nongnu.org,
+ Jesse Larrew <jlarrew@linux.vnet.ibm.com>
+Date: Mon, 29 Apr 2013 10:52:52 -0500
+Message-id: 1367250772-17928-1-git-send-email-jlarrew@linux.vnet.ibm.com
+Subject: [PATCH 1/1] libqtest: only call fclose() on open files
+
+libqtest.c can segfault when calling fclose() if the pidfile wasn't
+opened successfully. This patch fixes the issue.
+
+Signed-off-by: Jesse Larrew <jlarrew@linux.vnet.ibm.com>
+Reviewed-by: Anthony Liguori <aliguori@us.ibm.com>
+---
+ tests/libqtest.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/tests/libqtest.c b/tests/libqtest.c
+index 884f959..879ffe9 100644
+--- a/tests/libqtest.c
++++ b/tests/libqtest.c
+@@ -99,8 +99,8 @@ static pid_t qtest_qemu_pid(QTestState *s)
+         if (fgets(buffer, sizeof(buffer), f)) {
+             pid = atoi(buffer);
+         }
++        fclose(f);
+     }
+-    fclose(f);
+     return pid;
+ }
+ 
+-- 
+1.7.11.7
+

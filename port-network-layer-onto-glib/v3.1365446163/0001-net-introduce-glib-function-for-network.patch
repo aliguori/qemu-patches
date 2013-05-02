@@ -1,0 +1,153 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Liu Ping Fan <pingfank@linux.vnet.ibm.com>
+To: qemu-devel@nongnu.org, Liu Ping Fan <pingfank@linux.vnet.ibm.com>
+Cc: Anthony Liguori <anthony@codemonkey.ws>,
+ Paolo Bonzini <pbonzini@redhat.com>, mdroth <mdroth@linux.vnet.ibm.com>,
+ Stefan Hajnoczi <stefanha@redhat.com>, qemu-devel@nongnu.org
+Date: Mon,  8 Apr 2013 13:36:04 +0800
+Message-id: 1365399368-26967-2-git-send-email-pingfank@linux.vnet.ibm.com
+Subject: [PATCH 1/5] net: introduce glib function for network
+
+Bind each NetClientState with a GSource(ie,NetClientSource). Currently,
+these GSource attached with default context, but in future, after
+resolving the race between handlers and the interface exposed by
+NetClientInfo and other re-entrant issue, we can run NetClientState
+on different threads
+
+Signed-off-by: Liu Ping Fan <pingfank@linux.vnet.ibm.com>
+---
+ include/net/net.h |   15 +++++++++++++
+ net/net.c         |   61 +++++++++++++++++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 76 insertions(+), 0 deletions(-)
+
+diff --git a/include/net/net.h b/include/net/net.h
+index cb049a1..cb2451d 100644
+--- a/include/net/net.h
++++ b/include/net/net.h
+@@ -44,6 +44,7 @@ typedef ssize_t (NetReceiveIOV)(NetClientState *, const struct iovec *, int);
+ typedef void (NetCleanup) (NetClientState *);
+ typedef void (LinkStatusChanged)(NetClientState *);
+ typedef void (NetClientDestructor)(NetClientState *);
++typedef void (NetClientBindCtx)(NetClientState *, GMainContext *);
+ 
+ typedef struct NetClientInfo {
+     NetClientOptionsKind type;
+@@ -55,8 +56,20 @@ typedef struct NetClientInfo {
+     NetCleanup *cleanup;
+     LinkStatusChanged *link_status_changed;
+     NetPoll *poll;
++    NetClientBindCtx *bind_ctx;
+ } NetClientInfo;
+ 
++typedef bool (*Pollable)(void *opaque);
++
++typedef struct NetClientSource {
++    GSource source;
++    /* fix me, to expand as array in future */
++    GPollFD gfd;
++    Pollable readable;
++    Pollable writable;
++    void *opaque;
++} NetClientSource;
++
+ struct NetClientState {
+     NetClientInfo *info;
+     int link_down;
+@@ -69,6 +82,7 @@ struct NetClientState {
+     unsigned receive_disabled : 1;
+     NetClientDestructor *destructor;
+     unsigned int queue_index;
++    NetClientSource *nsrc;
+ };
+ 
+ typedef struct NICState {
+@@ -155,6 +169,7 @@ extern int default_net;
+ extern const char *legacy_tftp_prefix;
+ extern const char *legacy_bootp_filename;
+ 
++NetClientSource *net_source_new(int fd, GSourceFunc f, void *opaque);
+ int net_client_init(QemuOpts *opts, int is_netdev, Error **errp);
+ int net_client_parse(QemuOptsList *opts_list, const char *str);
+ int net_init_clients(void);
+diff --git a/net/net.c b/net/net.c
+index f3d67f8..6aecf93 100644
+--- a/net/net.c
++++ b/net/net.c
+@@ -299,6 +299,9 @@ static void qemu_free_net_client(NetClientState *nc)
+     }
+     g_free(nc->name);
+     g_free(nc->model);
++    if (nc->nsrc) {
++        g_source_remove(g_source_get_id(&nc->nsrc->source));
++    }
+     if (nc->destructor) {
+         nc->destructor(nc);
+     }
+@@ -558,6 +561,64 @@ qemu_sendv_packet(NetClientState *nc, const struct iovec *iov, int iovcnt)
+     return qemu_sendv_packet_async(nc, iov, iovcnt, NULL);
+ }
+ 
++static gboolean prepare(GSource *src, gint *time)
++{
++    NetClientSource *nsrc = (NetClientSource *)src;
++    int events = 0;
++
++    if (!nsrc->readable && !nsrc->writable) {
++        return false;
++    }
++    if (nsrc->readable && nsrc->readable(nsrc->opaque)) {
++        events |= G_IO_IN;
++    }
++    if ((nsrc->writable) && nsrc->writable(nsrc->opaque)) {
++        events |= G_IO_OUT;
++    }
++    nsrc->gfd.events = events;
++
++    return false;
++}
++
++static gboolean check(GSource *src)
++{
++    NetClientSource *nsrc = (NetClientSource *)src;
++
++    if (nsrc->gfd.revents & nsrc->gfd.events) {
++        return true;
++    }
++    return false;
++}
++
++static gboolean dispatch(GSource *src, GSourceFunc cb, gpointer data)
++{
++    gboolean ret = false;
++
++    if (cb) {
++        ret = cb(data);
++    }
++    return ret;
++}
++
++static GSourceFuncs net_gsource_funcs = {
++    prepare,
++    check,
++    dispatch,
++    NULL
++};
++
++NetClientSource *net_source_new(int fd, GSourceFunc f, void *opaque)
++{
++    NetClientSource *nsrc = (NetClientSource *)g_source_new(&net_gsource_funcs,
++                                                    sizeof(NetClientSource));
++    nsrc->gfd.fd = fd;
++    nsrc->opaque = opaque;
++    g_source_set_callback(&nsrc->source, f, nsrc, NULL);
++    g_source_add_poll(&nsrc->source, &nsrc->gfd);
++
++    return nsrc;
++}
++
+ NetClientState *qemu_find_netdev(const char *id)
+ {
+     NetClientState *nc;
+-- 
+1.7.4.4
+

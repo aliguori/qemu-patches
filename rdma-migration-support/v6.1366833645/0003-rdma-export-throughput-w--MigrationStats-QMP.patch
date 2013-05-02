@@ -1,0 +1,114 @@
+From patches Mon Sep 17 00:00:00 2001
+From: mrhines@linux.vnet.ibm.com
+To: quintela@redhat.com
+Cc: Anthony Liguori <aliguori@us.ibm.com>, qemu-devel@nongnu.org,
+ Michael R Hines <mrhines@us.ibm.com>, Bulent Abali <abali@us.ibm.com>,
+ owasserm@redhat.com, pbonzini@redhat.com, Gokul B Kandiraju <gokul@us.ibm.com>,
+ eblake@redhat.com
+Date: Wed, 24 Apr 2013 15:00:48 -0400
+Message-id: 1366830057-16964-4-git-send-email-mrhines@linux.vnet.ibm.com
+Subject: [PATCH 03/11] rdma: export throughput w/ MigrationStats QMP
+
+From: "Michael R. Hines" <mrhines@us.ibm.com>
+
+This exposes throughput (in megabits/sec) through QMP.
+
+Signed-off-by: Michael R. Hines <mrhines@us.ibm.com>
+---
+ hmp.c                         |    2 ++
+ include/migration/migration.h |    1 +
+ migration.c                   |   10 ++++++++++
+ qapi-schema.json              |    5 ++++-
+ 4 files changed, 17 insertions(+), 1 deletion(-)
+
+diff --git a/hmp.c b/hmp.c
+index 4fb76ec..ab2c030 100644
+--- a/hmp.c
++++ b/hmp.c
+@@ -167,6 +167,8 @@ void hmp_info_migrate(Monitor *mon, const QDict *qdict)
+     if (info->has_ram) {
+         monitor_printf(mon, "transferred ram: %" PRIu64 " kbytes\n",
+                        info->ram->transferred >> 10);
++        monitor_printf(mon, "throughput: %0.2f mbps\n",
++                       info->ram->mbps);
+         monitor_printf(mon, "remaining ram: %" PRIu64 " kbytes\n",
+                        info->ram->remaining >> 10);
+         monitor_printf(mon, "total ram: %" PRIu64 " kbytes\n",
+diff --git a/include/migration/migration.h b/include/migration/migration.h
+index e2acec6..6aa15e0 100644
+--- a/include/migration/migration.h
++++ b/include/migration/migration.h
+@@ -47,6 +47,7 @@ struct MigrationState
+     int64_t dirty_bytes_rate;
+     bool enabled_capabilities[MIGRATION_CAPABILITY_MAX];
+     int64_t xbzrle_cache_size;
++    double mbps;
+ };
+ 
+ void process_incoming_migration(QEMUFile *f);
+diff --git a/migration.c b/migration.c
+index 3eb0fad..4614c95 100644
+--- a/migration.c
++++ b/migration.c
+@@ -66,6 +66,7 @@ MigrationState *migrate_get_current(void)
+         .state = MIG_STATE_SETUP,
+         .bandwidth_limit = MAX_THROTTLE,
+         .xbzrle_cache_size = DEFAULT_MIGRATE_CACHE_SIZE,
++        .mbps = -1,
+     };
+ 
+     return &current_migration;
+@@ -201,6 +202,7 @@ MigrationInfo *qmp_query_migrate(Error **errp)
+         info->ram->normal = norm_mig_pages_transferred();
+         info->ram->normal_bytes = norm_mig_bytes_transferred();
+         info->ram->dirty_pages_rate = s->dirty_pages_rate;
++        info->ram->mbps = s->mbps;
+ 
+         if (blk_mig_active()) {
+             info->has_disk = true;
+@@ -230,6 +232,7 @@ MigrationInfo *qmp_query_migrate(Error **errp)
+         info->ram->skipped = skipped_mig_pages_transferred();
+         info->ram->normal = norm_mig_pages_transferred();
+         info->ram->normal_bytes = norm_mig_bytes_transferred();
++        info->ram->mbps = s->mbps;
+         break;
+     case MIG_STATE_ERROR:
+         info->has_status = true;
+@@ -545,6 +548,13 @@ static void *migration_thread(void *opaque)
+             double bandwidth = transferred_bytes / time_spent;
+             max_size = bandwidth * migrate_max_downtime() / 1000000;
+ 
++            if (time_spent) {
++                s->mbps = (((double) transferred_bytes * 8.0) /
++                    ((double) time_spent / 1000.0)) / 1000.0 / 1000.0;
++            } else {
++                s->mbps = -1.0;
++            }
++
+             DPRINTF("transferred %" PRIu64 " time_spent %" PRIu64
+                     " bandwidth %g max_size %" PRId64 "\n",
+                     transferred_bytes, time_spent, bandwidth, max_size);
+diff --git a/qapi-schema.json b/qapi-schema.json
+index 751d3c2..cc846c3 100644
+--- a/qapi-schema.json
++++ b/qapi-schema.json
+@@ -507,12 +507,15 @@
+ # @dirty-pages-rate: number of pages dirtied by second by the
+ #        guest (since 1.3)
+ #
++# @mbps: throughput in megabits/sec. (since 1.5)
++#
+ # Since: 0.14.0
+ ##
+ { 'type': 'MigrationStats',
+   'data': {'transferred': 'int', 'remaining': 'int', 'total': 'int' ,
+            'duplicate': 'int', 'skipped': 'int', 'normal': 'int',
+-           'normal-bytes': 'int', 'dirty-pages-rate' : 'int' } }
++           'normal-bytes': 'int', 'dirty-pages-rate' : 'int',
++           'mbps' : 'number' } }
+ 
+ ##
+ # @XBZRLECacheStats
+-- 
+1.7.10.4
+

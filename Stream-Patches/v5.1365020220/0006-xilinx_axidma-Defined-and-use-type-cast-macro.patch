@@ -1,0 +1,73 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+To: edgar.iglesias@gmail.com, qemu-devel@nongnu.org
+Cc: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+Date: Wed,  3 Apr 2013 15:17:06 +1000
+Message-id: 000115464c7ef148362891015f0d4152c6e20114.1364965814.git.peter.crosthwaite@xilinx.com
+Subject: [PATCH 06/16] xilinx_axidma: Defined and use type cast macro
+
+Standard QOM cast macro. Replaces usages of FROM_SYSBUS
+
+Signed-off-by: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+Acked-by: Edgar E. Iglesias <edgar.iglesias@xilinx.com>
+---
+
+ hw/xilinx_axidma.c |   13 +++++++++----
+ 1 files changed, 9 insertions(+), 4 deletions(-)
+
+diff --git a/hw/xilinx_axidma.c b/hw/xilinx_axidma.c
+index d57538e..7cb40bd 100644
+--- a/hw/xilinx_axidma.c
++++ b/hw/xilinx_axidma.c
+@@ -33,6 +33,11 @@
+ 
+ #define D(x)
+ 
++#define TYPE_XILINX_AXI_DMA "xlnx.axi-dma"
++
++#define XILINX_AXI_DMA(obj) \
++     OBJECT_CHECK(XilinxAXIDMA, (obj), TYPE_XILINX_AXI_DMA)
++
+ #define R_DMACR             (0x00 / 4)
+ #define R_DMASR             (0x04 / 4)
+ #define R_CURDESC           (0x08 / 4)
+@@ -356,7 +361,7 @@ static void stream_process_s2mem(struct Stream *s,
+ static void
+ axidma_push(StreamSlave *obj, unsigned char *buf, size_t len, uint32_t *app)
+ {
+-    XilinxAXIDMA *d = FROM_SYSBUS(typeof(*d), SYS_BUS_DEVICE(obj));
++    XilinxAXIDMA *d = XILINX_AXI_DMA(obj);
+     struct Stream *s = &d->streams[1];
+ 
+     if (!app) {
+@@ -462,7 +467,7 @@ static const MemoryRegionOps axidma_ops = {
+ 
+ static int xilinx_axidma_init(SysBusDevice *dev)
+ {
+-    XilinxAXIDMA *s = FROM_SYSBUS(typeof(*s), dev);
++    XilinxAXIDMA *s = XILINX_AXI_DMA(dev);
+     int i;
+ 
+     sysbus_init_irq(dev, &s->streams[0].irq);
+@@ -484,7 +489,7 @@ static int xilinx_axidma_init(SysBusDevice *dev)
+ 
+ static void xilinx_axidma_initfn(Object *obj)
+ {
+-    XilinxAXIDMA *s = FROM_SYSBUS(typeof(*s), SYS_BUS_DEVICE(obj));
++    XilinxAXIDMA *s = XILINX_AXI_DMA(obj);
+ 
+     object_property_add_link(obj, "axistream-connected", TYPE_STREAM_SLAVE,
+                              (Object **) &s->tx_dev, NULL);
+@@ -507,7 +512,7 @@ static void axidma_class_init(ObjectClass *klass, void *data)
+ }
+ 
+ static const TypeInfo axidma_info = {
+-    .name          = "xlnx.axi-dma",
++    .name          = TYPE_XILINX_AXI_DMA,
+     .parent        = TYPE_SYS_BUS_DEVICE,
+     .instance_size = sizeof(XilinxAXIDMA),
+     .class_init    = axidma_class_init,
+-- 
+1.7.0.4
+
+

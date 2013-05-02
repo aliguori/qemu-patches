@@ -1,0 +1,1 @@
+../target-mips-fix-mipsdsp_mul_q15_q15-and-tests-for-MAQ_SA_Q_PHL-PHR/v1.1366052047/0001-target-mips-fix-mipsdsp_mul_q15_q15-and-tests-for-MAQ_SA_Q_PHL-PHR.patch

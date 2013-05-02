@@ -1,0 +1,66 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Dominik Dingel <dingel@linux.vnet.ibm.com>
+To: Anthony Liguori <anthony@codemonkey.ws>,
+ Dominik Dingel <dingel@linux.vnet.ibm.com>, qemu-devel@nongnu.org,
+ Gleb Natapov <gleb@redhat.com>
+Cc: Anthony Liguori <aliguori@us.ibm.com>,
+ "qemu-devel@nongnu.org qemu-devel" <qemu-devel@nongnu.org>,
+ Alexander Graf <agraf@suse.de>, Anthony Liguori <anthony@codemonkey.ws>,
+ Christian Borntraeger <borntraeger@de.ibm.com>, qemu-devel@nongnu.org,
+ Gleb Natapov <gleb@redhat.com>, Dominik Dingel <dingel@linux.vnet.ibm.com>
+Date: Fri, 26 Apr 2013 14:12:48 +0200
+Message-id: 1366978377-16823-2-git-send-email-dingel@linux.vnet.ibm.com
+Subject: [PATCH 01/10] Common: Add a default bootindex for all applicable
+ devices
+
+Currently only devices with a positive boot index will be pushed in the
+fw_boot_order queue, so if no boot index at all will be specified,
+the queue ends up empty.
+
+Instead we push exactly as docs/bootindex.txt says the devices with
+the lowest possible boot priority at the tail of the queue,
+because we give them the highest available boot index.
+
+Signed-off-by: Dominik Dingel <dingel@linux.vnet.ibm.com>
+
+diff --git a/vl.c b/vl.c
+index 6caa5f4..84d7031 100644
+--- a/vl.c
++++ b/vl.c
+@@ -248,7 +248,7 @@ struct FWBootEntry {
+     char *suffix;
+ };
+ 
+-static QTAILQ_HEAD(, FWBootEntry) fw_boot_order =
++static QTAILQ_HEAD(FWBootOrder, FWBootEntry) fw_boot_order =
+     QTAILQ_HEAD_INITIALIZER(fw_boot_order);
+ 
+ int nb_numa_nodes;
+@@ -1213,10 +1213,21 @@ void add_boot_device_path(int32_t bootindex, DeviceState *dev,
+     FWBootEntry *node, *i;
+ 
+     if (bootindex < 0) {
+-        return;
++        bootindex = INT32_MAX;
++        if (!QTAILQ_EMPTY(&fw_boot_order) &&
++           (QTAILQ_LAST(&fw_boot_order, FWBootOrder)->bootindex == INT32_MAX)) {
++            /* there is a device at the end of the queue, so we need to walk
++               the queue reverse to get the next free bootindex */
++            QTAILQ_FOREACH_REVERSE(i, &fw_boot_order, FWBootOrder, link) {
++                if (i->bootindex != bootindex) {
++                    break;
++                }
++                bootindex--;
++            }
++        }
+     }
+ 
+-    assert(dev != NULL || suffix != NULL);
++    assert(dev != NULL || suffix != NULL || bootindex >=  0);
+ 
+     node = g_malloc0(sizeof(FWBootEntry));
+     node->bootindex = bootindex;
+-- 
+1.7.9.5
+
+

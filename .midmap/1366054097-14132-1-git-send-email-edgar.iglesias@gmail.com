@@ -1,0 +1,1 @@
+../Allow-qtest-to-be-used-together-with-a-virtual-CPU/v1.1366079297/0001-Allow-qtest-to-be-used-together-with-a-virtual-CPU.patch

@@ -1,0 +1,1 @@
+../publish-etc-acpi-APIC-in-fw_cfg/v1.1365451998/0002-hw-acpi-extract-standard-table-headers-as-a-standalone-structure.patch

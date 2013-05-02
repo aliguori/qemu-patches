@@ -1,0 +1,1 @@
+../Xilinx-SPIPS-fixes-round-2/v2.1366390969/0007-xilinx_spips-Add-automatic-start-support.patch

@@ -1,0 +1,1 @@
+../target-i386-CPU-hot-add-with-cpu-add-QMP-command/v3.1365717099/0004-cpu-call-cpu_synchronize_post_init-from-CPUClassrealize-if-hotplugged.patch

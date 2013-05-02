@@ -1,0 +1,1 @@
+../block-fix-spurious-DEVICE_TRAY_MOVED-events-on-shutdown/v1.1366397237/0002-block-move-bdrv_dev_change_media_cb-to-callers-that-really-need-it.patch

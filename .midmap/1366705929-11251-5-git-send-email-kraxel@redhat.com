@@ -1,0 +1,1 @@
+../usb-patch-queue/v1.1366731125/0004-usb-host-raise-libusbx-minimum-version-to-1013.patch

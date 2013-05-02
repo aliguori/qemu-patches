@@ -1,0 +1,43 @@
+From patches Mon Sep 17 00:00:00 2001
+From: =?utf-8?b?T3phbiDDh2HEn2xheWFuIDxvemFuY2FnQGdtYWlsLmNvbT4=?=
+To: qemu-devel@nongnu.org, None <ozancag@gmail.com>
+Cc: Anthony Liguori <aliguori@us.ibm.com>, aliguori@us.ibm.com,
+ =?utf-8?b?Ik96YW4gw4dhxJ9sYXlhbiI=?= <ozancag@gmail.com>,
+ None <ozancag@gmail.com>
+Date: Tue, 23 Apr 2013 13:03:22 +0300
+Message-id: 1366711402-1750-1-git-send-email-ozancag@gmail.com
+Subject: [PATCH 1/1] ui/gtk: Use gtk_widget_get_window() to support both gtk2
+ and gtk3
+
+This fixes build with gtk+-3.0.
+
+Signed-off-by: Ozan Çağlayan <ozancag@gmail.com>
+---
+ ui/gtk.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/ui/gtk.c b/ui/gtk.c
+index b46997a..4110342 100644
+--- a/ui/gtk.c
++++ b/ui/gtk.c
+@@ -337,7 +337,7 @@ static void gd_mouse_set(DisplayChangeListener *dcl,
+     GtkDisplayState *s = container_of(dcl, GtkDisplayState, dcl);
+     gint x_root, y_root;
+ 
+-    gdk_window_get_root_coords(s->drawing_area->window,
++    gdk_window_get_root_coords(gtk_widget_get_window(s->drawing_area),
+                                x, y, &x_root, &y_root);
+     gdk_display_warp_pointer(gtk_widget_get_display(s->drawing_area),
+                              gtk_widget_get_screen(s->drawing_area),
+@@ -357,7 +357,7 @@ static void gd_cursor_define(DisplayChangeListener *dcl,
+                                       NULL, NULL);
+     cursor = gdk_cursor_new_from_pixbuf(gtk_widget_get_display(s->drawing_area),
+                                         pixbuf, c->hot_x, c->hot_y);
+-    gdk_window_set_cursor(s->drawing_area->window, cursor);
++    gdk_window_set_cursor(gtk_widget_get_window(s->drawing_area), cursor);
+     g_object_unref(pixbuf);
+     g_object_unref(cursor);
+ }
+-- 
+1.8.2
+

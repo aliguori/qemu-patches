@@ -1,0 +1,1 @@
+../virtio-serial-refactoring/v6.1365537209/0007-virtio-serial-cleanup-remove-qdev-field.patch

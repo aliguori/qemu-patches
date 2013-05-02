@@ -1,0 +1,68 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Richard Henderson <rth@twiddle.net>
+To: qemu-devel@nongnu.org
+Cc: av1474@comtv.ru, aurelien@aurel32.net
+Date: Mon, 15 Apr 2013 20:40:55 +0200
+Message-id: 1366051272-12979-17-git-send-email-rth@twiddle.net
+Subject: [PATCH 16/33] tcg-ppc64: Use automatic implementation of ext32u_i64
+
+The enhancements to and immediate obviate this.
+
+Reviewed-by: Aurelien Jarno <aurelien@aurel32.net>
+Signed-off-by: Richard Henderson <rth@twiddle.net>
+---
+ tcg/ppc64/tcg-target.c | 5 -----
+ tcg/ppc64/tcg-target.h | 6 +++---
+ 2 files changed, 3 insertions(+), 8 deletions(-)
+
+diff --git a/tcg/ppc64/tcg-target.c b/tcg/ppc64/tcg-target.c
+index 1bd456a..71d72b4 100644
+--- a/tcg/ppc64/tcg-target.c
++++ b/tcg/ppc64/tcg-target.c
+@@ -1686,10 +1686,6 @@ static void tcg_out_op (TCGContext *s, TCGOpcode opc, const TCGArg *args,
+         tcg_out32 (s, c | RS (args[1]) | RA (args[0]));
+         break;
+ 
+-    case INDEX_op_ext32u_i64:
+-        tcg_out_ext32u(s, args[0], args[1]);
+-        break;
+-
+     case INDEX_op_setcond_i32:
+         tcg_out_setcond (s, TCG_TYPE_I32, args[3], args[0], args[1], args[2],
+                          const_args[2]);
+@@ -1796,7 +1792,6 @@ static const TCGTargetOpDef ppc_op_defs[] = {
+     { INDEX_op_ext8s_i64, { "r", "r" } },
+     { INDEX_op_ext16s_i64, { "r", "r" } },
+     { INDEX_op_ext32s_i64, { "r", "r" } },
+-    { INDEX_op_ext32u_i64, { "r", "r" } },
+ 
+     { INDEX_op_setcond_i32, { "r", "r", "ri" } },
+     { INDEX_op_setcond_i64, { "r", "r", "ri" } },
+diff --git a/tcg/ppc64/tcg-target.h b/tcg/ppc64/tcg-target.h
+index f1c3067..a4078ae 100644
+--- a/tcg/ppc64/tcg-target.h
++++ b/tcg/ppc64/tcg-target.h
+@@ -70,6 +70,9 @@ typedef enum {
+ /* optional instructions automatically implemented */
+ #define TCG_TARGET_HAS_ext8u_i32        0 /* andi */
+ #define TCG_TARGET_HAS_ext16u_i32       0
++#define TCG_TARGET_HAS_ext8u_i64        0
++#define TCG_TARGET_HAS_ext16u_i64       0
++#define TCG_TARGET_HAS_ext32u_i64       0
+ 
+ /* optional instructions */
+ #define TCG_TARGET_HAS_div_i32          1
+@@ -97,9 +100,6 @@ typedef enum {
+ #define TCG_TARGET_HAS_ext8s_i64        1
+ #define TCG_TARGET_HAS_ext16s_i64       1
+ #define TCG_TARGET_HAS_ext32s_i64       1
+-#define TCG_TARGET_HAS_ext8u_i64        0
+-#define TCG_TARGET_HAS_ext16u_i64       0
+-#define TCG_TARGET_HAS_ext32u_i64       1
+ #define TCG_TARGET_HAS_bswap16_i64      0
+ #define TCG_TARGET_HAS_bswap32_i64      0
+ #define TCG_TARGET_HAS_bswap64_i64      0
+-- 
+1.8.1.4
+
+

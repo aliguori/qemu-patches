@@ -1,0 +1,150 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Aurelien Jarno <aurelien@aurel32.net>
+To: Aurelien Jarno <aurelien@aurel32.net>, qemu-devel@nongnu.org
+Cc: Aurelien Jarno <aurelien@aurel32.net>,
+ Stefan Hajnoczi <stefanha@redhat.com>, Kevin Wolf <kwolf@redhat.com>,
+ qemu-devel@nongnu.org
+Date: Sun, 31 Mar 2013 13:02:24 +0200
+Message-id: 1364727746-2686-6-git-send-email-aurelien@aurel32.net
+Subject: [PATCH 5/7] aes: move aes.h from include/block to include/qemu
+
+Move aes.h from include/block to include/qemu to show it can be reused
+by other subsystems.
+
+Cc: Kevin Wolf <kwolf@redhat.com>
+Cc: Stefan Hajnoczi <stefanha@redhat.com>
+Reviewed-by: Edgar E. Iglesias <edgar.iglesias@gmail.com>
+Reviewed-by: Richard Henderson <rth@twiddle.net>
+Reviewed-by: Stefan Hajnoczi <stefanha@redhat.com>
+Signed-off-by: Aurelien Jarno <aurelien@aurel32.net>
+---
+ block/qcow.c        |    2 +-
+ block/qcow2.c       |    2 +-
+ block/qcow2.h       |    2 +-
+ include/block/aes.h |   26 --------------------------
+ include/qemu/aes.h  |   26 ++++++++++++++++++++++++++
+ util/aes.c          |    2 +-
+ 6 files changed, 30 insertions(+), 30 deletions(-)
+ delete mode 100644 include/block/aes.h
+ create mode 100644 include/qemu/aes.h
+
+diff --git a/block/qcow.c b/block/qcow.c
+index 13d396b..3278e55 100644
+--- a/block/qcow.c
++++ b/block/qcow.c
+@@ -25,7 +25,7 @@
+ #include "block/block_int.h"
+ #include "qemu/module.h"
+ #include <zlib.h>
+-#include "block/aes.h"
++#include "qemu/aes.h"
+ #include "migration/migration.h"
+ 
+ /**************************************************************/
+diff --git a/block/qcow2.c b/block/qcow2.c
+index 7e7d775..1d18073 100644
+--- a/block/qcow2.c
++++ b/block/qcow2.c
+@@ -25,7 +25,7 @@
+ #include "block/block_int.h"
+ #include "qemu/module.h"
+ #include <zlib.h>
+-#include "block/aes.h"
++#include "qemu/aes.h"
+ #include "block/qcow2.h"
+ #include "qemu/error-report.h"
+ #include "qapi/qmp/qerror.h"
+diff --git a/block/qcow2.h b/block/qcow2.h
+index bf8db2a..9421843 100644
+--- a/block/qcow2.h
++++ b/block/qcow2.h
+@@ -25,7 +25,7 @@
+ #ifndef BLOCK_QCOW2_H
+ #define BLOCK_QCOW2_H
+ 
+-#include "block/aes.h"
++#include "qemu/aes.h"
+ #include "block/coroutine.h"
+ 
+ //#define DEBUG_ALLOC
+diff --git a/include/block/aes.h b/include/block/aes.h
+deleted file mode 100644
+index a0167eb..0000000
+--- a/include/block/aes.h
++++ /dev/null
+@@ -1,26 +0,0 @@
+-#ifndef QEMU_AES_H
+-#define QEMU_AES_H
+-
+-#define AES_MAXNR 14
+-#define AES_BLOCK_SIZE 16
+-
+-struct aes_key_st {
+-    uint32_t rd_key[4 *(AES_MAXNR + 1)];
+-    int rounds;
+-};
+-typedef struct aes_key_st AES_KEY;
+-
+-int AES_set_encrypt_key(const unsigned char *userKey, const int bits,
+-	AES_KEY *key);
+-int AES_set_decrypt_key(const unsigned char *userKey, const int bits,
+-	AES_KEY *key);
+-
+-void AES_encrypt(const unsigned char *in, unsigned char *out,
+-	const AES_KEY *key);
+-void AES_decrypt(const unsigned char *in, unsigned char *out,
+-	const AES_KEY *key);
+-void AES_cbc_encrypt(const unsigned char *in, unsigned char *out,
+-		     const unsigned long length, const AES_KEY *key,
+-		     unsigned char *ivec, const int enc);
+-
+-#endif
+diff --git a/include/qemu/aes.h b/include/qemu/aes.h
+new file mode 100644
+index 0000000..a0167eb
+--- /dev/null
++++ b/include/qemu/aes.h
+@@ -0,0 +1,26 @@
++#ifndef QEMU_AES_H
++#define QEMU_AES_H
++
++#define AES_MAXNR 14
++#define AES_BLOCK_SIZE 16
++
++struct aes_key_st {
++    uint32_t rd_key[4 *(AES_MAXNR + 1)];
++    int rounds;
++};
++typedef struct aes_key_st AES_KEY;
++
++int AES_set_encrypt_key(const unsigned char *userKey, const int bits,
++	AES_KEY *key);
++int AES_set_decrypt_key(const unsigned char *userKey, const int bits,
++	AES_KEY *key);
++
++void AES_encrypt(const unsigned char *in, unsigned char *out,
++	const AES_KEY *key);
++void AES_decrypt(const unsigned char *in, unsigned char *out,
++	const AES_KEY *key);
++void AES_cbc_encrypt(const unsigned char *in, unsigned char *out,
++		     const unsigned long length, const AES_KEY *key,
++		     unsigned char *ivec, const int enc);
++
++#endif
+diff --git a/util/aes.c b/util/aes.c
+index 1da7bff..54c7b98 100644
+--- a/util/aes.c
++++ b/util/aes.c
+@@ -28,7 +28,7 @@
+  * EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+  */
+ #include "qemu-common.h"
+-#include "block/aes.h"
++#include "qemu/aes.h"
+ 
+ #ifndef NDEBUG
+ #define NDEBUG
+-- 
+1.7.10.4
+
+

@@ -1,0 +1,54 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Alexey Kardashevskiy <aik@ozlabs.ru>
+To: Paolo Bonzini <pbonzini@redhat.com>, Alexey Kardashevskiy <aik@ozlabs.ru>,
+ Kevin Wolf <kwolf@redhat.com>, qemu-devel@nongnu.org,
+ Peter Maydell <peter.maydell@linaro.org>,
+ Markus Armbruster <armbru@redhat.com>
+Cc: Blue Swirl <blauwirbel@gmail.com>, Paolo Bonzini <pbonzini@redhat.com>,
+ Alexey Kardashevskiy <aik@ozlabs.ru>, qemu-devel@nongnu.org,
+ David Gibson <david@gibson.dropbear.id.au>,
+ Markus Armbruster <armbru@redhat.com>,
+ Peter Maydell <peter.maydell@linaro.org>,
+ Stefan Hajnoczi <stefanha@redhat.com>, Gerd Hoffmann <kraxel@redhat.com>
+Date: Mon, 15 Apr 2013 12:31:13 +1000
+Message-id: 1365993073-4659-1-git-send-email-aik@ozlabs.ru
+Subject: [PATCH 1/1] pixman: remove -Wredundand-decls
+
+The assert.h header file from Fedora18 does not have #ifdef-#endif
+brackets around __assertXXXX function so it cannot compile with
+the -Wredundant-decls switch on.
+
+Some Linux distributions (such as Debian Wheezy) still do have those
+brackets arounb __assertXXXX functions (#ifndef _ASSERT_H_DECLS) but
+the version of assert.h on http://sourceware.org/git/?p=glibc.git does not
+so we should not be using -Wredundant-decls.
+
+The patch removes it.
+
+Signed-off-by: Alexey Kardashevskiy <aik@ozlabs.ru>
+---
+ include/ui/qemu-pixman.h |    6 ------
+ 1 file changed, 6 deletions(-)
+
+diff --git a/include/ui/qemu-pixman.h b/include/ui/qemu-pixman.h
+index b032f52..6f473f9 100644
+--- a/include/ui/qemu-pixman.h
++++ b/include/ui/qemu-pixman.h
+@@ -7,13 +7,7 @@
+ #define QEMU_PIXMAN_H
+ 
+ /* pixman-0.16.0 headers have a redundant declaration */
+-#ifdef CONFIG_PRAGMA_DIAGNOSTIC_AVAILABLE
+-#pragma GCC diagnostic ignored "-Wredundant-decls"
+-#endif
+ #include <pixman.h>
+-#ifdef CONFIG_PRAGMA_DIAGNOSTIC_AVAILABLE
+-#pragma GCC diagnostic error "-Wredundant-decls"
+-#endif
+ 
+ #include "qemu/typedefs.h"
+ 
+-- 
+1.7.10.4
+
+

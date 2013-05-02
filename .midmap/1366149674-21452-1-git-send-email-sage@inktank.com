@@ -1,0 +1,1 @@
+../qemu-iotests-send-rbd-rm--stderr-to--dev-null/v1.1366142474/0001-qemu-iotests-send-rbd-rm--stderr-to--dev-null.patch

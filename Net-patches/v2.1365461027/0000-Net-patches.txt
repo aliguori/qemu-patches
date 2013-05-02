@@ -1,0 +1,40 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Stefan Hajnoczi <stefanha@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>,
+ Stefan Hajnoczi <stefanha@redhat.com>
+Date: Mon, 8 Apr 2013 17:43:47 +0200
+Message-id: 1365435829-23535-1-git-send-email-stefanha@redhat.com
+Subject: [PATCH 0/2] Net patches
+
+v2:
+ * Include git-request-pull(1) output [aliguori]
+
+This pull request fixes the vmxnet3 big-endian host build failure and allows
+iPXE to netboot on vmxnet3.
+
+The following changes since commit 9196dd411d580c27f85daa209ff9a501d719ebc0:
+
+  Merge branch 'arm-devs.next' of git://git.linaro.org/people/pmaydell/qemu-arm (2013-04-06 12:53:54 +0000)
+
+are available in the git repository at:
+
+
+  git://github.com/stefanha/qemu.git net
+
+for you to fetch changes up to 389dd80795c646c914ab3c4366c9409e309f0e4f:
+
+  vmxnet3: const_cpu_to_le64 wrapping for feature bits dropped (2013-04-08 14:01:25 +0200)
+
+----------------------------------------------------------------
+Dmitry Fleytman (2):
+      vmxnet3: iPXE compatibility fixes
+      vmxnet3: const_cpu_to_le64 wrapping for feature bits dropped
+
+ hw/vmxnet3.c | 11 +++++++++++
+ hw/vmxnet3.h | 11 ++++-------
+ 2 files changed, 15 insertions(+), 7 deletions(-)
+
+-- 
+1.8.1.4
+

@@ -1,0 +1,32 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Stefan Hajnoczi <stefanha@redhat.com>
+To: Stefan Hajnoczi <stefanha@redhat.com>, qemu-devel@nongnu.org
+Cc: Nick Thomas <nick@bytemark.co.uk>, Paolo Bonzini <pbonzini@redhat.com>,
+ Stefan Hajnoczi <stefanha@redhat.com>, Kevin Wolf <kwolf@redhat.com>,
+ qemu-devel@nongnu.org
+Date: Thu,  2 May 2013 14:23:06 +0200
+Message-id: 1367497388-5962-1-git-send-email-stefanha@redhat.com
+Subject: [PATCH 0/2] nbd: support large NBD requests
+
+These patches switch from fixed-size 1 MB data buffers to dynamically sized
+buffers in NBD.  This is necessary because the Linux nbd driver now allows up
+to 32 MB request size.
+
+Patch 1 gets rid of the request freelist, which becomes pointless when data
+buffers are no longer reused.
+
+Patch 2 dynamically sizes the data buffer.
+
+Stefan Hajnoczi (2):
+  nbd: use g_slice_new() instead of a freelist
+  nbd: support large NBD requests
+
+ include/block/nbd.h |  3 ++-
+ nbd.c               | 36 +++++++++++++++---------------------
+ 2 files changed, 17 insertions(+), 22 deletions(-)
+
+Reviewed-by: Paolo Bonzini <pbonzini@redhat.com>
+-- 
+1.8.1.4
+
+

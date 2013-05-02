@@ -1,0 +1,47 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Hans de Goede <hdegoede@redhat.com>
+To: Hans de Goede <hdegoede@redhat.com>, qemu-devel@nongnu.org
+Cc: Hans de Goede <hdegoede@redhat.com>, Amit Shah <amit.shah@redhat.com>,
+ Anthony Liguori <aliguori@us.ibm.com>, Paolo Bonzini <pbonzini@redhat.com>
+Date: Thu, 25 Apr 2013 13:53:02 +0200
+Message-id: 1366890782-10311-1-git-send-email-hdegoede@redhat.com
+Subject: [PATCH 1/1] qemu-char: Set foo_tag = 0 when returning FALSE from
+ callbacks
+
+While reviewing some patches I found this problem where tcp_chr_accept
+does not clear listen_tag when returning FALSE, leading to a double
+g_source_remove of the underlying source. Not really a problem unless the id
+gets re-used in between, but still something we should fix.
+
+While at it I've also reviewed all the other code in qemu-char.c for
+similar problems and found that pty_chr_timer has the same problem.
+
+Cc: Anthony Liguori <aliguori@us.ibm.com>
+Signed-off-by: Hans de Goede <hdegoede@redhat.com>
+---
+ qemu-char.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/qemu-char.c b/qemu-char.c
+index f29f9b1..64e824d 100644
+--- a/qemu-char.c
++++ b/qemu-char.c
+@@ -1077,6 +1077,7 @@ static gboolean pty_chr_timer(gpointer opaque)
+     pty_chr_update_read_handler(chr);
+ 
+ out:
++    s->timer_tag = 0;
+     return FALSE;
+ }
+ 
+@@ -2642,6 +2643,7 @@ static gboolean tcp_chr_accept(GIOChannel *channel, GIOCondition cond, void *opa
+ 	}
+         fd = qemu_accept(s->listen_fd, addr, &len);
+         if (fd < 0 && errno != EINTR) {
++            s->listen_tag = 0;
+             return FALSE;
+         } else if (fd >= 0) {
+             if (s->do_telnetopt)
+-- 
+1.8.2.1
+

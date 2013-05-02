@@ -1,0 +1,1 @@
+../ccid-and-libcacard-fixes-for-windows-mingw/v3.1366671870/0017-dev-smartcard-reader-support-windows-guest.patch

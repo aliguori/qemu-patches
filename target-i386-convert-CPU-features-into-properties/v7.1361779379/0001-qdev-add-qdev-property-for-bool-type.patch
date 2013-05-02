@@ -1,0 +1,92 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Igor Mammedov <imammedo@redhat.com>
+To: Igor Mammedov <imammedo@redhat.com>,
+ Andreas =?ISO-8859-1?B?RuRyYmVy?= <afaerber@suse.de>, qemu-devel@nongnu.org
+Cc: qemu-devel@nongnu.org, Peter Maydell <peter.maydell@linaro.org>,
+ ehabkost@redhat.com, Eduardo Habkost <ehabkost@redhat.com>, afaerber@suse.de
+Date: Mon, 25 Feb 2013 02:03:00 +0100
+Message-id: 1361754189-29809-2-git-send-email-imammedo@redhat.com
+Subject: [PATCH 01/10] qdev: add qdev property for bool type
+
+Signed-off-by: Igor Mammedov <imammedo@redhat.com>
+---
+ hw/qdev-properties.c |   33 +++++++++++++++++++++++++++++++++
+ hw/qdev-properties.h |   10 ++++++++++
+ 2 files changed, 43 insertions(+), 0 deletions(-)
+
+diff --git a/hw/qdev-properties.c b/hw/qdev-properties.c
+index a8a31f5..16ac814 100644
+--- a/hw/qdev-properties.c
++++ b/hw/qdev-properties.c
+@@ -106,6 +106,39 @@ PropertyInfo qdev_prop_bit = {
+     .set   = set_bit,
+ };
+ 
++/* --- bool --- */
++
++static void get_bool(Object *obj, Visitor *v, void *opaque,
++                     const char *name, Error **errp)
++{
++    DeviceState *dev = DEVICE(obj);
++    Property *prop = opaque;
++    bool *ptr = qdev_get_prop_ptr(dev, prop);
++
++    visit_type_bool(v, ptr, name, errp);
++}
++
++static void set_bool(Object *obj, Visitor *v, void *opaque,
++                       const char *name, Error **errp)
++{
++    DeviceState *dev = DEVICE(obj);
++    Property *prop = opaque;
++    bool *ptr = qdev_get_prop_ptr(dev, prop);
++
++    if (dev->realized) {
++        error_setg(errp, "Insufficient permission to perform this operation");
++        return;
++    }
++
++    visit_type_bool(v, ptr, name, errp);
++}
++
++PropertyInfo qdev_prop_bool = {
++    .name  = "boolean",
++    .get   = get_bool,
++    .set   = set_bool,
++};
++
+ /* --- 8bit integer --- */
+ 
+ static void get_uint8(Object *obj, Visitor *v, void *opaque,
+diff --git a/hw/qdev-properties.h b/hw/qdev-properties.h
+index 20c67f3..3915f7c 100644
+--- a/hw/qdev-properties.h
++++ b/hw/qdev-properties.h
+@@ -6,6 +6,7 @@
+ /*** qdev-properties.c ***/
+ 
+ extern PropertyInfo qdev_prop_bit;
++extern PropertyInfo qdev_prop_bool;
+ extern PropertyInfo qdev_prop_uint8;
+ extern PropertyInfo qdev_prop_uint16;
+ extern PropertyInfo qdev_prop_uint32;
+@@ -51,6 +52,15 @@ extern PropertyInfo qdev_prop_pci_host_devaddr;
+         .defval    = (bool)_defval,                              \
+         }
+ 
++#define DEFINE_PROP_BOOL(_name, _state, _field, _defval) {       \
++        .name      = (_name),                                    \
++        .info      = &(qdev_prop_bool),                          \
++        .offset    = offsetof(_state, _field)                    \
++            + type_check(bool, typeof_field(_state, _field)),    \
++        .qtype     = QTYPE_QBOOL,                                \
++        .defval    = (bool)_defval,                              \
++        }
++
+ #define DEFINE_PROP_UINT8(_n, _s, _f, _d)                       \
+     DEFINE_PROP_DEFAULT(_n, _s, _f, _d, qdev_prop_uint8, uint8_t)
+ #define DEFINE_PROP_UINT16(_n, _s, _f, _d)                      \
+-- 
+1.7.1
+
+

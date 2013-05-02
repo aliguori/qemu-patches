@@ -1,0 +1,90 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Felipe Franciosi <felipe.franciosi@citrix.com>
+To: qemu-devel@nongnu.org, Felipe Franciosi <felipe.franciosi@citrix.com>
+Cc: Felipe Franciosi <felipe.franciosi@citrix.com>,
+ Stefano Stabellini <Stefano.Stabellini@eu.citrix.com>,
+ "xen-devel@lists.xen.org" <xen-devel@lists.xen.org>,
+ "qemu-devel@nongnu.org" <qemu-devel@nongnu.org>,
+ Felipe Franciosi <felipe@paradoxo.org>, xen-devel@lists.xen.org,
+ Stefano Stabellini <stefano.stabellini@eu.citrix.com>
+Date: Wed, 3 Apr 2013 15:01:11 +0100
+Message-id: 1364997672-29579-2-git-send-email-felipe.franciosi@citrix.com
+Subject: [PATCH 1/2] Introduce 64 bit integer write interface to xenstore
+
+The current implementation of xen_backend only provides 32 bit integer
+functions to write to xenstore. This patch adds two functions that
+allow writing 64 bit integers (one generic function and another for
+the backend only).
+
+This patch also fixes the size of the char arrays used to represent
+these integers as strings (originally 32 bytes, however no more than
+12 bytes are needed for 32 bit integers and no more than 21 bytes are
+needed for 64 bit integers).
+
+Signed-off-by: Felipe Franciosi <felipe@paradoxo.org>
+Acked-by: Stefano Stabellini <stefano.stabellini@eu.citrix.com>
+---
+ hw/xen_backend.c |   15 ++++++++++++++-
+ hw/xen_backend.h |    2 ++
+ 2 files changed, 16 insertions(+), 1 deletion(-)
+
+diff --git a/hw/xen_backend.c b/hw/xen_backend.c
+index 24381b5..02693d7 100644
+--- a/hw/xen_backend.c
++++ b/hw/xen_backend.c
+@@ -85,12 +85,20 @@ char *xenstore_read_str(const char *base, const char *node)
+ 
+ int xenstore_write_int(const char *base, const char *node, int ival)
+ {
+-    char val[32];
++    char val[12];
+ 
+     snprintf(val, sizeof(val), "%d", ival);
+     return xenstore_write_str(base, node, val);
+ }
+ 
++int xenstore_write_int64(const char *base, const char *node, int64_t ival)
++{
++    char val[21];
++
++    snprintf(val, sizeof(val), "%"PRId64, ival);
++    return xenstore_write_str(base, node, val);
++}
++
+ int xenstore_read_int(const char *base, const char *node, int *ival)
+ {
+     char *val;
+@@ -114,6 +122,11 @@ int xenstore_write_be_int(struct XenDevice *xendev, const char *node, int ival)
+     return xenstore_write_int(xendev->be, node, ival);
+ }
+ 
++int xenstore_write_be_int64(struct XenDevice *xendev, const char *node, int64_t ival)
++{
++    return xenstore_write_int64(xendev->be, node, ival);
++}
++
+ char *xenstore_read_be_str(struct XenDevice *xendev, const char *node)
+ {
+     return xenstore_read_str(xendev->be, node);
+diff --git a/hw/xen_backend.h b/hw/xen_backend.h
+index 6d5c699..d04b985 100644
+--- a/hw/xen_backend.h
++++ b/hw/xen_backend.h
+@@ -63,11 +63,13 @@ extern const char *xen_protocol;
+ /* xenstore helper functions */
+ int xenstore_write_str(const char *base, const char *node, const char *val);
+ int xenstore_write_int(const char *base, const char *node, int ival);
++int xenstore_write_int64(const char *base, const char *node, int64_t ival);
+ char *xenstore_read_str(const char *base, const char *node);
+ int xenstore_read_int(const char *base, const char *node, int *ival);
+ 
+ int xenstore_write_be_str(struct XenDevice *xendev, const char *node, const char *val);
+ int xenstore_write_be_int(struct XenDevice *xendev, const char *node, int ival);
++int xenstore_write_be_int64(struct XenDevice *xendev, const char *node, int64_t ival);
+ char *xenstore_read_be_str(struct XenDevice *xendev, const char *node);
+ int xenstore_read_be_int(struct XenDevice *xendev, const char *node, int *ival);
+ char *xenstore_read_fe_str(struct XenDevice *xendev, const char *node);
+-- 
+1.7.10.4
+
+

@@ -1,0 +1,43 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Stefan Hajnoczi <stefanha@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>,
+ Luiz Capitulino <lcapitulino@redhat.com>,
+ Stefan Hajnoczi <stefanha@redhat.com>
+Date: Fri, 19 Apr 2013 13:33:55 +0200
+Message-id: 1366371241-23430-3-git-send-email-stefanha@redhat.com
+Subject: [PATCH 2/8] virtio.h: drop unused function prototypes
+
+From: Luiz Capitulino <lcapitulino@redhat.com>
+
+They are unused since commit 5c7d0962f60498c3f11d402e1c857cb9d5d8568d.
+
+Signed-off-by: Luiz Capitulino <lcapitulino@redhat.com>
+Signed-off-by: Stefan Hajnoczi <stefanha@redhat.com>
+---
+ include/hw/virtio/virtio.h | 2 --
+ 1 file changed, 2 deletions(-)
+
+diff --git a/include/hw/virtio/virtio.h b/include/hw/virtio/virtio.h
+index b21e5c2..d3f1436 100644
+--- a/include/hw/virtio/virtio.h
++++ b/include/hw/virtio/virtio.h
+@@ -258,7 +258,6 @@ VirtIODevice *virtio_net_init(DeviceState *dev, NICConf *conf,
+                               uint32_t host_features);
+ typedef struct virtio_serial_conf virtio_serial_conf;
+ VirtIODevice *virtio_serial_init(DeviceState *dev, virtio_serial_conf *serial);
+-VirtIODevice *virtio_balloon_init(DeviceState *dev);
+ typedef struct VirtIOSCSIConf VirtIOSCSIConf;
+ VirtIODevice *virtio_scsi_init(DeviceState *dev, VirtIOSCSIConf *conf);
+ typedef struct VirtIORNGConf VirtIORNGConf;
+@@ -270,7 +269,6 @@ VirtIODevice *virtio_9p_init(DeviceState *dev, V9fsConf *conf);
+ 
+ void virtio_net_exit(VirtIODevice *vdev);
+ void virtio_serial_exit(VirtIODevice *vdev);
+-void virtio_balloon_exit(VirtIODevice *vdev);
+ void virtio_scsi_exit(VirtIODevice *vdev);
+ void virtio_rng_exit(VirtIODevice *vdev);
+ 
+-- 
+1.8.1.4
+

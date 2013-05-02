@@ -1,0 +1,75 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+To: qemu-devel@nongnu.org
+Cc: peter.maydell@linaro.org, mst@redhat.com,
+ Peter Crosthwaite <peter.crosthwaite@xilinx.com>, blauwirbel@gmail.com,
+ kraxel@redhat.com, edgar.iglesias@gmail.com
+Date: Fri,  5 Apr 2013 18:43:39 +1000
+Message-id: cover.1365151096.git.peter.crosthwaite@xilinx.com
+Subject: [PATCH 0/5] Data Driven device registers & Zynq DEVCFG
+
+Hi All. This is a new scheme i've come up with handling device registers in a
+data driven way. My motivation for this is to factor out a lot of the access
+checking that seems to be replicated in every device. See P2 commit message for
+further discussion.
+
+P1 is a trivial addition to bitops.h
+P2 is the main patch, adds the register definition functionality
+P3 is an example new device (the Xilinx Zynq devcfg) that uses this scheme.
+P4 adds devcfg to the Zynq machine model
+
+This devcfg device was particularly finnicky with per-bit restrictions which
+prompted all this. Im also looking for a higher-than-usual modelling fidelity
+on the register space, with semantics defined for random reserved bits
+in-between otherwise consistent fields.
+
+Heres an example of the qemu_log output for the devcfg device. This is produced
+by now generic sharable code:
+
+/machine/unattached/device[44]:Addr 0x000008:CFG: write of value 00000508
+/machine/unattached/device[44]:Addr 0x000080:MCTRL: write of value 00800010
+/machine/unattached/device[44]:Addr 0x000010:INT_MASK: write of value ffffffff
+/machine/unattached/device[44]:Addr 00000000:CTRL: write of value 0c00607f
+
+And an example of a rogue guest banging on a bad bit:
+
+/machine/unattached/device[44]:Addr 0x000014:STATUS bits 0x000001 may not be \
+								written to 1
+
+Future work: Theres a lot of overlap here with what Peter did with the ARM
+coprocessor definitions. We could go further and generalise ARM CP to use this
+or some further evolution of it. That and converting existing models to this
+scheme. Some device models will lose a lot of weight. Also integrate with
+memory API.
+
+Changed from v1:
+Added ONES macro patch
+Dropped bogus former patch 1 (PMM review)
+Addressed Blue, Gerd and MST comments.
+Simplified to be more Memory API compatible.
+Added Memory API helpers.
+Please see discussion already on list and commit msgs for more detail.
+
+
+Peter A. G. Crosthwaite (2):
+  xilinx_devcfg: Zynq devcfg device model
+  xilinx_zynq: added devcfg to machine model
+
+Peter Crosthwaite (3):
+  bitops: Add ONES macro
+  register: Add Register API
+  register: Add Memory API glue
+
+ Makefile.target         |    2 +-
+ hw/arm/Makefile.objs    |    2 +-
+ hw/arm/xilinx_zynq.c    |    8 +
+ hw/xilinx_devcfg.c      |  489 +++++++++++++++++++++++++++++++++++++++++++++++
+ include/exec/register.h |  147 ++++++++++++++
+ include/qemu/bitops.h   |    2 +
+ register.c              |  207 ++++++++++++++++++++
+ 7 files changed, 855 insertions(+), 2 deletions(-)
+ create mode 100644 hw/xilinx_devcfg.c
+ create mode 100644 include/exec/register.h
+ create mode 100644 register.c
+
+

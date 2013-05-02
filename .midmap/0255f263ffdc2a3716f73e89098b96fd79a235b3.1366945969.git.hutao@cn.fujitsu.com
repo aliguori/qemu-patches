@@ -1,0 +1,1 @@
+../Add-pvpanic-device-to-deal-with-guest-panic-event/v21.1366993479/0001-add-a-new-runstate-RUN_STATE_GUEST_PANICKED.patch

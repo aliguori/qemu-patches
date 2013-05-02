@@ -1,0 +1,114 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Pavel Hrdina <phrdina@redhat.com>
+To: Eric Blake <eblake@redhat.com>, Wenchao Xia <xiawenc@linux.vnet.ibm.com>,
+ qemu-devel@nongnu.org, Pavel Hrdina <phrdina@redhat.com>
+Cc: qemu-devel@nongnu.org, phrdina@redhat.com, armbru@redhat.com,
+ Pavel Hrdina <phrdina@redhat.com>, lcapitulino@redhat.com
+Date: Tue, 16 Apr 2013 18:05:23 +0200
+Message-id: 13b9d1e79947b89982ec51c421b9b1bd0a7b587d.1366127809.git.phrdina@redhat.com
+Subject: [PATCH 11/11] savevm: remove backward compatibility from
+ bdrv_snapshot_find()
+
+
+Signed-off-by: Pavel Hrdina <phrdina@redhat.com>
+---
+ savevm.c | 33 +++++++++++----------------------
+ 1 file changed, 11 insertions(+), 22 deletions(-)
+
+diff --git a/savevm.c b/savevm.c
+index 66753da..bc829a5 100644
+--- a/savevm.c
++++ b/savevm.c
+@@ -2195,7 +2195,7 @@ out:
+ }
+ 
+ static int bdrv_snapshot_find(BlockDriverState *bs, QEMUSnapshotInfo *sn_info,
+-                              const char *name, const char *id, bool old_match)
++                              const char *name, const char *id)
+ {
+     QEMUSnapshotInfo *sn_tab, *sn;
+     int nb_sns, i, found = 0;
+@@ -2218,20 +2218,10 @@ static int bdrv_snapshot_find(BlockDriverState *bs, QEMUSnapshotInfo *sn_info,
+                 break;
+             }
+         } else if (name) {
+-            /* for compatibility for old bdrv_snapshot_find call
+-             * will be removed */
+-            if (old_match) {
+-                if (!strcmp(sn->id_str, id) || !strcmp(sn->name, name)) {
+-                    *sn_info = *sn;
+-                    found = 1;
+-                    break;
+-                }
+-            } else {
+-                if (!strcmp(sn->name, name)) {
+-                    *sn_info = *sn;
+-                    found = 1;
+-                    break;
+-                }
++            if (!strcmp(sn->name, name)) {
++                *sn_info = *sn;
++                found = 1;
++                break;
+             }
+         } else if (id) {
+             if (!strcmp(sn->id_str, id)) {
+@@ -2290,7 +2280,7 @@ SnapshotInfo *qmp_vm_snapshot_save(const char *name, Error **errp)
+     sn->date_nsec = tv.tv_usec * 1000;
+     sn->vm_clock_nsec = qemu_get_clock_ns(vm_clock);
+ 
+-    if (bdrv_snapshot_find(bs, old_sn, name, NULL, false)) {
++    if (bdrv_snapshot_find(bs, old_sn, name, NULL)) {
+         error_setg(errp, "snapshot '%s' exists", name);
+         goto the_end;
+     } else {
+@@ -2388,7 +2378,7 @@ SnapshotInfo *qmp_vm_snapshot_load(bool has_name, const char *name,
+     }
+ 
+     /* Don't even try to load empty VM states */
+-    if (!bdrv_snapshot_find(bs_vm_state, &sn, name, id, false)) {
++    if (!bdrv_snapshot_find(bs_vm_state, &sn, name, id)) {
+         return NULL;
+     }
+ 
+@@ -2413,7 +2403,7 @@ SnapshotInfo *qmp_vm_snapshot_load(bool has_name, const char *name,
+             return NULL;
+         }
+ 
+-        if (!bdrv_snapshot_find(bs, &sn, name, id, false)) {
++        if (!bdrv_snapshot_find(bs, &sn, name, id)) {
+             return NULL;
+         }
+     }
+@@ -2484,7 +2474,7 @@ SnapshotInfo *qmp_vm_snapshot_delete(const bool has_name, const char *name,
+         return NULL;
+     }
+ 
+-    if (!bdrv_snapshot_find(bs, &sn, name, id, false)) {
++    if (!bdrv_snapshot_find(bs, &sn, name, id)) {
+         /* no need to set an error if snapshot doesn't exist */
+         return NULL;
+     }
+@@ -2501,7 +2491,7 @@ SnapshotInfo *qmp_vm_snapshot_delete(const bool has_name, const char *name,
+     bs = NULL;
+     while ((bs = bdrv_next(bs))) {
+         if (bdrv_can_snapshot(bs)
+-                && bdrv_snapshot_find(bs, &sn, name, id, false)) {
++                && bdrv_snapshot_find(bs, &sn, name, id)) {
+             bdrv_snapshot_delete(bs, sn.name, errp);
+             if (error_is_set(errp)) {
+                 return NULL;
+@@ -2549,8 +2539,7 @@ void do_info_snapshots(Monitor *mon, const QDict *qdict)
+ 
+         while ((bs1 = bdrv_next(bs1))) {
+             if (bdrv_can_snapshot(bs1) && bs1 != bs) {
+-                if (!bdrv_snapshot_find(bs1, sn_info, sn->name, sn->id_str,
+-                                        true)) {
++                if (!bdrv_snapshot_find(bs1, sn_info, sn->name, sn->id_str)) {
+                     available = 0;
+                     break;
+                 }
+-- 
+1.8.1.4
+
+

@@ -1,0 +1,9 @@
+0000-libqos-support.txt
+0001-qtest-add-libqos.patch
+0002-i440fx-test-add-test-to-compare-default-register-values-against-spec.patch
+0003-i440fx-test-add-test-for-PAM-functionality.patch
+0004-pci-foreach.patch
+0005-fw_cfg-add-qtest-test-harness.patch
+0006-libqos-fw_cfg.patch
+0007-libqos-add-fw_cfg-pc.patch
+0008-libqos-add-malloc.patch

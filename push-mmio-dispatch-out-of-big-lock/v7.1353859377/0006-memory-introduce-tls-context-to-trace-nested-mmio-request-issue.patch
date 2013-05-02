@@ -1,0 +1,110 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Liu Ping Fan <qemulist@gmail.com>
+To: qemu-devel@nongnu.org
+Cc: Paolo Bonzini <pbonzini@redhat.com>, gleb@redhat.com,
+ Anthony Liguori <anthony@codemonkey.ws>, Stefan Hajnoczi <stefanha@gmail.com>,
+ Marcelo Tosatti <mtosatti@redhat.com>,
+ Peter Maydell <peter.maydell@linaro.org>, Jan Kiszka <jan.kiszka@siemens.com>
+Date: Sun, 25 Nov 2012 10:03:03 +0800
+Message-id: 1353808984-22368-7-git-send-email-qemulist@gmail.com
+Subject: [PATCH 6/7] memory: introduce tls context to trace nested mmio
+ request issue
+
+From: Liu Ping Fan <pingfank@linux.vnet.ibm.com>
+
+After breaking down big lock, nested MMIO request which not targeting
+at RAM can cause deadlock issue. Supposing the scene: dev_a,b with
+fine-grain locks lockA/B, then ABBA dealock issue can be triggered.
+We fix this by tracing and rejecting such request.
+
+Signed-off-by: Liu Ping Fan <pingfank@linux.vnet.ibm.com>
+---
+ exec.c |   37 ++++++++++++++++++++++++++++++++++++-
+ 1 files changed, 36 insertions(+), 1 deletions(-)
+
+diff --git a/exec.c b/exec.c
+index fa34ef9..7eae54e 100644
+--- a/exec.c
++++ b/exec.c
+@@ -3442,6 +3442,32 @@ static bool address_space_section_lookup_ref(AddressSpace *as,
+     return safe_ref;
+ }
+ 
++typedef struct ThreadContext {
++  unsigned int req_pending;
++} ThreadContext;
++
++static DEFINE_TLS(ThreadContext, thread_context) = {
++    .req_pending = 0
++};
++#define thread_context tls_var(thread_context)
++
++static bool address_space_check_inc_req_pending(MemoryRegionSection *section)
++{
++    bool nested;
++
++    nested = ++thread_context.req_pending > 1 ? true : false;
++    /* To fix, will filter iommu case */
++    if (nested && !memory_region_is_ram(section->mr)) {
++        fprintf(stderr, "waring: nested target not RAM is not support");
++    }
++    return nested;
++}
++
++static void address_space_dec_req_pending(void)
++{
++    thread_context.req_pending--;
++}
++
+ void address_space_rw(AddressSpace *as, target_phys_addr_t addr, uint8_t *buf,
+                       int len, bool is_write)
+ {
+@@ -3450,7 +3476,7 @@ void address_space_rw(AddressSpace *as, target_phys_addr_t addr, uint8_t *buf,
+     uint8_t *ptr;
+     uint32_t val;
+     target_phys_addr_t page;
+-    bool safe_ref;
++    bool safe_ref, nested;
+     MemoryRegionSection *section, obj_mrs;
+ 
+     while (len > 0) {
+@@ -3462,6 +3488,11 @@ void address_space_rw(AddressSpace *as, target_phys_addr_t addr, uint8_t *buf,
+         qemu_mutex_lock(&as->lock);
+         safe_ref = memory_region_section_lookup_ref(d, page, &obj_mrs);
+         qemu_mutex_unlock(&as->lock);
++        nested = address_space_check_inc_req_pending(&obj_mrs);
++        if (nested) {
++            goto skip;
++        }
++
+         if (!safe_ref) {
+             qemu_mutex_lock_iothread();
+             qemu_mutex_lock(&as->lock);
+@@ -3477,6 +3508,7 @@ void address_space_rw(AddressSpace *as, target_phys_addr_t addr, uint8_t *buf,
+         if (is_write) {
+             if (!memory_region_is_ram(section->mr)) {
+                 target_phys_addr_t addr1;
++
+                 addr1 = memory_region_section_addr(section, addr);
+                 /* XXX: could force cpu_single_env to NULL to avoid
+                    potential bugs */
+@@ -3510,6 +3542,7 @@ void address_space_rw(AddressSpace *as, target_phys_addr_t addr, uint8_t *buf,
+             if (!(memory_region_is_ram(section->mr) ||
+                   memory_region_is_romd(section->mr))) {
+                 target_phys_addr_t addr1;
++
+                 /* I/O case */
+                 addr1 = memory_region_section_addr(section, addr);
+                 if (l >= 4 && ((addr1 & 3) == 0)) {
+@@ -3537,6 +3570,8 @@ void address_space_rw(AddressSpace *as, target_phys_addr_t addr, uint8_t *buf,
+                 qemu_put_ram_ptr(ptr);
+             }
+         }
++skip:
++        address_space_dec_req_pending();
+         memory_region_section_unref(&obj_mrs);
+         len -= l;
+         buf += l;
+-- 
+1.7.4.4
+

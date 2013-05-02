@@ -1,0 +1,2222 @@
+From patches Mon Sep 17 00:00:00 2001
+From: =?utf-8?q?Andreas_F=C3=A4rber_=3Cafaerber=40suse=2Ede=3E?=
+To: qemu-devel@nongnu.org
+Cc: Blue Swirl <blauwirbel@gmail.com>, "open list:e500" <qemu-ppc@nongnu.org>,
+ Michael Walle <michael@walle.cc>, Max Filippov <jcmvbkbc@gmail.com>,
+ Alexander Graf <agraf@suse.de>, Guan Xuetao <gxt@mprc.pku.edu.cn>,
+ "Edgar E. Iglesias" <edgar.iglesias@gmail.com>,
+ Aurelien Jarno <aurelien@aurel32.net>, Richard Henderson <rth@twiddle.net>,
+ Scott Wood <scottwood@freescale.com>,
+ David Gibson <david@gibson.dropbear.id.au>,
+ Stefano Stabellini <stefano.stabellini@eu.citrix.com>,
+ Paul Brook <paul@codesourcery.com>,
+ =?UTF-8?q?Andreas=20F=C3=A4rber?= <afaerber@suse.de>,
+ Gleb Natapov <gleb@redhat.com>,
+ "open list:X86" <xen-devel@lists.xensource.com>,
+ Marcelo Tosatti <mtosatti@redhat.com>,
+ Peter Maydell <peter.maydell@linaro.org>,
+ "open list:Overall" <kvm@vger.kernel.org>,
+ Fabien Chouteau <chouteau@adacore.com>
+Date: Mon, 25 Feb 2013 19:45:49 +0100
+Message-id: 1361817954-8984-3-git-send-email-afaerber@suse.de
+Subject: [PATCH 2/7] cpu: Move halted and interrupt_request fields to CPUState
+
+Both fields are used in VMState, thus need to be moved together.
+Explicitly zero them on reset since they were located before
+breakpoints.
+
+Pass PowerPCCPU to kvmppc_handle_halt().
+
+Signed-off-by: Andreas Färber <afaerber@suse.de>
+---
+ cpu-exec.c                         |   34 ++++++++++++------------
+ cpus.c                             |    4 +--
+ exec.c                             |   16 +++++++-----
+ gdbstub.c                          |    2 +-
+ hw/leon3.c                         |    5 ++--
+ hw/omap1.c                         |    7 +++--
+ hw/openrisc_timer.c                |    4 ++-
+ hw/ppc.c                           |   22 ++++++++++------
+ hw/ppc/e500.c                      |   10 +++++---
+ hw/ppce500_spin.c                  |    2 +-
+ hw/pxa2xx_gpio.c                   |    3 ++-
+ hw/pxa2xx_pic.c                    |    3 ++-
+ hw/s390x/s390-virtio.c             |   14 ++++++----
+ hw/spapr.c                         |   10 +++++---
+ hw/spapr_hcall.c                   |    2 +-
+ hw/spapr_rtas.c                    |    6 ++---
+ hw/sun4m.c                         |   21 ++++++++-------
+ hw/sun4u.c                         |   15 +++++++----
+ hw/xen_machine_pv.c                |    6 ++---
+ hw/xtensa_pic.c                    |    8 +++---
+ include/exec/cpu-defs.h            |    2 --
+ include/qom/cpu.h                  |    4 +++
+ kvm-all.c                          |    2 +-
+ qom/cpu.c                          |    2 ++
+ target-alpha/cpu.h                 |    4 +--
+ target-alpha/translate.c           |    3 ++-
+ target-arm/cpu.h                   |    4 +--
+ target-arm/helper.c                |    4 ++-
+ target-arm/op_helper.c             |    4 ++-
+ target-cris/cpu.h                  |    4 +--
+ target-cris/helper.c               |    9 ++++---
+ target-cris/translate.c            |    3 ++-
+ target-i386/cpu.c                  |    2 +-
+ target-i386/cpu.h                  |   20 ++++++++-------
+ target-i386/helper.c               |   12 +++++----
+ target-i386/kvm.c                  |   50 +++++++++++++++++++-----------------
+ target-i386/machine.c              |    2 +-
+ target-i386/misc_helper.c          |   21 ++++++++++-----
+ target-i386/svm_helper.c           |    9 ++++---
+ target-lm32/cpu.h                  |    4 +--
+ target-lm32/op_helper.c            |    4 ++-
+ target-m68k/cpu.h                  |    4 +--
+ target-m68k/op_helper.c            |    4 ++-
+ target-m68k/qregs.def              |    1 -
+ target-m68k/translate.c            |    8 +++++-
+ target-microblaze/cpu.h            |    4 +--
+ target-mips/cpu.h                  |    4 +--
+ target-mips/op_helper.c            |   10 +++++---
+ target-mips/translate.c            |    4 +--
+ target-openrisc/cpu.h              |    4 +--
+ target-openrisc/interrupt_helper.c |    3 ++-
+ target-openrisc/sys_helper.c       |    3 ++-
+ target-ppc/cpu.h                   |    5 ++--
+ target-ppc/excp_helper.c           |   22 +++++++++++-----
+ target-ppc/helper_regs.h           |   11 +++++---
+ target-ppc/kvm.c                   |   16 +++++++-----
+ target-ppc/translate.c             |    3 ++-
+ target-s390x/cpu.c                 |    8 +++---
+ target-s390x/cpu.h                 |    5 ++--
+ target-s390x/helper.c              |    7 +++--
+ target-sh4/cpu.h                   |    4 +--
+ target-sh4/helper.c                |    5 ++--
+ target-sh4/op_helper.c             |    4 ++-
+ target-sparc/cpu.h                 |    5 ++--
+ target-sparc/helper.c              |    4 ++-
+ target-unicore32/cpu.h             |    4 +--
+ target-unicore32/softmmu.c         |    3 ++-
+ target-xtensa/op_helper.c          |    5 +++-
+ translate-all.c                    |   10 ++++----
+ xen-all.c                          |   10 +++++---
+ 70 Dateien geändert, 319 Zeilen hinzugefügt(+), 224 Zeilen entfernt(-)
+
+diff --git a/cpu-exec.c b/cpu-exec.c
+index afbe497..f1da4e4 100644
+--- a/cpu-exec.c
++++ b/cpu-exec.c
+@@ -188,12 +188,12 @@ int cpu_exec(CPUArchState *env)
+     uint8_t *tc_ptr;
+     tcg_target_ulong next_tb;
+ 
+-    if (env->halted) {
++    if (cpu->halted) {
+         if (!cpu_has_work(cpu)) {
+             return EXCP_HALTED;
+         }
+ 
+-        env->halted = 0;
++        cpu->halted = 0;
+     }
+ 
+     cpu_single_env = env;
+@@ -263,14 +263,14 @@ int cpu_exec(CPUArchState *env)
+ 
+             next_tb = 0; /* force lookup of first TB */
+             for(;;) {
+-                interrupt_request = env->interrupt_request;
++                interrupt_request = cpu->interrupt_request;
+                 if (unlikely(interrupt_request)) {
+                     if (unlikely(env->singlestep_enabled & SSTEP_NOIRQ)) {
+                         /* Mask out external interrupts for this step. */
+                         interrupt_request &= ~CPU_INTERRUPT_SSTEP_MASK;
+                     }
+                     if (interrupt_request & CPU_INTERRUPT_DEBUG) {
+-                        env->interrupt_request &= ~CPU_INTERRUPT_DEBUG;
++                        cpu->interrupt_request &= ~CPU_INTERRUPT_DEBUG;
+                         env->exception_index = EXCP_DEBUG;
+                         cpu_loop_exit(env);
+                     }
+@@ -278,8 +278,8 @@ int cpu_exec(CPUArchState *env)
+     defined(TARGET_PPC) || defined(TARGET_ALPHA) || defined(TARGET_CRIS) || \
+     defined(TARGET_MICROBLAZE) || defined(TARGET_LM32) || defined(TARGET_UNICORE32)
+                     if (interrupt_request & CPU_INTERRUPT_HALT) {
+-                        env->interrupt_request &= ~CPU_INTERRUPT_HALT;
+-                        env->halted = 1;
++                        cpu->interrupt_request &= ~CPU_INTERRUPT_HALT;
++                        cpu->halted = 1;
+                         env->exception_index = EXCP_HLT;
+                         cpu_loop_exit(env);
+                     }
+@@ -287,7 +287,7 @@ int cpu_exec(CPUArchState *env)
+ #if defined(TARGET_I386)
+ #if !defined(CONFIG_USER_ONLY)
+                     if (interrupt_request & CPU_INTERRUPT_POLL) {
+-                        env->interrupt_request &= ~CPU_INTERRUPT_POLL;
++                        cpu->interrupt_request &= ~CPU_INTERRUPT_POLL;
+                         apic_poll_irq(env->apic_state);
+                     }
+ #endif
+@@ -304,17 +304,17 @@ int cpu_exec(CPUArchState *env)
+                             !(env->hflags & HF_SMM_MASK)) {
+                             cpu_svm_check_intercept_param(env, SVM_EXIT_SMI,
+                                                           0);
+-                            env->interrupt_request &= ~CPU_INTERRUPT_SMI;
++                            cpu->interrupt_request &= ~CPU_INTERRUPT_SMI;
+                             do_smm_enter(env);
+                             next_tb = 0;
+                         } else if ((interrupt_request & CPU_INTERRUPT_NMI) &&
+                                    !(env->hflags2 & HF2_NMI_MASK)) {
+-                            env->interrupt_request &= ~CPU_INTERRUPT_NMI;
++                            cpu->interrupt_request &= ~CPU_INTERRUPT_NMI;
+                             env->hflags2 |= HF2_NMI_MASK;
+                             do_interrupt_x86_hardirq(env, EXCP02_NMI, 1);
+                             next_tb = 0;
+                         } else if (interrupt_request & CPU_INTERRUPT_MCE) {
+-                            env->interrupt_request &= ~CPU_INTERRUPT_MCE;
++                            cpu->interrupt_request &= ~CPU_INTERRUPT_MCE;
+                             do_interrupt_x86_hardirq(env, EXCP12_MCHK, 0);
+                             next_tb = 0;
+                         } else if ((interrupt_request & CPU_INTERRUPT_HARD) &&
+@@ -326,7 +326,8 @@ int cpu_exec(CPUArchState *env)
+                             int intno;
+                             cpu_svm_check_intercept_param(env, SVM_EXIT_INTR,
+                                                           0);
+-                            env->interrupt_request &= ~(CPU_INTERRUPT_HARD | CPU_INTERRUPT_VIRQ);
++                            cpu->interrupt_request &= ~(CPU_INTERRUPT_HARD |
++                                                        CPU_INTERRUPT_VIRQ);
+                             intno = cpu_get_pic_interrupt(env);
+                             qemu_log_mask(CPU_LOG_TB_IN_ASM, "Servicing hardware INT=0x%02x\n", intno);
+                             do_interrupt_x86_hardirq(env, intno, 1);
+@@ -344,7 +345,7 @@ int cpu_exec(CPUArchState *env)
+                             intno = ldl_phys(env->vm_vmcb + offsetof(struct vmcb, control.int_vector));
+                             qemu_log_mask(CPU_LOG_TB_IN_ASM, "Servicing virtual hardware INT=0x%02x\n", intno);
+                             do_interrupt_x86_hardirq(env, intno, 1);
+-                            env->interrupt_request &= ~CPU_INTERRUPT_VIRQ;
++                            cpu->interrupt_request &= ~CPU_INTERRUPT_VIRQ;
+                             next_tb = 0;
+ #endif
+                         }
+@@ -355,8 +356,9 @@ int cpu_exec(CPUArchState *env)
+                     }
+                     if (interrupt_request & CPU_INTERRUPT_HARD) {
+                         ppc_hw_interrupt(env);
+-                        if (env->pending_interrupts == 0)
+-                            env->interrupt_request &= ~CPU_INTERRUPT_HARD;
++                        if (env->pending_interrupts == 0) {
++                            cpu->interrupt_request &= ~CPU_INTERRUPT_HARD;
++                        }
+                         next_tb = 0;
+                     }
+ #elif defined(TARGET_LM32)
+@@ -533,8 +535,8 @@ int cpu_exec(CPUArchState *env)
+ #endif
+                    /* Don't use the cached interrupt_request value,
+                       do_interrupt may have updated the EXITTB flag. */
+-                    if (env->interrupt_request & CPU_INTERRUPT_EXITTB) {
+-                        env->interrupt_request &= ~CPU_INTERRUPT_EXITTB;
++                    if (cpu->interrupt_request & CPU_INTERRUPT_EXITTB) {
++                        cpu->interrupt_request &= ~CPU_INTERRUPT_EXITTB;
+                         /* ensure that no TB jump will be modified as
+                            the program flow was changed */
+                         next_tb = 0;
+diff --git a/cpus.c b/cpus.c
+index 46355c1..8d47bfd 100644
+--- a/cpus.c
++++ b/cpus.c
+@@ -72,7 +72,7 @@ static bool cpu_thread_is_idle(CPUArchState *env)
+     if (cpu->stopped || !runstate_is_running()) {
+         return true;
+     }
+-    if (!env->halted || qemu_cpu_has_work(cpu) ||
++    if (!cpu->halted || qemu_cpu_has_work(cpu) ||
+         kvm_async_interrupts_enabled()) {
+         return false;
+     }
+@@ -1198,7 +1198,7 @@ CpuInfoList *qmp_query_cpus(Error **errp)
+         info->value = g_malloc0(sizeof(*info->value));
+         info->value->CPU = cpu->cpu_index;
+         info->value->current = (env == first_cpu);
+-        info->value->halted = env->halted;
++        info->value->halted = cpu->halted;
+         info->value->thread_id = cpu->thread_id;
+ #if defined(TARGET_I386)
+         info->value->has_pc = true;
+diff --git a/exec.c b/exec.c
+index 84e43bd..e180aec 100644
+--- a/exec.c
++++ b/exec.c
+@@ -223,12 +223,12 @@ void cpu_exec_init_all(void)
+ 
+ static int cpu_common_post_load(void *opaque, int version_id)
+ {
+-    CPUArchState *env = opaque;
++    CPUState *cpu = opaque;
+ 
+     /* 0x01 was CPU_INTERRUPT_EXIT. This line can be removed when the
+        version_id is increased. */
+-    env->interrupt_request &= ~0x01;
+-    tlb_flush(env, 1);
++    cpu->interrupt_request &= ~0x01;
++    tlb_flush(cpu->env_ptr, 1);
+ 
+     return 0;
+ }
+@@ -240,8 +240,8 @@ static const VMStateDescription vmstate_cpu_common = {
+     .minimum_version_id_old = 1,
+     .post_load = cpu_common_post_load,
+     .fields      = (VMStateField []) {
+-        VMSTATE_UINT32(halted, CPUArchState),
+-        VMSTATE_UINT32(interrupt_request, CPUArchState),
++        VMSTATE_UINT32(halted, CPUState),
++        VMSTATE_UINT32(interrupt_request, CPUState),
+         VMSTATE_END_OF_LIST()
+     }
+ };
+@@ -293,7 +293,7 @@ void cpu_exec_init(CPUArchState *env)
+ #if defined(CONFIG_USER_ONLY)
+     cpu_list_unlock();
+ #endif
+-    vmstate_register(NULL, cpu_index, &vmstate_cpu_common, env);
++    vmstate_register(NULL, cpu_index, &vmstate_cpu_common, cpu);
+ #if defined(CPU_SAVE_VERSION) && !defined(CONFIG_USER_ONLY)
+     register_savevm(NULL, "cpu", cpu_index, CPU_SAVE_VERSION,
+                     cpu_save, cpu_load, env);
+@@ -494,7 +494,9 @@ void cpu_single_step(CPUArchState *env, int enabled)
+ 
+ void cpu_reset_interrupt(CPUArchState *env, int mask)
+ {
+-    env->interrupt_request &= ~mask;
++    CPUState *cpu = ENV_GET_CPU(env);
++
++    cpu->interrupt_request &= ~mask;
+ }
+ 
+ void cpu_exit(CPUArchState *env)
+diff --git a/gdbstub.c b/gdbstub.c
+index 32dfea9..846de1c 100644
+--- a/gdbstub.c
++++ b/gdbstub.c
+@@ -2408,7 +2408,7 @@ static int gdb_handle_packet(GDBState *s, const char *line_buf)
+                 cpu_synchronize_state(env);
+                 len = snprintf((char *)mem_buf, sizeof(mem_buf),
+                                "CPU#%d [%s]", cpu->cpu_index,
+-                               env->halted ? "halted " : "running");
++                               cpu->halted ? "halted " : "running");
+                 memtohex(buf, mem_buf, len);
+                 put_packet(s, buf);
+             }
+diff --git a/hw/leon3.c b/hw/leon3.c
+index f16a8bb..e971d5c 100644
+--- a/hw/leon3.c
++++ b/hw/leon3.c
+@@ -49,11 +49,12 @@ typedef struct ResetData {
+ static void main_cpu_reset(void *opaque)
+ {
+     ResetData *s   = (ResetData *)opaque;
++    CPUState *cpu = CPU(s->cpu);
+     CPUSPARCState  *env = &s->cpu->env;
+ 
+-    cpu_reset(CPU(s->cpu));
++    cpu_reset(cpu);
+ 
+-    env->halted = 0;
++    cpu->halted = 0;
+     env->pc     = s->entry;
+     env->npc    = s->entry + 4;
+ }
+diff --git a/hw/omap1.c b/hw/omap1.c
+index 623b101..c36a330 100644
+--- a/hw/omap1.c
++++ b/hw/omap1.c
+@@ -1721,6 +1721,7 @@ static uint64_t omap_clkdsp_read(void *opaque, hwaddr addr,
+                                  unsigned size)
+ {
+     struct omap_mpu_state_s *s = (struct omap_mpu_state_s *) opaque;
++    CPUState *cpu = CPU(s->cpu);
+ 
+     if (size != 2) {
+         return omap_badwidth_read16(opaque, addr);
+@@ -1737,8 +1738,9 @@ static uint64_t omap_clkdsp_read(void *opaque, hwaddr addr,
+         return s->clkm.dsp_rstct2;
+ 
+     case 0x18:	/* DSP_SYSST */
++        cpu = CPU(s->cpu);
+         return (s->clkm.clocking_scheme << 11) | s->clkm.cold_start |
+-                (s->cpu->env.halted << 6);      /* Quite useless... */
++                (cpu->halted << 6);      /* Quite useless... */
+     }
+ 
+     OMAP_BAD_REG(addr);
+@@ -3754,8 +3756,9 @@ static void omap_setup_dsp_mapping(MemoryRegion *system_memory,
+ void omap_mpu_wakeup(void *opaque, int irq, int req)
+ {
+     struct omap_mpu_state_s *mpu = (struct omap_mpu_state_s *) opaque;
++    CPUState *cpu = CPU(mpu->cpu);
+ 
+-    if (mpu->cpu->env.halted) {
++    if (cpu->halted) {
+         cpu_interrupt(&mpu->cpu->env, CPU_INTERRUPT_EXITTB);
+     }
+ }
+diff --git a/hw/openrisc_timer.c b/hw/openrisc_timer.c
+index d965be7..f9f116a 100644
+--- a/hw/openrisc_timer.c
++++ b/hw/openrisc_timer.c
+@@ -73,8 +73,10 @@ static void openrisc_timer_cb(void *opaque)
+ 
+     if ((cpu->env.ttmr & TTMR_IE) &&
+          qemu_timer_expired(cpu->env.timer, qemu_get_clock_ns(vm_clock))) {
++        CPUState *cs = CPU(cpu);
++
+         cpu->env.ttmr |= TTMR_IP;
+-        cpu->env.interrupt_request |= CPU_INTERRUPT_TIMER;
++        cs->interrupt_request |= CPU_INTERRUPT_TIMER;
+     }
+ 
+     switch (cpu->env.ttmr & TTMR_M) {
+diff --git a/hw/ppc.c b/hw/ppc.c
+index 8cfb84f..e11d2f8 100644
+--- a/hw/ppc.c
++++ b/hw/ppc.c
+@@ -72,7 +72,7 @@ void ppc_set_irq(PowerPCCPU *cpu, int n_IRQ, int level)
+ 
+     LOG_IRQ("%s: %p n_IRQ %d level %d => pending %08" PRIx32
+                 "req %08x\n", __func__, env, n_IRQ, level,
+-                env->pending_interrupts, env->interrupt_request);
++                env->pending_interrupts, CPU(cpu)->interrupt_request);
+ }
+ 
+ /* PowerPC 6xx / 7xx internal IRQ controller */
+@@ -87,6 +87,8 @@ static void ppc6xx_set_irq(void *opaque, int pin, int level)
+     cur_level = (env->irq_input_state >> pin) & 1;
+     /* Don't generate spurious events */
+     if ((cur_level == 1 && level == 0) || (cur_level == 0 && level != 0)) {
++        CPUState *cs = CPU(cpu);
++
+         switch (pin) {
+         case PPC6xx_INPUT_TBEN:
+             /* Level sensitive - active high */
+@@ -126,7 +128,7 @@ static void ppc6xx_set_irq(void *opaque, int pin, int level)
+             /* XXX: Note that the only way to restart the CPU is to reset it */
+             if (level) {
+                 LOG_IRQ("%s: stop the CPU\n", __func__);
+-                env->halted = 1;
++                cs->halted = 1;
+             }
+             break;
+         case PPC6xx_INPUT_HRESET:
+@@ -174,6 +176,8 @@ static void ppc970_set_irq(void *opaque, int pin, int level)
+     cur_level = (env->irq_input_state >> pin) & 1;
+     /* Don't generate spurious events */
+     if ((cur_level == 1 && level == 0) || (cur_level == 0 && level != 0)) {
++        CPUState *cs = CPU(cpu);
++
+         switch (pin) {
+         case PPC970_INPUT_INT:
+             /* Level sensitive - active high */
+@@ -203,11 +207,11 @@ static void ppc970_set_irq(void *opaque, int pin, int level)
+             /* XXX: TODO: relay the signal to CKSTP_OUT pin */
+             if (level) {
+                 LOG_IRQ("%s: stop the CPU\n", __func__);
+-                env->halted = 1;
++                cs->halted = 1;
+             } else {
+                 LOG_IRQ("%s: restart the CPU\n", __func__);
+-                env->halted = 0;
+-                qemu_cpu_kick(CPU(cpu));
++                cs->halted = 0;
++                qemu_cpu_kick(cs);
+             }
+             break;
+         case PPC970_INPUT_HRESET:
+@@ -295,6 +299,8 @@ static void ppc40x_set_irq(void *opaque, int pin, int level)
+     cur_level = (env->irq_input_state >> pin) & 1;
+     /* Don't generate spurious events */
+     if ((cur_level == 1 && level == 0) || (cur_level == 0 && level != 0)) {
++        CPUState *cs = CPU(cpu);
++
+         switch (pin) {
+         case PPC40x_INPUT_RESET_SYS:
+             if (level) {
+@@ -332,11 +338,11 @@ static void ppc40x_set_irq(void *opaque, int pin, int level)
+             /* Level sensitive - active low */
+             if (level) {
+                 LOG_IRQ("%s: stop the CPU\n", __func__);
+-                env->halted = 1;
++                cs->halted = 1;
+             } else {
+                 LOG_IRQ("%s: restart the CPU\n", __func__);
+-                env->halted = 0;
+-                qemu_cpu_kick(CPU(cpu));
++                cs->halted = 0;
++                qemu_cpu_kick(cs);
+             }
+             break;
+         case PPC40x_INPUT_DEBUG:
+diff --git a/hw/ppc/e500.c b/hw/ppc/e500.c
+index 451682c..fef9c5d 100644
+--- a/hw/ppc/e500.c
++++ b/hw/ppc/e500.c
+@@ -420,26 +420,28 @@ static void mmubooke_create_initial_mapping(CPUPPCState *env)
+ static void ppce500_cpu_reset_sec(void *opaque)
+ {
+     PowerPCCPU *cpu = opaque;
++    CPUState *cs = CPU(cpu);
+     CPUPPCState *env = &cpu->env;
+ 
+-    cpu_reset(CPU(cpu));
++    cpu_reset(cs);
+ 
+     /* Secondary CPU starts in halted state for now. Needs to change when
+        implementing non-kernel boot. */
+-    env->halted = 1;
++    cs->halted = 1;
+     env->exception_index = EXCP_HLT;
+ }
+ 
+ static void ppce500_cpu_reset(void *opaque)
+ {
+     PowerPCCPU *cpu = opaque;
++    CPUState *cs = CPU(cpu);
+     CPUPPCState *env = &cpu->env;
+     struct boot_info *bi = env->load_info;
+ 
+-    cpu_reset(CPU(cpu));
++    cpu_reset(cs);
+ 
+     /* Set initial guest state. */
+-    env->halted = 0;
++    cs->halted = 0;
+     env->gpr[1] = (16<<20) - 8;
+     env->gpr[3] = bi->dt_base;
+     env->nip = bi->entry;
+diff --git a/hw/ppce500_spin.c b/hw/ppce500_spin.c
+index 5bdce52..18c5db4 100644
+--- a/hw/ppce500_spin.c
++++ b/hw/ppce500_spin.c
+@@ -112,7 +112,7 @@ static void spin_kick(void *data)
+     map_start = ldq_p(&curspin->addr) & ~(map_size - 1);
+     mmubooke_create_initial_mapping(env, 0, map_start, map_size);
+ 
+-    env->halted = 0;
++    cpu->halted = 0;
+     env->exception_index = -1;
+     cpu->stopped = false;
+     qemu_cpu_kick(cpu);
+diff --git a/hw/pxa2xx_gpio.c b/hw/pxa2xx_gpio.c
+index 05d2ad2..f00d150 100644
+--- a/hw/pxa2xx_gpio.c
++++ b/hw/pxa2xx_gpio.c
+@@ -93,6 +93,7 @@ static const int pxa2xx_gpio_wake[PXA2XX_GPIO_BANKS] = {
+ static void pxa2xx_gpio_set(void *opaque, int line, int level)
+ {
+     PXA2xxGPIOInfo *s = (PXA2xxGPIOInfo *) opaque;
++    CPUState *cpu = CPU(s->cpu);
+     int bank;
+     uint32_t mask;
+ 
+@@ -118,7 +119,7 @@ static void pxa2xx_gpio_set(void *opaque, int line, int level)
+         pxa2xx_gpio_irq_update(s);
+ 
+     /* Wake-up GPIOs */
+-    if (s->cpu->env.halted && (mask & ~s->dir[bank] & pxa2xx_gpio_wake[bank])) {
++    if (cpu->halted && (mask & ~s->dir[bank] & pxa2xx_gpio_wake[bank])) {
+         cpu_interrupt(&s->cpu->env, CPU_INTERRUPT_EXITTB);
+     }
+ }
+diff --git a/hw/pxa2xx_pic.c b/hw/pxa2xx_pic.c
+index 90b8fef..c73e709 100644
+--- a/hw/pxa2xx_pic.c
++++ b/hw/pxa2xx_pic.c
+@@ -46,8 +46,9 @@ static void pxa2xx_pic_update(void *opaque)
+ {
+     uint32_t mask[2];
+     PXA2xxPICState *s = (PXA2xxPICState *) opaque;
++    CPUState *cpu = CPU(s->cpu);
+ 
+-    if (s->cpu->env.halted) {
++    if (cpu->halted) {
+         mask[0] = s->int_pending[0] & (s->int_enabled[0] | s->int_idle);
+         mask[1] = s->int_pending[1] & (s->int_enabled[1] | s->int_idle);
+         if (mask[0] || mask[1]) {
+diff --git a/hw/s390x/s390-virtio.c b/hw/s390x/s390-virtio.c
+index e25c330..ca275bd 100644
+--- a/hw/s390x/s390-virtio.c
++++ b/hw/s390x/s390-virtio.c
+@@ -132,23 +132,25 @@ static unsigned s390_running_cpus;
+ 
+ void s390_add_running_cpu(S390CPU *cpu)
+ {
++    CPUState *cs = CPU(cpu);
+     CPUS390XState *env = &cpu->env;
+ 
+-    if (env->halted) {
++    if (cs->halted) {
+         s390_running_cpus++;
+-        env->halted = 0;
++        cs->halted = 0;
+         env->exception_index = -1;
+     }
+ }
+ 
+ unsigned s390_del_running_cpu(S390CPU *cpu)
+ {
++    CPUState *cs = CPU(cpu);
+     CPUS390XState *env = &cpu->env;
+ 
+-    if (env->halted == 0) {
++    if (cs->halted == 0) {
+         assert(s390_running_cpus >= 1);
+         s390_running_cpus--;
+-        env->halted = 1;
++        cs->halted = 1;
+         env->exception_index = EXCP_HLT;
+     }
+     return s390_running_cpus;
+@@ -183,11 +185,13 @@ void s390_init_cpus(const char *cpu_model, uint8_t *storage_keys)
+ 
+     for (i = 0; i < smp_cpus; i++) {
+         S390CPU *cpu;
++        CPUState *cs;
+ 
+         cpu = cpu_s390x_init(cpu_model);
++        cs = CPU(cpu);
+ 
+         ipi_states[i] = cpu;
+-        cpu->env.halted = 1;
++        cs->halted = 1;
+         cpu->env.exception_index = EXCP_HLT;
+         cpu->env.storage_keys = storage_keys;
+     }
+diff --git a/hw/spapr.c b/hw/spapr.c
+index e88a27a..da5181c 100644
+--- a/hw/spapr.c
++++ b/hw/spapr.c
+@@ -616,6 +616,8 @@ static void spapr_reset_htab(sPAPREnvironment *spapr)
+ 
+ static void ppc_spapr_reset(void)
+ {
++    CPUState *first_cpu_cpu;
++
+     /* Reset the hash table & recalc the RMA */
+     spapr_reset_htab(spapr);
+ 
+@@ -626,9 +628,10 @@ static void ppc_spapr_reset(void)
+                        spapr->rtas_size);
+ 
+     /* Set up the entry state */
++    first_cpu_cpu = CPU(first_cpu);
+     first_cpu->gpr[3] = spapr->fdt_addr;
+     first_cpu->gpr[5] = 0;
+-    first_cpu->halted = 0;
++    first_cpu_cpu->halted = 0;
+     first_cpu->nip = spapr->entry_point;
+ 
+ }
+@@ -636,14 +639,15 @@ static void ppc_spapr_reset(void)
+ static void spapr_cpu_reset(void *opaque)
+ {
+     PowerPCCPU *cpu = opaque;
++    CPUState *cs = CPU(cpu);
+     CPUPPCState *env = &cpu->env;
+ 
+-    cpu_reset(CPU(cpu));
++    cpu_reset(cs);
+ 
+     /* All CPUs start halted.  CPU0 is unhalted from the machine level
+      * reset code and the rest are explicitly started up by the guest
+      * using an RTAS call */
+-    env->halted = 1;
++    cs->halted = 1;
+ 
+     env->spr[SPR_HIOR] = 0;
+ 
+diff --git a/hw/spapr_hcall.c b/hw/spapr_hcall.c
+index 7b89594..531501b 100644
+--- a/hw/spapr_hcall.c
++++ b/hw/spapr_hcall.c
+@@ -513,7 +513,7 @@ static target_ulong h_cede(PowerPCCPU *cpu, sPAPREnvironment *spapr,
+     env->msr |= (1ULL << MSR_EE);
+     hreg_compute_hflags(env);
+     if (!cpu_has_work(cs)) {
+-        env->halted = 1;
++        cs->halted = 1;
+         env->exception_index = EXCP_HLT;
+         cs->exit_request = 1;
+     }
+diff --git a/hw/spapr_rtas.c b/hw/spapr_rtas.c
+index 5ec787f..a24e853 100644
+--- a/hw/spapr_rtas.c
++++ b/hw/spapr_rtas.c
+@@ -145,7 +145,7 @@ static void rtas_query_cpu_stopped_state(sPAPREnvironment *spapr,
+             continue;
+         }
+ 
+-        if (env->halted) {
++        if (cpu->halted) {
+             rtas_st(rets, 1, 0);
+         } else {
+             rtas_st(rets, 1, 2);
+@@ -184,7 +184,7 @@ static void rtas_start_cpu(sPAPREnvironment *spapr,
+             continue;
+         }
+ 
+-        if (!env->halted) {
++        if (!cpu->halted) {
+             rtas_st(rets, 0, -1);
+             return;
+         }
+@@ -197,7 +197,7 @@ static void rtas_start_cpu(sPAPREnvironment *spapr,
+         env->msr = (1ULL << MSR_SF) | (1ULL << MSR_ME);
+         env->nip = start;
+         env->gpr[3] = r3;
+-        env->halted = 0;
++        cpu->halted = 0;
+ 
+         qemu_cpu_kick(cpu);
+ 
+diff --git a/hw/sun4m.c b/hw/sun4m.c
+index 9903f44..45f9441 100644
+--- a/hw/sun4m.c
++++ b/hw/sun4m.c
+@@ -256,10 +256,11 @@ void cpu_check_irqs(CPUSPARCState *env)
+ static void cpu_kick_irq(SPARCCPU *cpu)
+ {
+     CPUSPARCState *env = &cpu->env;
++    CPUState *cs = CPU(cpu);
+ 
+-    env->halted = 0;
++    cs->halted = 0;
+     cpu_check_irqs(env);
+-    qemu_cpu_kick(CPU(cpu));
++    qemu_cpu_kick(cs);
+ }
+ 
+ static void cpu_set_irq(void *opaque, int irq, int level)
+@@ -285,19 +286,19 @@ static void dummy_cpu_set_irq(void *opaque, int irq, int level)
+ static void main_cpu_reset(void *opaque)
+ {
+     SPARCCPU *cpu = opaque;
+-    CPUSPARCState *env = &cpu->env;
++    CPUState *cs = CPU(cpu);
+ 
+-    cpu_reset(CPU(cpu));
+-    env->halted = 0;
++    cpu_reset(cs);
++    cs->halted = 0;
+ }
+ 
+ static void secondary_cpu_reset(void *opaque)
+ {
+     SPARCCPU *cpu = opaque;
+-    CPUSPARCState *env = &cpu->env;
++    CPUState *cs = CPU(cpu);
+ 
+-    cpu_reset(CPU(cpu));
+-    env->halted = 1;
++    cpu_reset(cs);
++    cs->halted = 1;
+ }
+ 
+ static void cpu_halt_signal(void *opaque, int irq, int level)
+@@ -826,6 +827,7 @@ static const TypeInfo ram_info = {
+ static void cpu_devinit(const char *cpu_model, unsigned int id,
+                         uint64_t prom_addr, qemu_irq **cpu_irqs)
+ {
++    CPUState *cs;
+     SPARCCPU *cpu;
+     CPUSPARCState *env;
+ 
+@@ -841,7 +843,8 @@ static void cpu_devinit(const char *cpu_model, unsigned int id,
+         qemu_register_reset(main_cpu_reset, cpu);
+     } else {
+         qemu_register_reset(secondary_cpu_reset, cpu);
+-        env->halted = 1;
++        cs = CPU(cpu);
++        cs->halted = 1;
+     }
+     *cpu_irqs = qemu_allocate_irqs(cpu_set_irq, cpu, MAX_PILS);
+     env->prom_addr = prom_addr;
+diff --git a/hw/sun4u.c b/hw/sun4u.c
+index 9fbda29..056bb4d 100644
+--- a/hw/sun4u.c
++++ b/hw/sun4u.c
+@@ -254,6 +254,7 @@ static uint64_t sun4u_load_kernel(const char *kernel_filename,
+ 
+ void cpu_check_irqs(CPUSPARCState *env)
+ {
++    CPUState *cs;
+     uint32_t pil = env->pil_in |
+                   (env->softint & ~(SOFTINT_TIMER | SOFTINT_STIMER));
+ 
+@@ -261,6 +262,7 @@ void cpu_check_irqs(CPUSPARCState *env)
+     if (env->ivec_status & 0x20) {
+         return;
+     }
++    cs = CPU(sparc_env_get_cpu(env));
+     /* check if TM or SM in SOFTINT are set
+        setting these also causes interrupt 14 */
+     if (env->softint & (SOFTINT_TIMER | SOFTINT_STIMER)) {
+@@ -270,7 +272,7 @@ void cpu_check_irqs(CPUSPARCState *env)
+     /* The bit corresponding to psrpil is (1<< psrpil), the next bit
+        is (2 << psrpil). */
+     if (pil < (2 << env->psrpil)){
+-        if (env->interrupt_request & CPU_INTERRUPT_HARD) {
++        if (cs->interrupt_request & CPU_INTERRUPT_HARD) {
+             CPUIRQ_DPRINTF("Reset CPU IRQ (current interrupt %x)\n",
+                            env->interrupt_index);
+             env->interrupt_index = 0;
+@@ -302,7 +304,7 @@ void cpu_check_irqs(CPUSPARCState *env)
+                 break;
+             }
+         }
+-    } else if (env->interrupt_request & CPU_INTERRUPT_HARD) {
++    } else if (cs->interrupt_request & CPU_INTERRUPT_HARD) {
+         CPUIRQ_DPRINTF("Interrupts disabled, pil=%08x pil_in=%08x softint=%08x "
+                        "current interrupt %x\n",
+                        pil, env->pil_in, env->softint, env->interrupt_index);
+@@ -313,22 +315,25 @@ void cpu_check_irqs(CPUSPARCState *env)
+ 
+ static void cpu_kick_irq(SPARCCPU *cpu)
+ {
++    CPUState *cs = CPU(cpu);
+     CPUSPARCState *env = &cpu->env;
+ 
+-    env->halted = 0;
++    cs->halted = 0;
+     cpu_check_irqs(env);
+-    qemu_cpu_kick(CPU(cpu));
++    qemu_cpu_kick(cs);
+ }
+ 
+ static void cpu_set_ivec_irq(void *opaque, int irq, int level)
+ {
+     SPARCCPU *cpu = opaque;
+     CPUSPARCState *env = &cpu->env;
++    CPUState *cs;
+ 
+     if (level) {
+         if (!(env->ivec_status & 0x20)) {
+             CPUIRQ_DPRINTF("Raise IVEC IRQ %d\n", irq);
+-            env->halted = 0;
++            cs = CPU(cpu);
++            cs->halted = 0;
+             env->interrupt_index = TT_IVEC;
+             env->ivec_status |= 0x20;
+             env->ivec_data[0] = (0x1f << 6) | irq;
+diff --git a/hw/xen_machine_pv.c b/hw/xen_machine_pv.c
+index 66e8981..4fec4fc 100644
+--- a/hw/xen_machine_pv.c
++++ b/hw/xen_machine_pv.c
+@@ -36,7 +36,7 @@ static void xen_init_pv(QEMUMachineInitArgs *args)
+     const char *kernel_cmdline = args->kernel_cmdline;
+     const char *initrd_filename = args->initrd_filename;
+     X86CPU *cpu;
+-    CPUX86State *env;
++    CPUState *cs;
+     DriveInfo *dinfo;
+     int i;
+ 
+@@ -49,8 +49,8 @@ static void xen_init_pv(QEMUMachineInitArgs *args)
+ #endif
+     }
+     cpu = cpu_x86_init(cpu_model);
+-    env = &cpu->env;
+-    env->halted = 1;
++    cs = CPU(cpu);
++    cs->halted = 1;
+ 
+     /* Initialize backend core & drivers */
+     if (xen_be_init() != 0) {
+diff --git a/hw/xtensa_pic.c b/hw/xtensa_pic.c
+index 97d36be..dca15b4 100644
+--- a/hw/xtensa_pic.c
++++ b/hw/xtensa_pic.c
+@@ -47,6 +47,7 @@ void xtensa_advance_ccount(CPUXtensaState *env, uint32_t d)
+ 
+ void check_interrupts(CPUXtensaState *env)
+ {
++    CPUState *cs = CPU(xtensa_env_get_cpu(env));
+     int minlevel = xtensa_get_cintlevel(env);
+     uint32_t int_set_enabled = env->sregs[INTSET] & env->sregs[INTENABLE];
+     int level;
+@@ -54,7 +55,7 @@ void check_interrupts(CPUXtensaState *env)
+     /* If the CPU is halted advance CCOUNT according to the vm_clock time
+      * elapsed since the moment when it was advanced last time.
+      */
+-    if (env->halted) {
++    if (cs->halted) {
+         int64_t now = qemu_get_clock_ns(vm_clock);
+ 
+         xtensa_advance_ccount(env,
+@@ -127,11 +128,12 @@ static void xtensa_ccompare_cb(void *opaque)
+ {
+     XtensaCPU *cpu = opaque;
+     CPUXtensaState *env = &cpu->env;
++    CPUState *cs = CPU(cpu);
+ 
+-    if (env->halted) {
++    if (cs->halted) {
+         env->halt_clock = qemu_get_clock_ns(vm_clock);
+         xtensa_advance_ccount(env, env->wake_ccount - env->sregs[CCOUNT]);
+-        if (!cpu_has_work(CPU(cpu))) {
++        if (!cpu_has_work(cs)) {
+             env->sregs[CCOUNT] = env->wake_ccount + 1;
+             xtensa_rearm_ccompare_timer(env);
+         }
+diff --git a/include/exec/cpu-defs.h b/include/exec/cpu-defs.h
+index 3dc9656..0ae967a 100644
+--- a/include/exec/cpu-defs.h
++++ b/include/exec/cpu-defs.h
+@@ -156,8 +156,6 @@ typedef struct CPUWatchpoint {
+                             accessed */                                 \
+     target_ulong mem_io_vaddr; /* target virtual addr at which the      \
+                                      memory was accessed */             \
+-    uint32_t halted; /* Nonzero if the CPU is in suspend state */       \
+-    uint32_t interrupt_request;                                         \
+     CPU_COMMON_TLB                                                      \
+     struct TranslationBlock *tb_jmp_cache[TB_JMP_CACHE_SIZE];           \
+     /* buffer for temporaries in the code generator */                  \
+diff --git a/include/qom/cpu.h b/include/qom/cpu.h
+index 65e24d3..32581fa 100644
+--- a/include/qom/cpu.h
++++ b/include/qom/cpu.h
+@@ -72,6 +72,8 @@ struct kvm_run;
+  * @host_tid: Host thread ID.
+  * @running: #true if CPU is currently running (usermode).
+  * @created: Indicates whether the CPU thread has been successfully created.
++ * @interrupt_request: Indicates a pending interrupt request.
++ * @halted: Nonzero if the CPU is in suspended state.
+  * @stop: Indicates a pending stop request.
+  * @stopped: Indicates the CPU has been artificially stopped.
+  * @env_ptr: Pointer to subclass-specific CPUArchState field.
+@@ -103,6 +105,7 @@ struct CPUState {
+     bool stop;
+     bool stopped;
+     volatile sig_atomic_t exit_request;
++    uint32_t interrupt_request;
+ 
+     void *env_ptr; /* CPUArchState */
+     struct TranslationBlock *current_tb;
+@@ -114,6 +117,7 @@ struct CPUState {
+ 
+     /* TODO Move common fields from CPUArchState here. */
+     int cpu_index; /* used by alpha TCG */
++    uint32_t halted; /* used by alpha, cris, ppc TCG */
+ };
+ 
+ 
+diff --git a/kvm-all.c b/kvm-all.c
+index 4decfdc..2b761e0 100644
+--- a/kvm-all.c
++++ b/kvm-all.c
+@@ -830,7 +830,7 @@ static void kvm_handle_interrupt(CPUArchState *env, int mask)
+ {
+     CPUState *cpu = ENV_GET_CPU(env);
+ 
+-    env->interrupt_request |= mask;
++    cpu->interrupt_request |= mask;
+ 
+     if (!qemu_cpu_is_self(cpu)) {
+         qemu_cpu_kick(cpu);
+diff --git a/qom/cpu.c b/qom/cpu.c
+index 0a2194d..0aa9be7 100644
+--- a/qom/cpu.c
++++ b/qom/cpu.c
+@@ -33,7 +33,9 @@ void cpu_reset(CPUState *cpu)
+ static void cpu_common_reset(CPUState *cpu)
+ {
+     cpu->exit_request = 0;
++    cpu->interrupt_request = 0;
+     cpu->current_tb = NULL;
++    cpu->halted = 0;
+ }
+ 
+ ObjectClass *cpu_class_by_name(const char *typename, const char *cpu_model)
+diff --git a/target-alpha/cpu.h b/target-alpha/cpu.h
+index f1db651..90f78ac 100644
+--- a/target-alpha/cpu.h
++++ b/target-alpha/cpu.h
+@@ -517,8 +517,6 @@ static inline void cpu_set_tls(CPUAlphaState *env, target_ulong newtls)
+ 
+ static inline bool cpu_has_work(CPUState *cpu)
+ {
+-    CPUAlphaState *env = &ALPHA_CPU(cpu)->env;
+-
+     /* Here we are checking to see if the CPU should wake up from HALT.
+        We will have gotten into this state only for WTINT from PALmode.  */
+     /* ??? I'm not sure how the IPL state works with WTINT to keep a CPU
+@@ -526,7 +524,7 @@ static inline bool cpu_has_work(CPUState *cpu)
+        assume that if a CPU really wants to stay asleep, it will mask
+        interrupts at the chipset level, which will prevent these bits
+        from being set in the first place.  */
+-    return env->interrupt_request & (CPU_INTERRUPT_HARD
++    return cpu->interrupt_request & (CPU_INTERRUPT_HARD
+                                      | CPU_INTERRUPT_TIMER
+                                      | CPU_INTERRUPT_SMP
+                                      | CPU_INTERRUPT_MCHK);
+diff --git a/target-alpha/translate.c b/target-alpha/translate.c
+index f8f7695..95ae88a 100644
+--- a/target-alpha/translate.c
++++ b/target-alpha/translate.c
+@@ -1686,7 +1686,8 @@ static ExitStatus gen_mtpr(DisasContext *ctx, int rb, int regno)
+     case 253:
+         /* WAIT */
+         tmp = tcg_const_i64(1);
+-        tcg_gen_st32_i64(tmp, cpu_env, offsetof(CPUAlphaState, halted));
++        tcg_gen_st32_i64(tmp, cpu_env, -offsetof(AlphaCPU, env) +
++                                       offsetof(CPUState, halted));
+         return gen_excp(ctx, EXCP_HLT, 0);
+ 
+     case 252:
+diff --git a/target-arm/cpu.h b/target-arm/cpu.h
+index 2902ba5..7c47467 100644
+--- a/target-arm/cpu.h
++++ b/target-arm/cpu.h
+@@ -721,9 +721,7 @@ static inline void cpu_get_tb_cpu_state(CPUARMState *env, target_ulong *pc,
+ 
+ static inline bool cpu_has_work(CPUState *cpu)
+ {
+-    CPUARMState *env = &ARM_CPU(cpu)->env;
+-
+-    return env->interrupt_request &
++    return cpu->interrupt_request &
+         (CPU_INTERRUPT_FIQ | CPU_INTERRUPT_HARD | CPU_INTERRUPT_EXITTB);
+ }
+ 
+diff --git a/target-arm/helper.c b/target-arm/helper.c
+index e97e1a5..655093d 100644
+--- a/target-arm/helper.c
++++ b/target-arm/helper.c
+@@ -1802,6 +1802,7 @@ static void do_interrupt_v7m(CPUARMState *env)
+ /* Handle a CPU exception.  */
+ void do_interrupt(CPUARMState *env)
+ {
++    CPUState *cs;
+     uint32_t addr;
+     uint32_t mask;
+     int new_mode;
+@@ -1908,7 +1909,8 @@ void do_interrupt(CPUARMState *env)
+     }
+     env->regs[14] = env->regs[15] + offset;
+     env->regs[15] = addr;
+-    env->interrupt_request |= CPU_INTERRUPT_EXITTB;
++    cs = CPU(arm_env_get_cpu(env));
++    cs->interrupt_request |= CPU_INTERRUPT_EXITTB;
+ }
+ 
+ /* Check section/page access permissions.
+diff --git a/target-arm/op_helper.c b/target-arm/op_helper.c
+index a522313..a918e5b 100644
+--- a/target-arm/op_helper.c
++++ b/target-arm/op_helper.c
+@@ -218,8 +218,10 @@ uint32_t HELPER(usat16)(CPUARMState *env, uint32_t x, uint32_t shift)
+ 
+ void HELPER(wfi)(CPUARMState *env)
+ {
++    CPUState *cs = CPU(arm_env_get_cpu(env));
++
+     env->exception_index = EXCP_HLT;
+-    env->halted = 1;
++    cs->halted = 1;
+     cpu_loop_exit(env);
+ }
+ 
+diff --git a/target-cris/cpu.h b/target-cris/cpu.h
+index ebf2d40..2fc7c5c 100644
+--- a/target-cris/cpu.h
++++ b/target-cris/cpu.h
+@@ -289,9 +289,7 @@ void cris_cpu_list(FILE *f, fprintf_function cpu_fprintf);
+ 
+ static inline bool cpu_has_work(CPUState *cpu)
+ {
+-    CPUCRISState *env = &CRIS_CPU(cpu)->env;
+-
+-    return env->interrupt_request & (CPU_INTERRUPT_HARD | CPU_INTERRUPT_NMI);
++    return cpu->interrupt_request & (CPU_INTERRUPT_HARD | CPU_INTERRUPT_NMI);
+ }
+ 
+ #include "exec/exec-all.h"
+diff --git a/target-cris/helper.c b/target-cris/helper.c
+index de04143..885f67f 100644
+--- a/target-cris/helper.c
++++ b/target-cris/helper.c
+@@ -66,6 +66,7 @@ static void cris_shift_ccs(CPUCRISState *env)
+ int cpu_cris_handle_mmu_fault(CPUCRISState *env, target_ulong address, int rw,
+                               int mmu_idx)
+ {
++    D(CPUState *cpu = CPU(cris_env_get_cpu(env)));
+     struct cris_mmu_result res;
+     int prot, miss;
+     int r = -1;
+@@ -99,7 +100,7 @@ int cpu_cris_handle_mmu_fault(CPUCRISState *env, target_ulong address, int rw,
+     }
+     if (r > 0) {
+         D_LOG("%s returns %d irqreq=%x addr=%x phy=%x vec=%x pc=%x\n",
+-              __func__, r, env->interrupt_request, address, res.phy,
++              __func__, r, cpu->interrupt_request, address, res.phy,
+               res.bf_vec, env->pc);
+     }
+     return r;
+@@ -107,11 +108,12 @@ int cpu_cris_handle_mmu_fault(CPUCRISState *env, target_ulong address, int rw,
+ 
+ static void do_interruptv10(CPUCRISState *env)
+ {
++    D(CPUState *cs = CPU(cris_env_get_cpu(env)));
+     int ex_vec = -1;
+ 
+     D_LOG("exception index=%d interrupt_req=%d\n",
+           env->exception_index,
+-          env->interrupt_request);
++          cs->interrupt_request);
+ 
+     assert(!(env->pregs[PR_CCS] & PFIX_FLAG));
+     switch (env->exception_index) {
+@@ -162,6 +164,7 @@ static void do_interruptv10(CPUCRISState *env)
+ 
+ void do_interrupt(CPUCRISState *env)
+ {
++    D(CPUState *cs = CPU(cris_env_get_cpu(env)));
+     int ex_vec = -1;
+ 
+     if (env->pregs[PR_VR] < 32) {
+@@ -170,7 +173,7 @@ void do_interrupt(CPUCRISState *env)
+ 
+     D_LOG("exception index=%d interrupt_req=%d\n",
+           env->exception_index,
+-          env->interrupt_request);
++          cs->interrupt_request);
+ 
+     switch (env->exception_index) {
+     case EXCP_BREAK:
+diff --git a/target-cris/translate.c b/target-cris/translate.c
+index 14c167f..4b6d6c8 100644
+--- a/target-cris/translate.c
++++ b/target-cris/translate.c
+@@ -2888,7 +2888,8 @@ static int dec_rfe_etc(CPUCRISState *env, DisasContext *dc)
+     cris_cc_mask(dc, 0);
+ 
+     if (dc->op2 == 15) {
+-        t_gen_mov_env_TN(halted, tcg_const_tl(1));
++        tcg_gen_st_i32(tcg_const_i32(1), cpu_env,
++                       -offsetof(CRISCPU, env) + offsetof(CPUState, halted));
+         tcg_gen_movi_tl(env_pc, dc->pc + 2);
+         t_gen_raise_exception(EXCP_HLT);
+         return 2;
+diff --git a/target-i386/cpu.c b/target-i386/cpu.c
+index 9b1f7d1..57ba84f 100644
+--- a/target-i386/cpu.c
++++ b/target-i386/cpu.c
+@@ -2014,7 +2014,7 @@ static void x86_cpu_reset(CPUState *s)
+         apic_designate_bsp(env->apic_state);
+     }
+ 
+-    env->halted = !cpu_is_bsp(cpu);
++    s->halted = !cpu_is_bsp(cpu);
+ #endif
+ }
+ 
+diff --git a/target-i386/cpu.h b/target-i386/cpu.h
+index 0c1c5c5..bf6e210 100644
+--- a/target-i386/cpu.h
++++ b/target-i386/cpu.h
+@@ -967,6 +967,7 @@ static inline void cpu_x86_load_seg_cache(CPUX86State *env,
+ static inline void cpu_x86_load_seg_cache_sipi(X86CPU *cpu,
+                                                int sipi_vector)
+ {
++    CPUState *cs = CPU(cpu);
+     CPUX86State *env = &cpu->env;
+ 
+     env->eip = 0;
+@@ -974,7 +975,7 @@ static inline void cpu_x86_load_seg_cache_sipi(X86CPU *cpu,
+                            sipi_vector << 12,
+                            env->segs[R_CS].limit,
+                            env->segs[R_CS].flags);
+-    env->halted = 0;
++    cs->halted = 0;
+ }
+ 
+ int cpu_x86_get_descr_debug(CPUX86State *env, unsigned int selector,
+@@ -1166,17 +1167,18 @@ static inline void cpu_clone_regs(CPUX86State *env, target_ulong newsp)
+ #include "hw/apic.h"
+ #endif
+ 
+-static inline bool cpu_has_work(CPUState *cpu)
++static inline bool cpu_has_work(CPUState *cs)
+ {
+-    CPUX86State *env = &X86_CPU(cpu)->env;
++    X86CPU *cpu = X86_CPU(cs);
++    CPUX86State *env = &cpu->env;
+ 
+-    return ((env->interrupt_request & (CPU_INTERRUPT_HARD |
+-                                       CPU_INTERRUPT_POLL)) &&
++    return ((cs->interrupt_request & (CPU_INTERRUPT_HARD |
++                                      CPU_INTERRUPT_POLL)) &&
+             (env->eflags & IF_MASK)) ||
+-           (env->interrupt_request & (CPU_INTERRUPT_NMI |
+-                                      CPU_INTERRUPT_INIT |
+-                                      CPU_INTERRUPT_SIPI |
+-                                      CPU_INTERRUPT_MCE));
++           (cs->interrupt_request & (CPU_INTERRUPT_NMI |
++                                     CPU_INTERRUPT_INIT |
++                                     CPU_INTERRUPT_SIPI |
++                                     CPU_INTERRUPT_MCE));
+ }
+ 
+ #include "exec/exec-all.h"
+diff --git a/target-i386/helper.c b/target-i386/helper.c
+index 82a731c..b49a0fc 100644
+--- a/target-i386/helper.c
++++ b/target-i386/helper.c
+@@ -182,6 +182,7 @@ done:
+ void cpu_dump_state(CPUX86State *env, FILE *f, fprintf_function cpu_fprintf,
+                     int flags)
+ {
++    CPUState *cs = CPU(x86_env_get_cpu(env));
+     int eflags, i, nb;
+     char cc_op_name[32];
+     static const char *seg_name[6] = { "ES", "CS", "SS", "DS", "FS", "GS" };
+@@ -225,7 +226,7 @@ void cpu_dump_state(CPUX86State *env, FILE *f, fprintf_function cpu_fprintf,
+                     (env->hflags >> HF_INHIBIT_IRQ_SHIFT) & 1,
+                     (env->a20_mask >> 20) & 1,
+                     (env->hflags >> HF_SMM_SHIFT) & 1,
+-                    env->halted);
++                    cs->halted);
+     } else
+ #endif
+     {
+@@ -252,7 +253,7 @@ void cpu_dump_state(CPUX86State *env, FILE *f, fprintf_function cpu_fprintf,
+                     (env->hflags >> HF_INHIBIT_IRQ_SHIFT) & 1,
+                     (env->a20_mask >> 20) & 1,
+                     (env->hflags >> HF_SMM_SHIFT) & 1,
+-                    env->halted);
++                    cs->halted);
+     }
+ 
+     for(i = 0; i < 6; i++) {
+@@ -1281,12 +1282,13 @@ int cpu_x86_get_descr_debug(CPUX86State *env, unsigned int selector,
+ #if !defined(CONFIG_USER_ONLY)
+ void do_cpu_init(X86CPU *cpu)
+ {
++    CPUState *cs = CPU(cpu);
+     CPUX86State *env = &cpu->env;
+-    int sipi = env->interrupt_request & CPU_INTERRUPT_SIPI;
++    int sipi = cs->interrupt_request & CPU_INTERRUPT_SIPI;
+     uint64_t pat = env->pat;
+ 
+-    cpu_reset(CPU(cpu));
+-    env->interrupt_request = sipi;
++    cpu_reset(cs);
++    cs->interrupt_request = sipi;
+     env->pat = pat;
+     apic_init_reset(env->apic_state);
+ }
+diff --git a/target-i386/kvm.c b/target-i386/kvm.c
+index 0cf413d..df30fa6 100644
+--- a/target-i386/kvm.c
++++ b/target-i386/kvm.c
+@@ -1460,17 +1460,18 @@ static int kvm_put_mp_state(X86CPU *cpu)
+ 
+ static int kvm_get_mp_state(X86CPU *cpu)
+ {
++    CPUState *cs = CPU(cpu);
+     CPUX86State *env = &cpu->env;
+     struct kvm_mp_state mp_state;
+     int ret;
+ 
+-    ret = kvm_vcpu_ioctl(CPU(cpu), KVM_GET_MP_STATE, &mp_state);
++    ret = kvm_vcpu_ioctl(cs, KVM_GET_MP_STATE, &mp_state);
+     if (ret < 0) {
+         return ret;
+     }
+     env->mp_state = mp_state.mp_state;
+     if (kvm_irqchip_in_kernel()) {
+-        env->halted = (mp_state.mp_state == KVM_MP_STATE_HALTED);
++        cs->halted = (mp_state.mp_state == KVM_MP_STATE_HALTED);
+     }
+     return 0;
+ }
+@@ -1762,8 +1763,8 @@ void kvm_arch_pre_run(CPUState *cpu, struct kvm_run *run)
+     int ret;
+ 
+     /* Inject NMI */
+-    if (env->interrupt_request & CPU_INTERRUPT_NMI) {
+-        env->interrupt_request &= ~CPU_INTERRUPT_NMI;
++    if (cpu->interrupt_request & CPU_INTERRUPT_NMI) {
++        cpu->interrupt_request &= ~CPU_INTERRUPT_NMI;
+         DPRINTF("injected NMI\n");
+         ret = kvm_vcpu_ioctl(cpu, KVM_NMI);
+         if (ret < 0) {
+@@ -1775,18 +1776,18 @@ void kvm_arch_pre_run(CPUState *cpu, struct kvm_run *run)
+     if (!kvm_irqchip_in_kernel()) {
+         /* Force the VCPU out of its inner loop to process any INIT requests
+          * or pending TPR access reports. */
+-        if (env->interrupt_request &
++        if (cpu->interrupt_request &
+             (CPU_INTERRUPT_INIT | CPU_INTERRUPT_TPR)) {
+             cpu->exit_request = 1;
+         }
+ 
+         /* Try to inject an interrupt if the guest can accept it */
+         if (run->ready_for_interrupt_injection &&
+-            (env->interrupt_request & CPU_INTERRUPT_HARD) &&
++            (cpu->interrupt_request & CPU_INTERRUPT_HARD) &&
+             (env->eflags & IF_MASK)) {
+             int irq;
+ 
+-            env->interrupt_request &= ~CPU_INTERRUPT_HARD;
++            cpu->interrupt_request &= ~CPU_INTERRUPT_HARD;
+             irq = cpu_get_pic_interrupt(env);
+             if (irq >= 0) {
+                 struct kvm_interrupt intr;
+@@ -1806,7 +1807,7 @@ void kvm_arch_pre_run(CPUState *cpu, struct kvm_run *run)
+          * interrupt, request an interrupt window exit.  This will
+          * cause a return to userspace as soon as the guest is ready to
+          * receive interrupts. */
+-        if ((env->interrupt_request & CPU_INTERRUPT_HARD)) {
++        if ((cpu->interrupt_request & CPU_INTERRUPT_HARD)) {
+             run->request_interrupt_window = 1;
+         } else {
+             run->request_interrupt_window = 0;
+@@ -1836,11 +1837,11 @@ int kvm_arch_process_async_events(CPUState *cs)
+     X86CPU *cpu = X86_CPU(cs);
+     CPUX86State *env = &cpu->env;
+ 
+-    if (env->interrupt_request & CPU_INTERRUPT_MCE) {
++    if (cs->interrupt_request & CPU_INTERRUPT_MCE) {
+         /* We must not raise CPU_INTERRUPT_MCE if it's not supported. */
+         assert(env->mcg_cap);
+ 
+-        env->interrupt_request &= ~CPU_INTERRUPT_MCE;
++        cs->interrupt_request &= ~CPU_INTERRUPT_MCE;
+ 
+         kvm_cpu_synchronize_state(env);
+ 
+@@ -1853,7 +1854,7 @@ int kvm_arch_process_async_events(CPUState *cs)
+         env->exception_injected = EXCP12_MCHK;
+         env->has_error_code = 0;
+ 
+-        env->halted = 0;
++        cs->halted = 0;
+         if (kvm_irqchip_in_kernel() && env->mp_state == KVM_MP_STATE_HALTED) {
+             env->mp_state = KVM_MP_STATE_RUNNABLE;
+         }
+@@ -1863,41 +1864,42 @@ int kvm_arch_process_async_events(CPUState *cs)
+         return 0;
+     }
+ 
+-    if (env->interrupt_request & CPU_INTERRUPT_POLL) {
+-        env->interrupt_request &= ~CPU_INTERRUPT_POLL;
++    if (cs->interrupt_request & CPU_INTERRUPT_POLL) {
++        cs->interrupt_request &= ~CPU_INTERRUPT_POLL;
+         apic_poll_irq(env->apic_state);
+     }
+-    if (((env->interrupt_request & CPU_INTERRUPT_HARD) &&
++    if (((cs->interrupt_request & CPU_INTERRUPT_HARD) &&
+          (env->eflags & IF_MASK)) ||
+-        (env->interrupt_request & CPU_INTERRUPT_NMI)) {
+-        env->halted = 0;
++        (cs->interrupt_request & CPU_INTERRUPT_NMI)) {
++        cs->halted = 0;
+     }
+-    if (env->interrupt_request & CPU_INTERRUPT_INIT) {
++    if (cs->interrupt_request & CPU_INTERRUPT_INIT) {
+         kvm_cpu_synchronize_state(env);
+         do_cpu_init(cpu);
+     }
+-    if (env->interrupt_request & CPU_INTERRUPT_SIPI) {
++    if (cs->interrupt_request & CPU_INTERRUPT_SIPI) {
+         kvm_cpu_synchronize_state(env);
+         do_cpu_sipi(cpu);
+     }
+-    if (env->interrupt_request & CPU_INTERRUPT_TPR) {
+-        env->interrupt_request &= ~CPU_INTERRUPT_TPR;
++    if (cs->interrupt_request & CPU_INTERRUPT_TPR) {
++        cs->interrupt_request &= ~CPU_INTERRUPT_TPR;
+         kvm_cpu_synchronize_state(env);
+         apic_handle_tpr_access_report(env->apic_state, env->eip,
+                                       env->tpr_access_type);
+     }
+ 
+-    return env->halted;
++    return cs->halted;
+ }
+ 
+ static int kvm_handle_halt(X86CPU *cpu)
+ {
++    CPUState *cs = CPU(cpu);
+     CPUX86State *env = &cpu->env;
+ 
+-    if (!((env->interrupt_request & CPU_INTERRUPT_HARD) &&
++    if (!((cs->interrupt_request & CPU_INTERRUPT_HARD) &&
+           (env->eflags & IF_MASK)) &&
+-        !(env->interrupt_request & CPU_INTERRUPT_NMI)) {
+-        env->halted = 1;
++        !(cs->interrupt_request & CPU_INTERRUPT_NMI)) {
++        cs->halted = 1;
+         return EXCP_HLT;
+     }
+ 
+diff --git a/target-i386/machine.c b/target-i386/machine.c
+index c9984b8..b80a5f4 100644
+--- a/target-i386/machine.c
++++ b/target-i386/machine.c
+@@ -453,7 +453,7 @@ const VMStateDescription vmstate_x86_cpu = {
+         VMSTATE_UINT64_V(env.pat, X86CPU, 5),
+         VMSTATE_UINT32_V(env.hflags2, X86CPU, 5),
+ 
+-        VMSTATE_UINT32_TEST(env.halted, X86CPU, version_is_5),
++        VMSTATE_UINT32_TEST(parent_obj.halted, X86CPU, version_is_5),
+         VMSTATE_UINT64_V(env.vm_hsave, X86CPU, 5),
+         VMSTATE_UINT64_V(env.vm_vmcb, X86CPU, 5),
+         VMSTATE_UINT64_V(env.tsc_offset, X86CPU, 5),
+diff --git a/target-i386/misc_helper.c b/target-i386/misc_helper.c
+index b6d5740..dfbc07b 100644
+--- a/target-i386/misc_helper.c
++++ b/target-i386/misc_helper.c
+@@ -553,20 +553,25 @@ void helper_rdmsr(CPUX86State *env)
+ }
+ #endif
+ 
+-static void do_hlt(CPUX86State *env)
++static void do_hlt(X86CPU *cpu)
+ {
++    CPUState *cs = CPU(cpu);
++    CPUX86State *env = &cpu->env;
++
+     env->hflags &= ~HF_INHIBIT_IRQ_MASK; /* needed if sti is just before */
+-    env->halted = 1;
++    cs->halted = 1;
+     env->exception_index = EXCP_HLT;
+     cpu_loop_exit(env);
+ }
+ 
+ void helper_hlt(CPUX86State *env, int next_eip_addend)
+ {
++    X86CPU *cpu = x86_env_get_cpu(env);
++
+     cpu_svm_check_intercept_param(env, SVM_EXIT_HLT, 0);
+     EIP += next_eip_addend;
+ 
+-    do_hlt(env);
++    do_hlt(cpu);
+ }
+ 
+ void helper_monitor(CPUX86State *env, target_ulong ptr)
+@@ -580,7 +585,8 @@ void helper_monitor(CPUX86State *env, target_ulong ptr)
+ 
+ void helper_mwait(CPUX86State *env, int next_eip_addend)
+ {
+-    CPUState *cpu;
++    CPUState *cs;
++    X86CPU *cpu;
+ 
+     if ((uint32_t)ECX != 0) {
+         raise_exception(env, EXCP0D_GPF);
+@@ -588,13 +594,14 @@ void helper_mwait(CPUX86State *env, int next_eip_addend)
+     cpu_svm_check_intercept_param(env, SVM_EXIT_MWAIT, 0);
+     EIP += next_eip_addend;
+ 
+-    cpu = CPU(x86_env_get_cpu(env));
++    cpu = x86_env_get_cpu(env);
++    cs = CPU(cpu);
+     /* XXX: not complete but not completely erroneous */
+-    if (cpu->cpu_index != 0 || env->next_cpu != NULL) {
++    if (cs->cpu_index != 0 || env->next_cpu != NULL) {
+         /* more than one CPU: do not sleep because another CPU may
+            wake this one */
+     } else {
+-        do_hlt(env);
++        do_hlt(cpu);
+     }
+ }
+ 
+diff --git a/target-i386/svm_helper.c b/target-i386/svm_helper.c
+index 3f246e9..c46a213 100644
+--- a/target-i386/svm_helper.c
++++ b/target-i386/svm_helper.c
+@@ -271,7 +271,9 @@ void helper_vmrun(CPUX86State *env, int aflag, int next_eip_addend)
+     env->hflags2 |= HF2_GIF_MASK;
+ 
+     if (int_ctl & V_IRQ_MASK) {
+-        env->interrupt_request |= CPU_INTERRUPT_VIRQ;
++        CPUState *cs = CPU(x86_env_get_cpu(env));
++
++        cs->interrupt_request |= CPU_INTERRUPT_VIRQ;
+     }
+ 
+     /* maybe we need to inject an event */
+@@ -548,6 +550,7 @@ void helper_svm_check_io(CPUX86State *env, uint32_t port, uint32_t param,
+ /* Note: currently only 32 bits of exit_code are used */
+ void helper_vmexit(CPUX86State *env, uint32_t exit_code, uint64_t exit_info_1)
+ {
++    CPUState *cs = CPU(x86_env_get_cpu(env));
+     uint32_t int_ctl;
+ 
+     qemu_log_mask(CPU_LOG_TB_IN_ASM, "vmexit(%08x, %016" PRIx64 ", %016"
+@@ -594,7 +597,7 @@ void helper_vmexit(CPUX86State *env, uint32_t exit_code, uint64_t exit_info_1)
+     int_ctl = ldl_phys(env->vm_vmcb + offsetof(struct vmcb, control.int_ctl));
+     int_ctl &= ~(V_TPR_MASK | V_IRQ_MASK);
+     int_ctl |= env->v_tpr & V_TPR_MASK;
+-    if (env->interrupt_request & CPU_INTERRUPT_VIRQ) {
++    if (cs->interrupt_request & CPU_INTERRUPT_VIRQ) {
+         int_ctl |= V_IRQ_MASK;
+     }
+     stl_phys(env->vm_vmcb + offsetof(struct vmcb, control.int_ctl), int_ctl);
+@@ -615,7 +618,7 @@ void helper_vmexit(CPUX86State *env, uint32_t exit_code, uint64_t exit_info_1)
+     env->hflags &= ~HF_SVMI_MASK;
+     env->intercept = 0;
+     env->intercept_exceptions = 0;
+-    env->interrupt_request &= ~CPU_INTERRUPT_VIRQ;
++    cs->interrupt_request &= ~CPU_INTERRUPT_VIRQ;
+     env->tsc_offset = 0;
+ 
+     env->gdt.base  = ldq_phys(env->vm_hsave + offsetof(struct vmcb,
+diff --git a/target-lm32/cpu.h b/target-lm32/cpu.h
+index e0bbe04..3d3181b 100644
+--- a/target-lm32/cpu.h
++++ b/target-lm32/cpu.h
+@@ -252,9 +252,7 @@ static inline void cpu_get_tb_cpu_state(CPULM32State *env, target_ulong *pc,
+ 
+ static inline bool cpu_has_work(CPUState *cpu)
+ {
+-    CPULM32State *env = &LM32_CPU(cpu)->env;
+-
+-    return env->interrupt_request & CPU_INTERRUPT_HARD;
++    return cpu->interrupt_request & CPU_INTERRUPT_HARD;
+ }
+ 
+ #include "exec/exec-all.h"
+diff --git a/target-lm32/op_helper.c b/target-lm32/op_helper.c
+index 53410b1..ebc94a0 100644
+--- a/target-lm32/op_helper.c
++++ b/target-lm32/op_helper.c
+@@ -25,7 +25,9 @@ void helper_raise_exception(CPULM32State *env, uint32_t index)
+ 
+ void helper_hlt(CPULM32State *env)
+ {
+-    env->halted = 1;
++    CPUState *cs = CPU(lm32_env_get_cpu(env));
++
++    cs->halted = 1;
+     env->exception_index = EXCP_HLT;
+     cpu_loop_exit(env);
+ }
+diff --git a/target-m68k/cpu.h b/target-m68k/cpu.h
+index 2672eae..bb2fbd6 100644
+--- a/target-m68k/cpu.h
++++ b/target-m68k/cpu.h
+@@ -265,9 +265,7 @@ static inline void cpu_get_tb_cpu_state(CPUM68KState *env, target_ulong *pc,
+ 
+ static inline bool cpu_has_work(CPUState *cpu)
+ {
+-    CPUM68KState *env = &M68K_CPU(cpu)->env;
+-
+-    return env->interrupt_request & CPU_INTERRUPT_HARD;
++    return cpu->interrupt_request & CPU_INTERRUPT_HARD;
+ }
+ 
+ #include "exec/exec-all.h"
+diff --git a/target-m68k/op_helper.c b/target-m68k/op_helper.c
+index 16df24c..e11f34b 100644
+--- a/target-m68k/op_helper.c
++++ b/target-m68k/op_helper.c
+@@ -84,6 +84,7 @@ static void do_rte(CPUM68KState *env)
+ 
+ static void do_interrupt_all(CPUM68KState *env, int is_hw)
+ {
++    CPUState *cs;
+     uint32_t sp;
+     uint32_t fmt;
+     uint32_t retaddr;
+@@ -108,7 +109,8 @@ static void do_interrupt_all(CPUM68KState *env, int is_hw)
+                 do_m68k_semihosting(env, env->dregs[0]);
+                 return;
+             }
+-            env->halted = 1;
++            cs = CPU(m68k_env_get_cpu(env));
++            cs->halted = 1;
+             env->exception_index = EXCP_HLT;
+             cpu_loop_exit(env);
+             return;
+diff --git a/target-m68k/qregs.def b/target-m68k/qregs.def
+index 49400c4..4235b02 100644
+--- a/target-m68k/qregs.def
++++ b/target-m68k/qregs.def
+@@ -8,6 +8,5 @@ DEFO32(CC_X, cc_x)
+ DEFO32(DIV1, div1)
+ DEFO32(DIV2, div2)
+ DEFO32(EXCEPTION, exception_index)
+-DEFO32(HALTED, halted)
+ DEFO32(MACSR, macsr)
+ DEFO32(MAC_MASK, mac_mask)
+diff --git a/target-m68k/translate.c b/target-m68k/translate.c
+index 3f1478c..40dd0a0 100644
+--- a/target-m68k/translate.c
++++ b/target-m68k/translate.c
+@@ -42,6 +42,8 @@
+ #undef DEFO64
+ #undef DEFF64
+ 
++static TCGv_i32 cpu_halted;
++
+ static TCGv_ptr cpu_env;
+ 
+ static char cpu_reg_names[3*8*3 + 5*4];
+@@ -76,6 +78,10 @@ void m68k_tcg_init(void)
+ #undef DEFO64
+ #undef DEFF64
+ 
++    cpu_halted = tcg_global_mem_new_i32(TCG_AREG0,
++                                        -offsetof(M68kCPU, env) +
++                                        offsetof(CPUState, halted), "HALTED");
++
+     cpu_env = tcg_global_reg_new_ptr(TCG_AREG0, "env");
+ 
+     p = cpu_reg_names;
+@@ -2024,7 +2030,7 @@ DISAS_INSN(stop)
+     s->pc += 2;
+ 
+     gen_set_sr_im(s, ext, 0);
+-    tcg_gen_movi_i32(QREG_HALTED, 1);
++    tcg_gen_movi_i32(cpu_halted, 1);
+     gen_exception(s, s->pc, EXCP_HLT);
+ }
+ 
+diff --git a/target-microblaze/cpu.h b/target-microblaze/cpu.h
+index c3dd7f6..7548aa9 100644
+--- a/target-microblaze/cpu.h
++++ b/target-microblaze/cpu.h
+@@ -374,9 +374,7 @@ void cpu_unassigned_access(CPUMBState *env1, hwaddr addr,
+ 
+ static inline bool cpu_has_work(CPUState *cpu)
+ {
+-    CPUMBState *env = &MICROBLAZE_CPU(cpu)->env;
+-
+-    return env->interrupt_request & (CPU_INTERRUPT_HARD | CPU_INTERRUPT_NMI);
++    return cpu->interrupt_request & (CPU_INTERRUPT_HARD | CPU_INTERRUPT_NMI);
+ }
+ 
+ #include "exec/exec-all.h"
+diff --git a/target-mips/cpu.h b/target-mips/cpu.h
+index 0e198b1..7434099 100644
+--- a/target-mips/cpu.h
++++ b/target-mips/cpu.h
+@@ -719,7 +719,7 @@ static inline bool cpu_has_work(CPUState *cpu)
+     /* It is implementation dependent if non-enabled interrupts
+        wake-up the CPU, however most of the implementations only
+        check for interrupts that can be taken. */
+-    if ((env->interrupt_request & CPU_INTERRUPT_HARD) &&
++    if ((cpu->interrupt_request & CPU_INTERRUPT_HARD) &&
+         cpu_mips_hw_interrupts_pending(env)) {
+         has_work = true;
+     }
+@@ -728,7 +728,7 @@ static inline bool cpu_has_work(CPUState *cpu)
+     if (env->CP0_Config3 & (1 << CP0C3_MT)) {
+         /* The QEMU model will issue an _WAKE request whenever the CPUs
+            should be woken up.  */
+-        if (env->interrupt_request & CPU_INTERRUPT_WAKE) {
++        if (cpu->interrupt_request & CPU_INTERRUPT_WAKE) {
+             has_work = true;
+         }
+ 
+diff --git a/target-mips/op_helper.c b/target-mips/op_helper.c
+index 45cbb2f..3ab4356 100644
+--- a/target-mips/op_helper.c
++++ b/target-mips/op_helper.c
+@@ -515,11 +515,12 @@ void helper_sdm(CPUMIPSState *env, target_ulong addr, target_ulong reglist,
+ /* SMP helpers.  */
+ static bool mips_vpe_is_wfi(MIPSCPU *c)
+ {
++    CPUState *cpu = CPU(c);
+     CPUMIPSState *env = &c->env;
+ 
+     /* If the VPE is halted but otherwise active, it means it's waiting for
+        an interrupt.  */
+-    return env->halted && mips_vpe_active(env);
++    return cpu->halted && mips_vpe_active(env);
+ }
+ 
+ static inline void mips_vpe_wake(CPUMIPSState *c)
+@@ -532,11 +533,12 @@ static inline void mips_vpe_wake(CPUMIPSState *c)
+ 
+ static inline void mips_vpe_sleep(MIPSCPU *cpu)
+ {
++    CPUState *cs = CPU(cpu);
+     CPUMIPSState *c = &cpu->env;
+ 
+     /* The VPE was shut off, really go to bed.
+        Reset any old _WAKE requests.  */
+-    c->halted = 1;
++    cs->halted = 1;
+     cpu_reset_interrupt(c, CPU_INTERRUPT_WAKE);
+ }
+ 
+@@ -2099,7 +2101,9 @@ void helper_pmon(CPUMIPSState *env, int function)
+ 
+ void helper_wait(CPUMIPSState *env)
+ {
+-    env->halted = 1;
++    CPUState *cs = CPU(mips_env_get_cpu(env));
++
++    cs->halted = 1;
+     cpu_reset_interrupt(env, CPU_INTERRUPT_WAKE);
+     helper_raise_exception(env, EXCP_HLT);
+ }
+diff --git a/target-mips/translate.c b/target-mips/translate.c
+index f10a533..01cea69 100644
+--- a/target-mips/translate.c
++++ b/target-mips/translate.c
+@@ -16012,7 +16012,7 @@ void cpu_state_reset(CPUMIPSState *env)
+             env->tcs[i].CP0_TCHalt = 1;
+         }
+         env->active_tc.CP0_TCHalt = 1;
+-        env->halted = 1;
++        cs->halted = 1;
+ 
+         if (cs->cpu_index == 0) {
+             /* VPE0 starts up enabled.  */
+@@ -16020,7 +16020,7 @@ void cpu_state_reset(CPUMIPSState *env)
+             env->CP0_VPEConf0 |= (1 << CP0VPEC0_MVP) | (1 << CP0VPEC0_VPA);
+ 
+             /* TC0 starts up unhalted.  */
+-            env->halted = 0;
++            cs->halted = 0;
+             env->active_tc.CP0_TCHalt = 0;
+             env->tcs[0].CP0_TCHalt = 0;
+             /* With thread 0 active.  */
+diff --git a/target-openrisc/cpu.h b/target-openrisc/cpu.h
+index 4cfd1c7..64370a3 100644
+--- a/target-openrisc/cpu.h
++++ b/target-openrisc/cpu.h
+@@ -423,9 +423,7 @@ static inline int cpu_mmu_index(CPUOpenRISCState *env)
+ #define CPU_INTERRUPT_TIMER   CPU_INTERRUPT_TGT_INT_0
+ static inline bool cpu_has_work(CPUState *cpu)
+ {
+-    CPUOpenRISCState *env = &OPENRISC_CPU(cpu)->env;
+-
+-    return env->interrupt_request & (CPU_INTERRUPT_HARD |
++    return cpu->interrupt_request & (CPU_INTERRUPT_HARD |
+                                      CPU_INTERRUPT_TIMER);
+ }
+ 
+diff --git a/target-openrisc/interrupt_helper.c b/target-openrisc/interrupt_helper.c
+index a176441..844648f 100644
+--- a/target-openrisc/interrupt_helper.c
++++ b/target-openrisc/interrupt_helper.c
+@@ -24,6 +24,7 @@
+ void HELPER(rfe)(CPUOpenRISCState *env)
+ {
+     OpenRISCCPU *cpu = openrisc_env_get_cpu(env);
++    CPUState *cs = CPU(cpu);
+ #ifndef CONFIG_USER_ONLY
+     int need_flush_tlb = (cpu->env.sr & (SR_SM | SR_IME | SR_DME)) ^
+                          (cpu->env.esr & (SR_SM | SR_IME | SR_DME));
+@@ -53,5 +54,5 @@ void HELPER(rfe)(CPUOpenRISCState *env)
+         tlb_flush(&cpu->env, 1);
+     }
+ #endif
+-    cpu->env.interrupt_request |= CPU_INTERRUPT_EXITTB;
++    cs->interrupt_request |= CPU_INTERRUPT_EXITTB;
+ }
+diff --git a/target-openrisc/sys_helper.c b/target-openrisc/sys_helper.c
+index 3c5f45a..cccbc0e 100644
+--- a/target-openrisc/sys_helper.c
++++ b/target-openrisc/sys_helper.c
+@@ -31,6 +31,7 @@ void HELPER(mtspr)(CPUOpenRISCState *env,
+     int idx;
+ 
+     OpenRISCCPU *cpu = openrisc_env_get_cpu(env);
++    CPUState *cs = CPU(cpu);
+ 
+     switch (spr) {
+     case TO_SPR(0, 0): /* VR */
+@@ -132,7 +133,7 @@ void HELPER(mtspr)(CPUOpenRISCState *env,
+                 env->ttmr = (rb & ~TTMR_IP) + ip;
+             } else {    /* Clear IP bit.  */
+                 env->ttmr = rb & ~TTMR_IP;
+-                env->interrupt_request &= ~CPU_INTERRUPT_TIMER;
++                cs->interrupt_request &= ~CPU_INTERRUPT_TIMER;
+             }
+ 
+             cpu_openrisc_count_update(cpu);
+diff --git a/target-ppc/cpu.h b/target-ppc/cpu.h
+index 20f4565..f45d7a0 100644
+--- a/target-ppc/cpu.h
++++ b/target-ppc/cpu.h
+@@ -2231,9 +2231,10 @@ extern void (*cpu_ppc_hypercall)(PowerPCCPU *);
+ 
+ static inline bool cpu_has_work(CPUState *cpu)
+ {
+-    CPUPPCState *env = &POWERPC_CPU(cpu)->env;
++    PowerPCCPU *ppc_cpu = POWERPC_CPU(cpu);
++    CPUPPCState *env = &ppc_cpu->env;
+ 
+-    return msr_ee && (env->interrupt_request & CPU_INTERRUPT_HARD);
++    return msr_ee && (cpu->interrupt_request & CPU_INTERRUPT_HARD);
+ }
+ 
+ #include "exec/exec-all.h"
+diff --git a/target-ppc/excp_helper.c b/target-ppc/excp_helper.c
+index 0a1ac86..79ce7bf 100644
+--- a/target-ppc/excp_helper.c
++++ b/target-ppc/excp_helper.c
+@@ -66,6 +66,7 @@ static inline void dump_syscall(CPUPPCState *env)
+ static inline void powerpc_excp(PowerPCCPU *cpu, int excp_model, int excp)
+ {
+     CPUPPCState *env = &cpu->env;
++    CPUState *cs;
+     target_ulong msr, new_msr, vector;
+     int srr0, srr1, asrr0, asrr1;
+     int lpes0, lpes1, lev;
+@@ -131,8 +132,9 @@ static inline void powerpc_excp(PowerPCCPU *cpu, int excp_model, int excp)
+                 fprintf(stderr, "Machine check while not allowed. "
+                         "Entering checkstop state\n");
+             }
+-            env->halted = 1;
+-            env->interrupt_request |= CPU_INTERRUPT_EXITTB;
++            cs = CPU(cpu);
++            cs->halted = 1;
++            cs->interrupt_request |= CPU_INTERRUPT_EXITTB;
+         }
+         if (0) {
+             /* XXX: find a suitable condition to enable the hypervisor mode */
+@@ -663,11 +665,12 @@ void ppc_hw_interrupt(CPUPPCState *env)
+ {
+     PowerPCCPU *cpu = ppc_env_get_cpu(env);
+     int hdice;
+-
+ #if 0
++    CPUState *cs = CPU(cpu);
++
+     qemu_log_mask(CPU_LOG_INT, "%s: %p pending %08x req %08x me %d ee %d\n",
+-                __func__, env, env->pending_interrupts,
+-                env->interrupt_request, (int)msr_me, (int)msr_ee);
++                  __func__, env, env->pending_interrupts,
++                  cs->interrupt_request, (int)msr_me, (int)msr_ee);
+ #endif
+     /* External reset */
+     if (env->pending_interrupts & (1 << PPC_INTERRUPT_RESET)) {
+@@ -807,9 +810,12 @@ void helper_raise_exception(CPUPPCState *env, uint32_t exception)
+ #if !defined(CONFIG_USER_ONLY)
+ void helper_store_msr(CPUPPCState *env, target_ulong val)
+ {
++    CPUState *cs;
++
+     val = hreg_store_msr(env, val, 0);
+     if (val != 0) {
+-        env->interrupt_request |= CPU_INTERRUPT_EXITTB;
++        cs = CPU(ppc_env_get_cpu(env));
++        cs->interrupt_request |= CPU_INTERRUPT_EXITTB;
+         helper_raise_exception(env, val);
+     }
+ }
+@@ -817,6 +823,8 @@ void helper_store_msr(CPUPPCState *env, target_ulong val)
+ static inline void do_rfi(CPUPPCState *env, target_ulong nip, target_ulong msr,
+                           target_ulong msrm, int keep_msrh)
+ {
++    CPUState *cs = CPU(ppc_env_get_cpu(env));
++
+ #if defined(TARGET_PPC64)
+     if (msr_is_64bit(env, msr)) {
+         nip = (uint64_t)nip;
+@@ -841,7 +849,7 @@ static inline void do_rfi(CPUPPCState *env, target_ulong nip, target_ulong msr,
+     /* No need to raise an exception here,
+      * as rfi is always the last insn of a TB
+      */
+-    env->interrupt_request |= CPU_INTERRUPT_EXITTB;
++    cs->interrupt_request |= CPU_INTERRUPT_EXITTB;
+ }
+ 
+ void helper_rfi(CPUPPCState *env)
+diff --git a/target-ppc/helper_regs.h b/target-ppc/helper_regs.h
+index 3c98850..a6d5e2f 100644
+--- a/target-ppc/helper_regs.h
++++ b/target-ppc/helper_regs.h
+@@ -68,10 +68,13 @@ static inline int hreg_store_msr(CPUPPCState *env, target_ulong value,
+                                  int alter_hv)
+ {
+     int excp;
++#if !defined(CONFIG_USER_ONLY)
++    CPUState *cs = CPU(ppc_env_get_cpu(env));
++#endif
+ 
+     excp = 0;
+     value &= env->msr_mask;
+-#if !defined (CONFIG_USER_ONLY)
++#if !defined(CONFIG_USER_ONLY)
+     if (!alter_hv) {
+         /* mtmsr cannot alter the hypervisor state */
+         value &= ~MSR_HVB;
+@@ -82,7 +85,7 @@ static inline int hreg_store_msr(CPUPPCState *env, target_ulong value,
+         /* Flush all tlb when changing translation mode */
+         tlb_flush(env, 1);
+         excp = POWERPC_EXCP_NONE;
+-        env->interrupt_request |= CPU_INTERRUPT_EXITTB;
++        cs->interrupt_request |= CPU_INTERRUPT_EXITTB;
+     }
+     if (unlikely((env->flags & POWERPC_FLAG_TGPR) &&
+                  ((value ^ env->msr) & (1 << MSR_TGPR)))) {
+@@ -96,10 +99,10 @@ static inline int hreg_store_msr(CPUPPCState *env, target_ulong value,
+ #endif
+     env->msr = value;
+     hreg_compute_hflags(env);
+-#if !defined (CONFIG_USER_ONLY)
++#if !defined(CONFIG_USER_ONLY)
+     if (unlikely(msr_pow == 1)) {
+         if ((*env->check_pow)(env)) {
+-            env->halted = 1;
++            cs->halted = 1;
+             excp = EXCP_HALTED;
+         }
+     }
+diff --git a/target-ppc/kvm.c b/target-ppc/kvm.c
+index 8e64416..f0c4843 100644
+--- a/target-ppc/kvm.c
++++ b/target-ppc/kvm.c
+@@ -760,7 +760,7 @@ void kvm_arch_pre_run(CPUState *cs, struct kvm_run *run)
+      * interrupt, reset, etc) in PPC-specific env->irq_input_state. */
+     if (!cap_interrupt_level &&
+         run->ready_for_interrupt_injection &&
+-        (env->interrupt_request & CPU_INTERRUPT_HARD) &&
++        (cs->interrupt_request & CPU_INTERRUPT_HARD) &&
+         (env->irq_input_state & (1<<PPC_INPUT_INT)))
+     {
+         /* For now KVM disregards the 'irq' argument. However, in the
+@@ -791,14 +791,16 @@ void kvm_arch_post_run(CPUState *cpu, struct kvm_run *run)
+ 
+ int kvm_arch_process_async_events(CPUState *cs)
+ {
+-    PowerPCCPU *cpu = POWERPC_CPU(cs);
+-    return cpu->env.halted;
++    return cs->halted;
+ }
+ 
+-static int kvmppc_handle_halt(CPUPPCState *env)
++static int kvmppc_handle_halt(PowerPCCPU *cpu)
+ {
+-    if (!(env->interrupt_request & CPU_INTERRUPT_HARD) && (msr_ee)) {
+-        env->halted = 1;
++    CPUState *cs = CPU(cpu);
++    CPUPPCState *env = &cpu->env;
++
++    if (!(cs->interrupt_request & CPU_INTERRUPT_HARD) && (msr_ee)) {
++        cs->halted = 1;
+         env->exception_index = EXCP_HLT;
+     }
+ 
+@@ -840,7 +842,7 @@ int kvm_arch_handle_exit(CPUState *cs, struct kvm_run *run)
+         break;
+     case KVM_EXIT_HLT:
+         dprintf("handle halt\n");
+-        ret = kvmppc_handle_halt(env);
++        ret = kvmppc_handle_halt(cpu);
+         break;
+ #ifdef CONFIG_PSERIES
+     case KVM_EXIT_PAPR_HCALL:
+diff --git a/target-ppc/translate.c b/target-ppc/translate.c
+index f886441..d8c2dd1 100644
+--- a/target-ppc/translate.c
++++ b/target-ppc/translate.c
+@@ -3102,7 +3102,8 @@ static void gen_sync(DisasContext *ctx)
+ static void gen_wait(DisasContext *ctx)
+ {
+     TCGv_i32 t0 = tcg_temp_new_i32();
+-    tcg_gen_st_i32(t0, cpu_env, offsetof(CPUPPCState, halted));
++    tcg_gen_st_i32(t0, cpu_env,
++                   -offsetof(PowerPCCPU, env) + offsetof(CPUState, halted));
+     tcg_temp_free_i32(t0);
+     /* Stop translation, as the CPU is supposed to sleep from now */
+     gen_exception_err(ctx, EXCP_HLT, 1);
+diff --git a/target-s390x/cpu.c b/target-s390x/cpu.c
+index b746547..738a0ad 100644
+--- a/target-s390x/cpu.c
++++ b/target-s390x/cpu.c
+@@ -80,10 +80,10 @@ static void s390_cpu_reset(CPUState *s)
+     env->cregs[0] = CR0_RESET;
+     env->cregs[14] = CR14_RESET;
+     /* set halted to 1 to make sure we can add the cpu in
+-     * s390_ipl_cpu code, where env->halted is set back to 0
++     * s390_ipl_cpu code, where CPUState::halted is set back to 0
+      * after incrementing the cpu counter */
+ #if !defined(CONFIG_USER_ONLY)
+-    env->halted = 1;
++    s->halted = 1;
+ #endif
+     tlb_flush(env, 1);
+ }
+@@ -129,10 +129,10 @@ static void s390_cpu_initfn(Object *obj)
+     env->tod_basetime = 0;
+     env->tod_timer = qemu_new_timer_ns(vm_clock, s390x_tod_timer, cpu);
+     env->cpu_timer = qemu_new_timer_ns(vm_clock, s390x_cpu_timer, cpu);
+-    /* set env->halted state to 1 to avoid decrementing the running
++    /* set CPUState::halted state to 1 to avoid decrementing the running
+      * cpu counter in s390_cpu_reset to a negative number at
+      * initial ipl */
+-    env->halted = 1;
++    cs->halted = 1;
+ #endif
+     env->cpu_num = cpu_num++;
+     env->ext_index = -1;
+diff --git a/target-s390x/cpu.h b/target-s390x/cpu.h
+index e450db7..897ac59 100644
+--- a/target-s390x/cpu.h
++++ b/target-s390x/cpu.h
+@@ -1039,9 +1039,10 @@ static inline void cpu_inject_crw_mchk(S390CPU *cpu)
+ 
+ static inline bool cpu_has_work(CPUState *cpu)
+ {
+-    CPUS390XState *env = &S390_CPU(cpu)->env;
++    S390CPU *s390_cpu = S390_CPU(cpu);
++    CPUS390XState *env = &s390_cpu->env;
+ 
+-    return (env->interrupt_request & CPU_INTERRUPT_HARD) &&
++    return (cpu->interrupt_request & CPU_INTERRUPT_HARD) &&
+         (env->psw.mask & PSW_MASK_EXT);
+ }
+ 
+diff --git a/target-s390x/helper.c b/target-s390x/helper.c
+index 1183b45..c88a587 100644
+--- a/target-s390x/helper.c
++++ b/target-s390x/helper.c
+@@ -437,6 +437,7 @@ void load_psw(CPUS390XState *env, uint64_t mask, uint64_t addr)
+ {
+     if (mask & PSW_MASK_WAIT) {
+         S390CPU *cpu = s390_env_get_cpu(env);
++        CPUState *cs = CPU(cpu);
+         if (!(mask & (PSW_MASK_IO | PSW_MASK_EXT | PSW_MASK_MCHECK))) {
+             if (s390_del_running_cpu(cpu) == 0) {
+ #ifndef CONFIG_USER_ONLY
+@@ -444,7 +445,7 @@ void load_psw(CPUS390XState *env, uint64_t mask, uint64_t addr)
+ #endif
+             }
+         }
+-        env->halted = 1;
++        cs->halted = 1;
+         env->exception_index = EXCP_HLT;
+     }
+ 
+@@ -739,6 +740,7 @@ static void do_mchk_interrupt(CPUS390XState *env)
+ void do_interrupt(CPUS390XState *env)
+ {
+     S390CPU *cpu = s390_env_get_cpu(env);
++    CPUState *cs;
+ 
+     qemu_log_mask(CPU_LOG_INT, "%s: %d at pc=%" PRIx64 "\n",
+                   __func__, env->exception_index, env->psw.addr);
+@@ -797,7 +799,8 @@ void do_interrupt(CPUS390XState *env)
+     env->exception_index = -1;
+ 
+     if (!env->pending_int) {
+-        env->interrupt_request &= ~CPU_INTERRUPT_HARD;
++        cs = CPU(s390_env_get_cpu(env));
++        cs->interrupt_request &= ~CPU_INTERRUPT_HARD;
+     }
+ }
+ 
+diff --git a/target-sh4/cpu.h b/target-sh4/cpu.h
+index f805778..4966355 100644
+--- a/target-sh4/cpu.h
++++ b/target-sh4/cpu.h
+@@ -369,9 +369,7 @@ static inline void cpu_get_tb_cpu_state(CPUSH4State *env, target_ulong *pc,
+ 
+ static inline bool cpu_has_work(CPUState *cpu)
+ {
+-    CPUSH4State *env = &SUPERH_CPU(cpu)->env;
+-
+-    return env->interrupt_request & CPU_INTERRUPT_HARD;
++    return cpu->interrupt_request & CPU_INTERRUPT_HARD;
+ }
+ 
+ #include "exec/exec-all.h"
+diff --git a/target-sh4/helper.c b/target-sh4/helper.c
+index ddebc78..fd4efee 100644
+--- a/target-sh4/helper.c
++++ b/target-sh4/helper.c
+@@ -78,9 +78,10 @@ int cpu_sh4_is_cached(CPUSH4State * env, target_ulong addr)
+ #define MMU_DADDR_ERROR_READ     (-12)
+ #define MMU_DADDR_ERROR_WRITE    (-13)
+ 
+-void do_interrupt(CPUSH4State * env)
++void do_interrupt(CPUSH4State *env)
+ {
+-    int do_irq = env->interrupt_request & CPU_INTERRUPT_HARD;
++    CPUState *cs = CPU(sh_env_get_cpu(env));
++    int do_irq = cs->interrupt_request & CPU_INTERRUPT_HARD;
+     int do_exp, irq_vector = env->exception_index;
+ 
+     /* prioritize exceptions over interrupts */
+diff --git a/target-sh4/op_helper.c b/target-sh4/op_helper.c
+index 09e3d23..e955e81 100644
+--- a/target-sh4/op_helper.c
++++ b/target-sh4/op_helper.c
+@@ -102,7 +102,9 @@ void helper_debug(CPUSH4State *env)
+ 
+ void helper_sleep(CPUSH4State *env)
+ {
+-    env->halted = 1;
++    CPUState *cs = CPU(sh_env_get_cpu(env));
++
++    cs->halted = 1;
+     env->in_sleep = 1;
+     raise_exception(env, EXCP_HLT, 0);
+ }
+diff --git a/target-sparc/cpu.h b/target-sparc/cpu.h
+index a2f2cc8..8a2f8df 100644
+--- a/target-sparc/cpu.h
++++ b/target-sparc/cpu.h
+@@ -762,9 +762,10 @@ static inline bool tb_am_enabled(int tb_flags)
+ 
+ static inline bool cpu_has_work(CPUState *cpu)
+ {
+-    CPUSPARCState *env1 = &SPARC_CPU(cpu)->env;
++    SPARCCPU *sparc_cpu = SPARC_CPU(cpu);
++    CPUSPARCState *env1 = &sparc_cpu->env;
+ 
+-    return (env1->interrupt_request & CPU_INTERRUPT_HARD) &&
++    return (cpu->interrupt_request & CPU_INTERRUPT_HARD) &&
+            cpu_interrupts_enabled(env1);
+ }
+ 
+diff --git a/target-sparc/helper.c b/target-sparc/helper.c
+index 58e7efe..57c20af 100644
+--- a/target-sparc/helper.c
++++ b/target-sparc/helper.c
+@@ -229,7 +229,9 @@ target_ulong helper_tsubcctv(CPUSPARCState *env, target_ulong src1,
+ #ifndef TARGET_SPARC64
+ void helper_power_down(CPUSPARCState *env)
+ {
+-    env->halted = 1;
++    CPUState *cs = CPU(sparc_env_get_cpu(env));
++
++    cs->halted = 1;
+     env->exception_index = EXCP_HLT;
+     env->pc = env->npc;
+     env->npc = env->pc + 4;
+diff --git a/target-unicore32/cpu.h b/target-unicore32/cpu.h
+index ae9a9d6..58f1f20 100644
+--- a/target-unicore32/cpu.h
++++ b/target-unicore32/cpu.h
+@@ -181,9 +181,7 @@ void switch_mode(CPUUniCore32State *, int);
+ 
+ static inline bool cpu_has_work(CPUState *cpu)
+ {
+-    CPUUniCore32State *env = &UNICORE32_CPU(cpu)->env;
+-
+-    return env->interrupt_request &
++    return cpu->interrupt_request &
+         (CPU_INTERRUPT_HARD | CPU_INTERRUPT_EXITTB);
+ }
+ 
+diff --git a/target-unicore32/softmmu.c b/target-unicore32/softmmu.c
+index fc27100..1c4c7f5 100644
+--- a/target-unicore32/softmmu.c
++++ b/target-unicore32/softmmu.c
+@@ -74,6 +74,7 @@ void switch_mode(CPUUniCore32State *env, int mode)
+ /* Handle a CPU exception.  */
+ void do_interrupt(CPUUniCore32State *env)
+ {
++    CPUState *cs = CPU(uc32_env_get_cpu(env));
+     uint32_t addr;
+     int new_mode;
+ 
+@@ -112,7 +113,7 @@ void do_interrupt(CPUUniCore32State *env)
+     /* The PC already points to the proper instruction.  */
+     env->regs[30] = env->regs[31];
+     env->regs[31] = addr;
+-    env->interrupt_request |= CPU_INTERRUPT_EXITTB;
++    cs->interrupt_request |= CPU_INTERRUPT_EXITTB;
+ }
+ 
+ static int get_phys_addr_ucv2(CPUUniCore32State *env, uint32_t address,
+diff --git a/target-xtensa/op_helper.c b/target-xtensa/op_helper.c
+index 3813a72..1037101 100644
+--- a/target-xtensa/op_helper.c
++++ b/target-xtensa/op_helper.c
+@@ -373,6 +373,8 @@ void HELPER(dump_state)(CPUXtensaState *env)
+ 
+ void HELPER(waiti)(CPUXtensaState *env, uint32_t pc, uint32_t intlevel)
+ {
++    CPUState *cpu;
++
+     env->pc = pc;
+     env->sregs[PS] = (env->sregs[PS] & ~PS_INTLEVEL) |
+         (intlevel << PS_INTLEVEL_SHIFT);
+@@ -382,8 +384,9 @@ void HELPER(waiti)(CPUXtensaState *env, uint32_t pc, uint32_t intlevel)
+         return;
+     }
+ 
++    cpu = CPU(xtensa_env_get_cpu(env));
+     env->halt_clock = qemu_get_clock_ns(vm_clock);
+-    env->halted = 1;
++    cpu->halted = 1;
+     if (xtensa_option_enabled(env->config, XTENSA_OPTION_TIMER_INTERRUPT)) {
+         xtensa_rearm_ccompare_timer(env);
+     }
+diff --git a/translate-all.c b/translate-all.c
+index b50fb89..ada8d7e 100644
+--- a/translate-all.c
++++ b/translate-all.c
+@@ -1077,8 +1077,8 @@ void tb_invalidate_phys_page_range(tb_page_addr_t start, tb_page_addr_t end,
+             tb_phys_invalidate(tb, -1);
+             if (cpu != NULL) {
+                 cpu->current_tb = saved_tb;
+-                if (env && env->interrupt_request && cpu->current_tb) {
+-                    cpu_interrupt(env, env->interrupt_request);
++                if (env && cpu->interrupt_request && cpu->current_tb) {
++                    cpu_interrupt(env, cpu->interrupt_request);
+                 }
+             }
+         }
+@@ -1456,8 +1456,8 @@ static void tcg_handle_interrupt(CPUArchState *env, int mask)
+     CPUState *cpu = ENV_GET_CPU(env);
+     int old_mask;
+ 
+-    old_mask = env->interrupt_request;
+-    env->interrupt_request |= mask;
++    old_mask = cpu->interrupt_request;
++    cpu->interrupt_request |= mask;
+ 
+     /*
+      * If called from iothread context, wake the target cpu in
+@@ -1625,7 +1625,7 @@ void cpu_interrupt(CPUArchState *env, int mask)
+ {
+     CPUState *cpu = ENV_GET_CPU(env);
+ 
+-    env->interrupt_request |= mask;
++    cpu->interrupt_request |= mask;
+     cpu_unlink_tb(cpu);
+ }
+ 
+diff --git a/xen-all.c b/xen-all.c
+index 110f958..8c05843 100644
+--- a/xen-all.c
++++ b/xen-all.c
+@@ -578,16 +578,18 @@ void qmp_xen_set_global_dirty_log(bool enable, Error **errp)
+ 
+ static void xen_reset_vcpu(void *opaque)
+ {
+-    CPUArchState *env = opaque;
++    CPUState *cpu = opaque;
+ 
+-    env->halted = 1;
++    cpu->halted = 1;
+ }
+ 
+ void xen_vcpu_init(void)
+ {
+     if (first_cpu != NULL) {
+-        qemu_register_reset(xen_reset_vcpu, first_cpu);
+-        xen_reset_vcpu(first_cpu);
++        CPUState *cpu = ENV_GET_CPU(first_cpu);
++
++        qemu_register_reset(xen_reset_vcpu, cpu);
++        xen_reset_vcpu(cpu);
+     }
+     /* if rtc_clock is left to default (host_clock), disable it */
+     if (rtc_clock == host_clock) {
+-- 
+1.7.10.4
+
+

@@ -1,0 +1,95 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: 
+Date: Fri, 27 Jul 2012 17:02:39 +0200
+Message-id: 1343401379-19495-13-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 12/32] scsi-disk: separate read_data/write_data implementation
+ for emulate_reqops
+
+The previous patch only separated the send_command callback.
+Use different implementations also for read_data and write_data.
+The latter is still unreachable, so it aborts for now.
+
+read_data passes the data buffer that was prepared and completes
+the command.
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ hw/scsi-disk.c |   36 +++++++++++++++++++++++++-----------
+ 1 file changed, 25 insertions(+), 11 deletions(-)
+
+diff --git a/hw/scsi-disk.c b/hw/scsi-disk.c
+index ea0b05e..1633177 100644
+--- a/hw/scsi-disk.c
++++ b/hw/scsi-disk.c
+@@ -343,13 +343,6 @@ static void scsi_read_data(SCSIRequest *req)
+     SCSIDiskState *s = DO_UPCAST(SCSIDiskState, qdev, r->req.dev);
+     bool first;
+ 
+-    if (r->sector_count == (uint32_t)-1) {
+-        DPRINTF("Read buf_len=%zd\n", r->iov.iov_len);
+-        r->sector_count = 0;
+-        r->started = true;
+-        scsi_req_data(&r->req, r->iov.iov_len);
+-        return;
+-    }
+     DPRINTF("Read sector_count=%d\n", r->sector_count);
+     if (r->sector_count == 0) {
+         /* This also clears the sense buffer for REQUEST SENSE.  */
+@@ -1262,6 +1255,28 @@ static int scsi_disk_emulate_start_stop(SCSIDiskReq *r)
+     return 0;
+ }
+ 
++static void scsi_disk_emulate_read_data(SCSIRequest *req)
++{
++    SCSIDiskReq *r = DO_UPCAST(SCSIDiskReq, req, req);
++    int buflen = r->iov.iov_len;
++
++    if (buflen) {
++        DPRINTF("Read buf_len=%zd\n", buflen);
++        r->iov.iov_len = 0;
++        r->started = true;
++        scsi_req_data(&r->req, buflen);
++        return;
++    }
++
++    /* This also clears the sense buffer for REQUEST SENSE.  */
++    scsi_req_complete(&r->req, GOOD);
++}
++
++static void scsi_disk_emulate_write_data(SCSIRequest *req)
++{
++    abort();
++}
++
+ static int32_t scsi_disk_emulate_command(SCSIRequest *req, uint8_t *buf)
+ {
+     SCSIDiskReq *r = DO_UPCAST(SCSIDiskReq, req, req);
+@@ -1532,9 +1547,8 @@ static int32_t scsi_disk_emulate_command(SCSIRequest *req, uint8_t *buf)
+         scsi_check_condition(r, SENSE_CODE(INVALID_OPCODE));
+         return 0;
+     }
+-    assert(!r->req.aiocb && r->sector_count == 0);
++    assert(!r->req.aiocb);
+     r->iov.iov_len = MIN(buflen, req->cmd.xfer);
+-    r->sector_count = -1;
+     if (r->iov.iov_len == 0) {
+         scsi_req_complete(&r->req, GOOD);
+     }
+@@ -1785,8 +1799,8 @@ static const SCSIReqOps scsi_disk_emulate_reqops = {
+     .size         = sizeof(SCSIDiskReq),
+     .free_req     = scsi_free_request,
+     .send_command = scsi_disk_emulate_command,
+-    .read_data    = scsi_read_data,
+-    .write_data   = scsi_write_data,
++    .read_data    = scsi_disk_emulate_read_data,
++    .write_data   = scsi_disk_emulate_write_data,
+     .get_buf      = scsi_get_buf,
+ };
+ 
+-- 
+1.7.10.4
+
+
+

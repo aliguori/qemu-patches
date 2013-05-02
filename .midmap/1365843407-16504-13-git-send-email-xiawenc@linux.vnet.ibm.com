@@ -1,0 +1,1 @@
+../qmp-hmp-interfaces-for-internal-snapshot-info/v12.1365890189/0012-qmp-add-ImageInfo-in-BlockDeviceInfo-used-by-query-block.patch

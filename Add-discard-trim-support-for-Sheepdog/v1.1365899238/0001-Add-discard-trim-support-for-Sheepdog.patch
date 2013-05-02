@@ -1,0 +1,25 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Liu Yuan <namei.unix@gmail.com>
+To: sheepdog@lists.wpkg.org, qemu-devel@nongnu.org
+Cc: 
+Date: Sat, 13 Apr 2013 19:27:18 +0800
+Message-id: 1365852442-28941-1-git-send-email-namei.unix@gmail.com
+Subject: [PATCH 1/1] Add discard/trim support for Sheepdog
+
+From: Liu Yuan <tailai.ly@taobao.com>
+
+Trim/discard is a command that allows VM to inform underlying storage system to
+release unused space. Sheepdog takes use of this command to release unused
+objects for better thin-provision.
+
+This patch set aims to add trim/discard support to both Sheepdog and QEMU's
+Sheepdog block driver.
+
+There are first 3 patches for Sheepdog and the last one is for QEMU.
+
+Thanks,
+Yuan
+-- 
+1.7.9.5
+
+

@@ -1,0 +1,12 @@
+0000-convert-savevm-to-use-qapi-and-introduce-qmp-command.txt
+0001-block-add-error-parameter-to-bdrv_snapshot_create-and-related-functions.patch
+0002-block-add-error-parameter-to-del_existing_snapshots.patch
+0003-savevm-add-error-parameter-to-qemu_savevm_state_begin.patch
+0004-savevm-add-error-parameter-to-qemu_savevm_state_iterate.patch
+0005-savevm-add-error-parameter-to-qemu_savevm_state_complete.patch
+0006-savevm-add-error-parameter-to-qemu_savevm_state.patch
+0007-qapi-Convert-savevm.patch
+0008-qemu-img-introduce-qemu_img_handle_error.patch
+0009-block-update-return-value-from-bdrv_snapshot_create.patch
+0010-savevm-update-return-value-from-qemu_savevm_state.patch
+0011-savevm-add-force-parameter-to-HMP-command-and-return-snapshot-info.patch

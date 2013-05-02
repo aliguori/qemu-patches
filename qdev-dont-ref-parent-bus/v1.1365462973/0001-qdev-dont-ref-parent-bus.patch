@@ -1,0 +1,40 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Hu Tao <hutao@cn.fujitsu.com>
+To: qemu-devel@nongnu.org
+Cc: 
+Date: Mon, 8 Apr 2013 18:16:13 +0800
+Message-id: 1365416173-30073-1-git-send-email-hutao@cn.fujitsu.com
+Subject: [PATCH 1/1] qdev: don't ref parent bus
+
+Since bus refs its children, it introduces reference cycle when qdev
+refs its parent bus.
+
+Signed-off-by: Hu Tao <hutao@cn.fujitsu.com>
+---
+ hw/qdev.c | 2 --
+ 1 file changed, 2 deletions(-)
+
+diff --git a/hw/qdev.c b/hw/qdev.c
+index e2bb37d..c84bffb 100644
+--- a/hw/qdev.c
++++ b/hw/qdev.c
+@@ -103,7 +103,6 @@ static void bus_add_child(BusState *bus, DeviceState *child)
+ void qdev_set_parent_bus(DeviceState *dev, BusState *bus)
+ {
+     dev->parent_bus = bus;
+-    object_ref(OBJECT(bus));
+     bus_add_child(bus, dev);
+ }
+ 
+@@ -783,7 +782,6 @@ static void device_unparent(Object *obj)
+     }
+     if (dev->parent_bus) {
+         bus_remove_child(dev->parent_bus, dev);
+-        object_unref(OBJECT(dev->parent_bus));
+         dev->parent_bus = NULL;
+     }
+ 
+-- 
+1.8.1.4
+
+

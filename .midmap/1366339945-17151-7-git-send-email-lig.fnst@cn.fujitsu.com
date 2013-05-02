@@ -1,0 +1,1 @@
+../target-i386do-some-cleanups/v1.1366386739/0006-target-i386-seg_helper-define-names-for-code-data-segment-types.patch

@@ -1,0 +1,141 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Eduardo Habkost <ehabkost@redhat.com>
+To: qemu-devel@nongnu.org, =?UTF-8?q?Andreas=20F=C3=A4rber?= <afaerber@suse.de>
+Cc: libvir-list@redhat.com, Igor Mammedov <imammedo@redhat.com>,
+ Jiri Denemark <jdenemar@redhat.com>
+Date: Mon, 22 Apr 2013 16:00:20 -0300
+Message-id: 1366657220-776-10-git-send-email-ehabkost@redhat.com
+Subject: [PATCH 9/9] target-i386: Add "filtered-features" property to X86CPU
+
+This property will contain all the features that were removed from the
+CPU because they are not supported by the host.
+
+This way, libvirt or other management tools can emulate the
+check/enforce behavior by checking if filtered-properties is all zeroes,
+before starting the guest.
+
+Example output where some features were missing:
+
+  $ ./install/bin/qemu-system-x86_64 -enable-kvm -cpu Haswell,check -S -qmp unix:/tmp/m,server,nowait
+  warning: host doesn't support requested feature: CPUID.01H:ECX.fma [bit 12]
+  warning: host doesn't support requested feature: CPUID.01H:ECX.movbe [bit 22]
+  warning: host doesn't support requested feature: CPUID.01H:ECX.tsc-deadline [bit 24]
+  warning: host doesn't support requested feature: CPUID.01H:ECX.xsave [bit 26]
+  warning: host doesn't support requested feature: CPUID.01H:ECX.avx [bit 28]
+  warning: host doesn't support requested feature: CPUID.07H:EBX.fsgsbase [bit 0]
+  warning: host doesn't support requested feature: CPUID.07H:EBX.bmi1 [bit 3]
+  warning: host doesn't support requested feature: CPUID.07H:EBX.hle [bit 4]
+  warning: host doesn't support requested feature: CPUID.07H:EBX.avx2 [bit 5]
+  warning: host doesn't support requested feature: CPUID.07H:EBX.smep [bit 7]
+  warning: host doesn't support requested feature: CPUID.07H:EBX.bmi2 [bit 8]
+  warning: host doesn't support requested feature: CPUID.07H:EBX.erms [bit 9]
+  warning: host doesn't support requested feature: CPUID.07H:EBX.invpcid [bit 10]
+  warning: host doesn't support requested feature: CPUID.07H:EBX.rtm [bit 11]
+  [...]
+  $ ./QMP/qmp --path=/tmp/m qom-get --path=/machine/unattached/device[1] --property=filtered-features
+  item[0].cpuid-register: EDX
+  item[0].cpuid-input-eax: 2147483658
+  item[0].features: 0
+  item[1].cpuid-register: EAX
+  item[1].cpuid-input-eax: 1073741825
+  item[1].features: 0
+  item[2].cpuid-register: EDX
+  item[2].cpuid-input-eax: 3221225473
+  item[2].features: 0
+  item[3].cpuid-register: ECX
+  item[3].cpuid-input-eax: 2147483649
+  item[3].features: 0
+  item[4].cpuid-register: EDX
+  item[4].cpuid-input-eax: 2147483649
+  item[4].features: 0
+  item[5].cpuid-register: EBX
+  item[5].cpuid-input-eax: 7
+  item[5].features: 4025
+  item[5].cpuid-input-ecx: 0
+  item[6].cpuid-register: ECX
+  item[6].cpuid-input-eax: 1
+  item[6].features: 356519936
+  item[7].cpuid-register: EDX
+  item[7].cpuid-input-eax: 1
+  item[7].features: 0
+
+Example output when no feature is missing:
+
+  $ ./install/bin/qemu-system-x86_64 -enable-kvm -cpu Nehalem,enforce -S -qmp unix:/tmp/m,server,nowait
+  [...]
+  $ ./QMP/qmp --path=/tmp/m qom-get --path=/machine/unattached/device[1]
+  --property=filtered-features
+  item[0].cpuid-register: EDX
+  item[0].cpuid-input-eax: 2147483658
+  item[0].features: 0
+  item[1].cpuid-register: EAX
+  item[1].cpuid-input-eax: 1073741825
+  item[1].features: 0
+  item[2].cpuid-register: EDX
+  item[2].cpuid-input-eax: 3221225473
+  item[2].features: 0
+  item[3].cpuid-register: ECX
+  item[3].cpuid-input-eax: 2147483649
+  item[3].features: 0
+  item[4].cpuid-register: EDX
+  item[4].cpuid-input-eax: 2147483649
+  item[4].features: 0
+  item[5].cpuid-register: EBX
+  item[5].cpuid-input-eax: 7
+  item[5].features: 0
+  item[5].cpuid-input-ecx: 0
+  item[6].cpuid-register: ECX
+  item[6].cpuid-input-eax: 1
+  item[6].features: 0
+  item[7].cpuid-register: EDX
+  item[7].cpuid-input-eax: 1
+  item[7].features: 0
+
+Signed-off-by: Eduardo Habkost <ehabkost@redhat.com>
+---
+ target-i386/cpu.c | 11 +++++++----
+ 1 file changed, 7 insertions(+), 4 deletions(-)
+
+diff --git a/target-i386/cpu.c b/target-i386/cpu.c
+index 1178c5f..5bcb79c 100644
+--- a/target-i386/cpu.c
++++ b/target-i386/cpu.c
+@@ -1373,11 +1373,11 @@ static void x86_cpuid_set_tsc_freq(Object *obj, Visitor *v, void *opaque,
+     cpu->env.tsc_khz = value / 1000;
+ }
+ 
++/* Generic getter for "feature-words" and "filtered-features" properties */
+ static void x86_cpu_get_feature_words(Object *obj, Visitor *v, void *opaque,
+                                    const char *name, Error **errp)
+ {
+-    X86CPU *cpu = X86_CPU(obj);
+-    CPUX86State *env = &cpu->env;
++    uint32_t *array = (uint32_t *)opaque;
+     FeatureWord w;
+     Error *err = NULL;
+     X86CPUFeatureWordInfo word_infos[FEATURE_WORDS] = { };
+@@ -1391,7 +1391,7 @@ static void x86_cpu_get_feature_words(Object *obj, Visitor *v, void *opaque,
+         qwi->has_cpuid_input_ecx = wi->cpuid_needs_ecx;
+         qwi->cpuid_input_ecx = wi->cpuid_ecx;
+         qwi->cpuid_register = x86_reg_info_32[wi->cpuid_reg].qapi_enum;
+-        qwi->features = env->features[w];
++        qwi->features = array[w];
+ 
+         /* List will be in reverse order, but order shouldn't matter */
+         list_entries[w].next = list;
+@@ -2386,7 +2386,10 @@ static void x86_cpu_initfn(Object *obj)
+                         x86_cpuid_set_tsc_freq, NULL, NULL, NULL);
+     object_property_add(obj, "feature-words", "X86CPUFeatureWordInfo",
+                         x86_cpu_get_feature_words,
+-                        NULL, NULL, NULL, NULL);
++                        NULL, NULL, (void *)env->features, NULL);
++    object_property_add(obj, "filtered-features", "X86CPUFeatureWordInfo",
++                        x86_cpu_get_feature_words,
++                        NULL, NULL, (void *)cpu->filtered_features, NULL);
+ 
+     env->cpuid_apic_id = x86_cpu_apic_id_from_index(cs->cpu_index);
+ 
+-- 
+1.8.1.4
+
+

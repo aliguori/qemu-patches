@@ -1,0 +1,130 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: peter.maydell@linaro.org, edgar.iglesias@gmail.com
+Date: Wed, 17 Apr 2013 16:26:40 +0200
+Message-id: 1366208807-4433-7-git-send-email-pbonzini@redhat.com
+Subject: [PATCH 06/13] elfload: use abi_int/uint instead of target_int/uint
+
+The alignment is a characteristic of the ABI, not the CPU.
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ configure                    |  3 ---
+ include/exec/cpu-defs.h      |  2 --
+ include/exec/user/abitypes.h |  9 +++++++++
+ linux-user/elfload.c         | 14 +++++++-------
+ 4 files changed, 16 insertions(+), 12 deletions(-)
+
+diff --git a/configure b/configure
+index deaa377..9d29f57 100755
+--- a/configure
++++ b/configure
+@@ -4131,7 +4131,6 @@ bflt="no"
+ target_nptl="no"
+ interp_prefix1=`echo "$interp_prefix" | sed "s/%M/$target_arch2/g"`
+ gdb_xml_files=""
+-target_int_alignment=4
+ target_long_alignment=4
+ target_llong_alignment=8
+ target_libs_softmmu=
+@@ -4167,7 +4166,6 @@ case "$target_arch2" in
+   m68k)
+     bflt="yes"
+     gdb_xml_files="cf-core.xml cf-fp.xml"
+-    target_int_alignment=2
+     target_long_alignment=2
+     target_llong_alignment=2
+   ;;
+@@ -4272,7 +4270,6 @@ case "$cpu" in
+   ;;
+ esac
+ 
+-echo "TARGET_INT_ALIGNMENT=$target_int_alignment" >> $config_target_mak
+ echo "TARGET_LONG_ALIGNMENT=$target_long_alignment" >> $config_target_mak
+ echo "TARGET_LLONG_ALIGNMENT=$target_llong_alignment" >> $config_target_mak
+ echo "TARGET_ARCH=$TARGET_ARCH" >> $config_target_mak
+diff --git a/include/exec/cpu-defs.h b/include/exec/cpu-defs.h
+index d376f0f..2aa9331 100644
+--- a/include/exec/cpu-defs.h
++++ b/include/exec/cpu-defs.h
+@@ -36,8 +36,6 @@
+ 
+ #define TARGET_LONG_SIZE (TARGET_LONG_BITS / 8)
+ 
+-typedef int32_t target_int __attribute__((aligned(TARGET_INT_ALIGNMENT)));
+-typedef uint32_t target_uint __attribute__((aligned(TARGET_INT_ALIGNMENT)));
+ typedef int64_t target_llong __attribute__((aligned(TARGET_LLONG_ALIGNMENT)));
+ typedef uint64_t target_ullong __attribute__((aligned(TARGET_LLONG_ALIGNMENT)));
+ /* target_ulong is the type of a virtual address */
+diff --git a/include/exec/user/abitypes.h b/include/exec/user/abitypes.h
+index abaa028..4f3e804 100644
+--- a/include/exec/user/abitypes.h
++++ b/include/exec/user/abitypes.h
+@@ -2,12 +2,21 @@
+ #define QEMU_TYPES_H
+ #include "cpu.h"
+ 
++#ifdef TARGET_M68K
++#define ABI_INT_ALIGNMENT 2
++#endif
++
+ #ifndef ABI_SHORT_ALIGNMENT
+ #define ABI_SHORT_ALIGNMENT 2
+ #endif
++#ifndef ABI_INT_ALIGNMENT
++#define ABI_INT_ALIGNMENT 4
++#endif
+ 
+ typedef int16_t abi_short __attribute__ ((aligned(ABI_SHORT_ALIGNMENT)));
+ typedef uint16_t abi_ushort __attribute__((aligned(ABI_SHORT_ALIGNMENT)));
++typedef int32_t abi_int __attribute__((aligned(ABI_INT_ALIGNMENT)));
++typedef uint32_t abi_uint __attribute__((aligned(ABI_INT_ALIGNMENT)));
+ 
+ #ifdef TARGET_ABI32
+ typedef uint32_t abi_ulong;
+diff --git a/linux-user/elfload.c b/linux-user/elfload.c
+index 5eca934..14a8ecf 100644
+--- a/linux-user/elfload.c
++++ b/linux-user/elfload.c
+@@ -113,10 +113,10 @@ typedef abi_ulong       target_elf_greg_t;
+ typedef abi_ushort      target_uid_t;
+ typedef abi_ushort      target_gid_t;
+ #else
+-typedef target_uint     target_uid_t;
+-typedef target_uint     target_gid_t;
++typedef abi_uint        target_uid_t;
++typedef abi_uint        target_gid_t;
+ #endif
+-typedef target_int      target_pid_t;
++typedef abi_int         target_pid_t;
+ 
+ #ifdef TARGET_I386
+ 
+@@ -2109,9 +2109,9 @@ struct memelfnote {
+ };
+ 
+ struct target_elf_siginfo {
+-    target_int  si_signo; /* signal number */
+-    target_int  si_code;  /* extra code */
+-    target_int  si_errno; /* errno */
++    abi_int    si_signo; /* signal number */
++    abi_int    si_code;  /* extra code */
++    abi_int    si_errno; /* errno */
+ };
+ 
+ struct target_elf_prstatus {
+@@ -2128,7 +2128,7 @@ struct target_elf_prstatus {
+     struct target_timeval pr_cutime; /* XXX Cumulative user time */
+     struct target_timeval pr_cstime; /* XXX Cumulative system time */
+     target_elf_gregset_t      pr_reg;       /* GP registers */
+-    target_int         pr_fpvalid;   /* XXX */
++    abi_int            pr_fpvalid;   /* XXX */
+ };
+ 
+ #define ELF_PRARGSZ     (80) /* Number of chars for args */
+-- 
+1.8.1.4
+
+
+

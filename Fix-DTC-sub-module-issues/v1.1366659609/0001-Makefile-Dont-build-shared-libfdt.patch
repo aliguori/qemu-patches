@@ -1,0 +1,39 @@
+From patches Mon Sep 17 00:00:00 2001
+From: peter.crosthwaite@xilinx.com
+To: qemu-devel@nongnu.org
+Cc: blauwirbel@gmail.com, pbonzini@redhat.com, peter.maydell@linaro.org
+Date: Mon, 22 Apr 2013 14:40:49 +1000
+Message-id: 2f44cfcdea050da72668e3a39af31201ad9eae79.1366605200.git.peter.crosthwaite@xilinx.com
+Subject: [PATCH 1/2] Makefile: Don't build shared libfdt
+
+From: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+
+The submodule DTC should just build and use DTC as static (the whole
+motivation for using submod is lack of widespread distro support).
+
+The .so causes build failures on some platforms, so adjust the make
+target to just build the static lib.
+
+Signed-off-by: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+---
+
+ Makefile |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+diff --git a/Makefile b/Makefile
+index 88375dc..c4847aa 100644
+--- a/Makefile
++++ b/Makefile
+@@ -149,7 +149,7 @@ DTC_MAKE_ARGS=-I$(SRC_PATH)/dtc VPATH=$(SRC_PATH)/dtc -C dtc V="$(V)" LIBFDT_src
+ DTC_CFLAGS=$(CFLAGS) $(extra_cflags) -I$(BUILD_DIR)/dtc -I$(SRC_PATH)/dtc -I$(SRC_PATH)/dtc/libfdt
+ 
+ subdir-dtc:dtc/libfdt dtc/tests
+-	$(call quiet-command,$(MAKE) $(DTC_MAKE_ARGS) CPPFLAGS="$(DTC_CFLAGS)" LDFLAGS="$(LDFLAGS)" ARFLAGS="$(ARFLAGS)" CC="$(CC)" AR="$(AR)" LD="$(LD)" $(SUBDIR_MAKEFLAGS) libfdt,)
++	$(call quiet-command,$(MAKE) $(DTC_MAKE_ARGS) CPPFLAGS="$(DTC_CFLAGS)" LDFLAGS="$(LDFLAGS)" ARFLAGS="$(ARFLAGS)" CC="$(CC)" AR="$(AR)" LD="$(LD)" $(SUBDIR_MAKEFLAGS) libfdt/libfdt.a,)
+ 
+ dtc/%:
+ 	mkdir -p $@
+-- 
+1.7.0.4
+
+

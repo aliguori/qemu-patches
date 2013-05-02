@@ -1,0 +1,1 @@
+../DTC-as-submodule/v5.1366314335/0003-configure-Make-Build-libfdt-from-submodule-DTC.patch

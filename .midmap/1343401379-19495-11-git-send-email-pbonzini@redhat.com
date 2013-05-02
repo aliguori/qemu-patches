@@ -1,0 +1,1 @@
+../SCSI-patches-for-2012-08-27/v1.1343426547/0010-scsi-disk-move-all-non-DMA-commands-to-scsi_disk_emulate_command.patch

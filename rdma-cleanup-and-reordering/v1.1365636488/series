@@ -1,0 +1,14 @@
+0000-rdma-cleanup-and-reordering.txt
+0001-introduce-qemu_ram_foreach_block.patch
+0002-Core-RMDA-logic.patch
+0003-RDMA-is-enabled-by-default-per-the-usual--configure-testing.patch
+0004-update-QEMUFileOps-with-new-hooks.patch
+0005-accessor-function-prototypes-for-new-QEMUFileOps-hooks.patch
+0006-implementation-of-new-QEMUFileOps-hooks.patch
+0007-introduce-capability-for-dynamic-chunk-registration.patch
+0008-default-chunk-registration-to-true.patch
+0009-parse-QMP-string-for-new-rdma-protocol.patch
+0010-introduce-new-command-migrate_check_for_zero.patch
+0011-send-pcram-over-RDMA.patch
+0012-updated-protocol-documentation.patch
+0013-print-out-migration-throughput-while-debugging.patch

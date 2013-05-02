@@ -1,0 +1,63 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Igor Mammedov <imammedo@redhat.com>
+To: Peter Maydell <peter.maydell@linaro.org>,
+ Igor Mammedov <imammedo@redhat.com>, qemu-devel@nongnu.org,
+ Eduardo Habkost <ehabkost@redhat.com>
+Cc: Anthony Liguori <aliguori@us.ibm.com>,
+ Eduardo Habkost <ehabkost@redhat.com>, ehabkost@redhat.com,
+ qemu-devel@nongnu.org, Igor Mammedov <imammedo@redhat.com>,
+ anthony.perard@citrix.com, pbonzini@redhat.com, afaerber@suse.de
+Date: Tue, 30 Apr 2013 15:41:26 +0200
+Message-id: 1367329288-27178-4-git-send-email-imammedo@redhat.com
+Subject: [PATCH 3/5] add cpu_model to QEMUMachine
+
+1. Use default cpu_model from machine if user haven't provided it.
+   It will allow statically define default cpu_model instead of
+   dynamically setting default value.
+2. Provides globally accessible cpu_model via current_machine pointer.
+
+Signed-off-by: Igor Mammedov <imammedo@redhat.com>
+Reviewed-by: Eduardo Habkost <ehabkost@redhat.com>
+---
+Note:
+ 1. it will allow to remove dynamic setting of default cpu_model in pc.c:pc_cpus_init()
+    and simplify pc_init_isa() since default value will be defined as machine
+    definition.
+ 2. it will be used for cpu-add hook that will be set by target-i386.
+---
+ include/hw/boards.h |    1 +
+ vl.c                |    6 ++++++
+ 2 files changed, 7 insertions(+), 0 deletions(-)
+
+diff --git a/include/hw/boards.h b/include/hw/boards.h
+index 75cd127..4ced60a 100644
+--- a/include/hw/boards.h
++++ b/include/hw/boards.h
+@@ -44,6 +44,7 @@ typedef struct QEMUMachine {
+     struct QEMUMachine *next;
+     const char *hw_version;
+     void (*hot_add_cpu)(const int64_t id, Error **errp);
++    const char *cpu_model;
+ } QEMUMachine;
+ 
+ int qemu_register_machine(QEMUMachine *m);
+diff --git a/vl.c b/vl.c
+index 7d30af5..3df6021 100644
+--- a/vl.c
++++ b/vl.c
+@@ -4283,6 +4283,12 @@ int main(int argc, char **argv, char **envp)
+ 
+     qdev_machine_init();
+ 
++    if (cpu_model) {
++        machine->cpu_model = cpu_model;
++    } else {
++        cpu_model = machine->cpu_model;
++    }
++
+     QEMUMachineInitArgs args = { .ram_size = ram_size,
+                                  .boot_device = (boot_devices[0] == '\0') ?
+                                                 machine->boot_order :
+-- 
+1.7.1
+

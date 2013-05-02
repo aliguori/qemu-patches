@@ -1,0 +1,25 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Lei Li <lilei@linux.vnet.ibm.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, lagarcia@br.ibm.com,
+ Lei Li <lilei@linux.vnet.ibm.com>
+Date: Mon, 15 Apr 2013 17:29:07 +0800
+Message-id: 1366018149-16508-1-git-send-email-lilei@linux.vnet.ibm.com
+Subject: [PATCH 0/2] Support for LED state extension to Qemu VNC server
+
+Hi guys,
+
+This patch series tries to add support for LED state
+extension to Qemu VNC server. The proposal has been sent
+few days ago as link below:
+
+http://lists.gnu.org/archive/html/qemu-devel/2013-04/msg01421.html
+
+This is just an initial implementation, and has not been
+completely tested. To catch up Qemu 1.5 soft freeze, I'd
+like to send it out to have your suggestion. Please let me
+know if this seems like the direction we should be headed.
+
+Your suggestions and comments are very appreciated!
+
+Thanks

@@ -1,0 +1,31 @@
+From patches Mon Sep 17 00:00:00 2001
+From: "Pavel Dovgaluk" <Pavel.Dovgaluk@ispras.ru>
+To: 'qemu-devel' <qemu-devel@nongnu.org>
+Cc: 
+Date: Mon, 15 Apr 2013 10:59:15 +0400
+Message-id: 516ba567.c6e3340a.1b23.5169SMTPIN_ADDED_BROKEN@mx.google.com
+Subject: [PATCH 1/1] i386 ROR r8/r16 instruction fix
+
+Fixed EFLAGS corruption by ROR r8/r16 instruction located at the end of the TB.
+
+Signed-off-by: Pavel Dovgalyuk <pavel.dovgaluk@gmail.com>
+---
+ target-i386/translate.c |    1 +
+ 1 files changed, 1 insertions(+), 0 deletions(-)
+
+diff --git a/target-i386/translate.c b/target-i386/translate.c
+index 233f24f..40f891d 100644
+--- a/target-i386/translate.c
++++ b/target-i386/translate.c
+@@ -1775,6 +1775,7 @@ static void gen_rot_rm_T1(DisasContext *s, int ot, int op1, int is_right)
+     if (is_right) {
+         tcg_gen_shri_tl(cpu_cc_src2, cpu_T[0], mask - 1);
+         tcg_gen_shri_tl(cpu_cc_dst, cpu_T[0], mask);
++        tcg_gen_andi_tl(cpu_cc_dst, cpu_cc_dst, 1);
+     } else {
+         tcg_gen_shri_tl(cpu_cc_src2, cpu_T[0], mask);
+         tcg_gen_andi_tl(cpu_cc_dst, cpu_T[0], 1);
+--
+
+
+

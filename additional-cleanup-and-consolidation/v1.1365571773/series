@@ -1,0 +1,8 @@
+0000-additional-cleanup-and-consolidation.txt
+0001--configure-and-Makefile.patch
+0002-documentation-docs-rdmatxt.patch
+0003-Introduce-QEMURamControlOps.patch
+0004-Introduce-two-new-capabilities.patch
+0005-core-RDMA-logic.patch
+0006-send-pcram-over-RDMA.patch
+0007-introduce-qemu_ram_foreach_block.patch

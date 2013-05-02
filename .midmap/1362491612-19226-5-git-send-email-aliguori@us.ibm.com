@@ -1,0 +1,1 @@
+../libqos-support/v1.1362491604/0004-pci-foreach.patch

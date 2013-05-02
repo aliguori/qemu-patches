@@ -1,0 +1,105 @@
+From patches Mon Sep 17 00:00:00 2001
+From: =?utf-8?q?Andreas_F=C3=A4rber_=3Cafaerber=40suse=2Ede=3E?=
+To: qemu-devel@nongnu.org
+Cc: Igor Mammedov <imammedo@redhat.com>,
+ =?UTF-8?q?Andreas=20F=C3=A4rber?= <afaerber@suse.de>
+Date: Thu,  2 May 2013 15:35:33 +0200
+Message-id: 1367501755-32272-8-git-send-email-afaerber@suse.de
+Subject: [PATCH 07/29] cpu: Introduce get_arch_id() method and override it for
+ X86CPU
+
+From: Igor Mammedov <imammedo@redhat.com>
+
+get_arch_id() adds possibility for generic code to get a guest-visible
+CPU ID without accessing CPUArchState.
+If derived classes don't override it, it will return cpu_index.
+
+Override it on target-i386 in X86CPU to return the APIC ID.
+
+Signed-off-by: Igor Mammedov <imammedo@redhat.com>
+Reviewed-by: Eduardo Habkost <ehabkost@redhat.com>
+Reviewed-by: liguang <lig.fnst@cn.fujitsu.com>
+Acked-by: Michael S. Tsirkin <mst@redhat.com>
+Signed-off-by: Andreas Färber <afaerber@suse.de>
+---
+ include/qom/cpu.h |  2 ++
+ qom/cpu.c         |  6 ++++++
+ target-i386/cpu.c | 10 ++++++++++
+ 3 files changed, 18 insertions(+)
+
+diff --git a/include/qom/cpu.h b/include/qom/cpu.h
+index ac93dce..1b4de17 100644
+--- a/include/qom/cpu.h
++++ b/include/qom/cpu.h
+@@ -45,6 +45,7 @@ typedef struct CPUState CPUState;
+  * instantiatable CPU type.
+  * @reset: Callback to reset the #CPUState to its initial state.
+  * @do_interrupt: Callback for interrupt handling.
++ * @get_arch_id: Callback for getting architecture-dependent CPU ID.
+  * @vmsd: State description for migration.
+  *
+  * Represents a CPU family or model.
+@@ -58,6 +59,7 @@ typedef struct CPUClass {
+ 
+     void (*reset)(CPUState *cpu);
+     void (*do_interrupt)(CPUState *cpu);
++    int64_t (*get_arch_id)(CPUState *cpu);
+ 
+     const struct VMStateDescription *vmsd;
+ } CPUClass;
+diff --git a/qom/cpu.c b/qom/cpu.c
+index 34fa805..9a4457b 100644
+--- a/qom/cpu.c
++++ b/qom/cpu.c
+@@ -78,6 +78,11 @@ static void cpu_common_realizefn(DeviceState *dev, Error **errp)
+     }
+ }
+ 
++static int64_t cpu_common_get_arch_id(CPUState *cpu)
++{
++    return cpu->cpu_index;
++}
++
+ static void cpu_class_init(ObjectClass *klass, void *data)
+ {
+     DeviceClass *dc = DEVICE_CLASS(klass);
+@@ -85,6 +90,7 @@ static void cpu_class_init(ObjectClass *klass, void *data)
+ 
+     k->class_by_name = cpu_common_class_by_name;
+     k->reset = cpu_common_reset;
++    k->get_arch_id = cpu_common_get_arch_id;
+     dc->realize = cpu_common_realizefn;
+     dc->no_user = 1;
+ }
+diff --git a/target-i386/cpu.c b/target-i386/cpu.c
+index e2302d8..f34ba23 100644
+--- a/target-i386/cpu.c
++++ b/target-i386/cpu.c
+@@ -2272,6 +2272,14 @@ static void x86_cpu_initfn(Object *obj)
+     }
+ }
+ 
++static int64_t x86_cpu_get_arch_id(CPUState *cs)
++{
++    X86CPU *cpu = X86_CPU(cs);
++    CPUX86State *env = &cpu->env;
++
++    return env->cpuid_apic_id;
++}
++
+ static void x86_cpu_common_class_init(ObjectClass *oc, void *data)
+ {
+     X86CPUClass *xcc = X86_CPU_CLASS(oc);
+@@ -2286,6 +2294,8 @@ static void x86_cpu_common_class_init(ObjectClass *oc, void *data)
+ 
+     cc->do_interrupt = x86_cpu_do_interrupt;
+     cpu_class_set_vmsd(cc, &vmstate_x86_cpu);
++
++    cc->get_arch_id = x86_cpu_get_arch_id;
+ }
+ 
+ static const TypeInfo x86_cpu_type_info = {
+-- 
+1.8.1.4
+
+

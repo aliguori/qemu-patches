@@ -1,0 +1,1 @@
+../directory-reorganization-final-part/v1.1365721821/0005-configure-fix-TPM-logic.patch

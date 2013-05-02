@@ -1,0 +1,109 @@
+From patches Mon Sep 17 00:00:00 2001
+From: "Richard W.M. Jones" <rjones@redhat.com>
+To: Peter Maydell <peter.maydell@linaro.org>, qemu-devel@nongnu.org,
+ "Richard W.M. Jones" <rjones@redhat.com>
+Cc: qemu-devel@nongnu.org
+Date: Wed,  3 Apr 2013 23:17:39 +0100
+Message-id: 1365027461-8884-2-git-send-email-rjones@redhat.com
+Subject: [PATCH 1/3] osdep: Add a function to get the current username.
+
+From: "Richard W.M. Jones" <rjones@redhat.com>
+
+Signed-off-by: Richard W.M. Jones <rjones@redhat.com>
+---
+ include/qemu/osdep.h |  2 ++
+ util/osdep.c         | 49 ++++++++++++++++++++++++++++++++++++++++++++++++-
+ 2 files changed, 50 insertions(+), 1 deletion(-)
+
+diff --git a/include/qemu/osdep.h b/include/qemu/osdep.h
+index df24400..8ed5b78 100644
+--- a/include/qemu/osdep.h
++++ b/include/qemu/osdep.h
+@@ -182,4 +182,6 @@ const char *qemu_get_version(void);
+ void fips_set_state(bool requested);
+ bool fips_get_state(void);
+ 
++char *qemu_current_user(void);
++
+ #endif
+diff --git a/util/osdep.c b/util/osdep.c
+index bd59ac9..b40ebc8 100644
+--- a/util/osdep.c
++++ b/util/osdep.c
+@@ -29,6 +29,7 @@
+ #include <errno.h>
+ #include <unistd.h>
+ #include <fcntl.h>
++#include <sys/types.h>
+ 
+ /* Needed early for CONFIG_BSD etc. */
+ #include "config-host.h"
+@@ -38,13 +39,16 @@
+ #endif
+ 
+ #ifdef CONFIG_SOLARIS
+-#include <sys/types.h>
+ #include <sys/statvfs.h>
+ /* See MySQL bug #7156 (http://bugs.mysql.com/bug.php?id=7156) for
+    discussion about Solaris header problems */
+ extern int madvise(caddr_t, size_t, int);
+ #endif
+ 
++#ifndef _WIN32
++#include <pwd.h>
++#endif
++
+ #include "qemu-common.h"
+ #include "trace.h"
+ #include "qemu/sockets.h"
+@@ -406,3 +410,46 @@ bool fips_get_state(void)
+     return fips_enabled;
+ }
+ 
++/*
++ * Get the login name of the current user.  The string must be freed
++ * up by the caller.  If the current user could not be determined,
++ * returns NULL and sets errno.
++ */
++char *qemu_current_user(void)
++{
++#ifndef _WIN32
++    uid_t euid = geteuid();
++    char *buf;
++    long size;
++    struct passwd pwd, *result_pwd;
++    char *ret;
++
++#ifdef _SC_GETPW_R_SIZE_MAX
++    size = sysconf(_SC_GETPW_R_SIZE_MAX);
++#else
++    size = 256;
++#endif
++
++ again:
++    buf = g_malloc (size);
++    if (getpwuid_r(euid, &pwd, buf, size, &result_pwd) == -1) {
++        g_free(buf);
++        if (errno == ERANGE) {
++            size *= 2;
++            goto again;
++        }
++        return NULL;
++    }
++    if(result_pwd && result_pwd->pw_name) {
++        ret = g_strdup(result_pwd->pw_name);
++    } else {
++        ret = NULL;
++    }
++    g_free(buf);
++    return ret;
++
++#else /* _WIN32 */
++    errno = ENOTSUP;
++    return NULL;                /* Not implemented. */
++#endif
++}
+-- 
+1.8.1.4
+
+

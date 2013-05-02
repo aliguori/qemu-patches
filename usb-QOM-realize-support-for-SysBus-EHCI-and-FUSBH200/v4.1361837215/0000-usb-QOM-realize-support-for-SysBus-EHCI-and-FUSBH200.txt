@@ -1,0 +1,66 @@
+From patches Mon Sep 17 00:00:00 2001
+From: =?utf-8?q?Andreas_F=C3=A4rber_=3Cafaerber=40suse=2Ede=3E?=
+To: Gerd Hoffmann <kraxel@redhat.com>, qemu-devel@nongnu.org,
+ =?UTF-8?B?QW5kcmVhcyBGw6RyYmVy?= <afaerber@suse.de>
+Cc: qemu-devel@nongnu.org, Igor Mitsyanko <i.mitsyanko@samsung.com>,
+ Liming Wang <walimisdev@gmail.com>,
+ Peter Crosthwaite <peter.crosthwaite@xilinx.com>,
+ =?UTF-8?q?Andreas=20F=C3=A4rber?= <afaerber@suse.de>,
+ Gerd Hoffmann <kraxel@redhat.com>, Kuo-Jung Su <dantesu@faraday-tech.com>
+Date: Mon, 25 Feb 2013 18:06:55 +0100
+Message-id: 1361812020-3827-1-git-send-email-afaerber@suse.de
+Subject: [PATCH 0/5] usb: QOM realize support for SysBus EHCI and FUSBH200
+
+Hello Gerd,
+
+v4 fixes the bus naming by leaving usb_bus_new() in realize for now.
+A mid-term fix will be to rework (q)bus initialization.
+
+Regards,
+Andreas
+
+v3 -> v4:
+* Reverted moving usb_bus_new() into instance_init.
+
+v1 -> v3:
+* Renamed realizefn -> realize following a discussion with Anthony.
+* Rename usb_ehci_initfn -> usb_ehci_realize.
+* Split off instance_init from initfn / realize, with Faraday in mind.
+* Incorporated Kuo-Jung's v1 EHCI refactoring + FUSBH200 EHCI.
+* Merged Kuo-Jung's v2 PCI initialization.
+
+>From Kuo-Jung's FUSBH200/PORTSC v1/v2:
+* Moved old portscbase and portnr values into base class_init.
+* Moved mem_vendor field to new FUSBH200EHCIState.
+* Replace vendor init callback with derived instance_init.
+* Introduced enum for vendor registers.
+* Replace magic number 0x34 with formula, so that it doesn't deviate.
+
+>From my Tegra2 FYI patch:
+* None.
+
+Cc: Gerd Hoffmann <kraxel@redhat.com>
+Cc: Kuo-Jung Su <dantesu@faraday-tech.com>
+Cc: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+Cc: Igor Mitsyanko <i.mitsyanko@samsung.com>
+Cc: Liming Wang <walimisdev@gmail.com>
+
+Andreas Färber (3):
+  usb/hcd-ehci-sysbus: Convert to QOM realize
+  usb/hcd-ehci: Split off instance_init from realize
+  usb/hcd-ehci: Add Tegra2 SysBus EHCI device
+
+Kuo-Jung Su (2):
+  usb/hcd-ehci: Replace PORTSC macros with variables
+  usb/hcd-ehci: Add Faraday FUSBH200 support
+
+ hw/usb/hcd-ehci-pci.c    |   23 ++++++---
+ hw/usb/hcd-ehci-sysbus.c |  121 +++++++++++++++++++++++++++++++++++++++++++---
+ hw/usb/hcd-ehci.c        |   50 +++++++++++--------
+ hw/usb/hcd-ehci.h        |   28 ++++++++---
+ 4 Dateien geändert, 181 Zeilen hinzugefügt(+), 41 Zeilen entfernt(-)
+
+-- 
+1.7.10.4
+
+

@@ -1,0 +1,78 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Peter Maydell <peter.maydell@linaro.org>
+To: qemu-devel@nongnu.org
+Cc: Arnd Bergmann <arnd@arndb.de>, patches@linaro.org,
+ Aurelien Jarno <aurelien@aurel32.net>, "Michael S. Tsirkin" <mst@redhat.com>,
+ Paul Brook <paul@codesourcery.com>,
+ =?UTF-8?q?Andreas=20F=C3=A4rber?= <afaerber@suse.de>,
+ Will Deacon <will.deacon@arm.com>
+Date: Tue, 26 Mar 2013 10:22:02 +0000
+Message-id: 1364293331-8722-3-git-send-email-peter.maydell@linaro.org
+Subject: [PATCH 02/11] versatile_pci: Expose PCI I/O region on Versatile PB
+
+Comments in the QEMU source code claim that the version of the PCI
+controller on the VersatilePB board doesn't support the PCI I/O
+region, but this is incorrect; expose that region, map it in the
+correct location, and drop the misleading comments.
+
+This change removes the only currently implemented difference
+between the realview-pci and versatile-pci models; however there
+are other differences in not-yet-implemented functionality, so we
+retain the distinction between the two device types.
+
+Signed-off-by: Peter Maydell <peter.maydell@linaro.org>
+---
+ hw/arm/versatilepb.c |    3 +--
+ hw/versatile_pci.c   |    8 +++-----
+ 2 files changed, 4 insertions(+), 7 deletions(-)
+
+diff --git a/hw/arm/versatilepb.c b/hw/arm/versatilepb.c
+index baaa265..0d08d15 100644
+--- a/hw/arm/versatilepb.c
++++ b/hw/arm/versatilepb.c
+@@ -226,14 +226,13 @@ static void versatile_init(QEMUMachineInitArgs *args, int board_id)
+     qdev_init_nofail(dev);
+     sysbus_mmio_map(busdev, 0, 0x41000000); /* PCI self-config */
+     sysbus_mmio_map(busdev, 1, 0x42000000); /* PCI config */
++    sysbus_mmio_map(busdev, 2, 0x43000000); /* PCI I/O */
+     sysbus_connect_irq(busdev, 0, sic[27]);
+     sysbus_connect_irq(busdev, 1, sic[28]);
+     sysbus_connect_irq(busdev, 2, sic[29]);
+     sysbus_connect_irq(busdev, 3, sic[30]);
+     pci_bus = (PCIBus *)qdev_get_child_bus(dev, "pci");
+ 
+-    /* The Versatile PCI bridge does not provide access to PCI IO space,
+-       so many of the qemu PCI devices are not useable.  */
+     for(n = 0; n < nb_nics; n++) {
+         nd = &nd_table[n];
+ 
+diff --git a/hw/versatile_pci.c b/hw/versatile_pci.c
+index 16ce5d1..1312f46 100644
+--- a/hw/versatile_pci.c
++++ b/hw/versatile_pci.c
+@@ -77,7 +77,7 @@ static int pci_vpb_init(SysBusDevice *dev)
+     /* Our memory regions are:
+      * 0 : PCI self config window
+      * 1 : PCI config window
+-     * 2 : PCI IO window (realview_pci only)
++     * 2 : PCI IO window
+      */
+     memory_region_init_io(&s->mem_config, &pci_vpb_config_ops, bus,
+                           "pci-vpb-selfconfig", 0x1000000);
+@@ -85,10 +85,8 @@ static int pci_vpb_init(SysBusDevice *dev)
+     memory_region_init_io(&s->mem_config2, &pci_vpb_config_ops, bus,
+                           "pci-vpb-config", 0x1000000);
+     sysbus_init_mmio(dev, &s->mem_config2);
+-    if (s->realview) {
+-        isa_mmio_setup(&s->isa, 0x0100000);
+-        sysbus_init_mmio(dev, &s->isa);
+-    }
++    isa_mmio_setup(&s->isa, 0x0100000);
++    sysbus_init_mmio(dev, &s->isa);
+ 
+     pci_create_simple(bus, -1, "versatile_pci_host");
+     return 0;
+-- 
+1.7.9.5
+
+

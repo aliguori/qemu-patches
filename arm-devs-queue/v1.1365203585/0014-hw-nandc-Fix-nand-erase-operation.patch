@@ -1,0 +1,42 @@
+From patches Mon Sep 17 00:00:00 2001
+From: "Peter Maydell" <peter.maydell@linaro.org>
+To: Anthony Liguori <aliguori@us.ibm.com>, Blue Swirl <blauwirbel@gmail.com>
+Cc: Paul Brook <paul@codesourcery.com>, qemu-devel@nongnu.org
+Date: Fri,  5 Apr 2013 18:13:19 +0100
+Message-id: 1365181999-15387-15-git-send-email-peter.maydell@linaro.org
+Subject: [PATCH 14/14] hw/nand.c: Fix nand erase operation
+
+From: Wendy Liang <wendy.liang@xilinx.com>
+
+Usually, nand erase operation has only 2 or 3 address cycles.
+We need to mask s->addr to zero unset stale high-order bytes in the nand address
+before using it as the erase address.
+
+This fixes the NAND erase operation in Linux.
+
+[PC: Generalised to work for any number of address cycles rather than just 3]
+
+Signed-off-by: Wendy Liang <jliang@xilinx.com>
+Signed-off-by: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+Message-id: 1364967188-26711-1-git-send-email-peter.crosthwaite@xilinx.com
+Signed-off-by: Peter Maydell <peter.maydell@linaro.org>
+---
+ hw/nand.c |    1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/hw/nand.c b/hw/nand.c
+index de3e502..6362093 100644
+--- a/hw/nand.c
++++ b/hw/nand.c
+@@ -297,6 +297,7 @@ static void nand_command(NANDFlashState *s)
+         break;
+ 
+     case NAND_CMD_BLOCKERASE2:
++        s->addr &= (1ull << s->addrlen * 8) - 1;
+         if (nand_flash_ids[s->chip_id].options & NAND_SAMSUNG_LP)
+             s->addr <<= 16;
+         else
+-- 
+1.7.9.5
+
+

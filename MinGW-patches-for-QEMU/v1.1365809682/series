@@ -1,0 +1,5 @@
+0000-MinGW-patches-for-QEMU.txt
+0001-Check-effective-suspension-of-TCG-thread.patch
+0002-Ensure-good-ordering-of-memory-instruction-in-cpu_exec.patch
+0003-Release-SMP-restriction-on-Windows.patch
+0004-qemu-timer-move-timeBeginPeriod-timeEndPeriod-to-os-win32.patch

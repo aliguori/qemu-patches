@@ -1,0 +1,1 @@
+../implement-power-chip/v2.1365182884/0007-vl-run-power_management.patch

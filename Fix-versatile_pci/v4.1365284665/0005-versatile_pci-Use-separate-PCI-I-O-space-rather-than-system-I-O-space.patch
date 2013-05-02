@@ -1,0 +1,69 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Peter Maydell <peter.maydell@linaro.org>
+To: qemu-devel@nongnu.org
+Cc: Arnd Bergmann <arnd@arndb.de>, patches@linaro.org,
+ "Michael S. Tsirkin" <mst@redhat.com>, Paul Brook <paul@codesourcery.com>,
+ =?UTF-8?q?Andreas=20F=C3=A4rber?= <afaerber@suse.de>,
+ Will Deacon <will.deacon@arm.com>
+Date: Sat,  6 Apr 2013 16:44:30 +0100
+Message-id: 1365263076-16909-6-git-send-email-peter.maydell@linaro.org
+Subject: [PATCH 05/11] versatile_pci: Use separate PCI I/O space rather than
+ system I/O space
+
+Rather than overloading the system I/O space (which doesn't even make
+any sense on ARM) for PCI I/O, create an memory region in the PCI
+controller and use that to represent the I/O space.
+
+Signed-off-by: Peter Maydell <peter.maydell@linaro.org>
+Acked-by: Paul Brook <paul@codesourcery.com>
+---
+ hw/versatile_pci.c |   17 +++++++++++++----
+ 1 file changed, 13 insertions(+), 4 deletions(-)
+
+diff --git a/hw/versatile_pci.c b/hw/versatile_pci.c
+index 9e0ece0..ce5bdf2 100644
+--- a/hw/versatile_pci.c
++++ b/hw/versatile_pci.c
+@@ -19,7 +19,8 @@ typedef struct {
+     qemu_irq irq[4];
+     MemoryRegion mem_config;
+     MemoryRegion mem_config2;
+-    MemoryRegion isa;
++    MemoryRegion pci_io_space;
++    MemoryRegion pci_io_window;
+     PCIBus pci_bus;
+     PCIDevice pci_dev;
+ 
+@@ -77,8 +78,10 @@ static void pci_vpb_init(Object *obj)
+     PCIHostState *h = PCI_HOST_BRIDGE(obj);
+     PCIVPBState *s = PCI_VPB(obj);
+ 
++    memory_region_init(&s->pci_io_space, "pci_io", 1ULL << 32);
++
+     pci_bus_new_inplace(&s->pci_bus, DEVICE(obj), "pci",
+-                        get_system_memory(), get_system_io(),
++                        get_system_memory(), &s->pci_io_space,
+                         PCI_DEVFN(11, 0), TYPE_PCI_BUS);
+     h->bus = &s->pci_bus;
+ 
+@@ -111,8 +114,14 @@ static void pci_vpb_realize(DeviceState *dev, Error **errp)
+     memory_region_init_io(&s->mem_config2, &pci_vpb_config_ops, &s->pci_bus,
+                           "pci-vpb-config", 0x1000000);
+     sysbus_init_mmio(sbd, &s->mem_config2);
+-    isa_mmio_setup(&s->isa, 0x0100000);
+-    sysbus_init_mmio(sbd, &s->isa);
++
++    /* The window into I/O space is always into a fixed base address;
++     * its size is the same for both realview and versatile.
++     */
++    memory_region_init_alias(&s->pci_io_window, "pci-vbp-io-window",
++                             &s->pci_io_space, 0, 0x100000);
++
++    sysbus_init_mmio(sbd, &s->pci_io_space);
+ 
+     /* TODO Remove once realize propagates to child devices. */
+     object_property_set_bool(OBJECT(&s->pci_dev), true, "realized", errp);
+-- 
+1.7.9.5
+
+

@@ -1,0 +1,8 @@
+0000-QOM-CPUState-part-9-CPU_COMMON-for-interrupts.txt
+0001-target-cris-helperc-Update-Coding-Style.patch
+0002-cpu-Move-halted-and-interrupt_request-fields-to-CPUState.patch
+0003-exec-Pass-CPUState-to-cpu_reset_interrupt.patch
+0004-cpu-Pass-CPUState-to-cpu_interrupt.patch
+0005-cpu-Replace-do_interrupt-by-CPUClassdo_interrupt-method.patch
+0006-target-arm-Override-do_interrupt-for-ARMv7-M-profile.patch
+0007-target-cris-Override-do_interrupt-for-pre-v32-CPU-cores.patch

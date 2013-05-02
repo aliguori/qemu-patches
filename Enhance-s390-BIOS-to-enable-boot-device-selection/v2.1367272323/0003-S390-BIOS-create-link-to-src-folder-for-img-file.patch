@@ -1,0 +1,31 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Dominik Dingel <dingel@linux.vnet.ibm.com>
+To: Dominik Dingel <dingel@linux.vnet.ibm.com>, qemu-devel@nongnu.org
+Cc: Christian Borntraeger <borntraeger@de.ibm.com>,
+ Alexander Graf <agraf@suse.de>, qemu-devel@nongnu.org,
+ Dominik Dingel <dingel@linux.vnet.ibm.com>
+Date: Mon, 29 Apr 2013 16:52:06 +0200
+Message-id: 1367247128-22409-4-git-send-email-dingel@linux.vnet.ibm.com
+Subject: [PATCH 3/5] S390: BIOS create link to src folder for .img file
+
+For *.img files, there will be a link created directly to the src folder,
+like for all other blobs.
+
+Signed-off-by: Dominik Dingel <dingel@linux.vnet.ibm.com>
+
+diff --git a/configure b/configure
+index cb29b69..2ab54ec 100755
+--- a/configure
++++ b/configure
+@@ -4389,6 +4389,7 @@ for bios_file in \
+     $source_path/pc-bios/*.aml \
+     $source_path/pc-bios/*.rom \
+     $source_path/pc-bios/*.dtb \
++    $source_path/pc-bios/*.img \
+     $source_path/pc-bios/openbios-* \
+     $source_path/pc-bios/palcode-*
+ do
+-- 
+1.7.9.5
+
+

@@ -1,0 +1,402 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Corey Bryant <coreyb@linux.vnet.ibm.com>
+To: Laszlo Ersek <lersek@redhat.com>, Corey Bryant <coreyb@linux.vnet.ibm.com>,
+ Kevin O'Connor <kevin@koconnor.net>, seabios@seabios.org,
+ "Michael S. Tsirkin" <mst@redhat.com>, kevin@koconnor.net
+Cc: Laszlo Ersek <lersek@redhat.com>, Paolo Bonzini <pbonzini@redhat.com>,
+ Corey Bryant <coreyb@linux.vnet.ibm.com>, qemu-devel <qemu-devel@nongnu.org>,
+ stefanb@linux.vnet.ibm.com, Kevin O'Connor <kevin@koconnor.net>,
+ seabios@seabios.org, qemu-devel@nongnu.org,
+ "Michael S. Tsirkin" <mst@redhat.com>
+Date: Tue, 26 Mar 2013 10:14:55 -0400
+Message-id: 1364307295-518-3-git-send-email-coreyb@linux.vnet.ibm.com
+Subject: [PATCH 2/2] Provide ACPI SSDT table for TPM device
+
+This patch provides ACPI support for the TPM device. It probes for the TPM
+device and only if a TPM device is found then the TPM's SSDT and TCPA table
+are created. This patch also connects them to the RSDT.
+
+Since the logging area in the TCPA table requires 64kb, the memory reserved
+for ACPI tables (config.h) is increased to 96kb.
+
+The IRQ description in the TPM's SSDT is commented since it will be
+'safer' to run the TPM in polling mode - the Linux TPM TIS driver for example
+has too many issues when run in interrupt mode.
+
+The description of the TCPA (client) table can be found here:
+
+http://www.trustedcomputinggroup.org/resources/server_work_group_acpi_general_specification_version_10
+
+The compiled SSDT description is also part of this patch.
+
+Signed-off-by: Stefan Berger <stefanb@linux.vnet.ibm.com>
+Signed-off-by: Corey Bryant <coreyb@linux.vnet.ibm.com>
+---
+Version history from prior patch submission:
+
+v6:
+  - following Andreas Niederl's suggestion: enclosing Device(TPM) in
+    Scope(\_SB) { ... }  to have Linux 2.6.33 recognize the device properly;
+    seems to work fine with 3.0.0
+
+v2:
+  - Increasing the CONFIG_MAX_HIGHTABLE to 96kb
+  - Adding cut-down tcgbios.c|h to keep SeaBIOS compiling
+  - Build tpm_drivers.c and tcgbios.c
+    -> TPM's SSDT and TCPA tables are now visible in Linux
+---
+ Makefile              |    9 +++++-
+ src/acpi-tpm-ssdt.dsl |   24 +++++++++++++++++
+ src/acpi-tpm-ssdt.hex |   27 +++++++++++++++++++
+ src/acpi.c            |   41 ++++++++++++++++++++++++++++
+ src/acpi.h            |   20 ++++++++++++++
+ src/config.h          |    2 +-
+ src/tcgbios.c         |   70 +++++++++++++++++++++++++++++++++++++++++++++++++
+ src/tcgbios.h         |   57 +++++++++++++++++++++++++++++++++++++++
+ 8 files changed, 248 insertions(+), 2 deletions(-)
+ create mode 100644 src/acpi-tpm-ssdt.dsl
+ create mode 100644 src/acpi-tpm-ssdt.hex
+ create mode 100644 src/tcgbios.c
+ create mode 100644 src/tcgbios.h
+
+diff --git a/Makefile b/Makefile
+index 759bbbb..2807010 100644
+--- a/Makefile
++++ b/Makefile
+@@ -18,7 +18,7 @@ SRC16=$(SRCBOTH) system.c disk.c font.c
+ SRC32FLAT=$(SRCBOTH) post.c shadow.c memmap.c pmm.c coreboot.c boot.c \
+     acpi.c smm.c mptable.c pirtable.c smbios.c pciinit.c optionroms.c mtrr.c \
+     lzmadecode.c bootsplash.c jpeg.c usb-hub.c paravirt.c \
+-    biostables.c xen.c bmp.c romfile.c csm.c
++    biostables.c xen.c bmp.c romfile.c csm.c tcgbios.c tpm_drivers.c
+ SRC32SEG=util.c output.c pci.c pcibios.c apm.c stacks.c
+ 
+ # Default compiler flags
+@@ -215,6 +215,13 @@ $(OUT)vgabios.bin: $(OUT)vgabios.bin.raw tools/buildrom.py
+ iasl-option=$(shell if test -z "`$(1) $(2) 2>&1 > /dev/null`" \
+     ; then echo "$(2)"; else echo "$(3)"; fi ;)
+ 
++src/acpi-tpm-ssdt.hex: src/acpi-tpm-ssdt.dsl
++	@echo "Compiling TPM SSDT"
++	$(Q)cpp -P $< > $(OUT)$*.dsl.i
++	$(Q)iasl -tc -p $(OUT)$* $(OUT)$*.dsl.i
++	$(Q)cp $(OUT)$*.hex $@
++	$(Q)sed -i 's/AmlCode/AmlCode_TPM/' $@
++
+ $(OUT)%.hex: src/%.dsl ./tools/acpi_extract_preprocess.py ./tools/acpi_extract.py
+ 	@echo "  Compiling IASL $@"
+ 	$(Q)$(CPP) $(CPPFLAGS) $< -o $(OUT)$*.dsl.i.orig
+diff --git a/src/acpi-tpm-ssdt.dsl b/src/acpi-tpm-ssdt.dsl
+new file mode 100644
+index 0000000..080bae4
+--- /dev/null
++++ b/src/acpi-tpm-ssdt.dsl
+@@ -0,0 +1,24 @@
++DefinitionBlock (
++    "acpi-tpm-ssdt.aml",// Output Filename
++    "SSDT",             // Signature
++    0x01,               // SSDT Compliance Revision
++    "BXPC",             // OEMID
++    "BXSSDT",           // TABLE ID
++    0x1                 // OEM Revision
++    )
++{
++    Scope(\_SB) {
++        /* TPM with emulated TPM TIS interface */
++        Device (TPM) {
++            Name (_HID, EisaID ("PNP0C31"))
++            Name (_CRS, ResourceTemplate ()
++            {
++                Memory32Fixed (ReadWrite, 0xFED40000, 0x00005000)
++                //IRQNoFlags () {5}
++            })
++            Method (_STA, 0, NotSerialized) {
++                Return (0x0F)
++            }
++        }
++    }
++}
+diff --git a/src/acpi-tpm-ssdt.hex b/src/acpi-tpm-ssdt.hex
+new file mode 100644
+index 0000000..acbb78f
+--- /dev/null
++++ b/src/acpi-tpm-ssdt.hex
+@@ -0,0 +1,27 @@
++/*
++ *
++ * Intel ACPI Component Architecture
++ * ASL Optimizing Compiler version 20101013-64 [Nov 21 2010]
++ * Copyright (c) 2000 - 2010 Intel Corporation
++ *
++ * Compilation of "out/.dsl.i" - Mon Jan 30 16:03:18 2012
++ *
++ * C source code output
++ * AML code block contains 0x5D bytes
++ *
++ */
++unsigned char AmlCode_TPM[] =
++{
++    0x53,0x53,0x44,0x54,0x5D,0x00,0x00,0x00,  /* 00000000    "SSDT]..." */
++    0x01,0x15,0x42,0x58,0x50,0x43,0x00,0x00,  /* 00000008    "..BXPC.." */
++    0x42,0x58,0x53,0x53,0x44,0x54,0x00,0x00,  /* 00000010    "BXSSDT.." */
++    0x01,0x00,0x00,0x00,0x49,0x4E,0x54,0x4C,  /* 00000018    "....INTL" */
++    0x13,0x10,0x10,0x20,0x10,0x38,0x5C,0x5F,  /* 00000020    "... .8\_" */
++    0x53,0x42,0x5F,0x5B,0x82,0x30,0x54,0x50,  /* 00000028    "SB_[.0TP" */
++    0x4D,0x5F,0x08,0x5F,0x48,0x49,0x44,0x0C,  /* 00000030    "M_._HID." */
++    0x41,0xD0,0x0C,0x31,0x08,0x5F,0x43,0x52,  /* 00000038    "A..1._CR" */
++    0x53,0x11,0x11,0x0A,0x0E,0x86,0x09,0x00,  /* 00000040    "S......." */
++    0x01,0x00,0x00,0xD4,0xFE,0x00,0x50,0x00,  /* 00000048    "......P." */
++    0x00,0x79,0x00,0x14,0x09,0x5F,0x53,0x54,  /* 00000050    ".y..._ST" */
++    0x41,0x00,0xA4,0x0A,0x0F                  /* 00000058    "A...."    */
++};
+diff --git a/src/acpi.c b/src/acpi.c
+index bc4d8ea..86c9770 100644
+--- a/src/acpi.c
++++ b/src/acpi.c
+@@ -15,6 +15,8 @@
+ #include "config.h" // CONFIG_*
+ #include "paravirt.h" // RamSize
+ #include "dev-q35.h"
++#include "acpi-tpm-ssdt.hex"
++#include "tcgbios.h" // has_working_tpm
+ 
+ /****************************************************/
+ /* ACPI tables init */
+@@ -762,6 +764,39 @@ static const struct pci_device_id acpi_find_tbl[] = {
+     PCI_DEVICE_END,
+ };
+ 
++
++static u32 add_tpm_device(void **tpm_addr, void **tcpa_addr)
++{
++    struct tcpa_descriptor_rev2 *tcpa;
++
++    *tpm_addr = NULL;
++    *tcpa_addr = NULL;
++
++    if (has_working_tpm()) {
++        u32 laml = 64 * 1024;
++        *tpm_addr = malloc_high(sizeof(AmlCode_TPM));
++
++        tcpa = malloc_high(sizeof(*tcpa) + laml);
++        if (!tcpa || !*tpm_addr) {
++            warn_noalloc();
++            return 1;
++        }
++
++        if (*tpm_addr)
++            memcpy(*tpm_addr, AmlCode_TPM, sizeof(AmlCode_TPM));
++
++        memset(tcpa, 0x0, sizeof(*tcpa) + laml);
++        u64 lasa = (u32)tcpa + sizeof(*tcpa);
++
++        tcpa->laml = laml;
++        tcpa->lasa = lasa;
++        build_header((void*)tcpa, TCPA_SIGNATURE, sizeof(*tcpa), 2);
++
++        *tcpa_addr = tcpa;
++    }
++    return 0;
++}
++
+ struct rsdp_descriptor *RsdpAddr;
+ 
+ #define MAX_ACPI_TABLES 20
+@@ -835,6 +870,12 @@ acpi_setup(void)
+         fill_dsdt(fadt, dsdt);
+     }
+ 
++    void *tcpa, *tpm;
++    if (add_tpm_device(&tpm, &tcpa))
++        return;
++    ACPI_INIT_TABLE(tpm);
++    ACPI_INIT_TABLE(tcpa);
++
+     // Build final rsdt table
+     struct rsdt_descriptor_rev1 *rsdt;
+     size_t rsdt_len = sizeof(*rsdt) + sizeof(u32) * tbl_idx;
+diff --git a/src/acpi.h b/src/acpi.h
+index 7fbd082..c2c778c 100644
+--- a/src/acpi.h
++++ b/src/acpi.h
+@@ -130,4 +130,24 @@ struct acpi_table_mcfg {
+     struct acpi_mcfg_allocation allocation[0];
+ } PACKED;
+ 
++
++struct rsdt_descriptor {
++    ACPI_TABLE_HEADER_DEF
++    u32 entry[1];
++} PACKED;
++
++#define TCPA_SIGNATURE 0x41504354
++struct tcpa_descriptor_rev2
++{
++    ACPI_TABLE_HEADER_DEF
++    u16  platform_class;
++    u32  laml;
++    u64  lasa;
++} PACKED;
++
++/* TCPA ACPI definitions */
++#define TCPA_ACPI_CLASS_CLIENT          0
++#define TCPA_ACPI_CLASS_SERVER          1
++
++
+ #endif // acpi.h
+diff --git a/src/config.h b/src/config.h
+index 64e3c92..3d66568 100644
+--- a/src/config.h
++++ b/src/config.h
+@@ -17,7 +17,7 @@
+ // Maximum number of map entries in the e820 map
+ #define BUILD_MAX_E820 32
+ // Space to reserve in high-memory for tables
+-#define BUILD_MAX_HIGHTABLE (64*1024)
++#define BUILD_MAX_HIGHTABLE (96*1024)
+ // Largest supported externaly facing drive id
+ #define BUILD_MAX_EXTDRIVE 16
+ // Number of bytes the smbios may be and still live in the f-segment
+diff --git a/src/tcgbios.c b/src/tcgbios.c
+new file mode 100644
+index 0000000..f593a5f
+--- /dev/null
++++ b/src/tcgbios.c
+@@ -0,0 +1,70 @@
++//  Implementation of the TCG BIOS extension according to the specification
++//  described in
++//  https://www.trustedcomputinggroup.org/specs/PCClient/TCG_PCClientImplementationforBIOS_1-20_1-00.pdf
++//
++//  Copyright (C) 2006-2013 IBM Corporation
++//
++//  Authors:
++//      Stefan Berger <stefanb@linux.vnet.ibm.com>
++//
++// This file may be distributed under the terms of the GNU LGPLv3 license.
++
++
++#include "config.h"
++
++#include "types.h"
++#include "tpm_drivers.h" // tpm_drivers[]
++
++
++typedef struct {
++    u8            tpm_probed:1;
++    u8            tpm_found:1;
++    u8            tpm_working:1;
++    u8            if_shutdown:1;
++    u8            tpm_driver_to_use:4;
++} tcpa_state_t;
++
++
++static tcpa_state_t tcpa_state = {
++    .tpm_driver_to_use = TPM_INVALID_DRIVER,
++};
++
++
++/********************************************************
++  Extensions for TCG-enabled BIOS
++ *******************************************************/
++
++
++static u32
++is_tpm_present(void)
++{
++    u32 rc = 0;
++    unsigned int i;
++
++    for (i = 0; i < TPM_NUM_DRIVERS; i++) {
++        struct tpm_driver *td = &tpm_drivers[i];
++        if (td->probe() != 0) {
++            td->init();
++            tcpa_state.tpm_driver_to_use = i;
++            rc = 1;
++            break;
++        }
++    }
++
++    return rc;
++}
++
++
++int
++has_working_tpm(void)
++{
++    if (!tcpa_state.tpm_probed) {
++        tcpa_state.tpm_probed = 1;
++        tcpa_state.tpm_found = (is_tpm_present() != 0);
++        tcpa_state.tpm_working = 1;
++    }
++    if (!tcpa_state.tpm_working)
++        return 0;
++
++    return tcpa_state.tpm_found;
++}
+diff --git a/src/tcgbios.h b/src/tcgbios.h
+new file mode 100644
+index 0000000..b6023fe
+--- /dev/null
++++ b/src/tcgbios.h
+@@ -0,0 +1,57 @@
++#ifndef TCGBIOS_H
++#define TCGBIOS_H
++
++
++#define TPM_OK                          0x0
++#define TPM_RET_BASE                    0x1
++#define TCG_GENERAL_ERROR               (TPM_RET_BASE + 0x0)
++#define TCG_TPM_IS_LOCKED               (TPM_RET_BASE + 0x1)
++#define TCG_NO_RESPONSE                 (TPM_RET_BASE + 0x2)
++#define TCG_INVALID_RESPONSE            (TPM_RET_BASE + 0x3)
++#define TCG_INVALID_ACCESS_REQUEST      (TPM_RET_BASE + 0x4)
++#define TCG_FIRMWARE_ERROR              (TPM_RET_BASE + 0x5)
++#define TCG_INTEGRITY_CHECK_FAILED      (TPM_RET_BASE + 0x6)
++#define TCG_INVALID_DEVICE_ID           (TPM_RET_BASE + 0x7)
++#define TCG_INVALID_VENDOR_ID           (TPM_RET_BASE + 0x8)
++#define TCG_UNABLE_TO_OPEN              (TPM_RET_BASE + 0x9)
++#define TCG_UNABLE_TO_CLOSE             (TPM_RET_BASE + 0xa)
++#define TCG_RESPONSE_TIMEOUT            (TPM_RET_BASE + 0xb)
++#define TCG_INVALID_COM_REQUEST         (TPM_RET_BASE + 0xc)
++#define TCG_INVALID_ADR_REQUEST         (TPM_RET_BASE + 0xd)
++#define TCG_WRITE_BYTE_ERROR            (TPM_RET_BASE + 0xe)
++#define TCG_READ_BYTE_ERROR             (TPM_RET_BASE + 0xf)
++#define TCG_BLOCK_WRITE_TIMEOUT         (TPM_RET_BASE + 0x10)
++#define TCG_CHAR_WRITE_TIMEOUT          (TPM_RET_BASE + 0x11)
++#define TCG_CHAR_READ_TIMEOUT           (TPM_RET_BASE + 0x12)
++#define TCG_BLOCK_READ_TIMEOUT          (TPM_RET_BASE + 0x13)
++#define TCG_TRANSFER_ABORT              (TPM_RET_BASE + 0x14)
++#define TCG_INVALID_DRV_FUNCTION        (TPM_RET_BASE + 0x15)
++#define TCG_OUTPUT_BUFFER_TOO_SHORT     (TPM_RET_BASE + 0x16)
++#define TCG_FATAL_COM_ERROR             (TPM_RET_BASE + 0x17)
++#define TCG_INVALID_INPUT_PARA          (TPM_RET_BASE + 0x18)
++#define TCG_TCG_COMMAND_ERROR           (TPM_RET_BASE + 0x19)
++#define TCG_INTERFACE_SHUTDOWN          (TPM_RET_BASE + 0x20)
++//define TCG_PC_UNSUPPORTED             (TPM_RET_BASE + 0x21)
++#define TCG_PC_TPM_NOT_PRESENT          (TPM_RET_BASE + 0x22)
++#define TCG_PC_TPM_DEACTIVATED          (TPM_RET_BASE + 0x23)
++
++
++#define TPM_INVALID_ADR_REQUEST          TCG_INVALID_ADR_REQUEST
++#define TPM_IS_LOCKED                    TCG_TPM_IS_LOCKED
++#define TPM_INVALID_DEVICE_ID            TCG_INVALID_DEVICE_ID
++#define TPM_INVALID_VENDOR_ID            TCG_INVALID_VENDOR_ID
++//define TPM_RESERVED_REG_INVALID
++#define TPM_FIRMWARE_ERROR               TCG_FIRMWARE_ERROR
++#define TPM_UNABLE_TO_OPEN               TCG_UNABLE_TO_OPEN
++#define TPM_UNABLE_TO_CLOSE              TCG_UNABLE_TO_CLOSE
++#define TPM_INVALID_RESPONSE             TCG_INVALID_RESPONSE
++#define TPM_RESPONSE_TIMEOUT             TCG_RESPONSE_TIMEOUT
++#define TPM_INVALID_ACCESS_REQUEST       TCG_INVALID_ACCESS_REQUEST
++#define TPM_TRANSFER_ABORT               TCG_TRANSFER_ABORT
++#define TPM_GENERAL_ERROR                TCG_GENERAL_ERROR
++
++
++int has_working_tpm(void);
++
++
++#endif /* TCGBIOS_H */
+-- 
+1.7.1
+
+

@@ -1,0 +1,980 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Gerd Hoffmann <kraxel@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, Paul Brook <paul@codesourcery.com>,
+ Gerd Hoffmann <kraxel@redhat.com>, Dmitry Solodkiy <d.solodkiy@samsung.com>,
+ Jan Kiszka <jan.kiszka@web.de>, Maksim Kozlov <m.kozlov@samsung.com>,
+ Guan Xuetao <gxt@mprc.pku.edu.cn>, Igor Mitsyanko <i.mitsyanko@samsung.com>,
+ Peter Maydell <peter.maydell@linaro.org>,
+ Evgeny Voevodin <e.voevodin@samsung.com>
+Date: Tue, 16 Apr 2013 11:39:28 +0200
+Message-id: 1366105178-26744-15-git-send-email-kraxel@redhat.com
+Subject: [PATCH 14/24] console: simplify screendump
+
+Screendumps are alot simpler as we can update non-active
+QemuConsoles now.  So we only need to update the QemuConsole
+we want write out, then dump the DisplaySurface content into
+a ppm file.  Done.
+
+No console switching needed.  No special support code in the
+gfx card emulation needed.  Zap it all.  Also move ppm_save
+out of the vga code and next to the qmp_screendump function.
+
+For now screen dumping is limited to console #0 (like it used
+to be), even though it is dead simple to extend it to other
+consoles.  I wanna finish the console cleanup before setting
+new qapi interfaces into stone.
+
+Signed-off-by: Gerd Hoffmann <kraxel@redhat.com>
+Tested-by: Igor Mitsyanko <i.mitsyanko@gmail.com>
+---
+ hw/arm/musicpal.c            |    2 +-
+ hw/display/blizzard.c        |   14 +----
+ hw/display/cirrus_vga.c      |    4 +-
+ hw/display/exynos4210_fimd.c |    2 +-
+ hw/display/g364fb.c          |   73 +-----------------------
+ hw/display/jazz_led.c        |    1 -
+ hw/display/milkymist-vgafb.c |    2 +-
+ hw/display/omap_lcdc.c       |   86 +---------------------------
+ hw/display/pl110.c           |    2 +-
+ hw/display/pxa2xx_lcd.c      |    2 +-
+ hw/display/qxl.c             |   22 +------
+ hw/display/sm501.c           |    2 +-
+ hw/display/ssd0303.c         |    2 +-
+ hw/display/ssd0323.c         |    2 +-
+ hw/display/tc6393xb.c        |    1 -
+ hw/display/tcx.c             |  129 +-----------------------------------------
+ hw/display/vga-isa-mm.c      |    2 +-
+ hw/display/vga-isa.c         |    2 +-
+ hw/display/vga-pci.c         |    2 +-
+ hw/display/vga.c             |   66 ---------------------
+ hw/display/vga_int.h         |    2 -
+ hw/display/vmware_vga.c      |   26 ---------
+ hw/display/xenfb.c           |    1 -
+ hw/unicore32/puv3.c          |    2 +-
+ include/ui/console.h         |    3 -
+ ui/console.c                 |   72 ++++++++++++++++-------
+ 26 files changed, 73 insertions(+), 451 deletions(-)
+
+diff --git a/hw/arm/musicpal.c b/hw/arm/musicpal.c
+index d2247fa..6e77447 100644
+--- a/hw/arm/musicpal.c
++++ b/hw/arm/musicpal.c
+@@ -612,7 +612,7 @@ static int musicpal_lcd_init(SysBusDevice *dev)
+     sysbus_init_mmio(dev, &s->iomem);
+ 
+     s->con = graphic_console_init(lcd_refresh, lcd_invalidate,
+-                                  NULL, NULL, s);
++                                  NULL, s);
+     qemu_console_resize(s->con, 128*3, 64*3);
+ 
+     qdev_init_gpio_in(&dev->qdev, musicpal_lcd_gpio_brigthness_in, 3);
+diff --git a/hw/display/blizzard.c b/hw/display/blizzard.c
+index de7ccf8..70b6822 100644
+--- a/hw/display/blizzard.c
++++ b/hw/display/blizzard.c
+@@ -933,18 +933,6 @@ static void blizzard_update_display(void *opaque)
+     s->my[1] = 0;
+ }
+ 
+-static void blizzard_screen_dump(void *opaque, const char *filename,
+-                                 bool cswitch, Error **errp)
+-{
+-    BlizzardState *s = (BlizzardState *) opaque;
+-    DisplaySurface *surface = qemu_console_surface(s->con);
+-
+-    blizzard_update_display(opaque);
+-    if (s && surface_data(surface)) {
+-        ppm_save(filename, surface, errp);
+-    }
+-}
+-
+ #define DEPTH 8
+ #include "blizzard_template.h"
+ #define DEPTH 15
+@@ -965,7 +953,7 @@ void *s1d13745_init(qemu_irq gpio_int)
+ 
+     s->con = graphic_console_init(blizzard_update_display,
+                                   blizzard_invalidate_display,
+-                                  blizzard_screen_dump, NULL, s);
++                                  NULL, s);
+     surface = qemu_console_surface(s->con);
+ 
+     switch (surface_bits_per_pixel(surface)) {
+diff --git a/hw/display/cirrus_vga.c b/hw/display/cirrus_vga.c
+index 514bc33..c31b021 100644
+--- a/hw/display/cirrus_vga.c
++++ b/hw/display/cirrus_vga.c
+@@ -2911,7 +2911,7 @@ static int vga_initfn(ISADevice *dev)
+     cirrus_init_common(&d->cirrus_vga, CIRRUS_ID_CLGD5430, 0,
+                        isa_address_space(dev), isa_address_space_io(dev));
+     s->con = graphic_console_init(s->update, s->invalidate,
+-                                  s->screen_dump, s->text_update,
++                                  s->text_update,
+                                   s);
+     rom_add_vga(VGABIOS_CIRRUS_FILENAME);
+     /* XXX ISA-LFB support */
+@@ -2960,7 +2960,7 @@ static int pci_cirrus_vga_initfn(PCIDevice *dev)
+      cirrus_init_common(s, device_id, 1, pci_address_space(dev),
+                         pci_address_space_io(dev));
+      s->vga.con = graphic_console_init(s->vga.update, s->vga.invalidate,
+-                                       s->vga.screen_dump, s->vga.text_update,
++                                       s->vga.text_update,
+                                        &s->vga);
+ 
+      /* setup PCI */
+diff --git a/hw/display/exynos4210_fimd.c b/hw/display/exynos4210_fimd.c
+index 7e1cbb6..d651ddb 100644
+--- a/hw/display/exynos4210_fimd.c
++++ b/hw/display/exynos4210_fimd.c
+@@ -1901,7 +1901,7 @@ static int exynos4210_fimd_init(SysBusDevice *dev)
+             "exynos4210.fimd", FIMD_REGS_SIZE);
+     sysbus_init_mmio(dev, &s->iomem);
+     s->console = graphic_console_init(exynos4210_fimd_update,
+-                                  exynos4210_fimd_invalidate, NULL, NULL, s);
++                                      exynos4210_fimd_invalidate, NULL, s);
+ 
+     return 0;
+ }
+diff --git a/hw/display/g364fb.c b/hw/display/g364fb.c
+index f7014e9..b70fe8a 100644
+--- a/hw/display/g364fb.c
++++ b/hw/display/g364fb.c
+@@ -294,77 +294,6 @@ static void g364fb_reset(G364State *s)
+     g364fb_invalidate_display(s);
+ }
+ 
+-static void g364fb_screen_dump(void *opaque, const char *filename, bool cswitch,
+-                               Error **errp)
+-{
+-    G364State *s = opaque;
+-    int ret, y, x;
+-    uint8_t index;
+-    uint8_t *data_buffer;
+-    FILE *f;
+-
+-    qemu_flush_coalesced_mmio_buffer();
+-
+-    if (s->depth != 8) {
+-        error_setg(errp, "g364: unknown guest depth %d", s->depth);
+-        return;
+-    }
+-
+-    f = fopen(filename, "wb");
+-    if (!f) {
+-        error_setg(errp, "failed to open file '%s': %s", filename,
+-                   strerror(errno));
+-        return;
+-    }
+-
+-    if (s->ctla & CTLA_FORCE_BLANK) {
+-        /* blank screen */
+-        ret = fprintf(f, "P4\n%d %d\n", s->width, s->height);
+-        if (ret < 0) {
+-            goto write_err;
+-        }
+-        for (y = 0; y < s->height; y++)
+-            for (x = 0; x < s->width; x++) {
+-                ret = fputc(0, f);
+-                if (ret == EOF) {
+-                    goto write_err;
+-                }
+-            }
+-    } else {
+-        data_buffer = s->vram + s->top_of_screen;
+-        ret = fprintf(f, "P6\n%d %d\n%d\n", s->width, s->height, 255);
+-        if (ret < 0) {
+-            goto write_err;
+-        }
+-        for (y = 0; y < s->height; y++)
+-            for (x = 0; x < s->width; x++, data_buffer++) {
+-                index = *data_buffer;
+-                ret = fputc(s->color_palette[index][0], f);
+-                if (ret == EOF) {
+-                    goto write_err;
+-                }
+-                ret = fputc(s->color_palette[index][1], f);
+-                if (ret == EOF) {
+-                    goto write_err;
+-                }
+-                ret = fputc(s->color_palette[index][2], f);
+-                if (ret == EOF) {
+-                    goto write_err;
+-                }
+-        }
+-    }
+-
+-out:
+-    fclose(f);
+-    return;
+-
+-write_err:
+-    error_setg(errp, "failed to write to file '%s': %s", filename,
+-               strerror(errno));
+-    unlink(filename);
+-    goto out;
+-}
+-
+ /* called for accesses to io ports */
+ static uint64_t g364fb_ctrl_read(void *opaque,
+                                  hwaddr addr,
+@@ -552,7 +481,7 @@ static void g364fb_init(DeviceState *dev, G364State *s)
+ 
+     s->con = graphic_console_init(g364fb_update_display,
+                                   g364fb_invalidate_display,
+-                                  g364fb_screen_dump, NULL, s);
++                                  NULL, s);
+ 
+     memory_region_init_io(&s->mem_ctrl, &g364fb_ctrl_ops, s, "ctrl", 0x180000);
+     memory_region_init_ram_ptr(&s->mem_vram, "vram",
+diff --git a/hw/display/jazz_led.c b/hw/display/jazz_led.c
+index 05528c7..c027f76 100644
+--- a/hw/display/jazz_led.c
++++ b/hw/display/jazz_led.c
+@@ -263,7 +263,6 @@ static int jazz_led_init(SysBusDevice *dev)
+ 
+     s->con = graphic_console_init(jazz_led_update_display,
+                                   jazz_led_invalidate_display,
+-                                  NULL,
+                                   jazz_led_text_update, s);
+ 
+     return 0;
+diff --git a/hw/display/milkymist-vgafb.c b/hw/display/milkymist-vgafb.c
+index 3219041..9bdb5c7 100644
+--- a/hw/display/milkymist-vgafb.c
++++ b/hw/display/milkymist-vgafb.c
+@@ -280,7 +280,7 @@ static int milkymist_vgafb_init(SysBusDevice *dev)
+ 
+     s->con = graphic_console_init(vgafb_update_display,
+                                   vgafb_invalidate_display,
+-                                  NULL, NULL, s);
++                                  NULL, s);
+ 
+     return 0;
+ }
+diff --git a/hw/display/omap_lcdc.c b/hw/display/omap_lcdc.c
+index be7e9c0..f76f613 100644
+--- a/hw/display/omap_lcdc.c
++++ b/hw/display/omap_lcdc.c
+@@ -227,90 +227,6 @@ static void omap_update_display(void *opaque)
+     omap_lcd->invalidate = 0;
+ }
+ 
+-static void omap_ppm_save(const char *filename, uint8_t *data,
+-                    int w, int h, int linesize, Error **errp)
+-{
+-    FILE *f;
+-    uint8_t *d, *d1;
+-    unsigned int v;
+-    int ret, y, x, bpp;
+-
+-    f = fopen(filename, "wb");
+-    if (!f) {
+-        error_setg(errp, "failed to open file '%s': %s", filename,
+-                   strerror(errno));
+-        return;
+-    }
+-    ret = fprintf(f, "P6\n%d %d\n%d\n", w, h, 255);
+-    if (ret < 0) {
+-        goto write_err;
+-    }
+-    d1 = data;
+-    bpp = linesize / w;
+-    for (y = 0; y < h; y ++) {
+-        d = d1;
+-        for (x = 0; x < w; x ++) {
+-            v = *(uint32_t *) d;
+-            switch (bpp) {
+-            case 2:
+-                ret = fputc((v >> 8) & 0xf8, f);
+-                if (ret == EOF) {
+-                    goto write_err;
+-                }
+-                ret = fputc((v >> 3) & 0xfc, f);
+-                if (ret == EOF) {
+-                    goto write_err;
+-                }
+-                ret = fputc((v << 3) & 0xf8, f);
+-                if (ret == EOF) {
+-                    goto write_err;
+-                }
+-                break;
+-            case 3:
+-            case 4:
+-            default:
+-                ret = fputc((v >> 16) & 0xff, f);
+-                if (ret == EOF) {
+-                    goto write_err;
+-                }
+-                ret = fputc((v >> 8) & 0xff, f);
+-                if (ret == EOF) {
+-                    goto write_err;
+-                }
+-                ret = fputc((v) & 0xff, f);
+-                if (ret == EOF) {
+-                    goto write_err;
+-                }
+-                break;
+-            }
+-            d += bpp;
+-        }
+-        d1 += linesize;
+-    }
+-out:
+-    fclose(f);
+-    return;
+-
+-write_err:
+-    error_setg(errp, "failed to write to file '%s': %s", filename,
+-               strerror(errno));
+-    unlink(filename);
+-    goto out;
+-}
+-
+-static void omap_screen_dump(void *opaque, const char *filename, bool cswitch,
+-                             Error **errp)
+-{
+-    struct omap_lcd_panel_s *omap_lcd = opaque;
+-    DisplaySurface *surface = qemu_console_surface(omap_lcd->con);
+-
+-    omap_update_display(opaque);
+-    if (omap_lcd && surface_data(surface))
+-        omap_ppm_save(filename, surface_data(surface),
+-                    omap_lcd->width, omap_lcd->height,
+-                    surface_stride(surface), errp);
+-}
+-
+ static void omap_invalidate_display(void *opaque) {
+     struct omap_lcd_panel_s *omap_lcd = opaque;
+     omap_lcd->invalidate = 1;
+@@ -487,7 +403,7 @@ struct omap_lcd_panel_s *omap_lcdc_init(MemoryRegion *sysmem,
+ 
+     s->con = graphic_console_init(omap_update_display,
+                                   omap_invalidate_display,
+-                                  omap_screen_dump, NULL, s);
++                                  NULL, s);
+ 
+     return s;
+ }
+diff --git a/hw/display/pl110.c b/hw/display/pl110.c
+index 295434e..5599755 100644
+--- a/hw/display/pl110.c
++++ b/hw/display/pl110.c
+@@ -454,7 +454,7 @@ static int pl110_init(SysBusDevice *dev)
+     qdev_init_gpio_in(&s->busdev.qdev, pl110_mux_ctrl_set, 1);
+     s->con = graphic_console_init(pl110_update_display,
+                                   pl110_invalidate_display,
+-                                  NULL, NULL, s);
++                                  NULL, s);
+     return 0;
+ }
+ 
+diff --git a/hw/display/pxa2xx_lcd.c b/hw/display/pxa2xx_lcd.c
+index c9bd42e..d38479d 100644
+--- a/hw/display/pxa2xx_lcd.c
++++ b/hw/display/pxa2xx_lcd.c
+@@ -1010,7 +1010,7 @@ PXA2xxLCDState *pxa2xx_lcdc_init(MemoryRegion *sysmem,
+ 
+     s->con = graphic_console_init(pxa2xx_update_display,
+                                   pxa2xx_invalidate_display,
+-                                  NULL, NULL, s);
++                                  NULL, s);
+     surface = qemu_console_surface(s->con);
+ 
+     switch (surface_bits_per_pixel(surface)) {
+diff --git a/hw/display/qxl.c b/hw/display/qxl.c
+index 247209d..3b09d20 100644
+--- a/hw/display/qxl.c
++++ b/hw/display/qxl.c
+@@ -1772,26 +1772,6 @@ static void qxl_hw_invalidate(void *opaque)
+     vga->invalidate(vga);
+ }
+ 
+-static void qxl_hw_screen_dump(void *opaque, const char *filename, bool cswitch,
+-                               Error **errp)
+-{
+-    PCIQXLDevice *qxl = opaque;
+-    VGACommonState *vga = &qxl->vga;
+-
+-    switch (qxl->mode) {
+-    case QXL_MODE_COMPAT:
+-    case QXL_MODE_NATIVE:
+-        qxl_render_update(qxl);
+-        ppm_save(filename, qxl->ssd.ds, errp);
+-        break;
+-    case QXL_MODE_VGA:
+-        vga->screen_dump(vga, filename, cswitch, errp);
+-        break;
+-    default:
+-        break;
+-    }
+-}
+-
+ static void qxl_hw_text_update(void *opaque, console_ch_t *chardata)
+ {
+     PCIQXLDevice *qxl = opaque;
+@@ -2075,7 +2055,7 @@ static int qxl_init_primary(PCIDevice *dev)
+     portio_list_add(qxl_vga_port_list, pci_address_space_io(dev), 0x3b0);
+ 
+     vga->con = graphic_console_init(qxl_hw_update, qxl_hw_invalidate,
+-                                    qxl_hw_screen_dump, qxl_hw_text_update,
++                                    qxl_hw_text_update,
+                                     qxl);
+     qxl->ssd.con = vga->con,
+     qemu_spice_display_init_common(&qxl->ssd);
+diff --git a/hw/display/sm501.c b/hw/display/sm501.c
+index 9878df4..e57ff22 100644
+--- a/hw/display/sm501.c
++++ b/hw/display/sm501.c
+@@ -1446,5 +1446,5 @@ void sm501_init(MemoryRegion *address_space_mem, uint32_t base,
+ 
+     /* create qemu graphic console */
+     s->con = graphic_console_init(sm501_update_display, NULL,
+-                                  NULL, NULL, s);
++                                  NULL, s);
+ }
+diff --git a/hw/display/ssd0303.c b/hw/display/ssd0303.c
+index 183a878..9b6810f 100644
+--- a/hw/display/ssd0303.c
++++ b/hw/display/ssd0303.c
+@@ -290,7 +290,7 @@ static int ssd0303_init(I2CSlave *i2c)
+ 
+     s->con = graphic_console_init(ssd0303_update_display,
+                                   ssd0303_invalidate_display,
+-                                  NULL, NULL, s);
++                                  NULL, s);
+     qemu_console_resize(s->con, 96 * MAGNIFY, 16 * MAGNIFY);
+     return 0;
+ }
+diff --git a/hw/display/ssd0323.c b/hw/display/ssd0323.c
+index 5cf2f70..301cb20 100644
+--- a/hw/display/ssd0323.c
++++ b/hw/display/ssd0323.c
+@@ -339,7 +339,7 @@ static int ssd0323_init(SSISlave *dev)
+     s->row_end = 79;
+     s->con = graphic_console_init(ssd0323_update_display,
+                                   ssd0323_invalidate_display,
+-                                  NULL, NULL, s);
++                                  NULL, s);
+     qemu_console_resize(s->con, 128 * MAGNIFY, 64 * MAGNIFY);
+ 
+     qdev_init_gpio_in(&dev->qdev, ssd0323_cd, 1);
+diff --git a/hw/display/tc6393xb.c b/hw/display/tc6393xb.c
+index 178a21f..01beba4 100644
+--- a/hw/display/tc6393xb.c
++++ b/hw/display/tc6393xb.c
+@@ -585,7 +585,6 @@ TC6393xbState *tc6393xb_init(MemoryRegion *sysmem, uint32_t base, qemu_irq irq)
+     s->scr_height = 640;
+     s->con = graphic_console_init(tc6393xb_update_display,
+             NULL, /* invalidate */
+-            NULL, /* screen_dump */
+             NULL, /* text_update */
+             s);
+ 
+diff --git a/hw/display/tcx.c b/hw/display/tcx.c
+index c44068e..ba3857a 100644
+--- a/hw/display/tcx.c
++++ b/hw/display/tcx.c
+@@ -56,11 +56,6 @@ typedef struct TCXState {
+     uint8_t dac_index, dac_state;
+ } TCXState;
+ 
+-static void tcx_screen_dump(void *opaque, const char *filename, bool cswitch,
+-                            Error **errp);
+-static void tcx24_screen_dump(void *opaque, const char *filename, bool cswitch,
+-                            Error **errp);
+-
+ static void tcx_set_dirty(TCXState *s)
+ {
+     memory_region_set_dirty(&s->vram_mem, 0, MAXX * MAXY);
+@@ -569,7 +564,7 @@ static int tcx_init1(SysBusDevice *dev)
+ 
+         s->con = graphic_console_init(tcx24_update_display,
+                                       tcx24_invalidate_display,
+-                                      tcx24_screen_dump, NULL, s);
++                                      NULL, s);
+     } else {
+         /* THC 8 bit (dummy) */
+         memory_region_init_io(&s->thc8, &dummy_ops, s, "tcx.thc8",
+@@ -578,133 +573,13 @@ static int tcx_init1(SysBusDevice *dev)
+ 
+         s->con = graphic_console_init(tcx_update_display,
+                                       tcx_invalidate_display,
+-                                      tcx_screen_dump, NULL, s);
++                                      NULL, s);
+     }
+ 
+     qemu_console_resize(s->con, s->width, s->height);
+     return 0;
+ }
+ 
+-static void tcx_screen_dump(void *opaque, const char *filename, bool cswitch,
+-                            Error **errp)
+-{
+-    TCXState *s = opaque;
+-    FILE *f;
+-    uint8_t *d, *d1, v;
+-    int ret, y, x;
+-
+-    f = fopen(filename, "wb");
+-    if (!f) {
+-        error_setg(errp, "failed to open file '%s': %s", filename,
+-                   strerror(errno));
+-        return;
+-    }
+-    ret = fprintf(f, "P6\n%d %d\n%d\n", s->width, s->height, 255);
+-    if (ret < 0) {
+-        goto write_err;
+-    }
+-    d1 = s->vram;
+-    for(y = 0; y < s->height; y++) {
+-        d = d1;
+-        for(x = 0; x < s->width; x++) {
+-            v = *d;
+-            ret = fputc(s->r[v], f);
+-            if (ret == EOF) {
+-                goto write_err;
+-            }
+-            ret = fputc(s->g[v], f);
+-            if (ret == EOF) {
+-                goto write_err;
+-            }
+-            ret = fputc(s->b[v], f);
+-            if (ret == EOF) {
+-                goto write_err;
+-            }
+-            d++;
+-        }
+-        d1 += MAXX;
+-    }
+-
+-out:
+-    fclose(f);
+-    return;
+-
+-write_err:
+-    error_setg(errp, "failed to write to file '%s': %s", filename,
+-               strerror(errno));
+-    unlink(filename);
+-    goto out;
+-}
+-
+-static void tcx24_screen_dump(void *opaque, const char *filename, bool cswitch,
+-                              Error **errp)
+-{
+-    TCXState *s = opaque;
+-    FILE *f;
+-    uint8_t *d, *d1, v;
+-    uint32_t *s24, *cptr, dval;
+-    int ret, y, x;
+-
+-    f = fopen(filename, "wb");
+-    if (!f) {
+-        error_setg(errp, "failed to open file '%s': %s", filename,
+-                   strerror(errno));
+-        return;
+-    }
+-    ret = fprintf(f, "P6\n%d %d\n%d\n", s->width, s->height, 255);
+-    if (ret < 0) {
+-        goto write_err;
+-    }
+-    d1 = s->vram;
+-    s24 = s->vram24;
+-    cptr = s->cplane;
+-    for(y = 0; y < s->height; y++) {
+-        d = d1;
+-        for(x = 0; x < s->width; x++, d++, s24++) {
+-            if ((*cptr++ & 0xff000000) == 0x03000000) { // 24-bit direct
+-                dval = *s24 & 0x00ffffff;
+-                ret = fputc((dval >> 16) & 0xff, f);
+-                if (ret == EOF) {
+-                    goto write_err;
+-                }
+-                ret = fputc((dval >> 8) & 0xff, f);
+-                if (ret == EOF) {
+-                    goto write_err;
+-                }
+-                ret = fputc(dval & 0xff, f);
+-                if (ret == EOF) {
+-                    goto write_err;
+-                }
+-            } else {
+-                v = *d;
+-                ret = fputc(s->r[v], f);
+-                if (ret == EOF) {
+-                    goto write_err;
+-                }
+-                ret = fputc(s->g[v], f);
+-                if (ret == EOF) {
+-                    goto write_err;
+-                }
+-                ret = fputc(s->b[v], f);
+-                if (ret == EOF) {
+-                    goto write_err;
+-                }
+-            }
+-        }
+-        d1 += MAXX;
+-    }
+-
+-out:
+-    fclose(f);
+-    return;
+-
+-write_err:
+-    error_setg(errp, "failed to write to file '%s': %s", filename,
+-               strerror(errno));
+-    unlink(filename);
+-    goto out;
+-}
+-
+ static Property tcx_properties[] = {
+     DEFINE_PROP_HEX32("vram_size", TCXState, vram_size, -1),
+     DEFINE_PROP_UINT16("width",    TCXState, width,     -1),
+diff --git a/hw/display/vga-isa-mm.c b/hw/display/vga-isa-mm.c
+index 1c50070..e177197 100644
+--- a/hw/display/vga-isa-mm.c
++++ b/hw/display/vga-isa-mm.c
+@@ -136,7 +136,7 @@ int isa_vga_mm_init(hwaddr vram_base,
+     vga_mm_init(s, vram_base, ctrl_base, it_shift, address_space);
+ 
+     s->vga.con = graphic_console_init(s->vga.update, s->vga.invalidate,
+-                                      s->vga.screen_dump, s->vga.text_update,
++                                      s->vga.text_update,
+                                       s);
+ 
+     vga_init_vbe(&s->vga, address_space);
+diff --git a/hw/display/vga-isa.c b/hw/display/vga-isa.c
+index 90959eb..228657e 100644
+--- a/hw/display/vga-isa.c
++++ b/hw/display/vga-isa.c
+@@ -63,7 +63,7 @@ static int vga_initfn(ISADevice *dev)
+                                         vga_io_memory, 1);
+     memory_region_set_coalescing(vga_io_memory);
+     s->con = graphic_console_init(s->update, s->invalidate,
+-                                  s->screen_dump, s->text_update, s);
++                                  s->text_update, s);
+ 
+     vga_init_vbe(s, isa_address_space(dev));
+     /* ROM BIOS */
+diff --git a/hw/display/vga-pci.c b/hw/display/vga-pci.c
+index a9c69b6..a6245b4 100644
+--- a/hw/display/vga-pci.c
++++ b/hw/display/vga-pci.c
+@@ -151,7 +151,7 @@ static int pci_std_vga_initfn(PCIDevice *dev)
+     vga_init(s, pci_address_space(dev), pci_address_space_io(dev), true);
+ 
+     s->con = graphic_console_init(s->update, s->invalidate,
+-                                  s->screen_dump, s->text_update, s);
++                                  s->text_update, s);
+ 
+     /* XXX: VGA_RAM_SIZE must be a power of two */
+     pci_register_bar(&d->dev, 0, PCI_BASE_ADDRESS_MEM_PREFETCH, &s->vram);
+diff --git a/hw/display/vga.c b/hw/display/vga.c
+index e37e898..5d7684a 100644
+--- a/hw/display/vga.c
++++ b/hw/display/vga.c
+@@ -166,9 +166,6 @@ static uint32_t expand4[256];
+ static uint16_t expand2[256];
+ static uint8_t expand4to8[16];
+ 
+-static void vga_screen_dump(void *opaque, const char *filename, bool cswitch,
+-                            Error **errp);
+-
+ static void vga_update_memory_access(VGACommonState *s)
+ {
+     MemoryRegion *region, *old_region = s->chain4_alias;
+@@ -2298,7 +2295,6 @@ void vga_common_init(VGACommonState *s)
+     s->get_resolution = vga_get_resolution;
+     s->update = vga_update_display;
+     s->invalidate = vga_invalidate_display;
+-    s->screen_dump = vga_screen_dump;
+     s->text_update = vga_update_text;
+     switch (vga_retrace_method) {
+     case VGA_RETRACE_DUMB:
+@@ -2393,65 +2389,3 @@ void vga_init_vbe(VGACommonState *s, MemoryRegion *system_memory)
+                                 &s->vram_vbe);
+     s->vbe_mapped = 1;
+ }
+-/********************************************************/
+-/* vga screen dump */
+-
+-void ppm_save(const char *filename, struct DisplaySurface *ds, Error **errp)
+-{
+-    int width = pixman_image_get_width(ds->image);
+-    int height = pixman_image_get_height(ds->image);
+-    FILE *f;
+-    int y;
+-    int ret;
+-    pixman_image_t *linebuf;
+-
+-    trace_ppm_save(filename, ds);
+-    f = fopen(filename, "wb");
+-    if (!f) {
+-        error_setg(errp, "failed to open file '%s': %s", filename,
+-                   strerror(errno));
+-        return;
+-    }
+-    ret = fprintf(f, "P6\n%d %d\n%d\n", width, height, 255);
+-    if (ret < 0) {
+-        linebuf = NULL;
+-        goto write_err;
+-    }
+-    linebuf = qemu_pixman_linebuf_create(PIXMAN_BE_r8g8b8, width);
+-    for (y = 0; y < height; y++) {
+-        qemu_pixman_linebuf_fill(linebuf, ds->image, width, 0, y);
+-        clearerr(f);
+-        ret = fwrite(pixman_image_get_data(linebuf), 1,
+-                     pixman_image_get_stride(linebuf), f);
+-        (void)ret;
+-        if (ferror(f)) {
+-            goto write_err;
+-        }
+-    }
+-
+-out:
+-    qemu_pixman_image_unref(linebuf);
+-    fclose(f);
+-    return;
+-
+-write_err:
+-    error_setg(errp, "failed to write to file '%s': %s", filename,
+-               strerror(errno));
+-    unlink(filename);
+-    goto out;
+-}
+-
+-/* save the vga display in a PPM image even if no display is
+-   available */
+-static void vga_screen_dump(void *opaque, const char *filename, bool cswitch,
+-                            Error **errp)
+-{
+-    VGACommonState *s = opaque;
+-    DisplaySurface *surface = qemu_console_surface(s->con);
+-
+-    if (cswitch) {
+-        vga_invalidate_display(s);
+-    }
+-    graphic_hw_update(s->con);
+-    ppm_save(filename, surface, errp);
+-}
+diff --git a/hw/display/vga_int.h b/hw/display/vga_int.h
+index 1b8f670..e4bb4a0 100644
+--- a/hw/display/vga_int.h
++++ b/hw/display/vga_int.h
+@@ -154,7 +154,6 @@ typedef struct VGACommonState {
+                                  unsigned int g, unsigned b);
+     graphic_hw_update_ptr update;
+     graphic_hw_invalidate_ptr invalidate;
+-    graphic_hw_screen_dump_ptr screen_dump;
+     graphic_hw_text_update_ptr text_update;
+     bool full_update_text;
+     bool full_update_gfx;
+@@ -198,7 +197,6 @@ void vga_ioport_write(void *opaque, uint32_t addr, uint32_t val);
+ uint32_t vga_mem_readb(VGACommonState *s, hwaddr addr);
+ void vga_mem_writeb(VGACommonState *s, hwaddr addr, uint32_t val);
+ void vga_invalidate_scanlines(VGACommonState *s, int y1, int y2);
+-void ppm_save(const char *filename, struct DisplaySurface *ds, Error **errp);
+ 
+ int vga_ioport_invalid(VGACommonState *s, uint32_t addr);
+ 
+diff --git a/hw/display/vmware_vga.c b/hw/display/vmware_vga.c
+index 05befe4..61d8c15 100644
+--- a/hw/display/vmware_vga.c
++++ b/hw/display/vmware_vga.c
+@@ -1119,31 +1119,6 @@ static void vmsvga_invalidate_display(void *opaque)
+     s->invalidated = 1;
+ }
+ 
+-/* save the vga display in a PPM image even if no display is
+-   available */
+-static void vmsvga_screen_dump(void *opaque, const char *filename, bool cswitch,
+-                               Error **errp)
+-{
+-    struct vmsvga_state_s *s = opaque;
+-    DisplaySurface *surface = qemu_console_surface(s->vga.con);
+-
+-    if (!s->enable) {
+-        s->vga.screen_dump(&s->vga, filename, cswitch, errp);
+-        return;
+-    }
+-
+-    if (surface_bits_per_pixel(surface) == 32) {
+-        DisplaySurface *ds = qemu_create_displaysurface_from(
+-                                 surface_width(surface),
+-                                 surface_height(surface),
+-                                 32,
+-                                 surface_stride(surface),
+-                                 s->vga.vram_ptr, false);
+-        ppm_save(filename, ds, errp);
+-        g_free(ds);
+-    }
+-}
+-
+ static void vmsvga_text_update(void *opaque, console_ch_t *chardata)
+ {
+     struct vmsvga_state_s *s = opaque;
+@@ -1212,7 +1187,6 @@ static void vmsvga_init(struct vmsvga_state_s *s,
+ 
+     s->vga.con = graphic_console_init(vmsvga_update_display,
+                                       vmsvga_invalidate_display,
+-                                      vmsvga_screen_dump,
+                                       vmsvga_text_update, s);
+ 
+     s->fifo_size = SVGA_FIFO_SIZE;
+diff --git a/hw/display/xenfb.c b/hw/display/xenfb.c
+index e371569..80cc9e8 100644
+--- a/hw/display/xenfb.c
++++ b/hw/display/xenfb.c
+@@ -1007,7 +1007,6 @@ wait_more:
+     fb->c.con = graphic_console_init(xenfb_update,
+                                      xenfb_invalidate,
+                                      NULL,
+-                                     NULL,
+                                      fb);
+     fb->have_console = 1;
+ 
+diff --git a/hw/unicore32/puv3.c b/hw/unicore32/puv3.c
+index 7c8fc36..7488547 100644
+--- a/hw/unicore32/puv3.c
++++ b/hw/unicore32/puv3.c
+@@ -92,7 +92,7 @@ static void puv3_load_kernel(const char *kernel_filename)
+     }
+ 
+     /* cheat curses that we have a graphic console, only under ocd console */
+-    graphic_console_init(NULL, NULL, NULL, NULL, NULL);
++    graphic_console_init(NULL, NULL, NULL, NULL);
+ }
+ 
+ static void puv3_init(QEMUMachineInitArgs *args)
+diff --git a/include/ui/console.h b/include/ui/console.h
+index 0dd66fd..d6e3e92 100644
+--- a/include/ui/console.h
++++ b/include/ui/console.h
+@@ -279,13 +279,10 @@ static inline void console_write_ch(console_ch_t *dest, uint32_t ch)
+ 
+ typedef void (*graphic_hw_update_ptr)(void *);
+ typedef void (*graphic_hw_invalidate_ptr)(void *);
+-typedef void (*graphic_hw_screen_dump_ptr)(void *, const char *, bool cswitch,
+-                                       Error **errp);
+ typedef void (*graphic_hw_text_update_ptr)(void *, console_ch_t *);
+ 
+ QemuConsole *graphic_console_init(graphic_hw_update_ptr update,
+                                   graphic_hw_invalidate_ptr invalidate,
+-                                  graphic_hw_screen_dump_ptr screen_dump,
+                                   graphic_hw_text_update_ptr text_update,
+                                   void *opaque);
+ 
+diff --git a/ui/console.c b/ui/console.c
+index e8e548e..537b2fc 100644
+--- a/ui/console.c
++++ b/ui/console.c
+@@ -121,7 +121,6 @@ struct QemuConsole {
+     /* Graphic console state.  */
+     graphic_hw_update_ptr hw_update;
+     graphic_hw_invalidate_ptr hw_invalidate;
+-    graphic_hw_screen_dump_ptr hw_screen_dump;
+     graphic_hw_text_update_ptr hw_text_update;
+     void *hw;
+     int g_width, g_height;
+@@ -188,28 +187,65 @@ void graphic_hw_invalidate(QemuConsole *con)
+     }
+ }
+ 
+-void qmp_screendump(const char *filename, Error **errp)
++static void ppm_save(const char *filename, struct DisplaySurface *ds,
++                     Error **errp)
+ {
+-    QemuConsole *previous_active_console;
+-    bool cswitch;
+-
+-    previous_active_console = active_console;
+-    cswitch = previous_active_console && previous_active_console->index != 0;
++    int width = pixman_image_get_width(ds->image);
++    int height = pixman_image_get_height(ds->image);
++    FILE *f;
++    int y;
++    int ret;
++    pixman_image_t *linebuf;
+ 
+-    /* There is currently no way of specifying which screen we want to dump,
+-       so always dump the first one.  */
+-    if (cswitch) {
+-        console_select(0);
++    trace_ppm_save(filename, ds);
++    f = fopen(filename, "wb");
++    if (!f) {
++        error_setg(errp, "failed to open file '%s': %s", filename,
++                   strerror(errno));
++        return;
+     }
+-    if (consoles[0] && consoles[0]->hw_screen_dump) {
+-        consoles[0]->hw_screen_dump(consoles[0]->hw, filename, cswitch, errp);
+-    } else {
+-        error_setg(errp, "device doesn't support screendump");
++    ret = fprintf(f, "P6\n%d %d\n%d\n", width, height, 255);
++    if (ret < 0) {
++        linebuf = NULL;
++        goto write_err;
++    }
++    linebuf = qemu_pixman_linebuf_create(PIXMAN_BE_r8g8b8, width);
++    for (y = 0; y < height; y++) {
++        qemu_pixman_linebuf_fill(linebuf, ds->image, width, 0, y);
++        clearerr(f);
++        ret = fwrite(pixman_image_get_data(linebuf), 1,
++                     pixman_image_get_stride(linebuf), f);
++        (void)ret;
++        if (ferror(f)) {
++            goto write_err;
++        }
+     }
+ 
+-    if (cswitch) {
+-        console_select(previous_active_console->index);
++out:
++    qemu_pixman_image_unref(linebuf);
++    fclose(f);
++    return;
++
++write_err:
++    error_setg(errp, "failed to write to file '%s': %s", filename,
++               strerror(errno));
++    unlink(filename);
++    goto out;
++}
++
++void qmp_screendump(const char *filename, Error **errp)
++{
++    QemuConsole *con = consoles[0];
++    DisplaySurface *surface;
++
++    if (con == NULL) {
++        error_setg(errp, "There is no QemuConsole I can screendump from.");
++        return;
+     }
++
++    graphic_hw_update(con);
++    surface = qemu_console_surface(con);
++    ppm_save(filename, surface, errp);
+ }
+ 
+ void graphic_hw_text_update(QemuConsole *con, console_ch_t *chardata)
+@@ -1411,7 +1447,6 @@ DisplayState *init_displaystate(void)
+ 
+ QemuConsole *graphic_console_init(graphic_hw_update_ptr update,
+                                   graphic_hw_invalidate_ptr invalidate,
+-                                  graphic_hw_screen_dump_ptr screen_dump,
+                                   graphic_hw_text_update_ptr text_update,
+                                   void *opaque)
+ {
+@@ -1425,7 +1460,6 @@ QemuConsole *graphic_console_init(graphic_hw_update_ptr update,
+     s = new_console(ds, GRAPHIC_CONSOLE);
+     s->hw_update = update;
+     s->hw_invalidate = invalidate;
+-    s->hw_screen_dump = screen_dump;
+     s->hw_text_update = text_update;
+     s->hw = opaque;
+ 
+-- 
+1.7.9.7
+

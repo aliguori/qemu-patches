@@ -1,0 +1,56 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Fabien Chouteau <chouteau@adacore.com>
+To: qemu-devel@nongnu.org
+Cc: qemu-ppc@nongnu.org, agraf@suse.de
+Date: Wed,  3 Apr 2013 18:40:11 +0200
+Message-id: 1365007213-27603-2-git-send-email-chouteau@adacore.com
+Subject: [PATCH 1/3] PPC PReP: Load ELF kernel
+
+It is useful to be able to boot non-binary (i.e. ELF) kernels directly,
+as it is simpler to use and it makes symbols available in -d in_asm.
+
+Also remove, unnecessary exit() after hw_error().
+
+Signed-off-by: Fabien Chouteau <chouteau@adacore.com>
+---
+ hw/ppc/prep.c |   14 ++++++++++----
+ 1 file changed, 10 insertions(+), 4 deletions(-)
+
+diff --git a/hw/ppc/prep.c b/hw/ppc/prep.c
+index 2920911..a2730c8 100644
+--- a/hw/ppc/prep.c
++++ b/hw/ppc/prep.c
+@@ -41,6 +41,7 @@
+ #include "sysemu/blockdev.h"
+ #include "sysemu/arch_init.h"
+ #include "exec/address-spaces.h"
++#include "elf.h"
+ 
+ //#define HARD_DEBUG_PPC_IO
+ //#define DEBUG_PPC_IO
+@@ -521,12 +522,17 @@ static void ppc_prep_init(QEMUMachineInitArgs *args)
+ 
+     if (linux_boot) {
+         kernel_base = KERNEL_LOAD_ADDR;
+-        /* now we can load the kernel */
+-        kernel_size = load_image_targphys(kernel_filename, kernel_base,
+-                                          ram_size - kernel_base);
++
++        /* Try to load the kernel as an ELF file */
++        kernel_size = load_elf(kernel_filename, NULL, NULL, NULL, NULL, NULL,
++                               1, ELF_MACHINE, 0);
++        if (kernel_size < 0) {
++            /* Try to load the kernel as an binary file */
++            kernel_size = load_image_targphys(kernel_filename, kernel_base,
++                                              ram_size - kernel_base);
++        }
+         if (kernel_size < 0) {
+             hw_error("qemu: could not load kernel '%s'\n", kernel_filename);
+-            exit(1);
+         }
+         /* load initrd */
+         if (initrd_filename) {
+-- 
+1.7.9.5
+
+

@@ -1,0 +1,38 @@
+From patches Mon Sep 17 00:00:00 2001
+From: riku.voipio@linaro.org
+To: qemu-devel@nongnu.org, Riku Voipio <riku.voipio@linaro.org>
+Cc: qemu-devel <qemu-devel@nongnu.org>, Riku Voipio <riku.voipio@linaro.org>
+Date: Fri, 19 Apr 2013 16:59:53 +0300
+Message-id: cover.1366377671.git.riku.voipio@linaro.org
+Subject: [PATCH 0/3] linux-user pending patches
+
+From: Riku Voipio <riku.voipio@linaro.org>
+
+The following changes since commit 09dada400328d75daf79e3eca1e48e024fec148d:
+
+  configure: remove duplicate test (2013-04-18 14:12:31 +0200)
+
+are available in the git repository at:
+
+  git://git.linaro.org/people/rikuvoipio/qemu.git linux-user-for-upstream
+
+for you to fetch changes up to 03903ffcfb5a7c75e52da97d00eb9d0bb0660f28:
+
+  linux-user: fix setgroups/getgroups for non-UID16 archs (2013-04-19 10:48:51 +0300)
+
+----------------------------------------------------------------
+Andreas Schwab (2):
+      linux-user: fix undefined shift in copy_to_user_fdset
+      linux-user: fix setgroups/getgroups for non-UID16 archs
+
+Petar Jovanovic (1):
+      linux-user: change do_semop to return target errno when unsuccessful
+
+ linux-user/syscall.c |   12 ++++++------
+ 1 file changed, 6 insertions(+), 6 deletions(-)
+
+
+-- 
+1.7.10.4
+
+

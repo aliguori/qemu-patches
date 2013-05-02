@@ -1,0 +1,94 @@
+From patches Mon Sep 17 00:00:00 2001
+From: peter.crosthwaite@xilinx.com
+To: qemu-devel@nongnu.org
+Cc: peter.maydell@linaro.org, edgar.iglesias@gmail.com
+Date: Mon, 22 Apr 2013 15:15:13 +1000
+Message-id: 6abe6d94a7290572cf0eea41fe9c7f04576b14b0.1366606958.git.peter.crosthwaite@xilinx.com
+Subject: [PATCH 06/15] xilinx_spips: Trash LQ page cache on mode change
+
+From: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+
+Invalidate the LQSPI cached page when transitioning into LQSPI mode.
+Otherwise there is a possibility that the controller will return stale
+data to the guest when transitioning back to LQ_MODE after a page
+program.
+
+Signed-off-by: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+Reviewed-by: Peter Maydell <peter.maydell@linaro.org>
+---
+changed from v2:
+Removed extraneous break after goto (PMM review)
+changed from v1:
+Re-implemented using separate SPI/QSPI write handlers.
+
+ hw/ssi/xilinx_spips.c |   25 ++++++++++++++++++++++++-
+ 1 files changed, 24 insertions(+), 1 deletions(-)
+
+diff --git a/hw/ssi/xilinx_spips.c b/hw/ssi/xilinx_spips.c
+index e351cb2..a7ba702 100644
+--- a/hw/ssi/xilinx_spips.c
++++ b/hw/ssi/xilinx_spips.c
+@@ -165,6 +165,8 @@ typedef struct {
+ typedef struct XilinxSPIPSClass {
+     SysBusDeviceClass parent_class;
+ 
++    const MemoryRegionOps *reg_ops;
++
+     uint32_t rx_fifo_size;
+     uint32_t tx_fifo_size;
+ } XilinxSPIPSClass;
+@@ -462,6 +464,25 @@ static const MemoryRegionOps spips_ops = {
+     .endianness = DEVICE_LITTLE_ENDIAN,
+ };
+ 
++static void xilinx_qspips_write(void *opaque, hwaddr addr,
++                                uint64_t value, unsigned size)
++{
++    XilinxQSPIPS *q = XILINX_QSPIPS(opaque);
++
++    xilinx_spips_write(opaque, addr, value, size);
++    addr >>= 2;
++
++    if (addr == R_LQSPI_CFG) {
++        q->lqspi_cached_addr = ~0ULL;
++    }
++}
++
++static const MemoryRegionOps qspips_ops = {
++    .read = xilinx_spips_read,
++    .write = xilinx_qspips_write,
++    .endianness = DEVICE_LITTLE_ENDIAN,
++};
++
+ #define LQSPI_CACHE_SIZE 1024
+ 
+ static uint64_t
+@@ -565,7 +586,7 @@ static void xilinx_spips_realize(DeviceState *dev, Error **errp)
+         sysbus_init_irq(sbd, &s->cs_lines[i]);
+     }
+ 
+-    memory_region_init_io(&s->iomem, &spips_ops, s, "spi", R_MAX*4);
++    memory_region_init_io(&s->iomem, xsc->reg_ops, s, "spi", R_MAX*4);
+     sysbus_init_mmio(sbd, &s->iomem);
+ 
+     s->irqline = -1;
+@@ -629,6 +650,7 @@ static void xilinx_qspips_class_init(ObjectClass *klass, void * data)
+     XilinxSPIPSClass *xsc = XILINX_SPIPS_CLASS(klass);
+ 
+     dc->realize = xilinx_qspips_realize;
++    xsc->reg_ops = &qspips_ops;
+     xsc->rx_fifo_size = RXFF_A_Q;
+     xsc->tx_fifo_size = TXFF_A_Q;
+ }
+@@ -643,6 +665,7 @@ static void xilinx_spips_class_init(ObjectClass *klass, void *data)
+     dc->props = xilinx_spips_properties;
+     dc->vmsd = &vmstate_xilinx_spips;
+ 
++    xsc->reg_ops = &spips_ops;
+     xsc->rx_fifo_size = RXFF_A;
+     xsc->tx_fifo_size = TXFF_A;
+ }
+-- 
+1.7.0.4
+
+

@@ -1,0 +1,1 @@
+../Fix-DTC-sub-module-issues/v1.1366659609/0002-Makefile-Use-QEMU_FLAGS-for-DTC-compilation.patch

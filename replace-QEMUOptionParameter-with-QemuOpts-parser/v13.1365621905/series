@@ -1,0 +1,7 @@
+0000-replace-QEMUOptionParameter-with-QemuOpts-parser.txt
+0001-add-def_value_str-in-QemuOptDesc-struct-and-rewrite-qemu_opts_print.patch
+0002-avoid-duplication-of-default-value-in-QemuOpts.patch
+0003-Create-four-QemuOptsList-related-functions.patch
+0004-create-some-QemuOpts-functons.patch
+0005-Use-QemuOpts-support-in-block-layer.patch
+0006-remove-QEMUOptionParameter-related-functions-and-struct.patch

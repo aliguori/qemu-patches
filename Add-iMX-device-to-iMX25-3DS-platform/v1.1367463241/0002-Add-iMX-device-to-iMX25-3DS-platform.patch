@@ -1,0 +1,113 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Jean-Christophe DUBOIS <jcd@tribudubois.net>
+To: qemu-devel@nongnu.org
+Cc: peter.maydell@linaro.org, peter.chubb@nicta.com.au,
+ Jean-Christophe DUBOIS <jcd@tribudubois.net>
+Date: Wed,  1 May 2013 21:54:01 +0200
+Message-id: 1367438041-27625-1-git-send-email-jcd@tribudubois.net
+Subject: [PATCH 2/2] Add i.MX device to i.MX25 3DS platform.
+
+Signed-off-by: Jean-Christophe DUBOIS <jcd@tribudubois.net>
+---
+ hw/arm/imx25_3ds.c | 48 ++++++++++++++++++++++++++++++++----------------
+ 1 file changed, 32 insertions(+), 16 deletions(-)
+
+diff --git a/hw/arm/imx25_3ds.c b/hw/arm/imx25_3ds.c
+index 9de4941..aba9279 100644
+--- a/hw/arm/imx25_3ds.c
++++ b/hw/arm/imx25_3ds.c
+@@ -25,6 +25,7 @@
+ #include "hw/boards.h"
+ #include "hw/char/serial.h"
+ #include "hw/arm/imx.h"
++#include "hw/i2c/i2c.h"
+ 
+ /* Memory map for 3D-Stack Emulation Baseboard:
+  * 0x00000000-0x00003fff 16k ROM              IGNORED
+@@ -37,6 +38,9 @@
+  * 0x40000000-0x43efffff Reserved             IGNORED
+  * 0x43f00000-0x6fffffff I.MX25 Internal Register Space
+  *   0x43f00000 IO_AREA0
++ *   0x43f80000 I2C0                          EMULATED
++ *   0x43f84000 I2C2                          EMULATED
++ *   0x43f98000 I2C1                          EMULATED
+  *   0x43f90000 UART1                         EMULATED
+  *   0x43f94000 UART2                         EMULATED
+  *   0x43fb0000 UART4                         IGNORED
+@@ -95,12 +99,11 @@ static void imx25_3ds_init(QEMUMachineInitArgs *args)
+     ARMCPU *cpu;
+     MemoryRegion *address_space_mem = get_system_memory();
+     qemu_irq *cpu_pic;
+-    DeviceState *dev;
++    DeviceState *pic_dev;
+     DeviceState *ccm;
+     MemoryRegion *sram = g_new(MemoryRegion, 1);
+     MemoryRegion *sram_alias = g_new(MemoryRegion, 1);
+ 
+-
+     if (!cpu_model) {
+         cpu_model = "arm926";
+     }
+@@ -169,31 +172,44 @@ static void imx25_3ds_init(QEMUMachineInitArgs *args)
+ 
+     /* add the PIC */
+     cpu_pic = arm_pic_init_cpu(cpu);
+-    dev = sysbus_create_varargs("imx_avic", 0x68000000,
++    pic_dev = sysbus_create_varargs("imx_avic", 0x68000000,
+                                 cpu_pic[ARM_PIC_CPU_IRQ],
+                                 cpu_pic[ARM_PIC_CPU_FIQ], NULL);
+ 
+     /* add some serial lines */
+-    imx_serial_create(0, 0x43f90000, qdev_get_gpio_in(dev, 45));
+-    imx_serial_create(1, 0x43f94000, qdev_get_gpio_in(dev, 32));
++    imx_serial_create(0, 0x43f90000, qdev_get_gpio_in(pic_dev, 45));
++    imx_serial_create(1, 0x43f94000, qdev_get_gpio_in(pic_dev, 32));
+     // Qemu does not support more than 4 serial ports. Too bad.
+-    //imx_serial_create(3, 0x5000c000, qdev_get_gpio_in(dev, 18));
+-    //imx_serial_create(4, 0x43fb0000, qdev_get_gpio_in(dev, 46));
+-    //imx_serial_create(5, 0x43fb4000, qdev_get_gpio_in(dev, 47));
++    //imx_serial_create(3, 0x5000c000, qdev_get_gpio_in(pic_dev, 18));
++    //imx_serial_create(4, 0x43fb0000, qdev_get_gpio_in(pic_dev, 46));
++    //imx_serial_create(5, 0x43fb4000, qdev_get_gpio_in(pic_dev, 47));
+ 
+     ccm = sysbus_create_simple("imx_ccm", 0x53f80000, NULL);
+ 
+     /* add gpt timers */
+-    imx_timerg_create(0x53f84000, qdev_get_gpio_in(dev, 1), ccm);
+-    imx_timerg_create(0x53f88000, qdev_get_gpio_in(dev, 29), ccm);
+-    imx_timerg_create(0x53f8c000, qdev_get_gpio_in(dev, 53), ccm);
+-    imx_timerg_create(0x53f90000, qdev_get_gpio_in(dev, 54), ccm);
++    imx_timerg_create(0x53f84000, qdev_get_gpio_in(pic_dev, 1), ccm);
++    imx_timerg_create(0x53f88000, qdev_get_gpio_in(pic_dev, 29), ccm);
++    imx_timerg_create(0x53f8c000, qdev_get_gpio_in(pic_dev, 53), ccm);
++    imx_timerg_create(0x53f90000, qdev_get_gpio_in(pic_dev, 54), ccm);
+ 
+     /* add epit timers */
+-    imx_timerp_create(0x53f94000, qdev_get_gpio_in(dev, 28), ccm);
+-    imx_timerp_create(0x53f98000, qdev_get_gpio_in(dev, 27), ccm);
+-
+-    imx_fec_create(0, 0x50038000, qdev_get_gpio_in(dev, 57));
++    imx_timerp_create(0x53f94000, qdev_get_gpio_in(pic_dev, 28), ccm);
++    imx_timerp_create(0x53f98000, qdev_get_gpio_in(pic_dev, 27), ccm);
++
++    imx_fec_create(0, 0x50038000, qdev_get_gpio_in(pic_dev, 57));
++
++    /*** I2C ***/
++    for (i = 0; i < 3; i++) {
++        static uint32_t addr[] = {0x43F80000, 0x43F98000, 0x43F84000};
++        static uint32_t irq[]  = {3, 4, 10};
++        SysBusDevice *busdev;
++        DeviceState *i2c_dev = qdev_create(NULL, "imx.i2c");
++
++        qdev_init_nofail(i2c_dev);
++        busdev = SYS_BUS_DEVICE(i2c_dev);
++        sysbus_connect_irq(busdev, 0, qdev_get_gpio_in(pic_dev, irq[i]));
++        sysbus_mmio_map(busdev, 0, addr[i]);
++    }
+ 
+     imx25_3ds_binfo.ram_size = ram_size;
+     imx25_3ds_binfo.kernel_filename = kernel_filename;
+-- 
+1.8.1.2
+
+

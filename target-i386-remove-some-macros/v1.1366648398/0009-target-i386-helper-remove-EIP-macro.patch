@@ -1,0 +1,245 @@
+From patches Mon Sep 17 00:00:00 2001
+From: liguang <lig.fnst@cn.fujitsu.com>
+To: qemu-devel@nongnu.org
+Cc: peter.maydell@linaro.org, ehabkost@redhat.com,
+ liguang <lig.fnst@cn.fujitsu.com>, blauwirbel@gmail.com, avi@redhat.com,
+ pbonzini@redhat.com, imammedo@redhat.com, afaerber@suse.de, rth@twiddle.net
+Date: Mon, 22 Apr 2013 11:33:27 +0800
+Message-id: 1366601610-15429-10-git-send-email-lig.fnst@cn.fujitsu.com
+Subject: [PATCH 09/12] target-i386/helper: remove EIP macro
+
+Signed-off-by: liguang <lig.fnst@cn.fujitsu.com>
+---
+ target-i386/cpu.h         |    2 --
+ target-i386/excp_helper.c |    2 +-
+ target-i386/misc_helper.c |    4 ++--
+ target-i386/seg_helper.c  |   24 ++++++++++++------------
+ target-i386/svm_helper.c  |   16 ++++++++--------
+ 5 files changed, 23 insertions(+), 25 deletions(-)
+
+diff --git a/target-i386/cpu.h b/target-i386/cpu.h
+index 23166d1..3b72b2e 100644
+--- a/target-i386/cpu.h
++++ b/target-i386/cpu.h
+@@ -1107,8 +1107,6 @@ static inline int cpu_mmu_index (CPUX86State *env)
+         ? MMU_KSMAP_IDX : MMU_KERNEL_IDX;
+ }
+ 
+-#undef EIP
+-#define EIP (env->eip)
+ #define DF  (env->df)
+ 
+ #define CC_DST  (env->cc_dst)
+diff --git a/target-i386/excp_helper.c b/target-i386/excp_helper.c
+index 179ea82..5319aef 100644
+--- a/target-i386/excp_helper.c
++++ b/target-i386/excp_helper.c
+@@ -87,7 +87,7 @@ static int check_exception(CPUX86State *env, int intno, int *error_code)
+ /*
+  * Signal an interruption. It is executed in the main CPU loop.
+  * is_int is TRUE if coming from the int instruction. next_eip is the
+- * EIP value AFTER the interrupt instruction. It is only relevant if
++ * env->eip value AFTER the interrupt instruction. It is only relevant if
+  * is_int is TRUE.
+  */
+ static void QEMU_NORETURN raise_interrupt2(CPUX86State *env, int intno,
+diff --git a/target-i386/misc_helper.c b/target-i386/misc_helper.c
+index 2ad0900..01d53fc 100644
+--- a/target-i386/misc_helper.c
++++ b/target-i386/misc_helper.c
+@@ -569,7 +569,7 @@ void helper_hlt(CPUX86State *env, int next_eip_addend)
+     X86CPU *cpu = x86_env_get_cpu(env);
+ 
+     cpu_svm_check_intercept_param(env, SVM_EXIT_HLT, 0);
+-    EIP += next_eip_addend;
++    env->eip += next_eip_addend;
+ 
+     do_hlt(cpu);
+ }
+@@ -592,7 +592,7 @@ void helper_mwait(CPUX86State *env, int next_eip_addend)
+         raise_exception(env, EXCP0D_GPF);
+     }
+     cpu_svm_check_intercept_param(env, SVM_EXIT_MWAIT, 0);
+-    EIP += next_eip_addend;
++    env->eip += next_eip_addend;
+ 
+     cpu = x86_env_get_cpu(env);
+     cs = CPU(cpu);
+diff --git a/target-i386/seg_helper.c b/target-i386/seg_helper.c
+index ae612d4..df26649 100644
+--- a/target-i386/seg_helper.c
++++ b/target-i386/seg_helper.c
+@@ -457,7 +457,7 @@ static void switch_tss(CPUX86State *env, int tss_selector,
+         tss_load_seg(env, R_GS, new_segs[R_GS]);
+     }
+ 
+-    /* check that EIP is in the CS segment limits */
++    /* check that env->eip is in the CS segment limits */
+     if (new_eip > env->segs[R_CS].limit) {
+         /* XXX: different exception if CALL? */
+         raise_exception_err(env, EXCP0D_GPF, 0);
+@@ -1122,7 +1122,7 @@ static void do_interrupt_user(CPUX86State *env, int intno, int is_int,
+        exiting the emulation with the suitable exception and error
+        code */
+     if (is_int) {
+-        EIP = next_eip;
++        env->eip = next_eip;
+     }
+ }
+ 
+@@ -1157,7 +1157,7 @@ static void handle_even_inj(CPUX86State *env, int intno, int is_int,
+ 
+ /*
+  * Begin execution of an interruption. is_int is TRUE if coming from
+- * the int instruction. next_eip is the EIP value AFTER the interrupt
++ * the int instruction. next_eip is the env->eip value AFTER the interrupt
+  * instruction. It is only relevant if is_int is TRUE.
+  */
+ static void do_interrupt_all(CPUX86State *env, int intno, int is_int,
+@@ -1171,8 +1171,8 @@ static void do_interrupt_all(CPUX86State *env, int intno, int is_int,
+                      " pc=" TARGET_FMT_lx " SP=%04x:" TARGET_FMT_lx,
+                      count, intno, error_code, is_int,
+                      env->hflags & HF_CPL_MASK,
+-                     env->segs[R_CS].selector, EIP,
+-                     (int)env->segs[R_CS].base + EIP,
++                     env->segs[R_CS].selector, env->eip,
++                     (int)env->segs[R_CS].base + env->eip,
+                      env->segs[R_SS].selector, env->regs[R_ESP]);
+             if (intno == 0x0e) {
+                 qemu_log(" CR2=" TARGET_FMT_lx, env->cr[2]);
+@@ -1584,7 +1584,7 @@ void helper_ljmp_protected(CPUX86State *env, int new_cs, target_ulong new_eip,
+         }
+         cpu_x86_load_seg_cache(env, R_CS, (new_cs & 0xfffc) | cpl,
+                        get_seg_base(e1, e2), limit, e2);
+-        EIP = new_eip;
++        env->eip = new_eip;
+     } else {
+         /* jump to call or task gate */
+         dpl = (e2 >> DESC_DPL_SHIFT) & 3;
+@@ -1637,7 +1637,7 @@ void helper_ljmp_protected(CPUX86State *env, int new_cs, target_ulong new_eip,
+             }
+             cpu_x86_load_seg_cache(env, R_CS, (gate_cs & 0xfffc) | cpl,
+                                    get_seg_base(e1, e2), limit, e2);
+-            EIP = new_eip;
++            env->eip = new_eip;
+             break;
+         default:
+             raise_exception_err(env, EXCP0D_GPF, new_cs & 0xfffc);
+@@ -1731,7 +1731,7 @@ void helper_lcall_protected(CPUX86State *env, int new_cs, target_ulong new_eip,
+             cpu_x86_load_seg_cache(env, R_CS, (new_cs & 0xfffc) | cpl,
+                                    get_seg_base(e1, e2),
+                                    get_seg_limit(e1, e2), e2);
+-            EIP = new_eip;
++            env->eip = new_eip;
+         } else
+ #endif
+         {
+@@ -1754,7 +1754,7 @@ void helper_lcall_protected(CPUX86State *env, int new_cs, target_ulong new_eip,
+             SET_ESP(sp, sp_mask);
+             cpu_x86_load_seg_cache(env, R_CS, (new_cs & 0xfffc) | cpl,
+                                    get_seg_base(e1, e2), limit, e2);
+-            EIP = new_eip;
++            env->eip = new_eip;
+         }
+     } else {
+         /* check gate type */
+@@ -1895,7 +1895,7 @@ void helper_lcall_protected(CPUX86State *env, int new_cs, target_ulong new_eip,
+                        e2);
+         cpu_x86_set_cpl(env, dpl);
+         SET_ESP(sp, sp_mask);
+-        EIP = offset;
++        env->eip = offset;
+     }
+ }
+ 
+@@ -2251,7 +2251,7 @@ void helper_sysenter(CPUX86State *env)
+                            DESC_S_MASK |
+                            DESC_W_MASK | DESC_A_MASK);
+     env->regs[R_ESP] = env->sysenter_esp;
+-    EIP = env->sysenter_eip;
++    env->eip = env->sysenter_eip;
+ }
+ 
+ void helper_sysexit(CPUX86State *env, int dflag)
+@@ -2291,7 +2291,7 @@ void helper_sysexit(CPUX86State *env, int dflag)
+                                DESC_W_MASK | DESC_A_MASK);
+     }
+     env->regs[R_ESP] = env->regs[R_ECX];
+-    EIP = env->regs[R_EDX];
++    env->eip = env->regs[R_EDX];
+ }
+ 
+ target_ulong helper_lsl(CPUX86State *env, target_ulong selector1)
+diff --git a/target-i386/svm_helper.c b/target-i386/svm_helper.c
+index 5706026..649be02 100644
+--- a/target-i386/svm_helper.c
++++ b/target-i386/svm_helper.c
+@@ -170,7 +170,7 @@ void helper_vmrun(CPUX86State *env, int aflag, int next_eip_addend)
+                  &env->segs[R_DS]);
+ 
+     stq_phys(env->vm_hsave + offsetof(struct vmcb, save.rip),
+-             EIP + next_eip_addend);
++             env->eip + next_eip_addend);
+     stq_phys(env->vm_hsave + offsetof(struct vmcb, save.rsp), env->regs[R_ESP]);
+     stq_phys(env->vm_hsave + offsetof(struct vmcb, save.rax), env->regs[R_EAX]);
+ 
+@@ -248,8 +248,8 @@ void helper_vmrun(CPUX86State *env, int aflag, int next_eip_addend)
+     svm_load_seg_cache(env, env->vm_vmcb + offsetof(struct vmcb, save.ds),
+                        R_DS);
+ 
+-    EIP = ldq_phys(env->vm_vmcb + offsetof(struct vmcb, save.rip));
+-    env->eip = EIP;
++    env->eip = ldq_phys(env->vm_vmcb + offsetof(struct vmcb, save.rip));
++    env->eip = env->eip;
+     env->regs[R_ESP] = ldq_phys(env->vm_vmcb + offsetof(struct vmcb, save.rsp));
+     env->regs[R_EAX] = ldq_phys(env->vm_vmcb + offsetof(struct vmcb, save.rax));
+     env->dr[7] = ldq_phys(env->vm_vmcb + offsetof(struct vmcb, save.dr7));
+@@ -302,7 +302,7 @@ void helper_vmrun(CPUX86State *env, int aflag, int next_eip_addend)
+             env->exception_index = EXCP02_NMI;
+             env->error_code = event_inj_err;
+             env->exception_is_int = 0;
+-            env->exception_next_eip = EIP;
++            env->exception_next_eip = env->eip;
+             qemu_log_mask(CPU_LOG_TB_IN_ASM, "NMI");
+             cpu_loop_exit(env);
+             break;
+@@ -318,7 +318,7 @@ void helper_vmrun(CPUX86State *env, int aflag, int next_eip_addend)
+             env->exception_index = vector;
+             env->error_code = event_inj_err;
+             env->exception_is_int = 1;
+-            env->exception_next_eip = EIP;
++            env->exception_next_eip = env->eip;
+             qemu_log_mask(CPU_LOG_TB_IN_ASM, "SOFT");
+             cpu_loop_exit(env);
+             break;
+@@ -539,7 +539,7 @@ void helper_svm_check_io(CPUX86State *env, uint32_t port, uint32_t param,
+         uint16_t mask = (1 << ((param >> 4) & 7)) - 1;
+ 
+         if (lduw_phys(addr + port / 8) & (mask << (port & 7))) {
+-            /* next EIP */
++            /* next env->eip */
+             stq_phys(env->vm_vmcb + offsetof(struct vmcb, control.exit_info_2),
+                      env->eip + next_eip_addend);
+             helper_vmexit(env, SVM_EXIT_IOIO, param | (port << 16));
+@@ -558,7 +558,7 @@ void helper_vmexit(CPUX86State *env, uint32_t exit_code, uint64_t exit_info_1)
+                   exit_code, exit_info_1,
+                   ldq_phys(env->vm_vmcb + offsetof(struct vmcb,
+                                                    control.exit_info_2)),
+-                  EIP);
++                  env->eip);
+ 
+     if (env->hflags & HF_INHIBIT_IRQ_MASK) {
+         stl_phys(env->vm_vmcb + offsetof(struct vmcb, control.int_state),
+@@ -657,7 +657,7 @@ void helper_vmexit(CPUX86State *env, uint32_t exit_code, uint64_t exit_info_1)
+     svm_load_seg_cache(env, env->vm_hsave + offsetof(struct vmcb, save.ds),
+                        R_DS);
+ 
+-    EIP = ldq_phys(env->vm_hsave + offsetof(struct vmcb, save.rip));
++    env->eip = ldq_phys(env->vm_hsave + offsetof(struct vmcb, save.rip));
+     env->regs[R_ESP] = ldq_phys(env->vm_hsave + offsetof(struct vmcb, save.rsp));
+     env->regs[R_EAX] = ldq_phys(env->vm_hsave + offsetof(struct vmcb, save.rax));
+ 
+-- 
+1.7.2.5
+
+

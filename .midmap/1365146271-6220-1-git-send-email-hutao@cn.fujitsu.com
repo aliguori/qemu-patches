@@ -1,0 +1,1 @@
+../Add-pvpanic-device-to-deal-with-guest-panic-event/v17.1365190576/0001-Add-pvpanic-device-driver.patch

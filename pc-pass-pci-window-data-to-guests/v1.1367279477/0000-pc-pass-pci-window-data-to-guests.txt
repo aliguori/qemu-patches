@@ -1,0 +1,37 @@
+From patches Mon Sep 17 00:00:00 2001
+From: "Michael S. Tsirkin" <mst@redhat.com>
+To: Anthony Liguori <aliguori@us.ibm.com>, kevin@koconnor.net,
+ lersek@redhat.com, qemu-devel@nongnu.org
+Cc: 
+Date: Mon, 29 Apr 2013 18:51:17 +0300
+Message-id: cover.1367250562.git.mst@redhat.com
+Subject: [PATCH 0/3] pc: pass pci window data to guests
+
+This makes it possible for bios to load pci window
+data from host.
+
+This makes it possible for host to make sure
+setup matches hardware exactly: especially important
+for when ACPI tables are loaded from host.
+This will also make it easier to add more chipsets
+down the road.
+
+
+
+Michael S. Tsirkin (3):
+  range: add structure to pass ranges around
+  pc: factor out pci hole math
+  pc: pass PCI hole ranges to Guests
+
+ hw/i386/pc.c              | 34 +++++++++++++++++++++++++++++++---
+ hw/i386/pc_piix.c         | 14 +++++++-------
+ hw/i386/pc_q35.c          |  9 ++++++---
+ hw/pci-host/q35.c         | 18 ++++++++----------
+ include/hw/i386/pc.h      | 25 ++++++++++++++++++++++++-
+ include/hw/pci-host/q35.h |  4 ++--
+ include/qemu/range.h      | 24 ++++++++++++++++++++++++
+ 7 files changed, 102 insertions(+), 26 deletions(-)
+
+-- 
+MST
+

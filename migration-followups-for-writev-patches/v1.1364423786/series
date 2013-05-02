@@ -1,0 +1,7 @@
+0000-migration-followups-for-writev-patches.txt
+0001-qemu-file-drop-socket_put_buffer.patch
+0002-iov-reorganize-iov_send_recv-part-1.patch
+0003-iov-reorganize-iov_send_recv-part-2.patch
+0004-iov-reorganize-iov_send_recv-part-3.patch
+0005-iov-handle-partial-writes-from-sendmsg-and-recvmsg.patch
+0006-qemu-file-do-not-use-stdio-for-qemu_fdopen.patch

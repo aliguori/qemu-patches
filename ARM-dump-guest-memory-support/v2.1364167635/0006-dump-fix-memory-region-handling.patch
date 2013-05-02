@@ -1,0 +1,146 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Rabin Vincent <rabin@rab.in>
+To: Peter Maydell <peter.maydell@linaro.org>, Rabin Vincent <rabin@rab.in>,
+ qemu-devel@nongnu.org
+Cc: Rabin Vincent <rabin@rab.in>, qemu-devel@nongnu.org
+Date: Sun, 24 Mar 2013 18:27:21 +0100
+Message-id: 1364146041-27041-7-git-send-email-rabin@rab.in
+Subject: [PATCH 6/6] dump: fix memory region handling
+
+RAMBlock.offset does not provide the physical address of the memory
+region.  This is available in the MemoryRegion's address.  The wrong
+usage leads to incorrect physical addreses in the ELF.  Fix it.
+
+Signed-off-by: Rabin Vincent <rabin@rab.in>
+---
+ dump.c                |   19 +++++++++++--------
+ include/exec/memory.h |    7 +++++++
+ memory.c              |   12 ++++++++++++
+ memory_mapping.c      |    6 ++++--
+ 4 files changed, 34 insertions(+), 10 deletions(-)
+
+diff --git a/dump.c b/dump.c
+index 4b7d76c..4b0353a 100644
+--- a/dump.c
++++ b/dump.c
+@@ -16,6 +16,7 @@
+ #include "cpu.h"
+ #include "exec/cpu-all.h"
+ #include "exec/hwaddr.h"
++#include "exec/memory.h"
+ #include "monitor/monitor.h"
+ #include "sysemu/kvm.h"
+ #include "sysemu/dump.h"
+@@ -432,26 +433,28 @@ static hwaddr get_offset(hwaddr phys_addr,
+     }
+ 
+     QTAILQ_FOREACH(block, &ram_list.blocks, next) {
++        hwaddr baddr = memory_region_get_addr(block->mr);
++
+         if (s->has_filter) {
+-            if (block->offset >= s->begin + s->length ||
+-                block->offset + block->length <= s->begin) {
++            if (baddr >= s->begin + s->length ||
++                baddr + block->length <= s->begin) {
+                 /* This block is out of the range */
+                 continue;
+             }
+ 
+-            if (s->begin <= block->offset) {
+-                start = block->offset;
++            if (s->begin <= baddr) {
++                start = baddr;
+             } else {
+                 start = s->begin;
+             }
+ 
+-            size_in_block = block->length - (start - block->offset);
+-            if (s->begin + s->length < block->offset + block->length) {
+-                size_in_block -= block->offset + block->length -
++            size_in_block = block->length - (start - baddr);
++            if (s->begin + s->length < baddr + block->length) {
++                size_in_block -= baddr + block->length -
+                                  (s->begin + s->length);
+             }
+         } else {
+-            start = block->offset;
++            start = baddr;
+             size_in_block = block->length;
+         }
+ 
+diff --git a/include/exec/memory.h b/include/exec/memory.h
+index 2322732..9227190 100644
+--- a/include/exec/memory.h
++++ b/include/exec/memory.h
+@@ -665,6 +665,13 @@ void memory_region_add_subregion_overlap(MemoryRegion *mr,
+                                          unsigned priority);
+ 
+ /**
++ * memory_region_get_addr: Get the address of a memory region
++ *
++ * @mr: the memory region
++ */
++hwaddr memory_region_get_addr(MemoryRegion *mr);
++
++/**
+  * memory_region_get_ram_addr: Get the ram address associated with a memory
+  *                             region
+  *
+diff --git a/memory.c b/memory.c
+index 92a2196..f90fd19 100644
+--- a/memory.c
++++ b/memory.c
+@@ -1427,6 +1427,18 @@ void memory_region_set_alias_offset(MemoryRegion *mr, hwaddr offset)
+     memory_region_transaction_commit();
+ }
+ 
++hwaddr memory_region_get_addr(MemoryRegion *mr)
++{
++    hwaddr addr = 0;
++
++    while (mr) {
++	    addr += mr->addr;
++	    mr = mr->parent;
++    }
++
++    return addr;
++}
++
+ ram_addr_t memory_region_get_ram_addr(MemoryRegion *mr)
+ {
+     return mr->ram_addr;
+diff --git a/memory_mapping.c b/memory_mapping.c
+index ff45b3a..cf0751c 100644
+--- a/memory_mapping.c
++++ b/memory_mapping.c
+@@ -13,6 +13,7 @@
+ 
+ #include "cpu.h"
+ #include "exec/cpu-all.h"
++#include "exec/memory.h"
+ #include "sysemu/memory_mapping.h"
+ 
+ static void memory_mapping_list_add_mapping_sorted(MemoryMappingList *list,
+@@ -201,7 +202,7 @@ int qemu_get_guest_memory_mapping(MemoryMappingList *list)
+      * address.
+      */
+     QTAILQ_FOREACH(block, &ram_list.blocks, next) {
+-        offset = block->offset;
++        offset = memory_region_get_addr(block->mr);
+         length = block->length;
+         create_new_memory_mapping(list, offset, offset, length);
+     }
+@@ -214,7 +215,8 @@ void qemu_get_guest_simple_memory_mapping(MemoryMappingList *list)
+     RAMBlock *block;
+ 
+     QTAILQ_FOREACH(block, &ram_list.blocks, next) {
+-        create_new_memory_mapping(list, block->offset, 0, block->length);
++        create_new_memory_mapping(list, memory_region_get_addr(block->mr),
++                                  0, block->length);
+     }
+ }
+ 
+-- 
+1.7.10.4
+
+

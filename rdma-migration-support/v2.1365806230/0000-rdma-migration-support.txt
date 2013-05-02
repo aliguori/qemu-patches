@@ -1,0 +1,49 @@
+From patches Mon Sep 17 00:00:00 2001
+From: mrhines@linux.vnet.ibm.com
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, mst@redhat.com,
+ Michael R Hines <mrhines@us.ibm.com>, Bulent Abali <abali@us.ibm.com>,
+ owasserm@redhat.com, pbonzini@redhat.com, Gokul B Kandiraju <gokul@us.ibm.com>
+Date: Fri, 12 Apr 2013 17:37:10 -0400
+Message-id: 1365802638-8478-1-git-send-email-mrhines@linux.vnet.ibm.com
+Subject: [PATCH 0/8] rdma: migration support
+
+From: "Michael R. Hines" <mrhines@us.ibm.com>
+
+Changes since v1:
+
+- Finished additional cleanup requests
+- Introduced COMPRESS command to zap zeros
+
+Wiki: http://wiki.qemu.org/Features/RDMALiveMigration
+Github: git@github.com:hinesmr/qemu.git
+
+Michael R. Hines (10):
+  rdma: introduce qemu_ram_foreach_block
+  rdma: new QEMUFileOps hooks
+  rdma: export ram_handle_compressed()
+  rdma: introduce capability for chunk registration
+  rdma: core rdma logic
+  rdma: send pc.ram
+  rdma: print out throughput while debugging
+  rdma: add documentation
+
+ Makefile.objs                 |    1 +
+ arch_init.c                   |   59 +-
+ configure                     |   29 +
+ docs/rdma.txt                 |  336 +++++
+ exec.c                        |    9 +
+ include/exec/cpu-common.h     |    5 +
+ include/migration/migration.h |   23 +
+ include/migration/qemu-file.h |   30 +
+ migration-rdma.c              | 2732 +++++++++++++++++++++++++++++++++++++++++
+ migration.c                   |   27 +-
+ qapi-schema.json              |    2 +-
+ savevm.c                      |   75 +-
+ 12 files changed, 3307 insertions(+), 21 deletions(-)
+ create mode 100644 docs/rdma.txt
+ create mode 100644 migration-rdma.c
+
+-- 
+1.7.10.4
+

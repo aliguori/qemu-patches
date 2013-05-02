@@ -1,0 +1,5 @@
+0000-target-i386-X86CPU-compatibility-properties.txt
+0001-qdev-Let-qdev_prop_parse-pass-through-Error.patch
+0002-qdev-Introduce-qdev_prop_set_custom_globals.patch
+0003-target-i386-Emulate-X86CPU-subclasses-for-global-properties.patch
+0004-target-i386-Change-CPUID-model-of-486-to-8.patch

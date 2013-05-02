@@ -1,0 +1,119 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+To: qemu-devel@nongnu.org, Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+Cc: peter.maydell@linaro.org, mst@redhat.com, qemu-devel@nongnu.org,
+ Peter Crosthwaite <peter.crosthwaite@xilinx.com>, blauwirbel@gmail.com,
+ kraxel@redhat.com, edgar.iglesias@gmail.com
+Date: Fri,  5 Apr 2013 18:43:42 +1000
+Message-id: 7ac19859ba3aed6c19c5f0645ae8f588c9e6a47c.1365151096.git.peter.crosthwaite@xilinx.com
+Subject: [PATCH 3/5] register: Add Memory API glue
+
+Add memory io handlers that glue the register API to the memory API.
+Just translation functions at this stage. Although it does allow for
+devices to be created without all-in-one mmio r/w handlers.
+
+Signed-off-by: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+---
+
+ include/exec/register.h |   13 +++++++++++++
+ register.c              |   43 +++++++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 56 insertions(+), 0 deletions(-)
+
+diff --git a/include/exec/register.h b/include/exec/register.h
+index 0b05439..f30c98e 100644
+--- a/include/exec/register.h
++++ b/include/exec/register.h
+@@ -13,6 +13,7 @@
+ 
+ #include <stdint.h>
+ #include <stdbool.h>
++#include "exec/memory.h"
+ 
+ typedef struct RegisterInfo RegisterInfo;
+ typedef struct RegisterAccessInfo RegisterAccessInfo;
+@@ -92,6 +93,8 @@ struct RegisterAccessInfo {
+  * @prefix: String prefix for log and debug messages
+  *
+  * @opaque: Opaque data for the register
++ *
++ * @mem: optional Memory region for the register
+  */
+ 
+ struct RegisterInfo {
+@@ -105,6 +108,8 @@ struct RegisterInfo {
+     const char *prefix;
+ 
+     void *opaque;
++
++    MemoryRegion mem;
+ };
+ 
+ /**
+@@ -131,4 +136,12 @@ uint64_t register_read(RegisterInfo *reg);
+ 
+ void register_reset(RegisterInfo *reg);
+ 
++void register_write_memory_be(void *opaque, hwaddr addr, uint64_t value,
++                              unsigned size);
++void register_write_memory_le(void *opaque, hwaddr addr, uint64_t value,
++                              unsigned size);
++
++uint64_t register_read_memory_be(void *opaque, hwaddr addr, unsigned size);
++uint64_t register_read_memory_le(void *opaque, hwaddr addr, unsigned size);
++
+ #endif
+diff --git a/register.c b/register.c
+index 439f2f2..7b7b6df 100644
+--- a/register.c
++++ b/register.c
+@@ -162,3 +162,46 @@ void register_reset(RegisterInfo *reg)
+ 
+     register_write_val(reg, reg->access->reset);
+ }
++
++static inline void register_write_memory(void *opaque, hwaddr addr,
++                                         uint64_t value, unsigned size, bool be)
++{
++    RegisterInfo *reg = opaque;
++    uint64_t we = (size == 8) ? ~0ull : (1ull << size * 8) - 1;
++    int shift = 8 * (be ? reg->data_size - size - addr : addr);
++
++    assert(size + addr <= reg->data_size);
++    register_write(reg, value << shift, we << shift);
++}
++
++void register_write_memory_be(void *opaque, hwaddr addr, uint64_t value,
++                              unsigned size)
++{
++    register_write_memory(opaque, addr, value, size, true);
++}
++
++
++void register_write_memory_le(void *opaque, hwaddr addr, uint64_t value,
++                              unsigned size)
++{
++    register_write_memory(opaque, addr, value, size, false);
++}
++
++static inline uint64_t register_read_memory(void *opaque, hwaddr addr,
++                                            unsigned size, bool be)
++{
++    RegisterInfo *reg = opaque;
++    int shift = 8 * (be ? reg->data_size - size - addr : addr);
++
++    return register_read(reg) >> shift;
++}
++
++uint64_t register_read_memory_be(void *opaque, hwaddr addr, unsigned size)
++{
++    return register_read_memory(opaque, addr, size, true);
++}
++
++uint64_t register_read_memory_le(void *opaque, hwaddr addr, unsigned size)
++{
++    return register_read_memory(opaque, addr, size, false);
++}
+-- 
+1.7.0.4
+
+

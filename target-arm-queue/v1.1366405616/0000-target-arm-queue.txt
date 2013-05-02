@@ -1,0 +1,49 @@
+From patches Mon Sep 17 00:00:00 2001
+From: "Peter Maydell" <peter.maydell@linaro.org>
+To: Blue Swirl <blauwirbel@gmail.com>, Peter Maydell <peter.maydell@linaro.org>,
+ Aurelien Jarno <aurelien@aurel32.net>
+Cc: Anthony Liguori <aliguori@us.ibm.com>, Paul Brook <paul@codesourcery.com>,
+ Aurelien Jarno <aurelien@aurel32.net>, qemu-devel@nongnu.org,
+ qemu-devel <qemu-devel@nongnu.org>
+Date: Fri, 19 Apr 2013 16:06:56 +0100
+Message-id: 1366384020-13253-1-git-send-email-peter.maydell@linaro.org
+Subject: [PATCH 0/4] target-arm queue
+
+target-arm pullreq, containing a fix for a dumb SRS bug I
+introduced, and the update to migration to use vmstate
+(both of which have been on the list since before freeze).
+Please pull.
+
+thanks
+-- PMM
+
+The following changes since commit 09dada400328d75daf79e3eca1e48e024fec148d:
+
+  configure: remove duplicate test (2013-04-18 14:12:31 +0200)
+
+are available in the git repository at:
+
+  git://git.linaro.org/people/pmaydell/qemu-arm.git target-arm.next
+
+for you to fetch changes up to e91f229a253f489f6d12b946ad7bdcdc158c5b67:
+
+  target-arm: Correctly restore FPSCR (2013-04-19 12:24:19 +0100)
+
+----------------------------------------------------------------
+Juan Quintela (1):
+      target-arm: port ARM CPU save/load to use VMState
+
+Peter Chubb (1):
+      target-arm: Reinsert missing return statement in ARM mode SRS decode
+
+Peter Maydell (2):
+      target-arm: Add some missing CPU state fields to VMState
+      target-arm: Correctly restore FPSCR
+
+ target-arm/cpu-qom.h   |    4 +
+ target-arm/cpu.c       |    1 +
+ target-arm/cpu.h       |    2 -
+ target-arm/machine.c   |  430 ++++++++++++++++++++++++------------------------
+ target-arm/translate.c |    1 +
+ 5 files changed, 222 insertions(+), 216 deletions(-)
+

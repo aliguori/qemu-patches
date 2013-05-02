@@ -1,0 +1,399 @@
+From patches Mon Sep 17 00:00:00 2001
+From: =?utf-8?q?Llu=C3=ADs_Vilanova_=3Cvilanova=40ac=2Eupc=2Eedu=3E?=
+To: qemu-devel@nongnu.org
+Cc: 
+Date: Tue, 16 Apr 2013 15:50:25 +0200
+Message-id: 20130416135025.21588.68303.stgit@fimbulvetr.bsc.es
+Subject: [PATCH 06/23] instrument: [none] Add null instrumentation
+
+Splits the QEMU-side tracing interface into different layers (in order of nested
+invocation):
+
+* trace_*
+  The interface used by QEMU code to signal traceable/instrumentable events
+  (now generated according to the selected instrumentation type).
+
+* qi_event_*
+  The interface provided by the user's instrumentation code (for which QEMU
+  provides default implementations depending on the instrumentation type).
+
+* qi_event_*_trace / qi_event_*_nop
+  The interface provided by QEMU to the user's instrumentation code to invoke
+  the tracing backend. The nop variant simply does nothing.
+
+* trace_*_backend
+  The interface provided by the tracing backend in QEMU. Originally exposed as
+  'trace_*' routines.
+
+The 'none' instrumentation type (this one) skips through the qi_* layers and
+directly calls 'trace_*_backend' from the 'trace_*' routines (providing the
+original tracing behaviour).
+
+Signed-off-by: Lluís Vilanova <vilanova@ac.upc.edu>
+---
+ .gitignore                              |    2 +
+ Makefile                                |    3 +
+ configure                               |   31 ++++++++++++++
+ include/trace.h                         |    2 -
+ instrument/Makefile.objs                |   24 +++++++++++
+ scripts/tracetool/__init__.py           |    9 +++-
+ scripts/tracetool/backend/instr_none.py |   41 +++++++++++++++++++
+ scripts/tracetool/format/api_h.py       |   39 ++++++++++++++++++
+ scripts/tracetool/format/qemu_h.py      |   68 +++++++++++++++++++++++++++++++
+ 9 files changed, 216 insertions(+), 3 deletions(-)
+ create mode 100644 instrument/Makefile.objs
+ create mode 100644 scripts/tracetool/backend/instr_none.py
+ create mode 100644 scripts/tracetool/format/api_h.py
+ create mode 100644 scripts/tracetool/format/qemu_h.py
+
+diff --git a/.gitignore b/.gitignore
+index 487813a..2c9695c 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -10,6 +10,8 @@ trace/generated-tracers.dtrace
+ trace/generated-events.h
+ trace/generated-events.c
+ libcacard/trace/generated-tracers.c
++instrument/generated-tracers.h
++instrument/qemu-instr/events.h
+ *-timestamp
+ *-softmmu
+ *-darwin-user
+diff --git a/Makefile b/Makefile
+index 0b6e6a1..028ef83 100644
+--- a/Makefile
++++ b/Makefile
+@@ -35,6 +35,9 @@ GENERATED_HEADERS = config-host.h qemu-options.def
+ GENERATED_HEADERS += qmp-commands.h qapi-types.h qapi-visit.h
+ GENERATED_SOURCES += qmp-marshal.c qapi-types.c qapi-visit.c
+ 
++GENERATED_HEADERS += instrument/generated-tracers.h
++GENERATED_HEADERS += instrument/qemu-instr/events.h
++
+ GENERATED_HEADERS += trace/generated-events.h
+ GENERATED_SOURCES += trace/generated-events.c
+ 
+diff --git a/configure b/configure
+index a3bd336..53b8bed 100755
+--- a/configure
++++ b/configure
+@@ -224,6 +224,7 @@ zero_malloc=""
+ trace_events=`dirname $0`/trace-events
+ trace_backend="nop"
+ trace_file="trace"
++trace_instrument="none"
+ spice=""
+ rbd=""
+ smartcard_nss=""
+@@ -646,6 +647,8 @@ for opt do
+   ;;
+   --with-trace-file=*) trace_file="$optarg"
+   ;;
++  --with-trace-instrument=*) trace_instrument="$optarg"
++  ;;
+   --enable-gprof) gprof="yes"
+   ;;
+   --enable-gcov) gcov="yes"
+@@ -1166,6 +1169,8 @@ echo "  --enable-trace-backend=B Set trace backend"
+ echo "                           Available backends:" $($python "$source_path"/scripts/tracetool.py --list-backends)
+ echo "  --with-trace-file=NAME   Full PATH,NAME of file to store traces"
+ echo "                           Default:trace-<pid>"
++echo "  --with-trace-instrument=TYPE"
++echo "                           Trace instrumentation type (none; default: $trace_instrument)"
+ echo "  --disable-spice          disable spice"
+ echo "  --enable-spice           enable spice"
+ echo "  --enable-rbd             enable building the rados block device (rbd)"
+@@ -3062,6 +3067,15 @@ if test "$trace_backend" = "dtrace"; then
+ fi
+ 
+ ##########################################
++# Check instrumentation type
++case "$trace_instrument" in
++none)    ;;
++*)       echo "Error: invalid trace instrumentation type: $trace_instrument"
++         exit 1
++         ;;
++esac
++
++##########################################
+ # __sync_fetch_and_and requires at least -march=i486. Many toolchains
+ # use i686 as default anyway, but for those that don't, an explicit
+ # specification is necessary
+@@ -3437,6 +3451,7 @@ echo "vhost-net support $vhost_net"
+ echo "Trace events      $trace_events"
+ echo "Trace backend     $trace_backend"
+ echo "Trace output file $trace_file-<pid>"
++echo "Trace instrument  $trace_instrument"
+ echo "spice support     $spice ($spice_protocol_version/$spice_server_version)"
+ echo "rbd support       $rbd"
+ echo "xfsctl support    $xfs"
+@@ -3859,6 +3874,22 @@ if test "$trace_default" = "yes"; then
+   echo "CONFIG_TRACE_DEFAULT=y" >> $config_host_mak
+ fi
+ 
++##########################################
++# trace instrumentation
++config_qi=instrument/qemu-instr/config.h
++mkdir -p `dirname $config_qi`
++echo "/* Automatically generated by configure - do not modify */" > $config_qi
++
++echo "TRACE_INSTRUMENT_BACKEND=instr-$trace_instrument" >> $config_host_mak
++
++if test "$trace_instrument" = "none"; then
++    echo "#define QI_TYPE_NONE 1" >> $config_qi
++    echo "CONFIG_TRACE_INSTRUMENT_NONE=y" >> $config_host_mak
++else
++    echo "CONFIG_TRACE_INSTRUMENT=y" >> $config_host_mak
++fi
++##########################################
++
+ echo "TOOLS=$tools" >> $config_host_mak
+ echo "ROMS=$roms" >> $config_host_mak
+ echo "MAKE=$make" >> $config_host_mak
+diff --git a/include/trace.h b/include/trace.h
+index c15f498..5cd06c7 100644
+--- a/include/trace.h
++++ b/include/trace.h
+@@ -1,6 +1,6 @@
+ #ifndef TRACE_H
+ #define TRACE_H
+ 
+-#include "trace/generated-tracers.h"
++#include "instrument/generated-tracers.h"
+ 
+ #endif  /* TRACE_H */
+diff --git a/instrument/Makefile.objs b/instrument/Makefile.objs
+new file mode 100644
+index 0000000..9c5d5dc
+--- /dev/null
++++ b/instrument/Makefile.objs
+@@ -0,0 +1,24 @@
++# -*- mode: makefile -*-
++
++######################################################################
++# QEMU trace->instrument interface
++
++$(obj)/generated-tracers.h: $(obj)/generated-tracers.h-timestamp
++$(obj)/generated-tracers.h-timestamp: $(TRACE_EVENTS) $(BUILD_DIR)/config-host.mak
++	$(call quiet-command,$(TRACETOOL) \
++		--format=qemu-h \
++		--backend=$(TRACE_INSTRUMENT_BACKEND) \
++		< $< > $@,"  GEN   $(patsubst %-timestamp,%,$@)")
++	@cmp -s $@ $(patsubst %-timestamp,%,$@) || cp $@ $(patsubst %-timestamp,%,$@)
++
++
++######################################################################
++# User interface
++
++$(obj)/qemu-instr/events.h: $(obj)/qemu-instr/events.h-timestamp
++$(obj)/qemu-instr/events.h-timestamp: $(TRACE_EVENTS) $(BUILD_DIR)/config-host.mak
++	$(call quiet-command,$(TRACETOOL) \
++		--format=api-h \
++		--backend=$(TRACE_INSTRUMENT_BACKEND) \
++		< $< > $@,"  GEN   $(patsubst %-timestamp,%,$@)")
++	@cmp -s $@ $(patsubst %-timestamp,%,$@) || cp $@ $(patsubst %-timestamp,%,$@)
+diff --git a/scripts/tracetool/__init__.py b/scripts/tracetool/__init__.py
+index 7e4d651..f849e39 100644
+--- a/scripts/tracetool/__init__.py
++++ b/scripts/tracetool/__init__.py
+@@ -122,7 +122,7 @@ class Event(object):
+ 
+     _CRE = re.compile("((?P<props>.*)\s+)?(?P<name>[^(\s]+)\((?P<args>[^)]*)\)\s*(?P<fmt>\".*)?")
+ 
+-    _VALID_PROPS = set(["disable"])
++    _VALID_PROPS = set(["disable", "instrument"])
+ 
+     def __init__(self, name, props, fmt, args):
+         """
+@@ -146,6 +146,9 @@ class Event(object):
+         if len(unknown_props) > 0:
+             raise ValueError("Unknown properties: %s" % ", ".join(unknown_props))
+ 
++        if "instrument" in self.properties and "disable" in self.properties:
++            raise ValueError("Cannot instrument a disabled event: %s" % self.name)
++
+     @staticmethod
+     def build(line_str):
+         """Build an Event instance from a string.
+@@ -175,10 +178,12 @@ class Event(object):
+ 
+ 
+     QEMU_TRACE              = "trace_%(name)s"
++    QEMU_TRACE_BACKEND      = "trace_%(name)s_backend"
++    QI_TRACE_INSTRUMENT     = "qi_event_%(name)s"
+ 
+     def api(self, fmt = None):
+         if fmt is None:
+-            fmt = Event.QEMU_TRACE
++            fmt = Event.QEMU_TRACE_BACKEND
+         return fmt % { "name" : self.name }
+ 
+ def _read_events(fobj):
+diff --git a/scripts/tracetool/backend/instr_none.py b/scripts/tracetool/backend/instr_none.py
+new file mode 100644
+index 0000000..a1327c0
+--- /dev/null
++++ b/scripts/tracetool/backend/instr_none.py
+@@ -0,0 +1,41 @@
++#!/usr/bin/env python
++# -*- coding: utf-8 -*-
++
++"""
++No-instrumentation proxy.
++"""
++
++__author__     = "Lluís Vilanova <vilanova@ac.upc.edu>"
++__copyright__  = "Copyright 2012-2013, Lluís Vilanova <vilanova@ac.upc.edu>"
++__license__    = "GPL version 2 or (at your option) any later version"
++
++__maintainer__ = "Stefan Hajnoczi"
++__email__      = "stefanha@linux.vnet.ibm.com"
++
++
++from tracetool import out
++import tracetool.format.qemu_h
++
++
++def qemu_h(events):
++    out('#include "instrument/qemu-instr/events.h"',
++        '',
++        )
++    tracetool.format.qemu_h.process_common(events)
++
++
++def api_h(events):
++    for e in events:
++        if "instrument" not in e.properties:
++            continue
++
++        out('static inline void %(qi)s(%(args)s)',
++            '{',
++            '    %(qemu_backend)s(%(argnames)s);',
++            '}',
++            '',
++            qi = e.api(e.QI_TRACE_INSTRUMENT),
++            args = e.args,
++            qemu_backend = e.api(e.QEMU_TRACE_BACKEND),
++            argnames = ", ".join(e.args.names()),
++            )
+diff --git a/scripts/tracetool/format/api_h.py b/scripts/tracetool/format/api_h.py
+new file mode 100644
+index 0000000..70d8e9f
+--- /dev/null
++++ b/scripts/tracetool/format/api_h.py
+@@ -0,0 +1,39 @@
++#!/usr/bin/env python
++# -*- coding: utf-8 -*-
++
++"""
++Generate .h for trace instrumentation clients.
++"""
++
++__author__     = "Lluís Vilanova <vilanova@ac.upc.edu>"
++__copyright__  = "Copyright 2012-2013, Lluís Vilanova <vilanova@ac.upc.edu>"
++__license__    = "GPL version 2 or (at your option) any later version"
++
++__maintainer__ = "Stefan Hajnoczi"
++__email__      = "stefanha@linux.vnet.ibm.com"
++
++
++from tracetool import out
++
++
++def begin(events):
++    out('/* This file is autogenerated by tracetool, do not edit. */',
++        '',
++        '#ifndef QI__EVENTS_H',
++        '#define QI__EVENTS_H',
++        '',
++        '#ifdef __cplusplus',
++        'extern "C" {',
++        '#endif',
++        '',
++        '#include <stdint.h>',
++        '',
++        )
++
++def end(events):
++    out('#ifdef __cplusplus',
++        '}',
++        '#endif',
++        '',
++        '#endif  /* QI__EVENTS_H */',
++        )
+diff --git a/scripts/tracetool/format/qemu_h.py b/scripts/tracetool/format/qemu_h.py
+new file mode 100644
+index 0000000..51bd02a
+--- /dev/null
++++ b/scripts/tracetool/format/qemu_h.py
+@@ -0,0 +1,68 @@
++#!/usr/bin/env python
++# -*- coding: utf-8 -*-
++
++"""
++Generate .h for trace instrumentation proxy.
++"""
++
++__author__     = "Lluís Vilanova <vilanova@ac.upc.edu>"
++__copyright__  = "Copyright 2012-2013, Lluís Vilanova <vilanova@ac.upc.edu>"
++__license__    = "GPL version 2 or (at your option) any later version"
++
++__maintainer__ = "Stefan Hajnoczi"
++__email__      = "stefanha@linux.vnet.ibm.com"
++
++
++from tracetool import out
++
++
++def begin(events):
++    out('/* This file is autogenerated by tracetool, do not edit. */',
++        '',
++        '#ifndef INSTRUMENT__GENERATED_TRACERS_H',
++        '#define INSTRUMENT__GENERATED_TRACERS_H',
++        '',
++        '#include "trace/generated-tracers.h"',
++        '',
++        )
++
++def end(events):
++    out('#include "trace/generated-events.h"',
++        '',
++        '#endif  /* INSTRUMENT__GENERATED_TRACERS_H */',
++        )
++
++def nop(events):
++    for e in events:
++        out('static inline void %(qemu)s(%(args)s)',
++            '{',
++            '    %(qemu_backend)s(%(argnames)s);',
++            '}',
++            '',
++            qemu = e.api(e.QEMU_TRACE),
++            args = e.args,
++            qemu_backend = e.api(e.QEMU_TRACE_BACKEND),
++            argnames = ", ".join(e.args.names()),
++            )
++
++def process_common(events):
++    for e in events:
++        if "instrument" not in e.properties:
++            nop([e])
++            continue
++
++        out('static inline void %(qemu)s(%(args)s)',
++            '{',
++            '#if defined(QEMU_TOOLS)',
++            '    %(backend)s(%(argnames)s);',
++            '#else',
++            '    %(qi)s(%(argnames)s);',
++            '#endif',
++            '}',
++            '',
++            qemu = e.api(e.QEMU_TRACE),
++            args = e.args,
++            qi = e.api(e.QI_TRACE_INSTRUMENT),
++            backend = e.api(e.QEMU_TRACE_BACKEND),
++            argnames = ", ".join(e.args.names()),
++            )
+
+

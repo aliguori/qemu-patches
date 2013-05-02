@@ -1,0 +1,1 @@
+../vmdk-zeroed-grain-GTE-support/v5.1367508321/0002-vmdk-add-support-for-zeroedgrain-GTE.patch

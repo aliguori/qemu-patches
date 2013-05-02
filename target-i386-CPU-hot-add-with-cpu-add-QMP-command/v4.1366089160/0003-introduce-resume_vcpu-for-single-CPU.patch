@@ -1,0 +1,101 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Igor Mammedov <imammedo@redhat.com>
+To: Igor Mammedov <imammedo@redhat.com>,
+ Andreas =?ISO-8859-1?B?RuRyYmVy?= <afaerber@suse.de>, qemu-devel@nongnu.org,
+ Gleb Natapov <gleb@redhat.com>
+Cc: Anthony Liguori <aliguori@us.ibm.com>, ehabkost@redhat.com, mst@redhat.com,
+ jan.kiszka@siemens.com, claudio.fontana@huawei.com, qemu-devel@nongnu.org,
+ aderumier@odiso.com, lcapitulino@redhat.com, jfrei@linux.vnet.ibm.com,
+ Gleb Natapov <gleb@redhat.com>, yang.z.zhang@intel.com, pbonzini@redhat.com,
+ eblake@redhat.com, afaerber@suse.de, lig.fnst@cn.fujitsu.com, rth@twiddle.net
+Date: Tue, 16 Apr 2013 00:12:43 +0200
+Message-id: 1366063976-4909-4-git-send-email-imammedo@redhat.com
+Subject: [PATCH 03/16] introduce resume_vcpu(), for single CPU
+
+... also add stub for it, to make possible to use it in qom/cpu.c,
+which is shared with user emulators.
+
+Signed-off-by: Igor Mammedov <imammedo@redhat.com>
+Reviewed-by: Eduardo Habkost <ehabkost@redhat.com>
+---
+Note:
+  it will be re-used from qom/cpu.c by hotpluged CPU
+---
+ cpus.c              | 11 ++++++++---
+ include/qom/cpu.h   |  9 +++++++++
+ stubs/Makefile.objs |  1 +
+ stubs/cpus.c        |  5 +++++
+ 4 files changed, 23 insertions(+), 3 deletions(-)
+ create mode 100644 stubs/cpus.c
+
+diff --git a/cpus.c b/cpus.c
+index c15ff6c..c347db5 100644
+--- a/cpus.c
++++ b/cpus.c
+@@ -993,6 +993,13 @@ void pause_all_vcpus(void)
+     }
+ }
+ 
++void resume_vcpu(CPUState *cpu)
++{
++    cpu->stop = false;
++    cpu->stopped = false;
++    qemu_cpu_kick(cpu);
++}
++
+ void resume_all_vcpus(void)
+ {
+     CPUArchState *penv = first_cpu;
+@@ -1000,9 +1007,7 @@ void resume_all_vcpus(void)
+     qemu_clock_enable(vm_clock, true);
+     while (penv) {
+         CPUState *pcpu = ENV_GET_CPU(penv);
+-        pcpu->stop = false;
+-        pcpu->stopped = false;
+-        qemu_cpu_kick(pcpu);
++        resume_vcpu(pcpu);
+         penv = penv->next_cpu;
+     }
+ }
+diff --git a/include/qom/cpu.h b/include/qom/cpu.h
+index 3664a1b..6ce6f10 100644
+--- a/include/qom/cpu.h
++++ b/include/qom/cpu.h
+@@ -256,5 +256,14 @@ void cpu_interrupt(CPUState *cpu, int mask);
+  */
+ void cpu_reset_interrupt(CPUState *cpu, int mask);
+ 
++/**
++ * resume_vcpu:
++ * @cpu: The CPU to resume.
++ *
++ * Resumes CPU, i.e. puts CPU into runable state.
++ * KVM requires extra call cpu_synchronize_post_init() to make
++ * KVM's CPU instance runable.
++ */
++void resume_vcpu(CPUState *cpu);
+ 
+ #endif
+diff --git a/stubs/Makefile.objs b/stubs/Makefile.objs
+index 9c55b34..03dff20 100644
+--- a/stubs/Makefile.objs
++++ b/stubs/Makefile.objs
+@@ -23,3 +23,4 @@ stub-obj-y += sysbus.o
+ stub-obj-y += vm-stop.o
+ stub-obj-y += vmstate.o
+ stub-obj-$(CONFIG_WIN32) += fd-register.o
++stub-obj-y += cpus.o
+diff --git a/stubs/cpus.c b/stubs/cpus.c
+new file mode 100644
+index 0000000..3d17451
+--- /dev/null
++++ b/stubs/cpus.c
+@@ -0,0 +1,5 @@
++#include "qom/cpu.h"
++
++void resume_vcpu(CPUState *cpu)
++{
++}
+-- 
+1.8.2
+

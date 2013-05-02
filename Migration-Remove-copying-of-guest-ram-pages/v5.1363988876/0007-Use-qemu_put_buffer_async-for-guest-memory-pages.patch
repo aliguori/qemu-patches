@@ -1,0 +1,37 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Orit Wasserman <owasserm@redhat.com>
+To: Paolo Bonzini <pbonzini@redhat.com>, qemu-devel@nongnu.org,
+ Orit Wasserman <owasserm@redhat.com>
+Cc: quintela@redhat.com, mst@redhat.com, qemu-devel@nongnu.org,
+ Orit Wasserman <owasserm@redhat.com>, pbonzini@redhat.com, chegu_vinod@hp.com
+Date: Fri, 22 Mar 2013 16:48:03 +0200
+Message-id: 1363963683-26157-8-git-send-email-owasserm@redhat.com
+Subject: [PATCH 7/7] Use qemu_put_buffer_async for guest memory pages
+
+This will remove an unneeded copy of guest memory pages.
+For the page header and device state we still copy the data to the
+static buffer the other option is to allocate the memory on demand
+which is more expensive.
+
+Signed-off-by: Orit Wasserman <owasserm@redhat.com>
+---
+ arch_init.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/arch_init.c b/arch_init.c
+index 98e2bc6..aa56a20 100644
+--- a/arch_init.c
++++ b/arch_init.c
+@@ -481,7 +481,7 @@ static int ram_save_block(QEMUFile *f, bool last_stage)
+             /* XBZRLE overflow or normal page */
+             if (bytes_sent == -1) {
+                 bytes_sent = save_block_hdr(f, block, offset, cont, RAM_SAVE_FLAG_PAGE);
+-                qemu_put_buffer(f, p, TARGET_PAGE_SIZE);
++                qemu_put_buffer_async(f, p, TARGET_PAGE_SIZE);
+                 bytes_sent += TARGET_PAGE_SIZE;
+                 acct_info.norm_pages++;
+             }
+-- 
+1.7.11.7
+
+

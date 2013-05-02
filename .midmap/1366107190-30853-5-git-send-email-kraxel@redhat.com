@@ -1,0 +1,1 @@
+../usb-patch-queue/v1.1366132383/0004-xhci-fix-portsc-writes.patch

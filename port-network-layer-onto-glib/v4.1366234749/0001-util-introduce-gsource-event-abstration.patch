@@ -1,0 +1,276 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Liu Ping Fan <qemulist@gmail.com>
+To: Liu Ping Fan <qemulist@gmail.com>, Stefan Hajnoczi <stefanha@gmail.com>,
+ Stefan Hajnoczi <stefanha@redhat.com>, qemu-devel@nongnu.org,
+ liu ping fan <qemulist@gmail.com>
+Cc: Paolo Bonzini <pbonzini@redhat.com>,
+ Anthony Liguori <anthony@codemonkey.ws>, Stefan Hajnoczi <stefanha@gmail.com>,
+ qemu-devel@nongnu.org, mdroth <mdroth@linux.vnet.ibm.com>,
+ Jan Kiszka <jan.kiszka@siemens.com>, Stefan Hajnoczi <stefanha@redhat.com>
+Date: Wed, 17 Apr 2013 16:39:10 +0800
+Message-id: 1366187964-14265-2-git-send-email-qemulist@gmail.com
+Subject: [PATCH 01/15] util: introduce gsource event abstration
+
+From: Liu Ping Fan <pingfank@linux.vnet.ibm.com>
+
+Introduce two structs EventGSource, EventsGSource
+EventGSource is used to abstract the event with single backend file.
+EventsGSource is used to abstract the event with dynamicly changed
+backend file, ex, slirp.
+
+Signed-off-by: Liu Ping Fan <pingfank@linux.vnet.ibm.com>
+---
+ util/Makefile.objs   |    1 +
+ util/event_gsource.c |  169 ++++++++++++++++++++++++++++++++++++++++++++++++++
+ util/event_gsource.h |   54 ++++++++++++++++
+ 3 files changed, 224 insertions(+), 0 deletions(-)
+ create mode 100644 util/event_gsource.c
+ create mode 100644 util/event_gsource.h
+
+diff --git a/util/Makefile.objs b/util/Makefile.objs
+index 495a178..a676d7d 100644
+--- a/util/Makefile.objs
++++ b/util/Makefile.objs
+@@ -8,3 +8,4 @@ util-obj-y += error.o qemu-error.o
+ util-obj-$(CONFIG_POSIX) += compatfd.o
+ util-obj-y += iov.o aes.o qemu-config.o qemu-sockets.o uri.o notify.o
+ util-obj-y += qemu-option.o qemu-progress.o
++util-obj-y += event_gsource.o
+diff --git a/util/event_gsource.c b/util/event_gsource.c
+new file mode 100644
+index 0000000..b255c47
+--- /dev/null
++++ b/util/event_gsource.c
+@@ -0,0 +1,169 @@
++/*
++ *  Copyright (C) 2013 IBM
++ *
++ *  This program is free software; you can redistribute it and/or modify
++ *  it under the terms of the GNU General Public License as published by
++ *  the Free Software Foundation; under version 2 of the License.
++ *
++ *  This program is distributed in the hope that it will be useful,
++ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
++ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ *  GNU General Public License for more details.
++ *
++ *  You should have received a copy of the GNU General Public License
++ *  along with this program; if not, see <http://www.gnu.org/licenses/>.
++ */
++
++#include "event_gsource.h"
++#include "qemu/bitops.h"
++
++static gboolean prepare(GSource *src, gint *time)
++{
++    EventGSource *nsrc = (EventGSource *)src;
++    int events = 0;
++
++    if (!nsrc->readable && !nsrc->writable) {
++        return false;
++    }
++    if (nsrc->readable && nsrc->readable(nsrc->opaque)) {
++        events |= G_IO_IN;
++    }
++    if ((nsrc->writable) && nsrc->writable(nsrc->opaque)) {
++        events |= G_IO_OUT;
++    }
++    nsrc->gfd.events = events;
++
++    return false;
++}
++
++static gboolean check(GSource *src)
++{
++    EventGSource *nsrc = (EventGSource *)src;
++
++    if (nsrc->gfd.revents & nsrc->gfd.events) {
++        return true;
++    }
++    return false;
++}
++
++static gboolean dispatch(GSource *src, GSourceFunc cb, gpointer data)
++{
++    gboolean ret = false;
++
++    if (cb) {
++        ret = cb(data);
++    }
++    return ret;
++}
++
++static GSourceFuncs net_gsource_funcs = {
++    prepare,
++    check,
++    dispatch,
++    NULL
++};
++
++EventGSource *event_source_new(int fd, GSourceFunc dispatch_cb, void *opaque)
++{
++    EventGSource *nsrc = (EventGSource *)g_source_new(&net_gsource_funcs,
++                                                    sizeof(EventGSource));
++    nsrc->gfd.fd = fd;
++    nsrc->opaque = opaque;
++    g_source_set_callback(&nsrc->source, dispatch_cb, nsrc, NULL);
++    g_source_add_poll(&nsrc->source, &nsrc->gfd);
++
++    return nsrc;
++}
++
++void event_source_release(EventGSource *src)
++{
++    g_source_destroy(&src->source);
++}
++
++GPollFD *events_source_get_gfd(EventsGSource *src, int fd)
++{
++    GPollFD *retfd;
++    unsigned long idx;
++
++    idx = find_first_zero_bit(src->alloc_bmp, src->bmp_sz);
++    if (idx == src->bmp_sz) {
++        //idx = src->bmp_sz;
++        src->bmp_sz += 8;
++        src->alloc_bmp = g_realloc(src->alloc_bmp, src->bmp_sz >> 3);
++        src->pollfds = g_realloc(src->pollfds, src->bmp_sz);
++    }
++    set_bit(idx, src->alloc_bmp);
++
++    retfd = src->pollfds + idx;
++    retfd->events = 0;
++    retfd->fd = fd;
++    if (fd > 0) {
++        g_source_add_poll(&src->source, retfd);
++    }
++
++    return retfd;
++}
++
++void events_source_close_gfd(EventsGSource *src, GPollFD *pollfd)
++{
++    unsigned long idx;
++
++    idx = pollfd - src->pollfds;
++    clear_bit(idx, src->alloc_bmp);
++    g_source_remove_poll(&src->source, pollfd);
++}
++
++gboolean events_source_check(GSource *src)
++{
++    unsigned long idx = 0;
++    EventsGSource *nsrc = (EventsGSource *)src;
++    unsigned long sz = nsrc->bmp_sz;
++    GPollFD *gfd;
++
++    do {
++        idx = find_next_bit(nsrc->alloc_bmp, sz, idx);
++        if (idx < sz) {
++            gfd = nsrc->pollfds + idx;
++            if (gfd->revents & gfd->events) {
++                return true;
++            }
++            idx++;
++            continue;
++        } else {
++            return false;
++        }
++    } while (true);
++}
++
++gboolean events_source_dispatch(GSource *src, GSourceFunc cb, gpointer data)
++{
++    gboolean ret = false;
++
++    if (cb) {
++        ret = cb(data);
++    }
++    return ret;
++}
++
++EventsGSource *events_source_new(GSourceFuncs *funcs, GSourceFunc dispatch_cb, void *opaque)
++{
++    EventsGSource *src = (EventsGSource *)g_source_new(funcs, sizeof(EventsGSource));
++
++    /* 8bits size at initial */
++    src->bmp_sz = 8;
++    src->alloc_bmp = g_malloc0(src->bmp_sz >> 3);
++    src->pollfds = g_malloc0(8 * sizeof(GPollFD));
++    src->opaque = opaque;
++    g_source_set_callback(&src->source, dispatch_cb, src, NULL);
++
++    return src;
++}
++
++void events_source_release(EventsGSource *src)
++{
++    g_free(src->alloc_bmp);
++    g_free(src->pollfds);
++    g_source_destroy(&src->source);
++    g_free(src);
++}
++
+diff --git a/util/event_gsource.h b/util/event_gsource.h
+new file mode 100644
+index 0000000..fd07e6d
+--- /dev/null
++++ b/util/event_gsource.h
+@@ -0,0 +1,54 @@
++/*
++ *  Copyright (C) 2013 IBM
++ *
++ *  This program is free software; you can redistribute it and/or modify
++ *  it under the terms of the GNU General Public License as published by
++ *  the Free Software Foundation; under version 2 of the License.
++ *
++ *  This program is distributed in the hope that it will be useful,
++ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
++ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ *  GNU General Public License for more details.
++ *
++ *  You should have received a copy of the GNU General Public License
++ *  along with this program; if not, see <http://www.gnu.org/licenses/>.
++ */
++
++#ifndef EVENT_GSOURCE_H
++#define EVENT_GSOURCE_H
++#include "qemu-common.h"
++
++typedef bool (*Pollable)(void *opaque);
++
++/* single fd drive gsource */
++typedef struct EventGSource {
++    GSource source;
++    GPollFD gfd;
++    Pollable readable;
++    Pollable writable;
++    void *opaque;
++} EventGSource;
++
++EventGSource *event_source_new(int fd, GSourceFunc dispatch_cb, void *opaque);
++void event_source_release(EventGSource *src);
++
++/* multi fd drive gsource*/
++typedef struct EventsGSource {
++    GSource source;
++    /* 8 for initial, stand for 8 pollfds */
++    unsigned int bmp_sz;
++    unsigned long *alloc_bmp;
++    GPollFD *pollfds;
++    void *opaque;
++} EventsGSource;
++
++EventsGSource *events_source_new(GSourceFuncs *funcs, GSourceFunc dispatch_cb, void *opaque);
++void events_source_release(EventsGSource *src);
++gboolean events_source_check(GSource *src);
++gboolean events_source_dispatch(GSource *src, GSourceFunc cb, gpointer data);
++GPollFD *events_source_get_gfd(EventsGSource *src, int fd);
++void events_source_close_gfd(EventsGSource *src, GPollFD *pollfd);
++
++
++
++#endif
+-- 
+1.7.4.4
+

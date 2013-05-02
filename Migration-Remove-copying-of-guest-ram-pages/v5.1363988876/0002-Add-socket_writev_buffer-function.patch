@@ -1,0 +1,58 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Orit Wasserman <owasserm@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: pbonzini@redhat.com, quintela@redhat.com, chegu_vinod@hp.com,
+ Orit Wasserman <owasserm@redhat.com>, mst@redhat.com
+Date: Fri, 22 Mar 2013 16:47:58 +0200
+Message-id: 1363963683-26157-3-git-send-email-owasserm@redhat.com
+Subject: [PATCH 2/7] Add socket_writev_buffer function
+
+Signed-off-by: Orit Wasserman <owasserm@redhat.com>
+---
+ savevm.c | 15 +++++++++++++++
+ 1 file changed, 15 insertions(+)
+
+diff --git a/savevm.c b/savevm.c
+index 35c8d1e..21140c4 100644
+--- a/savevm.c
++++ b/savevm.c
+@@ -39,6 +39,7 @@
+ #include "qmp-commands.h"
+ #include "trace.h"
+ #include "qemu/bitops.h"
++#include "qemu/iov.h"
+ 
+ #define SELF_ANNOUNCE_ROUNDS 5
+ 
+@@ -171,6 +172,19 @@ static void coroutine_fn yield_until_fd_readable(int fd)
+     qemu_coroutine_yield();
+ }
+ 
++static ssize_t socket_writev_buffer(void *opaque, struct iovec *iov, int iovcnt)
++{
++    QEMUFileSocket *s = opaque;
++    ssize_t len;
++    ssize_t size = iov_size(iov, iovcnt);
++
++    len = iov_send(s->fd, iov, iovcnt, 0, size);
++    if (len < size) {
++        len = -socket_error();
++    }
++    return len;
++}
++
+ static int socket_get_fd(void *opaque)
+ {
+     QEMUFileSocket *s = opaque;
+@@ -387,6 +401,7 @@ static const QEMUFileOps socket_read_ops = {
+ static const QEMUFileOps socket_write_ops = {
+     .get_fd =     socket_get_fd,
+     .put_buffer = socket_put_buffer,
++    .writev_buffer = socket_writev_buffer,
+     .close =      socket_close
+ };
+ 
+-- 
+1.7.11.7
+
+

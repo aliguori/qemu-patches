@@ -1,0 +1,144 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Kevin Wolf <kwolf@redhat.com>
+To: anthony@codemonkey.ws
+Cc: kwolf@redhat.com, qemu-devel@nongnu.org
+Date: Mon, 22 Apr 2013 13:31:34 +0200
+Message-id: 1366630294-18984-21-git-send-email-kwolf@redhat.com
+Subject: [PATCH 20/20] qemu-iotests: add 053 unaligned compressed image size
+ test
+
+From: Stefan Hajnoczi <stefanha@redhat.com>
+
+Test that qemu-img convert -c works when input image length is not a
+multiple of the cluster size.
+
+Previously an error message would be produced:
+
+  qemu-img: error while compressing sector 0: Input/output error
+
+Now that qcow2 and qcow handle this case the test passes successfully.
+
+Signed-off-by: Stefan Hajnoczi <stefanha@redhat.com>
+Signed-off-by: Kevin Wolf <kwolf@redhat.com>
+---
+ tests/qemu-iotests/053     | 73 ++++++++++++++++++++++++++++++++++++++++++++++
+ tests/qemu-iotests/053.out | 17 +++++++++++
+ tests/qemu-iotests/group   |  1 +
+ 3 files changed, 91 insertions(+)
+ create mode 100755 tests/qemu-iotests/053
+ create mode 100644 tests/qemu-iotests/053.out
+
+diff --git a/tests/qemu-iotests/053 b/tests/qemu-iotests/053
+new file mode 100755
+index 0000000..bc56992
+--- /dev/null
++++ b/tests/qemu-iotests/053
+@@ -0,0 +1,73 @@
++#!/bin/bash
++#
++# Test qemu-img convert when image length is not a multiple of cluster size
++#
++# Copyright (C) 2013 Red Hat, Inc.
++#
++# This program is free software; you can redistribute it and/or modify
++# it under the terms of the GNU General Public License as published by
++# the Free Software Foundation; either version 2 of the License, or
++# (at your option) any later version.
++#
++# This program is distributed in the hope that it will be useful,
++# but WITHOUT ANY WARRANTY; without even the implied warranty of
++# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++# GNU General Public License for more details.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program.  If not, see <http://www.gnu.org/licenses/>.
++#
++
++# creator
++owner=stefanha@redhat.com
++
++seq=`basename $0`
++echo "QA output created by $seq"
++
++here=`pwd`
++tmp=/tmp/$$
++status=1	# failure is the default!
++
++_cleanup()
++{
++	rm -f $TEST_IMG.orig
++	_cleanup_test_img
++}
++trap "_cleanup; exit \$status" 0 1 2 3 15
++
++# get standard environment, filters and checks
++. ./common.rc
++. ./common.filter
++
++_supported_fmt qcow2 qcow
++_supported_proto file
++_supported_os Linux
++
++echo
++echo "== Creating single sector image =="
++
++_make_test_img 512
++$QEMU_IO -c "write -P0xa 0 512" $TEST_IMG | _filter_qemu_io
++mv $TEST_IMG $TEST_IMG.orig
++
++echo
++echo "== Converting the image, compressed =="
++
++$QEMU_IMG convert -c -O $IMGFMT $TEST_IMG.orig $TEST_IMG
++_check_test_img
++
++echo
++echo "== Checking compressed image virtual disk size =="
++
++_img_info | grep '^virtual size:'
++
++echo
++echo "== Verifying the compressed image =="
++
++$QEMU_IO -c "read -P0xa 0 512" $TEST_IMG | _filter_qemu_io
++
++# success, all done
++echo "*** done"
++rm -f $seq.full
++status=0
++
+diff --git a/tests/qemu-iotests/053.out b/tests/qemu-iotests/053.out
+new file mode 100644
+index 0000000..16464e6
+--- /dev/null
++++ b/tests/qemu-iotests/053.out
+@@ -0,0 +1,17 @@
++QA output created by 053
++
++== Creating single sector image ==
++Formatting 'TEST_DIR/t.IMGFMT', fmt=IMGFMT size=512 
++wrote 512/512 bytes at offset 0
++512 bytes, X ops; XX:XX:XX.X (XXX YYY/sec and XXX ops/sec)
++
++== Converting the image, compressed ==
++No errors were found on the image.
++
++== Checking compressed image virtual disk size ==
++virtual size: 512 (512 bytes)
++
++== Verifying the compressed image ==
++read 512/512 bytes at offset 0
++512 bytes, X ops; XX:XX:XX.X (XXX YYY/sec and XXX ops/sec)
++*** done
+diff --git a/tests/qemu-iotests/group b/tests/qemu-iotests/group
+index 324bacb..68eabda 100644
+--- a/tests/qemu-iotests/group
++++ b/tests/qemu-iotests/group
+@@ -59,3 +59,4 @@
+ 050 rw auto backing quick
+ 051 rw auto
+ 052 rw auto backing
++053 rw auto
+-- 
+1.8.1.4
+

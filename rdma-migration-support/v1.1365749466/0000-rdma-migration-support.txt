@@ -1,0 +1,24 @@
+From patches Mon Sep 17 00:00:00 2001
+From: mrhines@linux.vnet.ibm.com
+To: qemu-devel@nongnu.org, mrhines@linux.vnet.ibm.com
+Cc: Anthony Liguori <aliguori@us.ibm.com>, mst@redhat.com,
+ qemu-devel@nongnu.org, Michael R Hines <mrhines@us.ibm.com>,
+ Bulent Abali <abali@us.ibm.com>, owasserm@redhat.com, pbonzini@redhat.com,
+ Gokul B Kandiraju <gokul@us.ibm.com>
+Date: Fri, 12 Apr 2013 01:51:06 -0400
+Message-id: 1365745874-24575-1-git-send-email-mrhines@linux.vnet.ibm.com
+Subject: [PATCH 0/8] rdma: migration support
+
+From: "Michael R. Hines" <mrhines@us.ibm.com>
+
+Changes since v7:
+
+- Ran checkpatch.pl
+- Finished additional cleanup requests
+- Deleted zero scanning option
+- Cleaned up docs/rdma.txt
+
+Wiki: http://wiki.qemu.org/Features/RDMALiveMigration
+Github: git@github.com:hinesmr/qemu.git
+
+Signed-off-by: Michael R. Hines <mrhines@us.ibm.com>

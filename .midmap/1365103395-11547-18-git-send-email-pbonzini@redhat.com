@@ -1,0 +1,1 @@
+../hw--reorganization-part-2/v3.1365128560/0017-hw-move-SSI-controllers-to-hw-ssi--configure-via-default-configs-.patch

@@ -1,0 +1,1 @@
+../build-ACPI-MADT-for-fw_cfg-clients/v1.1363843392/0010-pc_acpi_init-dont-bail-as-soon-as-failing-to-find-default-DSDT.patch

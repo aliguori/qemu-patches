@@ -1,0 +1,437 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Gerd Hoffmann <kraxel@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, Paul Brook <paul@codesourcery.com>,
+ Gerd Hoffmann <kraxel@redhat.com>, Dmitry Solodkiy <d.solodkiy@samsung.com>,
+ Jan Kiszka <jan.kiszka@web.de>, Maksim Kozlov <m.kozlov@samsung.com>,
+ Guan Xuetao <gxt@mprc.pku.edu.cn>, Igor Mitsyanko <i.mitsyanko@samsung.com>,
+ Peter Maydell <peter.maydell@linaro.org>,
+ Evgeny Voevodin <e.voevodin@samsung.com>
+Date: Thu, 25 Apr 2013 09:56:11 +0200
+Message-id: 1366876575-23958-3-git-send-email-kraxel@redhat.com
+Subject: [PATCH 2/6] console: add device link to QemuConsoles
+
+So it is possible to figure which qemu console displays which device.
+
+Signed-off-by: Gerd Hoffmann <kraxel@redhat.com>
+---
+ hw/arm/musicpal.c            |    2 +-
+ hw/display/blizzard.c        |    2 +-
+ hw/display/cirrus_vga.c      |    4 ++--
+ hw/display/exynos4210_fimd.c |    2 +-
+ hw/display/g364fb.c          |    2 +-
+ hw/display/jazz_led.c        |    2 +-
+ hw/display/milkymist-vgafb.c |    2 +-
+ hw/display/omap_lcdc.c       |    2 +-
+ hw/display/pl110.c           |    2 +-
+ hw/display/pxa2xx_lcd.c      |    2 +-
+ hw/display/qxl.c             |    4 ++--
+ hw/display/sm501.c           |    2 +-
+ hw/display/ssd0303.c         |    2 +-
+ hw/display/ssd0323.c         |    2 +-
+ hw/display/tc6393xb.c        |    2 +-
+ hw/display/tcx.c             |    4 ++--
+ hw/display/vga-isa-mm.c      |    2 +-
+ hw/display/vga-isa.c         |    2 +-
+ hw/display/vga-pci.c         |    2 +-
+ hw/display/vmware_vga.c      |    7 ++++---
+ hw/unicore32/puv3.c          |    2 +-
+ include/ui/console.h         |    3 ++-
+ ui/console.c                 |   15 ++++++++++++++-
+ 23 files changed, 43 insertions(+), 28 deletions(-)
+
+diff --git a/hw/arm/musicpal.c b/hw/arm/musicpal.c
+index f33ba9a..fbaf2be 100644
+--- a/hw/arm/musicpal.c
++++ b/hw/arm/musicpal.c
+@@ -616,7 +616,7 @@ static int musicpal_lcd_init(SysBusDevice *dev)
+                           "musicpal-lcd", MP_LCD_SIZE);
+     sysbus_init_mmio(dev, &s->iomem);
+ 
+-    s->con = graphic_console_init(&musicpal_gfx_ops, s);
++    s->con = graphic_console_init(DEVICE(dev), &musicpal_gfx_ops, s);
+     qemu_console_resize(s->con, 128*3, 64*3);
+ 
+     qdev_init_gpio_in(&dev->qdev, musicpal_lcd_gpio_brigthness_in, 3);
+diff --git a/hw/display/blizzard.c b/hw/display/blizzard.c
+index 1ca3355..4a466c8 100644
+--- a/hw/display/blizzard.c
++++ b/hw/display/blizzard.c
+@@ -956,7 +956,7 @@ void *s1d13745_init(qemu_irq gpio_int)
+ 
+     s->fb = g_malloc(0x180000);
+ 
+-    s->con = graphic_console_init(&blizzard_ops, s);
++    s->con = graphic_console_init(NULL, &blizzard_ops, s);
+     surface = qemu_console_surface(s->con);
+ 
+     switch (surface_bits_per_pixel(surface)) {
+diff --git a/hw/display/cirrus_vga.c b/hw/display/cirrus_vga.c
+index db232af..6e47956 100644
+--- a/hw/display/cirrus_vga.c
++++ b/hw/display/cirrus_vga.c
+@@ -2910,7 +2910,7 @@ static int vga_initfn(ISADevice *dev)
+     vga_common_init(s);
+     cirrus_init_common(&d->cirrus_vga, CIRRUS_ID_CLGD5430, 0,
+                        isa_address_space(dev), isa_address_space_io(dev));
+-    s->con = graphic_console_init(s->hw_ops, s);
++    s->con = graphic_console_init(DEVICE(dev), s->hw_ops, s);
+     rom_add_vga(VGABIOS_CIRRUS_FILENAME);
+     /* XXX ISA-LFB support */
+     /* FIXME not qdev yet */
+@@ -2957,7 +2957,7 @@ static int pci_cirrus_vga_initfn(PCIDevice *dev)
+      vga_common_init(&s->vga);
+      cirrus_init_common(s, device_id, 1, pci_address_space(dev),
+                         pci_address_space_io(dev));
+-     s->vga.con = graphic_console_init(s->vga.hw_ops, &s->vga);
++     s->vga.con = graphic_console_init(DEVICE(dev), s->vga.hw_ops, &s->vga);
+ 
+      /* setup PCI */
+ 
+diff --git a/hw/display/exynos4210_fimd.c b/hw/display/exynos4210_fimd.c
+index e6e7b27..6cb5016 100644
+--- a/hw/display/exynos4210_fimd.c
++++ b/hw/display/exynos4210_fimd.c
+@@ -1905,7 +1905,7 @@ static int exynos4210_fimd_init(SysBusDevice *dev)
+     memory_region_init_io(&s->iomem, &exynos4210_fimd_mmio_ops, s,
+             "exynos4210.fimd", FIMD_REGS_SIZE);
+     sysbus_init_mmio(dev, &s->iomem);
+-    s->console = graphic_console_init(&exynos4210_fimd_ops, s);
++    s->console = graphic_console_init(DEVICE(dev), &exynos4210_fimd_ops, s);
+ 
+     return 0;
+ }
+diff --git a/hw/display/g364fb.c b/hw/display/g364fb.c
+index 03810e9..2a4047e 100644
+--- a/hw/display/g364fb.c
++++ b/hw/display/g364fb.c
+@@ -484,7 +484,7 @@ static void g364fb_init(DeviceState *dev, G364State *s)
+ {
+     s->vram = g_malloc0(s->vram_size);
+ 
+-    s->con = graphic_console_init(&g364fb_ops, s);
++    s->con = graphic_console_init(dev, &g364fb_ops, s);
+ 
+     memory_region_init_io(&s->mem_ctrl, &g364fb_ctrl_ops, s, "ctrl", 0x180000);
+     memory_region_init_ram_ptr(&s->mem_vram, "vram",
+diff --git a/hw/display/jazz_led.c b/hw/display/jazz_led.c
+index 6306d8c..52035fc 100644
+--- a/hw/display/jazz_led.c
++++ b/hw/display/jazz_led.c
+@@ -267,7 +267,7 @@ static int jazz_led_init(SysBusDevice *dev)
+     memory_region_init_io(&s->iomem, &led_ops, s, "led", 1);
+     sysbus_init_mmio(dev, &s->iomem);
+ 
+-    s->con = graphic_console_init(&jazz_led_ops, s);
++    s->con = graphic_console_init(DEVICE(dev), &jazz_led_ops, s);
+ 
+     return 0;
+ }
+diff --git a/hw/display/milkymist-vgafb.c b/hw/display/milkymist-vgafb.c
+index 716997c..3828296 100644
+--- a/hw/display/milkymist-vgafb.c
++++ b/hw/display/milkymist-vgafb.c
+@@ -283,7 +283,7 @@ static int milkymist_vgafb_init(SysBusDevice *dev)
+             "milkymist-vgafb", R_MAX * 4);
+     sysbus_init_mmio(dev, &s->regs_region);
+ 
+-    s->con = graphic_console_init(&vgafb_ops, s);
++    s->con = graphic_console_init(DEVICE(dev), &vgafb_ops, s);
+ 
+     return 0;
+ }
+diff --git a/hw/display/omap_lcdc.c b/hw/display/omap_lcdc.c
+index e4a5595..fb72ebe 100644
+--- a/hw/display/omap_lcdc.c
++++ b/hw/display/omap_lcdc.c
+@@ -406,7 +406,7 @@ struct omap_lcd_panel_s *omap_lcdc_init(MemoryRegion *sysmem,
+     memory_region_init_io(&s->iomem, &omap_lcdc_ops, s, "omap.lcdc", 0x100);
+     memory_region_add_subregion(sysmem, base, &s->iomem);
+ 
+-    s->con = graphic_console_init(&omap_ops, s);
++    s->con = graphic_console_init(NULL, &omap_ops, s);
+ 
+     return s;
+ }
+diff --git a/hw/display/pl110.c b/hw/display/pl110.c
+index d232431..f259955 100644
+--- a/hw/display/pl110.c
++++ b/hw/display/pl110.c
+@@ -457,7 +457,7 @@ static int pl110_init(SysBusDevice *dev)
+     sysbus_init_mmio(dev, &s->iomem);
+     sysbus_init_irq(dev, &s->irq);
+     qdev_init_gpio_in(&s->busdev.qdev, pl110_mux_ctrl_set, 1);
+-    s->con = graphic_console_init(&pl110_gfx_ops, s);
++    s->con = graphic_console_init(DEVICE(dev), &pl110_gfx_ops, s);
+     return 0;
+ }
+ 
+diff --git a/hw/display/pxa2xx_lcd.c b/hw/display/pxa2xx_lcd.c
+index 76276cf..3b68f26 100644
+--- a/hw/display/pxa2xx_lcd.c
++++ b/hw/display/pxa2xx_lcd.c
+@@ -1013,7 +1013,7 @@ PXA2xxLCDState *pxa2xx_lcdc_init(MemoryRegion *sysmem,
+                           "pxa2xx-lcd-controller", 0x00100000);
+     memory_region_add_subregion(sysmem, base, &s->iomem);
+ 
+-    s->con = graphic_console_init(&pxa2xx_ops, s);
++    s->con = graphic_console_init(NULL, &pxa2xx_ops, s);
+     surface = qemu_console_surface(s->con);
+ 
+     switch (surface_bits_per_pixel(surface)) {
+diff --git a/hw/display/qxl.c b/hw/display/qxl.c
+index e679830..f8bd7ff 100644
+--- a/hw/display/qxl.c
++++ b/hw/display/qxl.c
+@@ -2069,7 +2069,7 @@ static int qxl_init_primary(PCIDevice *dev)
+     portio_list_init(qxl_vga_port_list, qxl_vga_portio_list, vga, "vga");
+     portio_list_add(qxl_vga_port_list, pci_address_space_io(dev), 0x3b0);
+ 
+-    vga->con = graphic_console_init(&qxl_ops, qxl);
++    vga->con = graphic_console_init(DEVICE(dev), &qxl_ops, qxl);
+     qemu_spice_display_init_common(&qxl->ssd);
+ 
+     rc = qxl_init_common(qxl);
+@@ -2094,7 +2094,7 @@ static int qxl_init_secondary(PCIDevice *dev)
+     memory_region_init_ram(&qxl->vga.vram, "qxl.vgavram", qxl->vga.vram_size);
+     vmstate_register_ram(&qxl->vga.vram, &qxl->pci.qdev);
+     qxl->vga.vram_ptr = memory_region_get_ram_ptr(&qxl->vga.vram);
+-    qxl->vga.con = graphic_console_init(&qxl_ops, qxl);
++    qxl->vga.con = graphic_console_init(DEVICE(dev), &qxl_ops, qxl);
+ 
+     return qxl_init_common(qxl);
+ }
+diff --git a/hw/display/sm501.c b/hw/display/sm501.c
+index 916816f..f72e488 100644
+--- a/hw/display/sm501.c
++++ b/hw/display/sm501.c
+@@ -1448,5 +1448,5 @@ void sm501_init(MemoryRegion *address_space_mem, uint32_t base,
+     }
+ 
+     /* create qemu graphic console */
+-    s->con = graphic_console_init(&sm501_ops, s);
++    s->con = graphic_console_init(DEVICE(dev), &sm501_ops, s);
+ }
+diff --git a/hw/display/ssd0303.c b/hw/display/ssd0303.c
+index 3d7ebbe..beea5bf 100644
+--- a/hw/display/ssd0303.c
++++ b/hw/display/ssd0303.c
+@@ -293,7 +293,7 @@ static int ssd0303_init(I2CSlave *i2c)
+ {
+     ssd0303_state *s = FROM_I2C_SLAVE(ssd0303_state, i2c);
+ 
+-    s->con = graphic_console_init(&ssd0303_ops, s);
++    s->con = graphic_console_init(DEVICE(i2c), &ssd0303_ops, s);
+     qemu_console_resize(s->con, 96 * MAGNIFY, 16 * MAGNIFY);
+     return 0;
+ }
+diff --git a/hw/display/ssd0323.c b/hw/display/ssd0323.c
+index 45e8dc1..c3231c6 100644
+--- a/hw/display/ssd0323.c
++++ b/hw/display/ssd0323.c
+@@ -342,7 +342,7 @@ static int ssd0323_init(SSISlave *dev)
+ 
+     s->col_end = 63;
+     s->row_end = 79;
+-    s->con = graphic_console_init(&ssd0323_ops, s);
++    s->con = graphic_console_init(DEVICE(dev), &ssd0323_ops, s);
+     qemu_console_resize(s->con, 128 * MAGNIFY, 64 * MAGNIFY);
+ 
+     qdev_init_gpio_in(&dev->qdev, ssd0323_cd, 1);
+diff --git a/hw/display/tc6393xb.c b/hw/display/tc6393xb.c
+index b5b255c..0cb87bc 100644
+--- a/hw/display/tc6393xb.c
++++ b/hw/display/tc6393xb.c
+@@ -587,7 +587,7 @@ TC6393xbState *tc6393xb_init(MemoryRegion *sysmem, uint32_t base, qemu_irq irq)
+     memory_region_add_subregion(sysmem, base + 0x100000, &s->vram);
+     s->scr_width = 480;
+     s->scr_height = 640;
+-    s->con = graphic_console_init(&tc6393xb_gfx_ops, s);
++    s->con = graphic_console_init(NULL, &tc6393xb_gfx_ops, s);
+ 
+     return s;
+ }
+diff --git a/hw/display/tcx.c b/hw/display/tcx.c
+index d7465c6..fc27f45 100644
+--- a/hw/display/tcx.c
++++ b/hw/display/tcx.c
+@@ -571,14 +571,14 @@ static int tcx_init1(SysBusDevice *dev)
+                                  &s->vram_mem, vram_offset, size);
+         sysbus_init_mmio(dev, &s->vram_cplane);
+ 
+-        s->con = graphic_console_init(&tcx24_ops, s);
++        s->con = graphic_console_init(DEVICE(dev), &tcx24_ops, s);
+     } else {
+         /* THC 8 bit (dummy) */
+         memory_region_init_io(&s->thc8, &dummy_ops, s, "tcx.thc8",
+                               TCX_THC_NREGS_8);
+         sysbus_init_mmio(dev, &s->thc8);
+ 
+-        s->con = graphic_console_init(&tcx_ops, s);
++        s->con = graphic_console_init(DEVICE(dev), &tcx_ops, s);
+     }
+ 
+     qemu_console_resize(s->con, s->width, s->height);
+diff --git a/hw/display/vga-isa-mm.c b/hw/display/vga-isa-mm.c
+index 2da08a1..ceeb92f 100644
+--- a/hw/display/vga-isa-mm.c
++++ b/hw/display/vga-isa-mm.c
+@@ -135,7 +135,7 @@ int isa_vga_mm_init(hwaddr vram_base,
+     vga_common_init(&s->vga);
+     vga_mm_init(s, vram_base, ctrl_base, it_shift, address_space);
+ 
+-    s->vga.con = graphic_console_init(s->vga.hw_ops, s);
++    s->vga.con = graphic_console_init(NULL, s->vga.hw_ops, s);
+ 
+     vga_init_vbe(&s->vga, address_space);
+     return 0;
+diff --git a/hw/display/vga-isa.c b/hw/display/vga-isa.c
+index d2c548e..2b3cc9b 100644
+--- a/hw/display/vga-isa.c
++++ b/hw/display/vga-isa.c
+@@ -62,7 +62,7 @@ static int vga_initfn(ISADevice *dev)
+                                         isa_mem_base + 0x000a0000,
+                                         vga_io_memory, 1);
+     memory_region_set_coalescing(vga_io_memory);
+-    s->con = graphic_console_init(s->hw_ops, s);
++    s->con = graphic_console_init(DEVICE(dev), s->hw_ops, s);
+ 
+     vga_init_vbe(s, isa_address_space(dev));
+     /* ROM BIOS */
+diff --git a/hw/display/vga-pci.c b/hw/display/vga-pci.c
+index dc73f28..cea8db7 100644
+--- a/hw/display/vga-pci.c
++++ b/hw/display/vga-pci.c
+@@ -150,7 +150,7 @@ static int pci_std_vga_initfn(PCIDevice *dev)
+     vga_common_init(s);
+     vga_init(s, pci_address_space(dev), pci_address_space_io(dev), true);
+ 
+-    s->con = graphic_console_init(s->hw_ops, s);
++    s->con = graphic_console_init(DEVICE(dev), s->hw_ops, s);
+ 
+     /* XXX: VGA_RAM_SIZE must be a power of two */
+     pci_register_bar(&d->dev, 0, PCI_BASE_ADDRESS_MEM_PREFETCH, &s->vram);
+diff --git a/hw/display/vmware_vga.c b/hw/display/vmware_vga.c
+index 263bf09..fd3569d 100644
+--- a/hw/display/vmware_vga.c
++++ b/hw/display/vmware_vga.c
+@@ -1185,13 +1185,13 @@ static const GraphicHwOps vmsvga_ops = {
+     .text_update = vmsvga_text_update,
+ };
+ 
+-static void vmsvga_init(struct vmsvga_state_s *s,
++static void vmsvga_init(DeviceState *dev, struct vmsvga_state_s *s,
+                         MemoryRegion *address_space, MemoryRegion *io)
+ {
+     s->scratch_size = SVGA_SCRATCH_SIZE;
+     s->scratch = g_malloc(s->scratch_size * 4);
+ 
+-    s->vga.con = graphic_console_init(&vmsvga_ops, s);
++    s->vga.con = graphic_console_init(dev, &vmsvga_ops, s);
+ 
+     s->fifo_size = SVGA_FIFO_SIZE;
+     memory_region_init_ram(&s->fifo_ram, "vmsvga.fifo", s->fifo_size);
+@@ -1258,7 +1258,8 @@ static int pci_vmsvga_initfn(PCIDevice *dev)
+     memory_region_set_flush_coalesced(&s->io_bar);
+     pci_register_bar(&s->card, 0, PCI_BASE_ADDRESS_SPACE_IO, &s->io_bar);
+ 
+-    vmsvga_init(&s->chip, pci_address_space(dev), pci_address_space_io(dev));
++    vmsvga_init(DEVICE(dev), &s->chip,
++                pci_address_space(dev), pci_address_space_io(dev));
+ 
+     pci_register_bar(&s->card, 1, PCI_BASE_ADDRESS_MEM_PREFETCH,
+                      &s->chip.vga.vram);
+diff --git a/hw/unicore32/puv3.c b/hw/unicore32/puv3.c
+index f8d32bc..56d1afa 100644
+--- a/hw/unicore32/puv3.c
++++ b/hw/unicore32/puv3.c
+@@ -94,7 +94,7 @@ static void puv3_load_kernel(const char *kernel_filename)
+     }
+ 
+     /* cheat curses that we have a graphic console, only under ocd console */
+-    graphic_console_init(&no_ops, NULL);
++    graphic_console_init(NULL, &no_ops, NULL);
+ }
+ 
+ static void puv3_init(QEMUMachineInitArgs *args)
+diff --git a/include/ui/console.h b/include/ui/console.h
+index c8a274d..22670d8 100644
+--- a/include/ui/console.h
++++ b/include/ui/console.h
+@@ -291,7 +291,8 @@ typedef struct GraphicHwOps {
+     void (*update_interval)(void *opaque, uint64_t interval);
+ } GraphicHwOps;
+ 
+-QemuConsole *graphic_console_init(const GraphicHwOps *ops,
++QemuConsole *graphic_console_init(DeviceState *dev,
++                                  const GraphicHwOps *ops,
+                                   void *opaque);
+ 
+ void graphic_hw_update(QemuConsole *con);
+diff --git a/ui/console.c b/ui/console.c
+index e9f3080..4102e8c 100644
+--- a/ui/console.c
++++ b/ui/console.c
+@@ -23,6 +23,7 @@
+  */
+ #include "qemu-common.h"
+ #include "ui/console.h"
++#include "hw/qdev-core.h"
+ #include "qemu/timer.h"
+ #include "qmp-commands.h"
+ #include "sysemu/char.h"
+@@ -122,6 +123,7 @@ struct QemuConsole {
+     int dcls;
+ 
+     /* Graphic console state.  */
++    Object *device;
+     const GraphicHwOps *hw_ops;
+     void *hw;
+ 
+@@ -1199,14 +1201,19 @@ static void text_console_update(void *opaque, console_ch_t *chardata)
+ 
+ static QemuConsole *new_console(DisplayState *ds, console_type_t console_type)
+ {
++    Error *local_err = NULL;
+     Object *obj;
+     QemuConsole *s;
+     int i;
+ 
+     if (nb_consoles >= MAX_CONSOLES)
+         return NULL;
++
+     obj = object_new(TYPE_QEMU_CONSOLE);
+     s = QEMU_CONSOLE(obj);
++    object_property_add_link(obj, "device", TYPE_DEVICE,
++                             (Object **)&s->device, &local_err);
++
+     if (!active_console || ((active_console->console_type != GRAPHIC_CONSOLE) &&
+         (console_type == GRAPHIC_CONSOLE))) {
+         active_console = s;
+@@ -1557,9 +1564,11 @@ DisplayState *init_displaystate(void)
+     return display_state;
+ }
+ 
+-QemuConsole *graphic_console_init(const GraphicHwOps *hw_ops,
++QemuConsole *graphic_console_init(DeviceState *dev,
++                                  const GraphicHwOps *hw_ops,
+                                   void *opaque)
+ {
++    Error *local_err = NULL;
+     int width = 640;
+     int height = 480;
+     QemuConsole *s;
+@@ -1570,6 +1579,10 @@ QemuConsole *graphic_console_init(const GraphicHwOps *hw_ops,
+     s = new_console(ds, GRAPHIC_CONSOLE);
+     s->hw_ops = hw_ops;
+     s->hw = opaque;
++    if (dev) {
++        object_property_set_link(OBJECT(s), OBJECT(dev),
++                                 "device", &local_err);
++    }
+ 
+     s->surface = qemu_create_displaysurface(width, height);
+     return s;
+-- 
+1.7.9.7
+

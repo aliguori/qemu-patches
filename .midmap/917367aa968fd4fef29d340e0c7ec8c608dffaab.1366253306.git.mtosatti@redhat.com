@@ -1,0 +1,1 @@
+../qemu-kvmgit-uq-master-queue/v1.1366260501/0004-target-i386-kvm-save-restore-steal-time-MSR.patch

@@ -1,0 +1,1265 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Tomoki Sekiyama <tsekiyam@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: mdroth@linux.vnet.ibm.com, pbonzini@redhat.com, vrozenfe@redhat.com,
+ Tomoki Sekiyama <tomoki.sekiyama@hds.com>, lcapitulino@redhat.com
+Date: Fri, 12 Apr 2013 16:01:55 -0400
+Message-id: 20130412200155.20814.55425.stgit@corona
+Subject: [PATCH 05/11] qemu-ga: Add Windows VSS provider to quiesce
+ applications on fsfreeze
+
+Implements a basic stub of software VSS provider. Currently, this modules
+only provides a relay function of events between qemu-guest-agent and
+Windows VSS when VSS finished filesystem freeze and when qemu snapshot
+is done.
+
+In the future, this module could be extended to support the other VSS
+functions, such as query for snapshot volumes and recovery.
+
+Signed-off-by: Tomoki Sekiyama <tomoki.sekiyama@hds.com>
+---
+ Makefile.objs                           |    2 
+ configure                               |    5 
+ qga/Makefile.objs                       |    6 
+ qga/vss-win32-provider.h                |   26 ++
+ qga/vss-win32-provider/Makefile.objs    |   21 +
+ qga/vss-win32-provider/install.cpp      |  494 +++++++++++++++++++++++++++++++
+ qga/vss-win32-provider/provider.cpp     |  474 ++++++++++++++++++++++++++++++
+ qga/vss-win32-provider/qga-provider.def |   10 +
+ qga/vss-win32-provider/qga-provider.idl |   20 +
+ qga/vss-win32.h                         |   85 +++++
+ 10 files changed, 1142 insertions(+), 1 deletion(-)
+ create mode 100644 qga/vss-win32-provider.h
+ create mode 100644 qga/vss-win32-provider/Makefile.objs
+ create mode 100644 qga/vss-win32-provider/install.cpp
+ create mode 100644 qga/vss-win32-provider/provider.cpp
+ create mode 100644 qga/vss-win32-provider/qga-provider.def
+ create mode 100644 qga/vss-win32-provider/qga-provider.idl
+ create mode 100644 qga/vss-win32.h
+
+diff --git a/Makefile.objs b/Makefile.objs
+index e568c01..15264a1 100644
+--- a/Makefile.objs
++++ b/Makefile.objs
+@@ -96,6 +96,7 @@ common-obj-y += disas/
+ # FIXME: a few definitions from qapi-types.o/qapi-visit.o are needed
+ # by libqemuutil.a.  These should be moved to a separate .json schema.
+ qga-obj-y = qga/ qapi-types.o qapi-visit.o
++qga-prv-obj-y = qga/
+ 
+ vl.o: QEMU_CFLAGS+=$(GPROF_CFLAGS)
+ 
+@@ -107,6 +108,7 @@ nested-vars += \
+ 	stub-obj-y \
+ 	util-obj-y \
+ 	qga-obj-y \
++	qga-prv-obj-y \
+ 	block-obj-y \
+ 	common-obj-y
+ dummy := $(call unnest-vars)
+diff --git a/configure b/configure
+index 310bf9f..ebc4114 100755
+--- a/configure
++++ b/configure
+@@ -3360,9 +3360,12 @@ if test "$softmmu" = yes ; then
+       virtfs=no
+     fi
+   fi
+-  if [ "$linux" = "yes" -o "$bsd" = "yes" -o "$solaris" = "yes" ] ; then
++  if [ "$linux" = "yes" -o "$bsd" = "yes" -o "$solaris" = "yes" -o "$mingw32" = "yes" ] ; then
+     if [ "$guest_agent" = "yes" ]; then
+       tools="qemu-ga\$(EXESUF) $tools"
++      if [ "$mingw32" = "yes" ]; then
++        tools="qga/vss-win32-provider/qga-provider.dll qga/vss-win32-provider/qga-provider.tlb $tools"
++      fi
+     fi
+   fi
+ fi
+diff --git a/qga/Makefile.objs b/qga/Makefile.objs
+index b8d7cd0..8d93866 100644
+--- a/qga/Makefile.objs
++++ b/qga/Makefile.objs
+@@ -3,3 +3,9 @@ qga-obj-$(CONFIG_POSIX) += commands-posix.o channel-posix.o
+ qga-obj-$(CONFIG_WIN32) += commands-win32.o channel-win32.o service-win32.o
+ qga-obj-y += qapi-generated/qga-qapi-types.o qapi-generated/qga-qapi-visit.o
+ qga-obj-y += qapi-generated/qga-qmp-marshal.o
++
++ifeq ($(CONFIG_QGA_VSS),y)
++QEMU_CFLAGS += -DHAS_VSS_SDK
++qga-obj-y += vss-win32-provider/
++qga-prv-obj-y += vss-win32-provider/
++endif
+diff --git a/qga/vss-win32-provider.h b/qga/vss-win32-provider.h
+new file mode 100644
+index 0000000..a437e71
+--- /dev/null
++++ b/qga/vss-win32-provider.h
+@@ -0,0 +1,26 @@
++/*
++ * QEMU Guest Agent win32 VSS provider declarations
++ *
++ * Copyright Hitachi Data Systems Corp. 2013
++ *
++ * Authors:
++ *  Tomoki Sekiyama   <tomoki.sekiyama@hds.com>
++ *
++ * This work is licensed under the terms of the GNU GPL, version 2 or later.
++ * See the COPYING file in the top-level directory.
++ */
++
++#ifndef VSS_WIN32_PROVIDER_H
++#define VSS_WIN32_PROVIDER_H
++
++#include <windows.h>
++
++STDAPI VSSCheckOSVersion(void);
++
++STDAPI COMRegister(void);
++STDAPI COMUnregister(void);
++
++STDAPI DllRegisterServer(void);
++STDAPI DllUnregisterServer(void);
++
++#endif
+diff --git a/qga/vss-win32-provider/Makefile.objs b/qga/vss-win32-provider/Makefile.objs
+new file mode 100644
+index 0000000..73ef752
+--- /dev/null
++++ b/qga/vss-win32-provider/Makefile.objs
+@@ -0,0 +1,21 @@
++# rules to build qga-provider.dll
++
++qga-obj-y += qga-provider.dll
++qga-prv-obj-y += provider.o install.o
++
++obj-qga-prv-obj-y = $(addprefix $(obj)/, $(qga-prv-obj-y))
++$(obj-qga-prv-obj-y): QEMU_CXXFLAGS = $(filter-out -Wstrict-prototypes -Wmissing-prototypes -Wnested-externs -Wold-style-declaration -Wold-style-definition -Wredundant-decls -fstack-protector-all, $(QEMU_CFLAGS)) -Wno-unknown-pragmas -Wno-delete-non-virtual-dtor
++
++$(obj)/qga-provider.dll: LDFLAGS = -shared -Wl,--add-stdcall-alias,--enable-stdcall-fixup -lole32 -loleaut32 -lshlwapi -luuid -static
++$(obj)/qga-provider.dll: $(obj-qga-prv-obj-y) $(SRC_PATH)/$(obj)/qga-provider.def $(obj)/qga-provider.tlb
++	$(call quiet-command,$(CXX) -o $@ $(qga-prv-obj-y) $(SRC_PATH)/qga/vss-win32-provider/qga-provider.def $(CXXFLAGS) $(LDFLAGS),"  LINK  $(TARGET_DIR)$@")
++
++
++# rules to build qga-provider.tlb
++# Currently, only native build is supported because building .tlb
++# (TypeLibrary) from .idl requires WindowsSDK and MIDL (included in VC++).
++MIDL=midl
++WINSDK="C:\\Program Files\\Microsoft SDKs\\Windows\\v7.1\\Include"
++
++$(obj)/qga-provider.tlb: $(SRC_PATH)/$(obj)/qga-provider.idl
++	$(call quiet-command,$(MIDL) -m64 -o $@ -I $(WINSDK) $<,"  MIDL  $(TARGET_DIR)$@")
+diff --git a/qga/vss-win32-provider/install.cpp b/qga/vss-win32-provider/install.cpp
+new file mode 100644
+index 0000000..2cf8741
+--- /dev/null
++++ b/qga/vss-win32-provider/install.cpp
+@@ -0,0 +1,494 @@
++/*
++ * QEMU Guest Agent win32 VSS Provider installer
++ *
++ * Copyright Hitachi Data Systems Corp. 2013
++ *
++ * Authors:
++ *  Tomoki Sekiyama   <tomoki.sekiyama@hds.com>
++ *
++ * This work is licensed under the terms of the GNU GPL, version 2 or later.
++ * See the COPYING file in the top-level directory.
++ */
++
++#include <stdio.h>
++#include <string.h>
++
++#include "../vss-win32.h"
++#include "inc/win2003/vscoordint.h"
++#include "../vss-win32-provider.h"
++
++#include <comadmin.h>
++#include <wbemidl.h>
++#include <comutil.h>
++
++extern HINSTANCE g_hinstDll;
++
++const GUID CLSID_COMAdminCatalog =
++{0xF618C514, 0xDFB8, 0x11d1, {0xA2, 0xCF, 0x00, 0x80, 0x5F, 0xC7, 0x92, 0x35}};
++const GUID IID_ICOMAdminCatalog =
++{0xDD662187, 0xDFC2, 0x11d1, {0xA2, 0xCF, 0x00, 0x80, 0x5F, 0xC7, 0x92, 0x35}};
++const GUID CLSID_WbemLocator =
++{0x4590f811, 0x1d3a, 0x11d0, {0x89, 0x1f, 0x00, 0xaa, 0x00, 0x4b, 0x2e, 0x24}};
++const GUID IID_IWbemLocator =
++{0xdc12a687, 0x737f, 0x11cf, {0x88, 0x4d, 0x00, 0xaa, 0x00, 0x4b, 0x2e, 0x24}};
++
++static void errmsg(DWORD err, const char *text)
++{
++    char *msg = NULL, *nul = strchr(text, '(');
++    int len = nul ? nul - text : -1;
++
++    FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER |
++                  FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
++                  NULL, err, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
++                  (char *)&msg, 0, NULL);
++    printf("%.*s. (Error: %lx) %s\n", len, text, err, msg);
++    LocalFree(msg);
++}
++
++static void errmsg_dialog(DWORD err, const char *text, const char *opt = "")
++{
++    char *msg, buf[512];
++
++    FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER |
++                  FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
++                  NULL, err, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
++                  (char *)&msg, 0, NULL);
++    snprintf(buf, sizeof(buf), "%s%s. (Error: %lx) %s\n", text, opt, err, msg);
++    MessageBox(NULL, buf, "Error from " QGA_PROVIDER_NAME, MB_OK|MB_ICONERROR);
++    LocalFree(msg);
++}
++
++#define _chk(hr, status, msg, err_label)	\
++    do {                                        \
++        hr = (status);                          \
++        if (FAILED(hr)) {                       \
++            errmsg(hr, msg);                    \
++            goto err_label;                     \
++        }                                       \
++    } while(0)
++
++#define chk(status) _chk(hr, status, "Failed to " #status, out)
++
++template<class T>
++HRESULT put_Value(ICatalogObject *pObj, LPCWSTR name, T val)
++{
++    return pObj->put_Value(_bstr_t(name), _variant_t(val));
++}
++
++/* Check whether this OS version supports VSS providers */
++STDAPI VSSCheckOSVersion(void)
++{
++    OSVERSIONINFO OSver;
++
++    OSver.dwOSVersionInfoSize = sizeof(OSVERSIONINFO);
++    GetVersionEx(&OSver);
++    if((OSver.dwMajorVersion == 5 && OSver.dwMinorVersion >= 2) ||
++       OSver.dwMajorVersion > 5) {
++        return S_OK;
++    }
++    return S_FALSE;
++}
++
++/* Lookup Administrators group name from winmgmt */
++static HRESULT GetAdminName(_bstr_t &name)
++{
++    HRESULT hr;
++    IWbemLocator *pLoc = NULL;
++    IWbemServices *pSvc = NULL;
++    IEnumWbemClassObject *pEnum = NULL;
++    IWbemClassObject *pWobj = NULL;
++    ULONG returned;
++    _variant_t var;
++
++    chk( CoCreateInstance(CLSID_WbemLocator, NULL, CLSCTX_INPROC_SERVER,
++                          IID_IWbemLocator, (LPVOID*)&pLoc) );
++    chk( pLoc->ConnectServer(_bstr_t(L"ROOT\\CIMV2"), NULL, NULL, NULL,
++                             0, 0, 0, &pSvc) );
++    chk( CoSetProxyBlanket(pSvc, RPC_C_AUTHN_WINNT, RPC_C_AUTHZ_NONE,
++                           NULL, RPC_C_AUTHN_LEVEL_CALL,
++                           RPC_C_IMP_LEVEL_IMPERSONATE, NULL, EOAC_NONE) );
++    chk( pSvc->ExecQuery(
++             _bstr_t(L"WQL"),
++             _bstr_t(L"select * from Win32_Account where "
++                     "SID='S-1-5-32-544' and localAccount=TRUE"),
++             WBEM_FLAG_RETURN_IMMEDIATELY | WBEM_FLAG_FORWARD_ONLY,
++             NULL, &pEnum) );
++    if (!pEnum) {
++        errmsg(E_FAIL, "Failed to query for Administrators");
++        goto out;
++    }
++    chk( pEnum->Next(WBEM_INFINITE, 1, &pWobj, &returned) );
++    if (returned == 0) {
++        errmsg(E_FAIL, "Failed to query for Administrators");
++        goto out;
++    }
++
++    chk( pWobj->Get(_bstr_t(L"Name"), 0, &var, 0, 0) );
++    name = var;
++out:
++    if (pLoc) {
++        pLoc->Release();
++    }
++    if (pSvc) {
++        pSvc->Release();
++    }
++    if (pEnum) {
++        pEnum->Release();
++    }
++    if (pWobj) {
++        pWobj->Release();
++    }
++    return hr;
++}
++
++/* Register this module to COM+ Applications Catalog */
++STDAPI COMRegister(void)
++{
++    HRESULT hr = E_FAIL;
++    IUnknown *pUnknown = NULL;
++    ICOMAdminCatalog *pCatalog = NULL;
++    ICatalogCollection *pApps = NULL, *pRoles = NULL, *pUsersInRole = NULL;
++    ICatalogObject *pObj = NULL;
++    long n;
++    _bstr_t name;
++    _variant_t key;
++    CHAR dllPath[MAX_PATH], tlbPath[MAX_PATH];
++
++    if (!g_hinstDll) {
++        errmsg(E_FAIL, "Failed to initialize DLL");
++        goto out;
++    }
++
++    if (VSSCheckOSVersion() == S_FALSE) {
++        printf("VSS provider is not supported in this OS version.\n");
++        return S_FALSE; /* VSS feature is disabled */
++    }
++
++    COMUnregister();
++
++    chk( CoInitialize(NULL) );
++    chk( CoCreateInstance(CLSID_COMAdminCatalog, NULL, CLSCTX_INPROC_SERVER,
++                          IID_IUnknown, (void**)&pUnknown) );
++    chk( pUnknown->QueryInterface(IID_ICOMAdminCatalog, (void**)&pCatalog) );
++
++    /* Install COM+ Component */
++
++    chk( pCatalog->GetCollection(_bstr_t(L"Applications"),
++                                 (IDispatch**)&pApps) );
++    chk( pApps->Populate() );
++    chk( pApps->Add((IDispatch**)&pObj) );
++    chk( put_Value(pObj, L"Name",        QGA_PROVIDER_LNAME) );
++    chk( put_Value(pObj, L"Description", QGA_PROVIDER_LNAME) );
++    chk( put_Value(pObj, L"ApplicationAccessChecksEnabled", true) );
++    chk( put_Value(pObj, L"Authentication",                 short(6)) );
++    chk( put_Value(pObj, L"AuthenticationCapability",       short(2)) );
++    chk( put_Value(pObj, L"ImpersonationLevel",             short(2)) );
++    chk( pApps->SaveChanges(&n) );
++    chk( pObj->get_Key(&key) );
++
++    pObj->Release();
++    pObj = NULL;
++
++    if (!GetModuleFileName(g_hinstDll, dllPath, sizeof(dllPath))) {
++        errmsg(GetLastError(), "GetModuleFileName failed");
++        goto out;
++    }
++    n = strlen(dllPath);
++    if (n < 3) {
++        errmsg(E_FAIL, "Failed to lookup dll");
++    }
++    strcpy(tlbPath, dllPath);
++    strcpy(tlbPath+n-3, "TLB");
++    printf("Registering " QGA_PROVIDER_NAME ":\n");
++    printf("  %s\n", dllPath);
++    printf("  %s\n", tlbPath);
++    if (!PathFileExists(tlbPath)) {
++        errmsg(ERROR_FILE_NOT_FOUND, "Failed to lookup tlb");
++        goto out;
++    }
++
++    chk( pCatalog->InstallComponent(_bstr_t(QGA_PROVIDER_LNAME),
++                                    _bstr_t(dllPath), _bstr_t(tlbPath),
++                                    _bstr_t("")) );
++
++    /* Setup roles of the applicaion */
++
++    chk( pApps->GetCollection(_bstr_t(L"Roles"), key,
++                              (IDispatch**)&pRoles) );
++    chk( pRoles->Populate() );
++    chk( pRoles->Add((IDispatch**)&pObj) );
++    chk( put_Value(pObj, L"Name",        L"Administrators") );
++    chk( put_Value(pObj, L"Description", L"Administrators group") );
++    chk( pRoles->SaveChanges(&n) );
++    chk( pObj->get_Key(&key) );
++
++    pObj->Release();
++    pObj = NULL;
++
++    /* Setup users in the role */
++
++    chk( pRoles->GetCollection(_bstr_t(L"UsersInRole"), key,
++                               (IDispatch**)&pUsersInRole) );
++    chk( pUsersInRole->Populate() );
++
++    chk( pUsersInRole->Add((IDispatch**)&pObj) );
++    chk( GetAdminName(name) );
++    chk( put_Value(pObj, L"User", _bstr_t(".\\") + name) );
++
++    pObj->Release();
++    pObj = NULL;
++
++    chk( pUsersInRole->Add((IDispatch**)&pObj) );
++    chk( put_Value(pObj, L"User", L"SYSTEM") );
++    chk( pUsersInRole->SaveChanges(&n) );
++
++out:
++    if (pUnknown) {
++        pUnknown->Release();
++    }
++    if (pCatalog) {
++        pCatalog->Release();
++    }
++    if (pApps) {
++        pApps->Release();
++    }
++    if (pRoles) {
++        pRoles->Release();
++    }
++    if (pUsersInRole) {
++        pUsersInRole->Release();
++    }
++    if (pObj) {
++        pObj->Release();
++    }
++
++    if (FAILED(hr)) {
++        COMUnregister();
++    }
++    CoUninitialize();
++
++    return hr;
++}
++
++/* Unregister this module from COM+ Applications Catalog */
++STDAPI COMUnregister(void)
++{
++    HRESULT hr;
++    IUnknown *pUnknown = NULL;
++    ICOMAdminCatalog *pCatalog = NULL;
++    ICatalogCollection *pColl = NULL;
++    ICatalogObject *pObj = NULL;
++    _variant_t var;
++    long i, n;
++
++    if (VSSCheckOSVersion() == S_FALSE) {
++        printf("VSS provider is not supported in this OS version.\n");
++        return S_FALSE; /* VSS feature is disabled */
++    }
++
++    chk( DllUnregisterServer() );
++
++    chk( CoInitialize(NULL) );
++    chk( CoCreateInstance(CLSID_COMAdminCatalog, NULL, CLSCTX_INPROC_SERVER,
++                          IID_IUnknown, (void**)&pUnknown) );
++    chk( pUnknown->QueryInterface(IID_ICOMAdminCatalog, (void**)&pCatalog) );
++
++    chk( pCatalog->GetCollection(_bstr_t(L"Applications"),
++                                 (IDispatch**)&pColl) );
++    chk( pColl->Populate() );
++
++    chk( pColl->get_Count(&n) );
++    for (i = n - 1; i >= 0; i--) {
++        chk( pColl->get_Item(i, (IDispatch**)&pObj) );
++        chk( pObj->get_Value(_bstr_t(L"Name"), &var) );
++        if (var == _variant_t(QGA_PROVIDER_LNAME)) {
++            printf("Removing COM+ Application: %S\n", (wchar_t*)_bstr_t(var));
++            chk( pColl->Remove(i) );
++        }
++    }
++    chk( pColl->SaveChanges(&n) );
++
++out:
++    if (pUnknown) {
++        pUnknown->Release();
++    }
++    if (pCatalog) {
++        pCatalog->Release();
++    }
++    if (pColl) {
++        pColl->Release();
++    }
++    if (pObj) {
++        pObj->Release();
++    }
++    CoUninitialize();
++
++    return hr;
++}
++
++
++static BOOL CreateRegistryKey(LPCTSTR key, LPCTSTR value, LPCTSTR data)
++{
++    HKEY  hKey;
++    LONG  ret;
++    DWORD size;
++
++    ret = RegCreateKeyEx(HKEY_CLASSES_ROOT, key, 0, NULL,
++        REG_OPTION_NON_VOLATILE, KEY_WRITE, NULL, &hKey, NULL);
++    if (ret != ERROR_SUCCESS) {
++        goto out;
++    }
++
++    if (data != NULL) {
++        size = (lstrlen(data) + 1) * sizeof(TCHAR);
++    } else {
++        size = 0;
++    }
++
++    ret = RegSetValueEx(hKey, value, 0, REG_SZ, (LPBYTE)data, size);
++    RegCloseKey(hKey);
++
++out:
++    if (ret != ERROR_SUCCESS) {
++        /* We cannot printf here, and need MessageBox to report an error. */
++        errmsg_dialog(ret, "Cannot add registry ", key);
++        return FALSE;
++    }
++    return TRUE;
++}
++
++/* Register this dll as a VSS provider */
++STDAPI DllRegisterServer(void)
++{
++    IVssAdmin *pVssAdmin = NULL;
++    HRESULT hr = E_FAIL;
++    char dllPath[MAX_PATH];
++    char key[256];
++
++    CoInitialize(NULL);
++
++    if (!g_hinstDll) {
++        errmsg_dialog(hr, "Module instance is not available");
++        goto out;
++    }
++
++    /* Add this module to registery */
++
++    sprintf(key, "CLSID\\%s", g_szClsid);
++    if (!CreateRegistryKey(key, NULL, g_szClsid)) {
++        goto out;
++    }
++
++    if (!GetModuleFileName(g_hinstDll, dllPath, sizeof(dllPath))) {
++        errmsg_dialog(GetLastError(), "GetModuleFileName failed");
++        goto out;
++    }
++    sprintf(key, "CLSID\\%s\\InprocServer32", g_szClsid);
++    if (!CreateRegistryKey(key, NULL, dllPath)) {
++        goto out;
++    }
++
++    sprintf(key, "CLSID\\%s\\InprocServer32", g_szClsid);
++    if (!CreateRegistryKey(key, "ThreadingModel", "Apartment")) {
++        goto out;
++    }
++
++    sprintf(key, "CLSID\\%s\\ProgID", g_szClsid);
++    if (!CreateRegistryKey(key, NULL, g_szProgid)) {
++        goto out;
++    }
++
++    if (!CreateRegistryKey(g_szProgid, NULL, QGA_PROVIDER_NAME)) {
++        goto out;
++    }
++
++    sprintf(key, "%s\\CLSID", g_szProgid);
++    if (!CreateRegistryKey(key, NULL, g_szClsid)) {
++        goto out;
++    }
++
++    hr = CoCreateInstance(CLSID_VSSCoordinator,
++        NULL, CLSCTX_ALL, IID_IVssAdmin, (void **)&pVssAdmin);
++    if (FAILED(hr)) {
++        errmsg_dialog(hr, "CoCreateInstance(VSSCoordinator) failed");
++        goto out;
++    }
++
++    hr = pVssAdmin->RegisterProvider(
++        g_gProviderId, CLSID_QGAVSSProvider,
++        const_cast<WCHAR*>(QGA_PROVIDER_LNAME), VSS_PROV_SOFTWARE,
++        const_cast<WCHAR*>(QGA_PROVIDER_VERSION), g_gProviderVersion);
++    if (FAILED(hr)) {
++        errmsg_dialog(hr, "RegisterProvider failed");
++        goto out;
++    }
++
++out:
++    if (pVssAdmin) {
++        pVssAdmin->Release();
++    }
++    CoUninitialize();
++
++    if (FAILED(hr)) {
++        DllUnregisterServer();
++    }
++
++    return hr;
++}
++
++/* Unregister this VSS hardware provider from the system */
++STDAPI DllUnregisterServer(void)
++{
++    TCHAR key[256];
++    IVssAdmin *pVssAdmin = NULL;
++
++    CoInitialize(NULL);
++
++    HRESULT hr = CoCreateInstance(CLSID_VSSCoordinator,
++         NULL, CLSCTX_ALL, IID_IVssAdmin, (void **)&pVssAdmin);
++    if (SUCCEEDED(hr)) {
++        hr = pVssAdmin->UnregisterProvider(g_gProviderId);
++        pVssAdmin->Release();
++    } else {
++        errmsg_dialog(hr, "CoCreateInstance(VSSCoordinator) failed");
++    }
++
++    sprintf(key, "CLSID\\%s", g_szClsid);
++    SHDeleteKey(HKEY_CLASSES_ROOT, key);
++    SHDeleteKey(HKEY_CLASSES_ROOT, g_szProgid);
++
++    CoUninitialize();
++
++    return S_OK; /* Uninstall should never fail */
++}
++
++
++/* Support functions for _bstr_t in MinGW: Originally written by: Diaa Sami */
++
++void __stdcall _com_issue_error(HRESULT hr)
++{
++    printf("_com_issue_error() called with parameter HRESULT = %lu", hr);
++}
++
++namespace _com_util
++{
++    char * __stdcall ConvertBSTRToString(BSTR bstr)
++    {
++        const unsigned int stringLength = lstrlenW(bstr);
++        char *const ascii = new char [stringLength + 1];
++
++        wcstombs(ascii, bstr, stringLength + 1);
++
++        return ascii;
++    }
++
++    BSTR __stdcall ConvertStringToBSTR(const char *const ascii)
++    {
++        const unsigned int stringLength = lstrlenA(ascii);
++        BSTR bstr = SysAllocStringLen(NULL, stringLength);
++
++        mbstowcs(bstr, ascii, stringLength + 1);
++
++        return bstr;
++    }
++}
+diff --git a/qga/vss-win32-provider/provider.cpp b/qga/vss-win32-provider/provider.cpp
+new file mode 100644
+index 0000000..afce5f9
+--- /dev/null
++++ b/qga/vss-win32-provider/provider.cpp
+@@ -0,0 +1,474 @@
++/*
++ * QEMU Guest Agent win32 VSS Provider implementations
++ *
++ * Copyright Hitachi Data Systems Corp. 2013
++ *
++ * Authors:
++ *  Tomoki Sekiyama   <tomoki.sekiyama@hds.com>
++ *
++ * This work is licensed under the terms of the GNU GPL, version 2 or later.
++ * See the COPYING file in the top-level directory.
++ */
++
++#include <stdio.h>
++#include "../vss-win32.h"
++#include "inc/win2003/vscoordint.h"
++#include "inc/win2003/vsprov.h"
++
++static long g_nComObjsInUse = 0;
++HINSTANCE g_hinstDll = NULL;
++
++/* VSS common GUID's */
++
++const CLSID CLSID_VSSCoordinator =
++{0xE579AB5F, 0x1CC4, 0x44b4, {0xBE, 0xD9, 0xDE, 0x09, 0x91, 0xFF, 0x06, 0x23}};
++const IID IID_IVssAdmin =
++{0x77ED5996, 0x2F63, 0x11d3, {0x8A, 0x39, 0x00, 0xC0, 0x4F, 0x72, 0xD8, 0xE3}};
++
++const IID IID_IVssHardwareSnapshotProvider =
++{0x9593A157, 0x44E9, 0x4344, {0xBB, 0xEB, 0x44, 0xFB, 0xF9, 0xB0, 0x6B, 0x10}};
++const IID IID_IVssSoftwareSnapshotProvider =
++{0x609e123e, 0x2c5a, 0x44d3, {0x8f, 0x01, 0x0b, 0x1d, 0x9a, 0x47, 0xd1, 0xff}};
++const IID IID_IVssProviderCreateSnapshotSet =
++{0x5F894E5B, 0x1E39, 0x4778, {0x8E, 0x23, 0x9A, 0xBA, 0xD9, 0xF0, 0xE0, 0x8C}};
++const IID IID_IVssProviderNotifications =
++{0xE561901F, 0x03A5, 0x4afe, {0x86, 0xD0, 0x72, 0xBA, 0xEE, 0xCE, 0x70, 0x04}};
++
++const IID IID_IVssEnumObject =
++{0xAE1C7110, 0x2F60, 0x11d3, {0x8A, 0x39, 0x00, 0xC0, 0x4F, 0x72, 0xD8, 0xE3}};
++
++
++void LockModule(BOOL block)
++{
++    if (block)
++        InterlockedIncrement(&g_nComObjsInUse);
++    else
++        InterlockedDecrement(&g_nComObjsInUse);
++}
++
++/* Empty enumerator for VssObject */
++
++class CQGAVSSEnumObject : public IVssEnumObject
++{
++public:
++    STDMETHODIMP QueryInterface(REFIID riid, void **ppObj);
++    STDMETHODIMP_(ULONG) AddRef();
++    STDMETHODIMP_(ULONG) Release();
++
++    /* IVssEnumObject Methods */
++    STDMETHODIMP Next(
++        ULONG celt, VSS_OBJECT_PROP *rgelt, ULONG *pceltFetched);
++    STDMETHODIMP Skip(ULONG celt);
++    STDMETHODIMP Reset(void);
++    STDMETHODIMP Clone(IVssEnumObject **ppenum);
++
++    /* CQGAVSSEnumObject Methods */
++    CQGAVSSEnumObject();
++    ~CQGAVSSEnumObject();
++
++private:
++    long m_nRefCount;
++};
++
++CQGAVSSEnumObject::CQGAVSSEnumObject()
++{
++    m_nRefCount = 0;
++    LockModule(TRUE);
++}
++
++CQGAVSSEnumObject::~CQGAVSSEnumObject()
++{
++    LockModule(FALSE);
++}
++
++STDMETHODIMP CQGAVSSEnumObject::QueryInterface(REFIID riid, void **ppObj)
++{
++    if (riid == IID_IUnknown || riid == IID_IVssEnumObject) {
++        *ppObj = static_cast<void*>(static_cast<IVssEnumObject*>(this));
++        AddRef();
++        return S_OK;
++    }
++    ppObj = NULL;
++    return E_NOINTERFACE;
++}
++
++STDMETHODIMP_(ULONG) CQGAVSSEnumObject::AddRef()
++{
++    return InterlockedIncrement(&m_nRefCount);
++}
++
++STDMETHODIMP_(ULONG) CQGAVSSEnumObject::Release()
++{
++    long nRefCount = InterlockedDecrement(&m_nRefCount);
++    if (m_nRefCount == 0)
++        delete this;
++    return nRefCount;
++}
++
++STDMETHODIMP CQGAVSSEnumObject::Next(
++    ULONG celt, VSS_OBJECT_PROP *rgelt, ULONG *pceltFetched)
++{
++    *pceltFetched = 0;
++    return S_FALSE;
++}
++
++STDMETHODIMP CQGAVSSEnumObject::Skip(ULONG celt)
++{
++    return S_FALSE;
++}
++
++STDMETHODIMP CQGAVSSEnumObject::Reset(void)
++{
++    return S_OK;
++}
++
++STDMETHODIMP CQGAVSSEnumObject::Clone(IVssEnumObject **ppenum)
++{
++    return E_NOTIMPL;
++}
++
++
++/* QGAVssProvider */
++
++class CQGAVssProvider :
++    public IVssSoftwareSnapshotProvider,
++    public IVssProviderCreateSnapshotSet,
++    public IVssProviderNotifications
++{
++public:
++    STDMETHODIMP QueryInterface(REFIID riid, void **ppObj);
++    STDMETHODIMP_(ULONG) AddRef();
++    STDMETHODIMP_(ULONG) Release();
++
++    /* IVssSoftwareSnapshotProvider Methods */
++    STDMETHODIMP SetContext(LONG lContext);
++    STDMETHODIMP GetSnapshotProperties(
++        VSS_ID SnapshotId, VSS_SNAPSHOT_PROP *pProp);
++    STDMETHODIMP Query(
++        VSS_ID QueriedObjectId, VSS_OBJECT_TYPE eQueriedObjectType,
++        VSS_OBJECT_TYPE eReturnedObjectsType, IVssEnumObject **ppEnum);
++    STDMETHODIMP DeleteSnapshots(
++        VSS_ID SourceObjectId, VSS_OBJECT_TYPE eSourceObjectType,
++        BOOL bForceDelete, LONG *plDeletedSnapshots,
++        VSS_ID *pNondeletedSnapshotID);
++    STDMETHODIMP BeginPrepareSnapshot(
++        VSS_ID SnapshotSetId, VSS_ID SnapshotId,
++        VSS_PWSZ pwszVolumeName, LONG lNewContext);
++    STDMETHODIMP IsVolumeSupported(
++        VSS_PWSZ pwszVolumeName, BOOL *pbSupportedByThisProvider);
++    STDMETHODIMP IsVolumeSnapshotted(
++        VSS_PWSZ pwszVolumeName, BOOL *pbSnapshotsPresent,
++        LONG *plSnapshotCompatibility);
++    STDMETHODIMP SetSnapshotProperty(
++        VSS_ID SnapshotId, VSS_SNAPSHOT_PROPERTY_ID eSnapshotPropertyId,
++        VARIANT vProperty);
++    STDMETHODIMP RevertToSnapshot(VSS_ID SnapshotId);
++    STDMETHODIMP QueryRevertStatus(VSS_PWSZ pwszVolume, IVssAsync **ppAsync);
++
++    /* IVssProviderCreateSnapshotSet Methods */
++    STDMETHODIMP EndPrepareSnapshots(VSS_ID SnapshotSetId);
++    STDMETHODIMP PreCommitSnapshots(VSS_ID SnapshotSetId);
++    STDMETHODIMP CommitSnapshots (VSS_ID SnapshotSetId);
++    STDMETHODIMP PostCommitSnapshots(
++        VSS_ID SnapshotSetId, LONG lSnapshotsCount);
++    STDMETHODIMP PreFinalCommitSnapshots(VSS_ID SnapshotSetId);
++    STDMETHODIMP PostFinalCommitSnapshots(VSS_ID SnapshotSetId);
++    STDMETHODIMP AbortSnapshots(VSS_ID SnapshotSetId);
++
++    /* IVssProviderNotifications Methods */
++    STDMETHODIMP OnLoad(IUnknown *pCallback);
++    STDMETHODIMP OnUnload(BOOL bForceUnload);
++
++    /* CQGAVssProvider Methods */
++    CQGAVssProvider();
++    ~CQGAVssProvider();
++
++private:
++    long m_nRefCount;
++};
++
++CQGAVssProvider::CQGAVssProvider()
++{
++    m_nRefCount = 0;
++    LockModule(TRUE);
++}
++
++CQGAVssProvider::~CQGAVssProvider()
++{
++    LockModule(FALSE);
++}
++
++STDMETHODIMP CQGAVssProvider::QueryInterface(REFIID riid, void **ppObj)
++{
++    if (riid == IID_IUnknown) {
++        *ppObj = static_cast<void*>(this);
++        AddRef();
++        return S_OK;
++    }
++    else if (riid == IID_IVssSoftwareSnapshotProvider) {
++        *ppObj = static_cast<void*>(static_cast<IVssSoftwareSnapshotProvider*>(this));
++        AddRef();
++        return S_OK;
++    }
++    else if (riid == IID_IVssProviderCreateSnapshotSet) {
++        *ppObj = static_cast<void*>(static_cast<IVssProviderCreateSnapshotSet*>(this));
++        AddRef();
++        return S_OK;
++    }
++    else if (riid == IID_IVssProviderNotifications) {
++        *ppObj = static_cast<void*>(static_cast<IVssProviderNotifications*>(this));
++        AddRef();
++        return S_OK;
++    }
++    *ppObj = NULL;
++    return E_NOINTERFACE;
++}
++
++STDMETHODIMP_(ULONG) CQGAVssProvider::AddRef()
++{
++    return InterlockedIncrement(&m_nRefCount);
++}
++
++STDMETHODIMP_(ULONG) CQGAVssProvider::Release()
++{
++    long nRefCount = InterlockedDecrement(&m_nRefCount);
++    if (m_nRefCount == 0)
++        delete this;
++    return nRefCount;
++}
++
++
++/*
++ * IVssSoftwareSnapshotProvider methods
++ */
++
++STDMETHODIMP CQGAVssProvider::SetContext(LONG lContext)
++{
++    return S_OK;
++}
++
++STDMETHODIMP CQGAVssProvider::GetSnapshotProperties(
++    VSS_ID SnapshotId, VSS_SNAPSHOT_PROP *pProp)
++{
++    return VSS_E_OBJECT_NOT_FOUND;
++}
++
++STDMETHODIMP CQGAVssProvider::Query(
++    VSS_ID QueriedObjectId, VSS_OBJECT_TYPE eQueriedObjectType,
++    VSS_OBJECT_TYPE eReturnedObjectsType, IVssEnumObject **ppEnum)
++{
++    *ppEnum = new CQGAVSSEnumObject;
++    (*ppEnum)->AddRef();
++    return S_OK;
++}
++
++STDMETHODIMP CQGAVssProvider::DeleteSnapshots(
++    VSS_ID SourceObjectId, VSS_OBJECT_TYPE eSourceObjectType,
++    BOOL bForceDelete, LONG *plDeletedSnapshots, VSS_ID *pNondeletedSnapshotID)
++{
++    return E_NOTIMPL;
++}
++
++STDMETHODIMP CQGAVssProvider::BeginPrepareSnapshot(
++    VSS_ID SnapshotSetId, VSS_ID SnapshotId,
++    VSS_PWSZ pwszVolumeName, LONG lNewContext)
++{
++    return S_OK;
++}
++
++STDMETHODIMP CQGAVssProvider::IsVolumeSupported(
++    VSS_PWSZ pwszVolumeName, BOOL *pbSupportedByThisProvider)
++{
++    *pbSupportedByThisProvider = TRUE;
++
++    return S_OK;
++}
++
++STDMETHODIMP CQGAVssProvider::IsVolumeSnapshotted(VSS_PWSZ pwszVolumeName,
++    BOOL *pbSnapshotsPresent, LONG *plSnapshotCompatibility)
++{
++    return S_OK;
++}
++
++STDMETHODIMP CQGAVssProvider::SetSnapshotProperty(VSS_ID SnapshotId,
++    VSS_SNAPSHOT_PROPERTY_ID eSnapshotPropertyId, VARIANT vProperty)
++{
++    return E_NOTIMPL;
++}
++
++STDMETHODIMP CQGAVssProvider::RevertToSnapshot(VSS_ID SnapshotId)
++{
++    return E_NOTIMPL;
++}
++
++STDMETHODIMP CQGAVssProvider::QueryRevertStatus(
++    VSS_PWSZ pwszVolume, IVssAsync **ppAsync)
++{
++    return S_OK;
++}
++
++
++/*
++ * IVssProviderCreateSnapshotSet methods
++ */
++
++STDMETHODIMP CQGAVssProvider::EndPrepareSnapshots(VSS_ID SnapshotSetId)
++{
++    return S_OK;
++}
++
++STDMETHODIMP CQGAVssProvider::PreCommitSnapshots(VSS_ID SnapshotSetId)
++{
++    return S_OK;
++}
++
++STDMETHODIMP CQGAVssProvider::CommitSnapshots(VSS_ID SnapshotSetId)
++{
++    HRESULT hr = S_OK;
++    HANDLE hEvent, hEvent2;
++
++    hEvent = OpenEvent(EVENT_ALL_ACCESS, FALSE, EVENT_NAME_FROZEN);
++    if (hEvent == INVALID_HANDLE_VALUE) {
++        hr = E_FAIL;
++        goto out;
++    }
++
++    hEvent2 = OpenEvent(EVENT_ALL_ACCESS, FALSE, EVENT_NAME_THAW);
++    if (hEvent == INVALID_HANDLE_VALUE) {
++        CloseHandle(hEvent);
++        hr = E_FAIL;
++        goto out;
++    }
++
++    SetEvent(hEvent);
++    if (WaitForSingleObject(hEvent2, 60*1000) != WAIT_OBJECT_0) {
++        hr = E_ABORT;
++    }
++
++    CloseHandle(hEvent2);
++    CloseHandle(hEvent);
++out:
++    return hr;
++}
++
++STDMETHODIMP CQGAVssProvider::PostCommitSnapshots(
++    VSS_ID SnapshotSetId, LONG lSnapshotsCount)
++{
++    return S_OK;
++}
++
++STDMETHODIMP CQGAVssProvider::PreFinalCommitSnapshots(VSS_ID SnapshotSetId)
++{
++    return S_OK;
++}
++
++STDMETHODIMP CQGAVssProvider::PostFinalCommitSnapshots(VSS_ID SnapshotSetId)
++{
++    return S_OK;
++}
++
++STDMETHODIMP CQGAVssProvider::AbortSnapshots(VSS_ID SnapshotSetId)
++{
++    return S_OK;
++}
++
++/*
++ * IVssProviderNotifications methods
++ */
++
++STDMETHODIMP CQGAVssProvider::OnLoad(IUnknown *pCallback)
++{
++    return S_OK;
++}
++
++STDMETHODIMP CQGAVssProvider::OnUnload(BOOL bForceUnload)
++{
++    return S_OK;
++}
++
++
++/*
++ * CQGAVssProviderFactory class
++ */
++
++class CQGAVssProviderFactory : public IClassFactory
++{
++public:
++    STDMETHODIMP QueryInterface(REFIID riid, void **ppv);
++    STDMETHODIMP_(ULONG) AddRef();
++    STDMETHODIMP_(ULONG) Release();
++    STDMETHODIMP CreateInstance(
++        IUnknown *pUnknownOuter, REFIID iid, void **ppv);
++    STDMETHODIMP LockServer(BOOL bLock) { return E_NOTIMPL; }
++private:
++    long m_nRefCount;
++};
++
++STDMETHODIMP CQGAVssProviderFactory::QueryInterface(REFIID riid, void **ppv)
++{
++    if (riid == IID_IUnknown || riid == IID_IClassFactory) {
++        *ppv = static_cast<void*>(this);
++        AddRef();
++        return S_OK;
++    }
++    *ppv = NULL;
++    return E_NOINTERFACE;
++}
++
++STDMETHODIMP_(ULONG) CQGAVssProviderFactory::AddRef()
++{
++    LockModule(TRUE);
++    return 2;
++}
++
++STDMETHODIMP_(ULONG) CQGAVssProviderFactory::Release()
++{
++    LockModule(FALSE);
++    return 1;
++}
++
++STDMETHODIMP CQGAVssProviderFactory::CreateInstance(
++    IUnknown *pUnknownOuter, REFIID iid, void **ppv)
++{
++    if (pUnknownOuter)
++        return CLASS_E_NOAGGREGATION;
++    CQGAVssProvider *pObj = new CQGAVssProvider;
++    if (!pObj)
++        return E_OUTOFMEMORY;
++    return pObj->QueryInterface(iid, ppv);
++}
++
++
++/*
++ * DLL functions
++ */
++
++STDAPI DllGetClassObject(REFCLSID rclsid, REFIID riid, LPVOID *ppv)
++{
++    static CQGAVssProviderFactory factory;
++
++    *ppv = NULL;
++    if (IsEqualCLSID(rclsid, CLSID_QGAVSSProvider)) {
++        return factory.QueryInterface(riid, ppv);
++    }
++    return CLASS_E_CLASSNOTAVAILABLE;
++}
++
++STDAPI DllCanUnloadNow()
++{
++    return g_nComObjsInUse == 0 ? S_OK : S_FALSE;
++}
++
++EXTERN_C
++BOOL WINAPI DllMain(HINSTANCE hinstDll, DWORD dwReason, LPVOID lpReserved)
++{
++    switch (dwReason) {
++
++    case DLL_PROCESS_ATTACH:
++        g_hinstDll = hinstDll;
++        DisableThreadLibraryCalls(hinstDll);
++        break;
++    }
++
++    return TRUE;
++}
+diff --git a/qga/vss-win32-provider/qga-provider.def b/qga/vss-win32-provider/qga-provider.def
+new file mode 100644
+index 0000000..9f3afc8
+--- /dev/null
++++ b/qga/vss-win32-provider/qga-provider.def
+@@ -0,0 +1,10 @@
++LIBRARY      "QGA-PROVIDER.DLL"
++
++EXPORTS
++	VSSCheckOSVersion	PRIVATE
++	COMRegister		PRIVATE
++	COMUnregister		PRIVATE
++	DllCanUnloadNow		PRIVATE
++	DllGetClassObject	PRIVATE
++	DllRegisterServer	PRIVATE
++	DllUnregisterServer	PRIVATE
+diff --git a/qga/vss-win32-provider/qga-provider.idl b/qga/vss-win32-provider/qga-provider.idl
+new file mode 100644
+index 0000000..17abca0
+--- /dev/null
++++ b/qga/vss-win32-provider/qga-provider.idl
+@@ -0,0 +1,20 @@
++import "oaidl.idl";
++import "ocidl.idl";
++
++[
++    uuid(103B8142-6CE5-48A7-BDE1-794D3192FCF1),
++    version(1.0),
++    helpstring("QGAVSSProvider Type Library")
++]
++library QGAVSSHWProviderLib
++{
++    importlib("stdole2.tlb");
++    [
++        uuid(6E6A3492-8D4D-440C-9619-5E5D0CC31CA8),
++        helpstring("QGAVSSProvider Class")
++    ]
++    coclass QGAVSSHWProvider
++    {
++        [default] interface IUnknown;
++    };
++};
+diff --git a/qga/vss-win32.h b/qga/vss-win32.h
+new file mode 100644
+index 0000000..7600087
+--- /dev/null
++++ b/qga/vss-win32.h
+@@ -0,0 +1,85 @@
++/*
++ * QEMU Guest Agent win32 VSS common declarations
++ *
++ * Copyright Hitachi Data Systems Corp. 2013
++ *
++ * Authors:
++ *  Tomoki Sekiyama   <tomoki.sekiyama@hds.com>
++ *
++ * This work is licensed under the terms of the GNU GPL, version 2 or later.
++ * See the COPYING file in the top-level directory.
++ */
++
++#ifndef VSS_WIN32_H
++#define VSS_WIN32_H
++
++#define __MIDL_user_allocate_free_DEFINED__
++#include "config-host.h"
++#include <windows.h>
++#include <shlwapi.h>
++
++/* Reduce warnings to include vss.h */
++#define __in  IN
++#define __out OUT
++#define __RPC_unique_pointer
++#define __RPC_string
++#define __RPC__deref_inout_opt
++#define __RPC__out
++#ifndef __RPC__out_ecount_part
++#define __RPC__out_ecount_part(x, y)
++#endif
++#define _declspec(x)
++#undef uuid
++#define uuid(x)
++
++#undef VSS_E_BAD_STATE
++#undef VSS_E_PROVIDER_NOT_REGISTERED
++#undef VSS_E_PROVIDER_VETO
++#undef VSS_E_OBJECT_NOT_FOUND
++#undef VSS_E_VOLUME_NOT_SUPPORTED
++#undef VSS_E_VOLUME_NOT_SUPPORTED_BY_PROVIDER
++#undef VSS_E_OBJECT_ALREADY_EXISTS
++#undef VSS_E_UNEXPECTED_PROVIDER_ERROR
++#undef VSS_E_INVALID_XML_DOCUMENT
++#undef VSS_E_MAXIMUM_NUMBER_OF_VOLUMES_REACHED
++#undef VSS_E_MAXIMUM_NUMBER_OF_SNAPSHOTS_REACHED
++
++/*
++ * VSS headers must be installed from Microsoft VSS SDK 7.2 available at:
++ * http://www.microsoft.com/en-us/download/details.aspx?id=23490
++ */
++#include "inc/win2003/vss.h"
++
++/* Macros to convert char definitions to wchar */
++#define _L(a) L##a
++#define L(a) _L(a)
++
++/* Constants for QGA VSS Provider */
++
++#define QGA_PROVIDER_NAME "QEMU Guest Agent VSS Provider"
++#define QGA_PROVIDER_LNAME L(QGA_PROVIDER_NAME)
++#define QGA_PROVIDER_VERSION L(QEMU_VERSION)
++
++#define EVENT_NAME_FROZEN "Global\\QGAVSSEvent-frozen"
++#define EVENT_NAME_THAW   "Global\\QGAVSSEvent-thaw"
++
++const GUID g_gProviderId = {
++    0x3629d4ed, 0xee09, 0x4e0e, {0x9a, 0x5c, 0x6d, 0x8b, 0xa2, 0x87, 0x2a, 0xef}
++};
++const GUID g_gProviderVersion = {
++    0x11ef8b15, 0xcac6, 0x40d6, {0x8d, 0x5c, 0x8f, 0xfc, 0x16, 0x3f, 0x24, 0xca}
++};
++
++const CLSID CLSID_QGAVSSProvider = {
++    0x6e6a3492, 0x8d4d, 0x440c, {0x96, 0x19, 0x5e, 0x5d, 0x0c, 0xc3, 0x1c, 0xa8}
++};
++const TCHAR g_szClsid[] = TEXT("{6E6A3492-8D4D-440C-9619-5E5D0CC31CA8}");
++const TCHAR g_szProgid[] = TEXT("QGAVSSProvider");
++
++/* Enums undefined in VSS SDK 7.2 but defined in newer Windows SDK */
++enum __VSS_VOLUME_SNAPSHOT_ATTRIBUTES {
++    VSS_VOLSNAP_ATTR_NO_AUTORECOVERY       = 0x00000002,
++    VSS_VOLSNAP_ATTR_TXF_RECOVERY          = 0x02000000
++};
++
++#endif
+
+

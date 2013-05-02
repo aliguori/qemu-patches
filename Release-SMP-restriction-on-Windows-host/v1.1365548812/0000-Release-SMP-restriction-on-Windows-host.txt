@@ -1,0 +1,49 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Fabien Chouteau <chouteau@adacore.com>
+To: hainque@adacore.com, Paolo Bonzini <pbonzini@redhat.com>,
+ Stefan Weil <sw@weilnetz.de>, qemu-devel@nongnu.org,
+ Fabien Chouteau <chouteau@adacore.com>
+Cc: hainque@adacore.com, peter.maydell@linaro.org,
+ Fabien Chouteau <chouteau@adacore.com>, Olivier Hainque <hainque@adacore.com>,
+ sw@weilnetz.de, qemu-devel@nongnu.org, blauwirbel@gmail.com,
+ pbonzini@redhat.com, afaerber@suse.de
+Date: Tue,  9 Apr 2013 18:06:52 +0200
+Message-id: 1365523615-5177-1-git-send-email-chouteau@adacore.com
+Subject: [PATCH 0/3] Release SMP restriction on Windows host
+
+As I already explained to this mailling list, we (AdaCore) use QEMU to run a
+lot of short executable (~2 secs) on many different targets. In that
+configuration the SMP restriction on Windows (QEMU runs only on 1 core) was not
+efficient on our 16 cores servers.
+
+Few months ago I asked on this mailing list if the restriction could be
+removed. There was no clear answer because nobody was able to tell if it would
+work. We decided to give it a try.
+
+During the last months we only found one problem, it was a dead lock between
+the TCG and IO thread, this is fixed by the second patch.
+
+We also found that suspendThread() and resumeThread() were not synchronous on
+SMP systems, so we added a busy loop to wait for effective suspension.
+
+Since then, we run thousands of QEMU on our SMP Windows servers each day
+without any problem. And of course we greatly improve the execution time of our
+test-suites.
+
+Fabien Chouteau (1):
+  Release SMP restriction on Windows
+
+Olivier Hainque (2):
+  Check effective suspension of TCG thread
+  Ensure good ordering of memory instruction in cpu_exec
+
+ cpu-exec.c |    8 ++++++++
+ cpus.c     |   24 ++++++++++++++++++++++--
+ os-win32.c |   18 ------------------
+ 3 files changed, 30 insertions(+), 20 deletions(-)
+
+Reviewed-by: Paolo Bonzini <pbonzini@redhat.com>
+-- 
+1.7.9.5
+
+

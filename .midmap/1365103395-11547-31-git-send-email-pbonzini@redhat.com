@@ -1,0 +1,1 @@
+../hw--reorganization-part-2/v3.1365128560/0030-hw-move-other-devices-to-hw-misc--configure-with-default-configs-.patch

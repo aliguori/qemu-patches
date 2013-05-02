@@ -1,0 +1,107 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Stefan Weil <sw@weilnetz.de>
+To: Anthony Liguori <aliguori@us.ibm.com>
+Cc: Paolo Bonzini <pbonzini@redhat.com>, Stefan Weil <sw@weilnetz.de>,
+ qemu-devel@nongnu.org, qemu-stable@nongnu.org
+Date: Fri, 12 Apr 2013 18:34:46 +0200
+Message-id: 1365784486-617-5-git-send-email-sw@weilnetz.de
+Subject: [PATCH 4/4] qemu-timer: move timeBeginPeriod/timeEndPeriod to os-win32
+
+From: Paolo Bonzini <pbonzini@redhat.com>
+
+These are needed for any of the Win32 alarm timer implementations.
+They are not tied to mmtimer exclusively.
+
+Jacob tested this patch with both mmtimer and Win32 timers.
+
+Cc: qemu-stable@nongnu.org
+Tested-by: Jacob Kroon <jacob.kroon@gmail.com>
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+Signed-off-by: Stefan Weil <sw@weilnetz.de>
+---
+ os-win32.c   |   11 +++++++++++
+ qemu-timer.c |   24 ++++++------------------
+ 2 files changed, 17 insertions(+), 18 deletions(-)
+
+diff --git a/os-win32.c b/os-win32.c
+index c7f6b5c..50b7f6f 100644
+--- a/os-win32.c
++++ b/os-win32.c
+@@ -23,6 +23,7 @@
+  * THE SOFTWARE.
+  */
+ #include <windows.h>
++#include <mmsystem.h>
+ #include <unistd.h>
+ #include <fcntl.h>
+ #include <signal.h>
+@@ -67,9 +68,19 @@ static BOOL WINAPI qemu_ctrl_handler(DWORD type)
+     return TRUE;
+ }
+ 
++static TIMECAPS mm_tc;
++
++static void os_undo_timer_resolution(void)
++{
++    timeEndPeriod(mm_tc.wPeriodMin);
++}
++
+ void os_setup_early_signal_handling(void)
+ {
+     SetConsoleCtrlHandler(qemu_ctrl_handler, TRUE);
++    timeGetDevCaps(&mm_tc, sizeof(mm_tc));
++    timeBeginPeriod(mm_tc.wPeriodMin);
++    atexit(os_undo_timer_resolution);
+ }
+ 
+ /* Look for support files in the same directory as the executable.  */
+diff --git a/qemu-timer.c b/qemu-timer.c
+index 8fb5c75..b2d95e2 100644
+--- a/qemu-timer.c
++++ b/qemu-timer.c
+@@ -624,28 +624,14 @@ static void CALLBACK mm_alarm_handler(UINT uTimerID, UINT uMsg,
+ static int mm_start_timer(struct qemu_alarm_timer *t)
+ {
+     timeGetDevCaps(&mm_tc, sizeof(mm_tc));
+-
+-    timeBeginPeriod(mm_tc.wPeriodMin);
+-
+-    mm_timer = timeSetEvent(mm_tc.wPeriodMin,   /* interval (ms) */
+-                            mm_tc.wPeriodMin,   /* resolution */
+-                            mm_alarm_handler,   /* function */
+-                            (DWORD_PTR)t,       /* parameter */
+-                            TIME_ONESHOT | TIME_CALLBACK_FUNCTION);
+-
+-    if (!mm_timer) {
+-        fprintf(stderr, "Failed to initialize win32 alarm timer\n");
+-        timeEndPeriod(mm_tc.wPeriodMin);
+-        return -1;
+-    }
+-
+     return 0;
+ }
+ 
+ static void mm_stop_timer(struct qemu_alarm_timer *t)
+ {
+-    timeKillEvent(mm_timer);
+-    timeEndPeriod(mm_tc.wPeriodMin);
++    if (mm_timer) {
++        timeKillEvent(mm_timer);
++    }
+ }
+ 
+ static void mm_rearm_timer(struct qemu_alarm_timer *t, int64_t delta)
+@@ -657,7 +643,9 @@ static void mm_rearm_timer(struct qemu_alarm_timer *t, int64_t delta)
+         nearest_delta_ms = mm_tc.wPeriodMax;
+     }
+ 
+-    timeKillEvent(mm_timer);
++    if (mm_timer) {
++        timeKillEvent(mm_timer);
++    }
+     mm_timer = timeSetEvent((UINT)nearest_delta_ms,
+                             mm_tc.wPeriodMin,
+                             mm_alarm_handler,
+-- 
+1.7.10.4
+

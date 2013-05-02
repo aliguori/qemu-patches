@@ -1,0 +1,189 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Liu Ping Fan <qemulist@gmail.com>
+To: Liu Ping Fan <qemulist@gmail.com>, Stefan Hajnoczi <stefanha@gmail.com>,
+ qemu-devel@nongnu.org, li guang <lig.fnst@cn.fujitsu.com>,
+ liu ping fan <qemulist@gmail.com>
+Cc: Anthony Liguori <aliguori@us.ibm.com>, Paolo Bonzini <pbonzini@redhat.com>,
+ Stefan Hajnoczi <stefanha@gmail.com>, qemu-devel@nongnu.org,
+ liu ping fan <qemulist@gmail.com>, Marcelo Tosatti <mtosatti@redhat.com>,
+ Peter Maydell <peter.maydell@linaro.org>, Jan Kiszka <jan.kiszka@siemens.com>,
+ Vasilis Liaskovitis <vasilis.liaskovitis@profitbricks.com>
+Date: Mon, 1 Apr 2013 16:20:33 +0800
+Message-id: 1364804434-7980-5-git-send-email-qemulist@gmail.com
+Subject: [PATCH 4/5] virtio-blk: release reference to RAM's memoryRegion
+
+From: Liu Ping Fan <pingfank@linux.vnet.ibm.com>
+
+virtio-blk will reference to RAM's memoryRegion when the req has been
+done.  So we can avoid to call bdrv_drain_all() when RAM hot unplug.
+
+Signed-off-by: Liu Ping Fan <pingfank@linux.vnet.ibm.com>
+---
+ hw/dataplane/virtio-blk.c |   52 ++++++++++++++++++++++++++++++++++----------
+ 1 files changed, 40 insertions(+), 12 deletions(-)
+
+diff --git a/hw/dataplane/virtio-blk.c b/hw/dataplane/virtio-blk.c
+index 1242d61..437174d 100644
+--- a/hw/dataplane/virtio-blk.c
++++ b/hw/dataplane/virtio-blk.c
+@@ -34,6 +34,8 @@ enum {
+ 
+ typedef struct {
+     struct iocb iocb;               /* Linux AIO control block */
++    MemoryRegion *mrs[VRING_MAX];
++    int mrs_cnt;
+     QEMUIOVector *inhdr;            /* iovecs for virtio_blk_inhdr */
+     unsigned int head;              /* vring descriptor index */
+     struct iovec *bounce_iov;       /* used if guest buffers are unaligned */
+@@ -120,6 +122,9 @@ static void complete_request(struct iocb *iocb, ssize_t ret, void *opaque)
+      * transferred plus the status bytes.
+      */
+     vring_push(&s->vring, req->head, len + sizeof(hdr));
++    while (--req->mrs_cnt >= 0) {
++        memory_region_unref(req->mrs[req->mrs_cnt]);
++    }
+ 
+     s->num_reqs--;
+ }
+@@ -155,7 +160,8 @@ static void do_get_id_cmd(VirtIOBlockDataPlane *s,
+ static int do_rdwr_cmd(VirtIOBlockDataPlane *s, bool read,
+                        struct iovec *iov, unsigned int iov_cnt,
+                        long long offset, unsigned int head,
+-                       QEMUIOVector *inhdr)
++                       QEMUIOVector *inhdr,
++                       MemoryRegion **mrs, int cnt)
+ {
+     struct iocb *iocb;
+     QEMUIOVector qiov;
+@@ -187,6 +193,8 @@ static int do_rdwr_cmd(VirtIOBlockDataPlane *s, bool read,
+ 
+     /* Fill in virtio block metadata needed for completion */
+     VirtIOBlockRequest *req = container_of(iocb, VirtIOBlockRequest, iocb);
++    memcpy(req->mrs, mrs, cnt*sizeof(MemoryRegion *));
++    req->mrs_cnt = cnt;
+     req->head = head;
+     req->inhdr = inhdr;
+     req->bounce_iov = bounce_iov;
+@@ -196,19 +204,22 @@ static int do_rdwr_cmd(VirtIOBlockDataPlane *s, bool read,
+ 
+ static int process_request(IOQueue *ioq, struct iovec iov[],
+                            unsigned int out_num, unsigned int in_num,
+-                           unsigned int head)
++                           unsigned int head, MemoryRegion **mrs)
+ {
+     VirtIOBlockDataPlane *s = container_of(ioq, VirtIOBlockDataPlane, ioqueue);
+     struct iovec *in_iov = &iov[out_num];
+     struct virtio_blk_outhdr outhdr;
+     QEMUIOVector *inhdr;
+     size_t in_size;
++    unsigned int i, cnt = out_num+in_num;
++    int ret;
+ 
+     /* Copy in outhdr */
+     if (unlikely(iov_to_buf(iov, out_num, 0, &outhdr,
+                             sizeof(outhdr)) != sizeof(outhdr))) {
+         error_report("virtio-blk request outhdr too short");
+-        return -EFAULT;
++        ret = -EFAULT;
++        goto free_mrs;
+     }
+     iov_discard_front(&iov, &out_num, sizeof(outhdr));
+ 
+@@ -216,7 +227,8 @@ static int process_request(IOQueue *ioq, struct iovec iov[],
+     in_size = iov_size(in_iov, in_num);
+     if (in_size < sizeof(struct virtio_blk_inhdr)) {
+         error_report("virtio_blk request inhdr too short");
+-        return -EFAULT;
++        ret = -EFAULT;
++        goto free_mrs;
+     }
+     inhdr = g_slice_new(QEMUIOVector);
+     qemu_iovec_init(inhdr, 1);
+@@ -229,18 +241,22 @@ static int process_request(IOQueue *ioq, struct iovec iov[],
+     outhdr.type &= ~VIRTIO_BLK_T_BARRIER;
+ 
+     switch (outhdr.type) {
++    /* For VIRTIO_BLK_T_IN/OUT, MemoryRegion will be release when cb */
+     case VIRTIO_BLK_T_IN:
+-        do_rdwr_cmd(s, true, in_iov, in_num, outhdr.sector * 512, head, inhdr);
++        do_rdwr_cmd(s, true, in_iov, in_num, outhdr.sector * 512, head, inhdr,
++            mrs, cnt);
+         return 0;
+ 
+     case VIRTIO_BLK_T_OUT:
+-        do_rdwr_cmd(s, false, iov, out_num, outhdr.sector * 512, head, inhdr);
++        do_rdwr_cmd(s, false, iov, out_num, outhdr.sector * 512, head, inhdr,
++            mrs, cnt);
+         return 0;
+ 
+     case VIRTIO_BLK_T_SCSI_CMD:
+         /* TODO support SCSI commands */
+         complete_request_early(s, head, inhdr, VIRTIO_BLK_S_UNSUPP);
+-        return 0;
++        ret = 0;
++        goto free_mrs;
+ 
+     case VIRTIO_BLK_T_FLUSH:
+         /* TODO fdsync not supported by Linux AIO, do it synchronously here! */
+@@ -249,18 +265,27 @@ static int process_request(IOQueue *ioq, struct iovec iov[],
+         } else {
+             complete_request_early(s, head, inhdr, VIRTIO_BLK_S_OK);
+         }
+-        return 0;
++        ret = 0;
++        goto free_mrs;
+ 
+     case VIRTIO_BLK_T_GET_ID:
+         do_get_id_cmd(s, in_iov, in_num, head, inhdr);
+-        return 0;
++        ret = 0;
++        goto free_mrs;
+ 
+     default:
+         error_report("virtio-blk unsupported request type %#x", outhdr.type);
+         qemu_iovec_destroy(inhdr);
+         g_slice_free(QEMUIOVector, inhdr);
+-        return -EFAULT;
++        ret = -EFAULT;
++        goto free_mrs;
++    }
++
++free_mrs:
++    for (i = 0; i < cnt; i++) {
++        memory_region_unref(mrs[i]);
+     }
++    return ret;
+ }
+ 
+ static int flush_true(EventNotifier *e)
+@@ -286,6 +311,7 @@ static void handle_notify(EventNotifier *e)
+     struct iovec iovec[VRING_MAX];
+     struct iovec *end = &iovec[VRING_MAX];
+     struct iovec *iov = iovec;
++    MemoryRegion *mrs[VRING_MAX];
+ 
+     /* When a request is read from the vring, the index of the first descriptor
+      * (aka head) is returned so that the completed request can be pushed onto
+@@ -304,7 +330,8 @@ static void handle_notify(EventNotifier *e)
+         vring_disable_notification(s->vdev, &s->vring);
+ 
+         for (;;) {
+-            head = vring_pop(s->vdev, &s->vring, iov, end, &out_num, &in_num);
++            head = vring_pop(s->vdev, &s->vring, iov, end, &out_num, &in_num,
++                            mrs);
+             if (head < 0) {
+                 break; /* no more requests */
+             }
+@@ -312,7 +339,8 @@ static void handle_notify(EventNotifier *e)
+             trace_virtio_blk_data_plane_process_request(s, out_num, in_num,
+                                                         head);
+ 
+-            if (process_request(&s->ioqueue, iov, out_num, in_num, head) < 0) {
++            if (process_request(&s->ioqueue, iov, out_num, in_num, head,
++                    mrs) < 0) {
+                 vring_set_broken(&s->vring);
+                 break;
+             }
+-- 
+1.7.4.4
+

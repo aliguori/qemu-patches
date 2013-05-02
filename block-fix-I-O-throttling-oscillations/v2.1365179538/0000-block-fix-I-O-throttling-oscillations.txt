@@ -1,0 +1,60 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Stefan Hajnoczi <stefanha@redhat.com>
+To: Stefan Hajnoczi <stefanha@redhat.com>, qemu-devel@nongnu.org
+Cc: =?iso-8859-1?Q?Beno=EEt?= Canet <benoit@irqsave.net>,
+ Zhi Yong Wu <wuzhy@cn.ibm.com>,
+ =?UTF-8?q?Beno=C3=AEt=20Canet?= <benoit@irqsave.net>,
+ Kevin Wolf <kwolf@redhat.com>, qemu-devel@nongnu.org,
+ Stefan Hajnoczi <stefanha@redhat.com>
+Date: Fri,  5 Apr 2013 11:32:18 +0200
+Message-id: 1365154342-10513-1-git-send-email-stefanha@redhat.com
+Subject: [PATCH 0/4] block: fix I/O throttling oscillations
+
+Benoît Canet <benoit@irqsave.net> reported that QEMU I/O throttling can
+oscillate under continuous I/O.  The test case runs 50 threads performing
+random writes and a -drive iops=150 limit is used.
+
+Since QEMU I/O throttling is implemented using 100 millisecond time slices,
+we'd expect 150 +/- 15 IOPS.  Anything outside that range indicates a problem
+with the I/O throttling algorithm.
+
+It turned out that even a single thread performing sequential I/O continuously
+is throttled outside the 150 +/- 15 IOPS range.  The continous stream of I/O
+slows down as time goes on but resets to 150 IOPS again when interrupted.  This
+can be tested with:
+
+  $ iostat -d 1 -x /dev/vdb &
+  $ dd if=/dev/vdb of=/dev/null bs=4096 iflag=direct
+
+This patches addresses these problems as follows:
+
+1. Account for I/O requests when they are submitted instead of completed.  This
+   ensures that we do not exceed the budget for this slice.  Exceeding the
+   budget leads to fluctuations since we have to make up for this later.
+
+2. Use constant 100 millisecond slice time.  Adjusting the slice time at
+   run-time led to oscillations.  Since the reason for adjusting slice time is
+   not clear, drop this behavior.
+
+I have also included two code clean-up patches.
+
+Tested-By: Benoit Canet <benoit@irqsave.net>
+
+v2:
+ * Account slice_submitted after both bps and iops checks pass [kwolf]
+
+Stefan Hajnoczi (4):
+  block: fix I/O throttling accounting blind spot
+  block: keep I/O throttling slice time constant
+  block: drop duplicated slice extension code
+  block: clean up I/O throttling wait_time code
+
+ block.c                   | 49 +++++++++++++++++++++--------------------------
+ blockdev.c                |  1 -
+ include/block/block_int.h |  3 +--
+ 3 files changed, 23 insertions(+), 30 deletions(-)
+
+-- 
+1.8.1.4
+
+

@@ -1,0 +1,33 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Laszlo Ersek <lersek@redhat.com>
+To: qemu-devel@nongnu.org, mst@redhat.com
+Cc: 
+Date: Mon, 15 Apr 2013 22:47:47 +0200
+Message-id: 1366058872-11196-3-git-send-email-lersek@redhat.com
+Subject: [PATCH 2/7] acpi_table_install(): fix funcparam formatting in leading
+ comment
+
+
+Signed-off-by: Laszlo Ersek <lersek@redhat.com>
+---
+ hw/acpi/core.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+diff --git a/hw/acpi/core.c b/hw/acpi/core.c
+index 64b8718..69cadb0 100644
+--- a/hw/acpi/core.c
++++ b/hw/acpi/core.c
+@@ -86,7 +86,7 @@ static int acpi_checksum(const uint8_t *data, int len)
+  * is optionally overwritten from @hdrs.
+  *
+  * It is valid to call this function with
+- * (@blob == NULL && bloblen == 0 && !has_header).
++ * (@blob == NULL && @bloblen == 0 && !@has_header).
+  *
+  * @hdrs->file and @hdrs->data are ignored.
+  *
+-- 
+1.7.1
+
+
+

@@ -1,0 +1,80 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Richard Henderson <rth@twiddle.net>
+To: qemu-devel@nongnu.org
+Cc: Aurelien Jarno <aurelien@aurel32.net>, av1474@comtv.ru
+Date: Thu,  4 Apr 2013 17:56:17 -0500
+Message-id: 1365116186-19382-25-git-send-email-rth@twiddle.net
+Subject: [PATCH 24/33] tcg-ppc64: Use I constraint for mul
+
+The mul_i32 pattern was loading non-16-bit constants into a register,
+when we can get the middle-end to do that for us.  The mul_i64 pattern
+was not considering that MULLI takes 64-bit inputs.
+
+Reviewed-by: Aurelien Jarno <aurelien@aurel32.net>
+Signed-off-by: Richard Henderson <rth@twiddle.net>
+---
+ tcg/ppc64/tcg-target.c | 24 ++++++++++++------------
+ 1 file changed, 12 insertions(+), 12 deletions(-)
+
+diff --git a/tcg/ppc64/tcg-target.c b/tcg/ppc64/tcg-target.c
+index 909ba3c..edb2b6c 100644
+--- a/tcg/ppc64/tcg-target.c
++++ b/tcg/ppc64/tcg-target.c
+@@ -1471,17 +1471,12 @@ static void tcg_out_op (TCGContext *s, TCGOpcode opc, const TCGArg *args,
+         break;
+ 
+     case INDEX_op_mul_i32:
++        a0 = args[0], a1 = args[1], a2 = args[2];
+         if (const_args[2]) {
+-            if (args[2] == (int16_t) args[2])
+-                tcg_out32 (s, MULLI | RT (args[0]) | RA (args[1])
+-                           | (args[2] & 0xffff));
+-            else {
+-                tcg_out_movi (s, TCG_TYPE_I32, 0, args[2]);
+-                tcg_out32 (s, MULLW | TAB (args[0], args[1], 0));
+-            }
++            tcg_out32(s, MULLI | TAI(a0, a1, a2));
++        } else {
++            tcg_out32(s, MULLW | TAB(a0, a1, a2));
+         }
+-        else
+-            tcg_out32 (s, MULLW | TAB (args[0], args[1], args[2]));
+         break;
+ 
+     case INDEX_op_div_i32:
+@@ -1646,7 +1641,12 @@ static void tcg_out_op (TCGContext *s, TCGOpcode opc, const TCGArg *args,
+         break;
+ 
+     case INDEX_op_mul_i64:
+-        tcg_out32 (s, MULLD | TAB (args[0], args[1], args[2]));
++        a0 = args[0], a1 = args[1], a2 = args[2];
++        if (const_args[2]) {
++            tcg_out32(s, MULLI | TAI(a0, a1, a2));
++        } else {
++            tcg_out32(s, MULLD | TAB(a0, a1, a2));
++        }
+         break;
+     case INDEX_op_div_i64:
+         tcg_out32 (s, DIVD | TAB (args[0], args[1], args[2]));
+@@ -1844,7 +1844,7 @@ static const TCGTargetOpDef ppc_op_defs[] = {
+     { INDEX_op_ld32s_i64, { "r", "r" } },
+ 
+     { INDEX_op_add_i32, { "r", "r", "ri" } },
+-    { INDEX_op_mul_i32, { "r", "r", "ri" } },
++    { INDEX_op_mul_i32, { "r", "r", "rI" } },
+     { INDEX_op_div_i32, { "r", "r", "r" } },
+     { INDEX_op_divu_i32, { "r", "r", "r" } },
+     { INDEX_op_rem_i32, { "r", "r", "r" } },
+@@ -1888,7 +1888,7 @@ static const TCGTargetOpDef ppc_op_defs[] = {
+     { INDEX_op_rotl_i64, { "r", "r", "ri" } },
+     { INDEX_op_rotr_i64, { "r", "r", "ri" } },
+ 
+-    { INDEX_op_mul_i64, { "r", "r", "r" } },
++    { INDEX_op_mul_i64, { "r", "r", "rI" } },
+     { INDEX_op_div_i64, { "r", "r", "r" } },
+     { INDEX_op_divu_i64, { "r", "r", "r" } },
+     { INDEX_op_rem_i64, { "r", "r", "r" } },
+-- 
+1.8.1.4
+
+

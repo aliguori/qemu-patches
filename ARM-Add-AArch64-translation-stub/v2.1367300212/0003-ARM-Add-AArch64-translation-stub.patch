@@ -1,0 +1,240 @@
+From patches Mon Sep 17 00:00:00 2001
+From: John Rigby <john.rigby@linaro.org>
+To: Laurent Desnogues <laurent.desnogues@gmail.com>,
+ John Rigby <john.rigby@linaro.org>, qemu-devel <qemu-devel@nongnu.org>
+Cc: Peter Maydell <peter.maydell@linaro.org>,
+ Laurent Desnogues <laurent.desnogues@gmail.com>,
+ John Rigby <john.rigby@linaro.org>, Alexander Graf <agraf@suse.de>,
+ qemu-devel <qemu-devel@nongnu.org>
+Date: Tue, 30 Apr 2013 00:36:52 -0600
+Message-id: 1367303812-9596-1-git-send-email-john.rigby@linaro.org
+Subject: [PATCH 03/12] ARM: Add AArch64 translation stub
+
+From: Alexander Graf <agraf@suse.de>
+
+We should translate AArch64 mode separately from AArch32 mode. In AArch64 mode,
+registers look vastly different, instruction encoding is completely different,
+basically the system turns into a different machine.
+
+So let's do a simple if() in translate.c to decide whether we can handle the
+current code in the legacy AArch32 code or in the new AArch64 code.
+
+So far, the translation always complains about unallocated instructions. There
+is no emulator functionality in this patch!
+
+Signed-off-by: Alexander Graf <agraf@suse.de>
+---
+Changes in v2:
+- Remove uses of is_a64 that are not needed because arch choice happens at
+a higher level.
+- aarch64 register arrays now only have 31 entries with sp and xzr treated as
+special cases.
+
++    if (is_a64(env)) {
+ target-arm/Makefile.objs   |    1 +
+ target-arm/translate-a64.c |  139 ++++++++++++++++++++++++++++++++++++++++++++
+ target-arm/translate.c     |    9 +++
+ target-arm/translate.h     |    6 ++
+ 4 files changed, 155 insertions(+)
+ create mode 100644 target-arm/translate-a64.c
+
+diff --git a/target-arm/Makefile.objs b/target-arm/Makefile.objs
+index d89b57c..e488edb 100644
+--- a/target-arm/Makefile.objs
++++ b/target-arm/Makefile.objs
+@@ -3,3 +3,4 @@ obj-$(CONFIG_SOFTMMU) += machine.o
+ obj-$(CONFIG_KVM) += kvm.o
+ obj-y += translate.o op_helper.o helper.o cpu.o
+ obj-y += neon_helper.o iwmmxt_helper.o
++obj-$(TARGET_AARCH64) += translate-a64.o
+diff --git a/target-arm/translate-a64.c b/target-arm/translate-a64.c
+new file mode 100644
+index 0000000..961792d
+--- /dev/null
++++ b/target-arm/translate-a64.c
+@@ -0,0 +1,139 @@
++/*
++ *  AArch64 translation
++ *
++ *  Copyright (c) 2013 Alexander Graf <agraf@suse.de>
++ *
++ * This library is free software; you can redistribute it and/or
++ * modify it under the terms of the GNU Lesser General Public
++ * License as published by the Free Software Foundation; either
++ * version 2 of the License, or (at your option) any later version.
++ *
++ * This library is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++ * Lesser General Public License for more details.
++ *
++ * You should have received a copy of the GNU Lesser General Public
++ * License along with this library; if not, see <http://www.gnu.org/licenses/>.
++ */
++#include <stdarg.h>
++#include <stdlib.h>
++#include <stdio.h>
++#include <string.h>
++#include <inttypes.h>
++
++#include "cpu.h"
++#include "tcg-op.h"
++#include "qemu/log.h"
++#include "translate.h"
++#include "qemu/host-utils.h"
++
++#include "helper.h"
++#define GEN_HELPER 1
++#include "helper.h"
++
++static TCGv_i64 cpu_X[31];
++static TCGv_i64 cpu_pc;
++static TCGv_i64 cpu_sp;
++static TCGv_i32 pstate;
++
++static const char *regnames[] =
++    { "x0", "x1", "x2", "x3", "x4", "x5", "x6", "x7",
++      "x8", "x9", "x10", "x11", "x12", "x13", "x14", "x15",
++      "x16", "x17", "x18", "x19", "x20", "x21", "x22", "x23",
++      "x24", "x25", "x26", "x27", "x28", "x29", "lr" };
++
++/* initialize TCG globals.  */
++void a64_translate_init(void)
++{
++    int i;
++
++    cpu_pc = tcg_global_mem_new_i64(TCG_AREG0,
++                                    offsetof(CPUARMState, pc),
++                                    "pc");
++    cpu_sp = tcg_global_mem_new_i64(TCG_AREG0,
++                                    offsetof(CPUARMState, sp),
++                                    "sp");
++    for (i = 0; i < 31; i++) {
++        cpu_X[i] = tcg_global_mem_new_i64(TCG_AREG0,
++                                          offsetof(CPUARMState, xregs[i]),
++                                          regnames[i]);
++    }
++
++    pstate = tcg_global_mem_new_i32(TCG_AREG0,
++                                    offsetof(CPUARMState, pstate),
++                                    "pstate");
++}
++
++void cpu_dump_state_a64(CPUARMState *env, FILE *f, fprintf_function cpu_fprintf,
++                        int flags)
++{
++    int i;
++
++    cpu_fprintf(f, "PC=%016"PRIx64"  SP=%016"PRIx64"\n", env->pc, env->sp);
++    for(i = 0; i < 31; i++) {
++        cpu_fprintf(f, "X%02d=%016"PRIx64, i, env->xregs[i]);
++        if ((i % 4) == 3)
++            cpu_fprintf(f, "\n");
++        else
++            cpu_fprintf(f, " ");
++    }
++    cpu_fprintf(f, "XZR=%016"PRIx64"\n", env->xregs[31]);
++    cpu_fprintf(f, "PSTATE=%c%c%c%c\n",
++        env->pstate & PSTATE_N ? 'n' : '.',
++        env->pstate & PSTATE_Z ? 'z' : '.',
++        env->pstate & PSTATE_C ? 'c' : '.',
++        env->pstate & PSTATE_V ? 'v' : '.');
++    cpu_fprintf(f, "\n");
++}
++
++void gen_a64_set_pc_im(uint64_t val)
++{
++    tcg_gen_movi_i64(cpu_pc, val);
++}
++
++static void gen_exception(int excp)
++{
++    TCGv_i32 tmp = tcg_temp_new_i32();
++    tcg_gen_movi_i32(tmp, excp);
++    gen_helper_exception(cpu_env, tmp);
++    tcg_temp_free_i32(tmp);
++}
++
++static void gen_exception_insn(DisasContext *s, int offset, int excp)
++{
++    gen_a64_set_pc_im(s->pc - offset);
++    gen_exception(excp);
++    s->is_jmp = DISAS_JUMP;
++}
++
++static void real_unallocated_encoding(DisasContext *s)
++{
++    fprintf(stderr, "Unknown instruction: %#x\n",
++            arm_ldl_code(cpu_single_env, s->pc - 4, s->bswap_code));
++    gen_exception_insn(s, 4, EXCP_UDEF);
++}
++
++#define unallocated_encoding(s) do { \
++    fprintf(stderr, "unallocated encoding at line: %d\n", __LINE__); \
++    real_unallocated_encoding(s); \
++    } while(0)
++
++void disas_a64_insn(CPUARMState *env, DisasContext *s)
++{
++    uint32_t insn;
++
++    insn = arm_ldl_code(env, s->pc, s->bswap_code);
++    s->pc += 4;
++
++    switch ((insn >> 24) & 0x1f) {
++    default:
++        unallocated_encoding(s);
++        break;
++    }
++
++    if (unlikely(s->singlestep_enabled) && (s->is_jmp == DISAS_TB_JUMP)) {
++        /* go through the main loop for single step */
++        s->is_jmp = DISAS_JUMP;
++    }
++}
+diff --git a/target-arm/translate.c b/target-arm/translate.c
+index a4b6d8a..6ffb5fe 100644
+--- a/target-arm/translate.c
++++ b/target-arm/translate.c
+@@ -112,6 +112,10 @@ void arm_translate_init(void)
+         offsetof(CPUARMState, exclusive_info), "exclusive_info");
+ #endif
+ 
++#ifdef TARGET_AARCH64
++    a64_translate_init();
++#endif
++
+ #define GEN_HELPER 2
+ #include "helper.h"
+ }
+@@ -10037,6 +10041,11 @@ void cpu_dump_state(CPUARMState *env, FILE *f, fprintf_function cpu_fprintf,
+     int i;
+     uint32_t psr;
+ 
++    if (is_a64(env)) {
++        cpu_dump_state_a64(env, f, cpu_fprintf, flags);
++        return;
++    }
++
+     for(i=0;i<16;i++) {
+         cpu_fprintf(f, "R%02d=%08x", i, env->regs[i]);
+         if ((i % 4) == 3)
+diff --git a/target-arm/translate.h b/target-arm/translate.h
+index 8ba1433..9086e43 100644
+--- a/target-arm/translate.h
++++ b/target-arm/translate.h
+@@ -26,4 +26,10 @@ typedef struct DisasContext {
+ 
+ extern TCGv_ptr cpu_env;
+ 
++void a64_translate_init(void);
++void cpu_dump_state_a64(CPUARMState *env, FILE *f,
++        fprintf_function cpu_fprintf, int flags);
++void disas_a64_insn(CPUARMState *env, DisasContext *s);
++void gen_a64_set_pc_im(uint64_t val);
++
+ #endif /* TARGET_ARM_TRANSLATE_H */
+-- 
+1.7.9.5
+
+

@@ -1,0 +1,40 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Stefan Hajnoczi <stefanha@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>,
+ Peter Maydell <peter.maydell@linaro.org>,
+ Stefan Hajnoczi <stefanha@redhat.com>
+Date: Fri, 5 Apr 2013 16:08:43 +0200
+Message-id: 1365170926-6361-3-git-send-email-stefanha@redhat.com
+Subject: [PATCH 2/5] linux-user: Don't omit comma for strace of rt_sigaction()
+
+From: Peter Maydell <peter.maydell@linaro.org>
+
+Pass the 'last' parameter of print_signal() through to
+print_raw_param(); this fixes a problem where we weren't printing
+the comma separator for strace of rt_sigaction() when the signal
+was an unnamed (ie realtime) one:
+  6856 rt_sigaction(230xf6fff870,0xf6fff8fc) = 0
+
+Signed-off-by: Peter Maydell <peter.maydell@linaro.org>
+Signed-off-by: Stefan Hajnoczi <stefanha@redhat.com>
+---
+ linux-user/strace.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/linux-user/strace.c b/linux-user/strace.c
+index 0fbae3c..ea6c1d2 100644
+--- a/linux-user/strace.c
++++ b/linux-user/strace.c
+@@ -143,7 +143,7 @@ print_signal(abi_ulong arg, int last)
+     case TARGET_SIGTTOU: signal_name = "SIGTTOU"; break;
+     }
+     if (signal_name == NULL) {
+-        print_raw_param("%ld", arg, 1);
++        print_raw_param("%ld", arg, last);
+         return;
+     }
+     gemu_log("%s%s", signal_name, get_comma(last));
+-- 
+1.8.1.4
+

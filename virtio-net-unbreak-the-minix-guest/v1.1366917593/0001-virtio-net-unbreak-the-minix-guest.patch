@@ -1,0 +1,63 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Jason Wang <jasowang@redhat.com>
+To: Anthony Liguori <aliguori@us.ibm.com>, qemu-devel@nongnu.org,
+ "Michael S. Tsirkin" <mst@redhat.com>, Jason Wang <jasowang@redhat.com>
+Cc: Anthony Liguori <aliguori@us.ibm.com>, Jason Wang <jasowang@redhat.com>,
+ Aurelien Jarno <aurelien@aurel32.net>, qemu-devel@nongnu.org, mst@redhat.com
+Date: Thu, 25 Apr 2013 14:19:53 +0800
+Message-id: 1366870793-769-1-git-send-email-jasowang@redhat.com
+Subject: [PATCH 1/1] virtio-net: unbreak the minix guest
+
+Multiqueue patchset conditionally add control vq only when guest negotiate the
+feature. Though the spec is not clear on this but it breaks the minix guest
+since it will identify the ctrl vq even if it does not support it. Though this
+behavior seems a violation on the spec "If the VIRTIO_NET_F_CTRL_VQ feature bit
+is negotiated, identify the control virtqueue.", to keep the backward
+compatibility, always add the ctrl vq at end of the queues.
+
+Also remove the meaningless ctrl_vq initialization and vq deletion.
+
+Reported-by: Aurelien Jarno <aurelien@aurel32.net>
+Cc: Aurelien Jarno <aurelien@aurel32.net>
+Signed-off-by: Jason Wang <jasowang@redhat.com>
+---
+ hw/net/virtio-net.c |    9 ++++-----
+ 1 files changed, 4 insertions(+), 5 deletions(-)
+
+diff --git a/hw/net/virtio-net.c b/hw/net/virtio-net.c
+index 4d2cdd2..1068f4e 100644
+--- a/hw/net/virtio-net.c
++++ b/hw/net/virtio-net.c
+@@ -1045,7 +1045,7 @@ static void virtio_net_set_multiqueue(VirtIONet *n, int multiqueue, int ctrl)
+ 
+     n->multiqueue = multiqueue;
+ 
+-    for (i = 2; i <= n->max_queues * 2 + 1; i++) {
++    for (i = 2; i <= n->max_queues * 2; i++) {
+         virtio_del_queue(vdev, i);
+     }
+ 
+@@ -1067,9 +1067,9 @@ static void virtio_net_set_multiqueue(VirtIONet *n, int multiqueue, int ctrl)
+         n->vqs[i].n = n;
+     }
+ 
+-    if (ctrl) {
+-        n->ctrl_vq = virtio_add_queue(vdev, 64, virtio_net_handle_ctrl);
+-    }
++    /* Some guest (e.g minix) may identifiy ctrl vq even if it does not
++     * support. */
++    n->ctrl_vq = virtio_add_queue(vdev, 64, virtio_net_handle_ctrl);
+ 
+     virtio_net_set_queues(n);
+ }
+@@ -1317,7 +1317,6 @@ static int virtio_net_device_init(VirtIODevice *vdev)
+                                            virtio_net_handle_tx_bh);
+         n->vqs[0].tx_bh = qemu_bh_new(virtio_net_tx_bh, &n->vqs[0]);
+     }
+-    n->ctrl_vq = virtio_add_queue(vdev, 64, virtio_net_handle_ctrl);
+     qemu_macaddr_default_if_unset(&n->nic_conf.macaddr);
+     memcpy(&n->mac[0], &n->nic_conf.macaddr, sizeof(n->mac));
+     n->status = VIRTIO_NET_S_LINK_UP;
+-- 
+1.7.1
+

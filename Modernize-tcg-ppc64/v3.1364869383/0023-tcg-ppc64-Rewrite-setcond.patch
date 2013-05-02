@@ -1,0 +1,345 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Richard Henderson <rth@twiddle.net>
+To: qemu-devel@nongnu.org
+Cc: av1474@comtv.ru, agraf@suse.de, aurelien@aurel32.net
+Date: Mon,  1 Apr 2013 21:23:26 -0700
+Message-id: 1364876610-3933-24-git-send-email-rth@twiddle.net
+Subject: [PATCH 23/27] tcg-ppc64: Rewrite setcond
+
+Never use MFCR, as the latency is really high.  Even MFOCRF, at half
+the latency of MFCR, isn't as fast as we can do with carry tricks.
+
+The ADDIC+SUBFE trick only works for word-sized operands, as we need
+carry-out from bit 63.  So for ppc64 we must extend 32-bit inputs.
+
+Use ISEL if available.
+
+Reviewed-by: Aurelien Jarno <aurelien@aurel32.net>
+Signed-off-by: Richard Henderson <rth@twiddle.net>
+---
+ tcg/ppc64/tcg-target.c | 264 +++++++++++++++++++++++++++++++++----------------
+ 1 file changed, 181 insertions(+), 83 deletions(-)
+
+diff --git a/tcg/ppc64/tcg-target.c b/tcg/ppc64/tcg-target.c
+index 96a05d9..30954ff 100644
+--- a/tcg/ppc64/tcg-target.c
++++ b/tcg/ppc64/tcg-target.c
+@@ -45,6 +45,7 @@ static uint8_t *tb_ret_addr;
+ #endif
+ 
+ #define HAVE_ISA_2_06  0
++#define HAVE_ISEL      0
+ 
+ #ifdef CONFIG_USE_GUEST_BASE
+ #define TCG_GUEST_BASE_REG 30
+@@ -389,6 +390,7 @@ static int tcg_target_const_match (tcg_target_long val,
+ #define ORC    XO31(412)
+ #define EQV    XO31(284)
+ #define NAND   XO31(476)
++#define ISEL   XO31( 15)
+ 
+ #define MULLD  XO31(233)
+ #define MULHD  XO31( 73)
+@@ -443,6 +445,7 @@ static int tcg_target_const_match (tcg_target_long val,
+ #define BT(n, c) (((c)+((n)*4))<<21)
+ #define BA(n, c) (((c)+((n)*4))<<16)
+ #define BB(n, c) (((c)+((n)*4))<<11)
++#define BC_(n, c) (((c)+((n)*4))<<6)
+ 
+ #define BO_COND_TRUE  BO (12)
+ #define BO_COND_FALSE BO ( 4)
+@@ -468,6 +471,20 @@ static const uint32_t tcg_to_bc[] = {
+     [TCG_COND_GTU] = BC | BI (7, CR_GT) | BO_COND_TRUE,
+ };
+ 
++/* The low bit here is set if the RA and RB fields must be inverted.  */
++static const uint32_t tcg_to_isel[] = {
++    [TCG_COND_EQ]  = ISEL | BC_(7, CR_EQ),
++    [TCG_COND_NE]  = ISEL | BC_(7, CR_EQ) | 1,
++    [TCG_COND_LT]  = ISEL | BC_(7, CR_LT),
++    [TCG_COND_GE]  = ISEL | BC_(7, CR_LT) | 1,
++    [TCG_COND_LE]  = ISEL | BC_(7, CR_GT) | 1,
++    [TCG_COND_GT]  = ISEL | BC_(7, CR_GT),
++    [TCG_COND_LTU] = ISEL | BC_(7, CR_LT),
++    [TCG_COND_GEU] = ISEL | BC_(7, CR_LT) | 1,
++    [TCG_COND_LEU] = ISEL | BC_(7, CR_GT) | 1,
++    [TCG_COND_GTU] = ISEL | BC_(7, CR_GT),
++};
++
+ static inline void tcg_out_mov(TCGContext *s, TCGType type,
+                                TCGReg ret, TCGReg arg)
+ {
+@@ -1124,105 +1141,186 @@ static void tcg_out_cmp(TCGContext *s, int cond, TCGArg arg1, TCGArg arg2,
+     }
+ }
+ 
+-static void tcg_out_setcond (TCGContext *s, TCGType type, TCGCond cond,
+-                             TCGArg arg0, TCGArg arg1, TCGArg arg2,
+-                             int const_arg2)
++static void tcg_out_setcond_eq0(TCGContext *s, TCGType type,
++                                TCGReg dst, TCGReg src)
+ {
+-    int crop, sh, arg;
++    tcg_out32(s, (type == TCG_TYPE_I64 ? CNTLZD : CNTLZW) | RS(dst) | RA(src));
++    tcg_out_shri64(s, dst, dst, type == TCG_TYPE_I64 ? 6 : 5);
++}
+ 
+-    switch (cond) {
+-    case TCG_COND_EQ:
+-        if (const_arg2) {
+-            if (!arg2) {
+-                arg = arg1;
+-            }
+-            else {
+-                arg = 0;
+-                if ((uint16_t) arg2 == arg2) {
+-                    tcg_out32(s, XORI | SAI(arg1, 0, arg2));
+-                }
+-                else {
+-                    tcg_out_movi (s, type, 0, arg2);
+-                    tcg_out32 (s, XOR | SAB (arg1, 0, 0));
+-                }
+-            }
+-        }
+-        else {
+-            arg = 0;
+-            tcg_out32 (s, XOR | SAB (arg1, 0, arg2));
+-        }
++static void tcg_out_setcond_ne0(TCGContext *s, TCGReg dst, TCGReg src)
++{
++    /* X != 0 implies X + -1 generates a carry.  Extra addition
++       trickery means: R = X-1 + ~X + C = X-1 + (-X+1) + C = C.  */
++    if (dst != src) {
++        tcg_out32(s, ADDIC | TAI(dst, src, -1));
++        tcg_out32(s, SUBFE | TAB(dst, dst, src));
++    } else {
++        tcg_out32(s, ADDIC | TAI(0, src, -1));
++        tcg_out32(s, SUBFE | TAB(dst, 0, src));
++    }
++}
+ 
+-        if (type == TCG_TYPE_I64) {
+-            tcg_out32 (s, CNTLZD | RS (arg) | RA (0));
+-            tcg_out_rld (s, RLDICL, arg0, 0, 58, 6);
+-        }
+-        else {
+-            tcg_out32 (s, CNTLZW | RS (arg) | RA (0));
+-            tcg_out_rlw(s, RLWINM, arg0, 0, 27, 5, 31);
++static int tcg_gen_setcond_xor(TCGContext *s, TCGReg arg1, TCGArg arg2,
++                               bool const_arg2)
++{
++    if (const_arg2) {
++        if ((uint32_t)arg2 == arg2) {
++            tcg_out_xori32(s, 0, arg1, arg2);
++        } else {
++            tcg_out_movi(s, TCG_TYPE_I64, 0, arg2);
++            tcg_out32(s, XOR | SAB(arg1, 0, 0));
+         }
+-        break;
++    } else {
++        tcg_out32(s, XOR | SAB(arg1, 0, arg2));
++    }
++    return 0;
++}
+ 
+-    case TCG_COND_NE:
+-        if (const_arg2) {
+-            if (!arg2) {
+-                arg = arg1;
+-            }
+-            else {
+-                arg = 0;
+-                if ((uint16_t) arg2 == arg2) {
+-                    tcg_out32(s, XORI | SAI(arg1, 0, arg2));
+-                } else {
+-                    tcg_out_movi (s, type, 0, arg2);
+-                    tcg_out32 (s, XOR | SAB (arg1, 0, 0));
+-                }
++static void tcg_out_setcond(TCGContext *s, TCGType type, TCGCond cond,
++                            TCGArg arg0, TCGArg arg1, TCGArg arg2,
++                            int const_arg2)
++{
++    bool invert, swap;
++
++    /* Handle common and trivial cases before handling anything else.  */
++    if (arg2 == 0) {
++        switch (cond) {
++        case TCG_COND_EQ:
++            tcg_out_setcond_eq0(s, type, arg0, arg1);
++            return;
++        case TCG_COND_NE:
++            if (type == TCG_TYPE_I32) {
++                tcg_out_ext32u(s, 0, arg1);
++                arg1 = 0;
+             }
++            tcg_out_setcond_ne0(s, arg0, arg1);
++            return;
++        case TCG_COND_GE:
++            tcg_out32(s, NOR | SAB(arg1, arg0, arg1));
++            arg1 = arg0;
++            /* FALLTHRU */
++        case TCG_COND_LT:
++            /* Extract the sign bit.  */
++            tcg_out_rld(s, RLDICL, arg0, arg1,
++                        type == TCG_TYPE_I64 ? 1 : 33, 63);
++            return;
++        default:
++            break;
+         }
+-        else {
+-            arg = 0;
+-            tcg_out32 (s, XOR | SAB (arg1, 0, arg2));
+-        }
++    }
+ 
+-        if (arg == arg1 && arg1 == arg0) {
+-            tcg_out32(s, ADDIC | TAI(0, arg, -1));
+-            tcg_out32(s, SUBFE | TAB(arg0, 0, arg));
++    /* If we have ISEL, we can implement everything with 3 or 4 insns.
++       All other cases below are also at least 3 insns, so speed up the
++       code generator by not considering them and always using ISEL.  */
++    if (HAVE_ISEL) {
++        int isel, tab;
++
++        tcg_out_cmp(s, cond, arg1, arg2, const_arg2, 7, type);
++
++        isel = tcg_to_isel[cond];
++
++        tcg_out_movi(s, type, arg0, 1);
++        if (isel & 1) {
++            /* arg0 = (bc ? 0 : 1) */
++            tab = TAB(arg0, 0, arg0);
++            isel &= ~1;
++        } else {
++            /* arg0 = (bc ? 1 : 0) */
++            tcg_out_movi(s, type, 0, 0);
++            tab = TAB(arg0, arg0, 0);
+         }
+-        else {
+-            tcg_out32(s, ADDIC | TAI(arg0, arg, -1));
+-            tcg_out32(s, SUBFE | TAB(arg0, arg0, arg));
++        tcg_out32(s, isel | tab);
++        return;
++    }
++
++    invert = swap = false;
++    switch (cond) {
++    case TCG_COND_EQ:
++        /* Given that we can ignore the high bits in setcond_eq0, make
++           sure we go through the XORIS+XORI path in setcond_xor.  */
++        if (type == TCG_TYPE_I32) {
++            arg2 = (uint32_t)arg2;
+         }
+-        break;
++        arg1 = tcg_gen_setcond_xor(s, arg1, arg2, const_arg2);
++        tcg_out_setcond_eq0(s, type, arg0, arg1);
++        return;
+ 
+-    case TCG_COND_GT:
+-    case TCG_COND_GTU:
+-        sh = 30;
+-        crop = 0;
+-        goto crtest;
++    case TCG_COND_NE:
++        if (type == TCG_TYPE_I32) {
++            tcg_out32(s, EXTSW | RS(arg1) | RA(0));
++            arg1 = 0;
++            if (const_arg2) {
++                arg2 = (int32_t)arg2;
++            } else {
++                tcg_out32(s, EXTSW | RS(arg2) | RA(arg0));
++                arg2 = arg0;
++            }
++        }
++        arg1 = tcg_gen_setcond_xor(s, arg1, arg2, const_arg2);
++        tcg_out_setcond_ne0(s, arg0, arg1);
++        return;
+ 
+-    case TCG_COND_LT:
++    /* Reduce the ordered relations to GT.  */
+     case TCG_COND_LTU:
+-        sh = 29;
+-        crop = 0;
+-        goto crtest;
+-
+-    case TCG_COND_GE:
+-    case TCG_COND_GEU:
+-        sh = 31;
+-        crop = CRNOR | BT (7, CR_EQ) | BA (7, CR_LT) | BB (7, CR_LT);
+-        goto crtest;
+-
+-    case TCG_COND_LE:
++    case TCG_COND_LT:
++        swap = true;
++        break;
+     case TCG_COND_LEU:
+-        sh = 31;
+-        crop = CRNOR | BT (7, CR_EQ) | BA (7, CR_GT) | BB (7, CR_GT);
+-    crtest:
+-        tcg_out_cmp(s, cond, arg1, arg2, const_arg2, 7, type);
+-        if (crop) tcg_out32 (s, crop);
+-        tcg_out32 (s, MFCR | RT (0));
+-        tcg_out_rlw(s, RLWINM, arg0, 0, sh, 31, 31);
++    case TCG_COND_LE:
++        invert = true;
++        break;
++    case TCG_COND_GEU:
++    case TCG_COND_GE:
++        swap = true, invert = true;
++        break;
++    case TCG_COND_GTU:
++    case TCG_COND_GT:
+         break;
+-
+     default:
+-        tcg_abort ();
++        tcg_abort();
++    }
++
++    /* In 64-bit mode, carry-out is only generated from the 63-rd bit.
++       Thus 32-bit inputs must be sign-extended.  */
++    if (type == TCG_TYPE_I32) {
++        tcg_out32(s, EXTSW | RS(arg1) | RA(0));
++        arg1 = 0;
++        if (const_arg2) {
++            arg2 = (int32_t)arg2;
++        } else {
++            tcg_out32(s, EXTSW | RS(arg2) | RA(arg0));
++            arg2 = arg0;
++        }
++    }
++    if (swap) {
++        if (const_arg2) {
++            tcg_out_movi(s, TCG_TYPE_I64, 0, arg2);
++            arg2 = arg1;
++            arg1 = 0;
++            const_arg2 = false;
++        } else {
++            int t = arg1;
++            arg1 = arg2;
++            arg2 = t;
++        }
++    }
++
++    /* X > Y implies Y - X generates a carry-out.  This works for both
++       signed and unsigned comparisons.  */
++    if (const_arg2 && (int16_t)arg2 == arg2) {
++        tcg_out32(s, SUBFIC | TAI(0, arg1, arg2));
++    } else {
++        if (const_arg2) {
++            tcg_out_movi(s, type, 0, arg2);
++            arg2 = 0;
++        }
++        tcg_out32(s, SUBFC | TAB(0, arg1, arg2));
++    }
++    tcg_out_movi(s, type, arg0, 0);
++    tcg_out32(s, ADDE | TAB(arg0, arg0, arg0));
++    if (invert) {
++        tcg_out32(s, XORI | SAI(arg0, arg0, 1));
+     }
+ }
+ 
+-- 
+1.8.1.4
+
+

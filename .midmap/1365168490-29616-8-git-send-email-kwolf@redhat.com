@@ -1,0 +1,1 @@
+../Block-patches/v1.1365193682/0007-qcow2-Return-real-error-in-qcow2_update_snapshot_refcount.patch

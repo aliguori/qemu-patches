@@ -1,0 +1,53 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Richard Henderson <rth@twiddle.net>
+To: qemu-devel@nongnu.org, Richard Henderson <rth@twiddle.net>
+Cc: Aurelien Jarno <aurelien@aurel32.net>, qemu-devel@nongnu.org
+Date: Sun, 31 Mar 2013 15:35:05 -0700
+Message-id: 1364769305-3687-20-git-send-email-rth@twiddle.net
+Subject: [PATCH 19/19] tcg-arm: Tidy exit_tb
+
+Use tcg_out_movi32 when it's profitable, which is always for v7.
+Simplify the logic around tcg_out_goto, now that we're sure that
+it won't generate a multi-insn branch.
+
+Signed-off-by: Richard Henderson <rth@twiddle.net>
+Reviewed-by: Aurelien Jarno <aurelien@aurel32.net>
+---
+ tcg/arm/tcg-target.c | 19 +++++++++----------
+ 1 file changed, 9 insertions(+), 10 deletions(-)
+
+diff --git a/tcg/arm/tcg-target.c b/tcg/arm/tcg-target.c
+index c27e4ee..eaade4a 100644
+--- a/tcg/arm/tcg-target.c
++++ b/tcg/arm/tcg-target.c
+@@ -1604,17 +1604,16 @@ static inline void tcg_out_op(TCGContext *s, TCGOpcode opc,
+ 
+     switch (opc) {
+     case INDEX_op_exit_tb:
+-        {
+-            uint8_t *ld_ptr = s->code_ptr;
+-            if (args[0] >> 8)
+-                tcg_out_ld32_12(s, COND_AL, TCG_REG_R0, TCG_REG_PC, 0);
+-            else
+-                tcg_out_dat_imm(s, COND_AL, ARITH_MOV, TCG_REG_R0, 0, args[0]);
++        if (use_armv7_instructions || check_fit_imm(args[0])) {
++            tcg_out_movi32(s, COND_AL, TCG_REG_R0, args[0]);
+             tcg_out_goto(s, COND_AL, (tcg_target_ulong) tb_ret_addr);
+-            if (args[0] >> 8) {
+-                *ld_ptr = (uint8_t) (s->code_ptr - ld_ptr) - 8;
+-                tcg_out32(s, args[0]);
+-            }
++        } else {
++            /* Lacking a real constant pool, use a pc-relative load.  Since
++               tcg_out_goto will always emit 1 insn, we know without further
++               ado that 0 plus the standard 8 bias is right.  */
++            tcg_out_ld32_12(s, COND_AL, TCG_REG_R0, TCG_REG_PC, 0);
++            tcg_out_goto(s, COND_AL, (tcg_target_ulong) tb_ret_addr);
++            tcg_out32(s, args[0]);
+         }
+         break;
+     case INDEX_op_goto_tb:
+-- 
+1.8.1.4
+
+

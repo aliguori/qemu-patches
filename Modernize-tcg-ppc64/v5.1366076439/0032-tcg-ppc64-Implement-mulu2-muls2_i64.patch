@@ -1,0 +1,79 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Richard Henderson <rth@twiddle.net>
+To: qemu-devel@nongnu.org
+Cc: av1474@comtv.ru, aurelien@aurel32.net
+Date: Mon, 15 Apr 2013 20:41:11 +0200
+Message-id: 1366051272-12979-33-git-send-email-rth@twiddle.net
+Subject: [PATCH 32/33] tcg-ppc64: Implement mulu2/muls2_i64
+
+Reviewed-by: Aurelien Jarno <aurelien@aurel32.net>
+Signed-off-by: Richard Henderson <rth@twiddle.net>
+---
+ tcg/ppc64/tcg-target.c | 27 +++++++++++++++++++++++++++
+ tcg/ppc64/tcg-target.h |  4 ++--
+ 2 files changed, 29 insertions(+), 2 deletions(-)
+
+diff --git a/tcg/ppc64/tcg-target.c b/tcg/ppc64/tcg-target.c
+index 1018266..0f33583 100644
+--- a/tcg/ppc64/tcg-target.c
++++ b/tcg/ppc64/tcg-target.c
+@@ -1988,6 +1988,31 @@ static void tcg_out_op (TCGContext *s, TCGOpcode opc, const TCGArg *args,
+         }
+         break;
+ 
++    case INDEX_op_mulu2_i64:
++    case INDEX_op_muls2_i64:
++        {
++            int oph = (opc == INDEX_op_mulu2_i64 ? MULHDU : MULHD);
++            TCGReg outl = args[0], outh = args[1];
++            a0 = args[2], a1 = args[3];
++
++            if (outl == a0 || outl == a1) {
++                if (outh == a0 || outh == a1) {
++                    outl = TCG_REG_R0;
++                } else {
++                    tcg_out32(s, oph | TAB(outh, a0, a1));
++                    oph = 0;
++                }
++            }
++            tcg_out32(s, MULLD | TAB(outl, a0, a1));
++            if (oph != 0) {
++                tcg_out32(s, oph | TAB(outh, a0, a1));
++            }
++            if (outl != args[0]) {
++                tcg_out_mov(s, TCG_TYPE_I64, args[0], outl);
++            }
++        }
++        break;
++
+     default:
+         tcg_dump_ops (s);
+         tcg_abort ();
+@@ -2116,6 +2141,8 @@ static const TCGTargetOpDef ppc_op_defs[] = {
+ 
+     { INDEX_op_add2_i64, { "r", "r", "r", "rI", "r", "rZM" } },
+     { INDEX_op_sub2_i64, { "r", "r", "rI", "r", "rZM", "r" } },
++    { INDEX_op_muls2_i64, { "r", "r", "r", "r" } },
++    { INDEX_op_mulu2_i64, { "r", "r", "r", "r" } },
+ 
+     { -1 },
+ };
+diff --git a/tcg/ppc64/tcg-target.h b/tcg/ppc64/tcg-target.h
+index 8dff1d5..cb77634 100644
+--- a/tcg/ppc64/tcg-target.h
++++ b/tcg/ppc64/tcg-target.h
+@@ -114,8 +114,8 @@ typedef enum {
+ #define TCG_TARGET_HAS_movcond_i64      1
+ #define TCG_TARGET_HAS_add2_i64         1
+ #define TCG_TARGET_HAS_sub2_i64         1
+-#define TCG_TARGET_HAS_mulu2_i64        0
+-#define TCG_TARGET_HAS_muls2_i64        0
++#define TCG_TARGET_HAS_mulu2_i64        1
++#define TCG_TARGET_HAS_muls2_i64        1
+ 
+ #define TCG_AREG0 TCG_REG_R27
+ 
+-- 
+1.8.1.4
+
+

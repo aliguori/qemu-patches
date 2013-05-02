@@ -1,0 +1,32 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+To: qemu-trivial@nongnu.org, qemu-devel@nongnu.org
+Cc: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+Date: Sun,  7 Apr 2013 15:53:33 +1000
+Message-id: 5a0fa6a74f61429fc41236f16746d2e81ade2288.1365313801.git.peter.crosthwaite@xilinx.com
+Subject: [PATCH 4/4] m25p80: Add debug message for no bdrv
+
+If there is no backing bdrv, let the debugging developer know about it.
+
+Signed-off-by: Peter Crosthwaite <peter.crosthwaite@xilinx.com>
+---
+
+ hw/m25p80.c |    1 +
+ 1 files changed, 1 insertions(+), 0 deletions(-)
+
+diff --git a/hw/m25p80.c b/hw/m25p80.c
+index d853a2e..efcc7f4 100644
+--- a/hw/m25p80.c
++++ b/hw/m25p80.c
+@@ -606,6 +606,7 @@ static int m25p80_init(SSISlave *ss)
+             return 1;
+         }
+     } else {
++        DB_PRINT_L(0, "No BDRV - binding to RAM\n");
+         memset(s->storage, 0xFF, s->size);
+     }
+ 
+-- 
+1.7.0.4
+
+

@@ -1,0 +1,7 @@
+0000-ARM-dump-guest-memory-support.txt
+0001-dump-create-writable-files.patch
+0002-dump-extract-out-note-helper.patch
+0003-dump-extract-out-get-note-size-function.patch
+0004-dump-fix-up-memory-mapping-dependencies---stub.patch
+0005-target-arm-add-dump-guest-memory-support.patch
+0006-dump-fix-memory-region-handling.patch

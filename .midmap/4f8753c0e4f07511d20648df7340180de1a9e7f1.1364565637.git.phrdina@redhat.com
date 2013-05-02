@@ -1,0 +1,1 @@
+../convert-savevm-to-use-qapi-and-introduce-qmp-command/v4.1364587947/0004-savevm-add-error-parameter-to-qemu_savevm_state_iterate.patch

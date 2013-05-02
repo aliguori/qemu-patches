@@ -1,0 +1,13 @@
+0000-directory-reorganization-final-part.txt
+0001-arm-fix-location-of-some-include-files.patch
+0002-virtio-9p-Fix-virtio-9p-no-longer-building-after-hw-dirs-branch-merge.patch
+0003-Add-linux-headers-to-QEMU_INCLUDES.patch
+0004-Fix-failure-to-create-q35-machine.patch
+0005-configure-fix-TPM-logic.patch
+0006-tpm-reorganize-headers-and-split-hardware-part.patch
+0007-sysemu-avoid-proliferation-of-include--subdirectories.patch
+0008-include-avoid-useless-includes-of-exec--headers.patch
+0009-memory-move-core-typedefs-to-qemu-typedefsh.patch
+0010-exec-remove-useless-declarations-from-memory-internalh.patch
+0011-hw-move-memory-API-headers-to-hw-.patch
+0012-hw-move-memory-API-to-hw-core.patch

@@ -1,0 +1,59 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Peter Maydell <peter.maydell@linaro.org>
+To: qemu-devel@nongnu.org
+Cc: =?UTF-8?q?Andreas=20F=C3=A4rber?= <afaerber@suse.de>, patches@linaro.org
+Date: Mon, 25 Mar 2013 22:31:34 +0000
+Message-id: 1364250694-7939-5-git-send-email-peter.maydell@linaro.org
+Subject: [PATCH 4/4] ui/cocoa.m: Avoid deprecated NSOpenPanel
+ beginSheetForDirectory
+
+In MacOSX 10.6 and above the NSOpenPanel beginSheetForDirectory
+method is deprecated. Use the preferred replacements instead.
+We retain the original code for use on earlier MacOSX versions
+because the replacement methods don't exist before 10.6.
+
+Signed-off-by: Peter Maydell <peter.maydell@linaro.org>
+---
+ ui/cocoa.m | 16 +++++++++++++++-
+ 1 file changed, 15 insertions(+), 1 deletion(-)
+
+diff --git a/ui/cocoa.m b/ui/cocoa.m
+index 36181d9..79fd41b 100644
+--- a/ui/cocoa.m
++++ b/ui/cocoa.m
+@@ -35,6 +35,9 @@
+ #ifndef MAC_OS_X_VERSION_10_5
+ #define MAC_OS_X_VERSION_10_5 1050
+ #endif
++#ifndef MAC_OS_X_VERSION_10_6
++#define MAC_OS_X_VERSION_10_6 1060
++#endif
+ 
+ 
+ //#define DEBUG
+@@ -771,9 +774,20 @@ QemuCocoaView *cocoaView;
+         NSOpenPanel *op = [[NSOpenPanel alloc] init];
+         [op setPrompt:@"Boot image"];
+         [op setMessage:@"Select the disk image you want to boot.\n\nHit the \"Cancel\" button to quit"];
+-        [op beginSheetForDirectory:nil file:nil types:[NSArray arrayWithObjects:@"img",@"iso",@"dmg",@"qcow",@"cow",@"cloop",@"vmdk",nil]
++        NSArray *filetypes = [NSArray arrayWithObjects:@"img", @"iso", @"dmg",
++                                 @"qcow", @"cow", @"cloop", @"vmdk", nil];
++#if (MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_6)
++        [op setAllowedFileTypes:filetypes];
++        [op beginSheetModalForWindow:normalWindow
++            completionHandler:^(NSInteger returnCode)
++            { [self openPanelDidEnd:op
++                  returnCode:returnCode contextInfo:NULL ]; } ];
++#else
++        // Compatibility code for pre-10.6, using deprecated method
++        [op beginSheetForDirectory:nil file:nil types:filetypes
+               modalForWindow:normalWindow modalDelegate:self
+               didEndSelector:@selector(openPanelDidEnd:returnCode:contextInfo:) contextInfo:NULL];
++#endif
+     } else {
+         // or launch QEMU, with the global args
+         [self startEmulationWithArgc:gArgc argv:(char **)gArgv];
+-- 
+1.7.11.4
+
+

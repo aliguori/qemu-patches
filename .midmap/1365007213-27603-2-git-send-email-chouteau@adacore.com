@@ -1,0 +1,1 @@
+../PPC-PReP-Use-ElF-kernel-on-PReP/v1.1365032410/0001-PPC-PReP-Load-ELF-kernel.patch

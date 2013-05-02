@@ -1,0 +1,382 @@
+From patches Mon Sep 17 00:00:00 2001
+From: John Rigby <john.rigby@linaro.org>
+To: qemu-devel@nongnu.org
+Cc: Peter Maydell <peter.maydell@linaro.org>,
+ John Rigby <john.rigby@linaro.org>, patches@linaro.org
+Date: Tue, 30 Apr 2013 10:04:23 -0600
+Message-id: 1367337863-24730-3-git-send-email-john.rigby@linaro.org
+Subject: [PATCH 2/2] ARM: Add mach-virt platform
+
+Add mach-virt platform support cooresponding to
+/arch/arm/mach-virt in kernel tree.
+
+For now it is not virtual but instantiates a pl011 uart
+and and sp804 timer.  The uart is need for a console
+the timer is needed when running without kvm and there
+is no arch timer.
+
+Signed-off-by: John Rigby <john.rigby@linaro.org>
+---
+ hw/arm/Makefile.objs |    2 +-
+ hw/arm/mach-virt.c   |  337 ++++++++++++++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 338 insertions(+), 1 deletion(-)
+ create mode 100644 hw/arm/mach-virt.c
+
+diff --git a/hw/arm/Makefile.objs b/hw/arm/Makefile.objs
+index 9e3a06f..0789352 100644
+--- a/hw/arm/Makefile.objs
++++ b/hw/arm/Makefile.objs
+@@ -1,5 +1,5 @@
+ obj-y += boot.o collie.o exynos4_boards.o gumstix.o highbank.o
+-obj-y += integratorcp.o kzm.o mainstone.o musicpal.o nseries.o
++obj-y += integratorcp.o kzm.o mach-virt.o mainstone.o musicpal.o nseries.o
+ obj-y += omap_sx1.o palm.o pic_cpu.o realview.o spitz.o stellaris.o
+ obj-y += tosa.o versatilepb.o vexpress.o xilinx_zynq.o z2.o
+ 
+diff --git a/hw/arm/mach-virt.c b/hw/arm/mach-virt.c
+new file mode 100644
+index 0000000..b55e4d1
+--- /dev/null
++++ b/hw/arm/mach-virt.c
+@@ -0,0 +1,337 @@
++/*
++ * ARM mach-virt emulation
++ *
++ * Copyright (c) 2013 Linaro
++ *
++ * This program is free software; you can redistribute it and/or modify it
++ * under the terms and conditions of the GNU General Public License,
++ * version 2 or later, as published by the Free Software Foundation.
++ *
++ * This program is distributed in the hope it will be useful, but WITHOUT
++ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
++ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
++ * more details.
++ *
++ * You should have received a copy of the GNU General Public License along with
++ * this program.  If not, see <http://www.gnu.org/licenses/>.
++ *
++ */
++
++#include "hw/sysbus.h"
++#include "hw/arm-misc.h"
++#include "hw/primecell.h"
++#include "hw/devices.h"
++#include "net/net.h"
++#include "sysemu/device_tree.h"
++#include "sysemu/sysemu.h"
++#include "hw/boards.h"
++#include "exec/address-spaces.h"
++#include "hw/flash.h"
++#include "libfdt_env.h"
++
++#define ARM_GIC_DIST_BASE 0x2c001000
++#define ARM_GIC_DIST_SIZE 0x1000
++#define ARM_GIC_CPUI_BASE 0x2c002000
++#define ARM_GIC_CPUI_SIZE 0x1000
++
++#define GIC_FDT_IRQ_NUM_CELLS 3
++
++#define GIC_FDT_IRQ_TYPE_SPI 0
++#define GIC_FDT_IRQ_TYPE_PPI 1
++
++#define GIC_FDT_IRQ_FLAGS_EDGE_LO_HI 1
++#define GIC_FDT_IRQ_FLAGS_EDGE_HI_LO 2
++#define GIC_FDT_IRQ_FLAGS_LEVEL_HI 4
++#define GIC_FDT_IRQ_FLAGS_LEVEL_LO 8
++
++#define GIC_FDT_IRQ_PPI_CPU_SHIFT 8
++#define GIC_FDT_IRQ_PPI_CPU_MASK (0xff << GIC_FDT_IRQ_PPI_CPU_SHIFT)
++
++#define CPU_NAME_MAX_LEN 16
++static void add_cpu_nodes(void *fdt, const struct arm_boot_info *binfo)
++{
++    int cpu;
++
++    qemu_devtree_add_subnode(fdt, "/cpus");
++    qemu_devtree_setprop_cell(fdt, "/cpus", "#address-cells", 0x1);
++    qemu_devtree_setprop_cell(fdt, "/cpus", "#size-cells", 0x0);
++
++    for (cpu = 0; cpu < binfo->nb_cpus; ++cpu) {
++        char cpu_name[CPU_NAME_MAX_LEN];
++
++        snprintf(cpu_name, CPU_NAME_MAX_LEN, "/cpus/cpu@%d", cpu);
++
++        qemu_devtree_add_subnode(fdt, cpu_name);
++        qemu_devtree_setprop_string(fdt, cpu_name, "device_type", "cpu");
++        qemu_devtree_setprop_string(fdt, cpu_name, "compatible",
++            "arm,cortex-a15");
++
++        if (binfo->nb_cpus > 1) {
++            qemu_devtree_setprop_string(fdt, cpu_name, "enable-method", "psci");
++        }
++
++        qemu_devtree_setprop_cell(fdt, cpu_name, "reg", cpu);
++    }
++}
++
++static void add_gic_nodes(void *fdt, uint32_t phandle)
++{
++    uint64_t reg_prop[] = {
++        cpu_to_fdt64(ARM_GIC_DIST_BASE), cpu_to_fdt64(ARM_GIC_DIST_SIZE),
++        cpu_to_fdt64(ARM_GIC_CPUI_BASE), cpu_to_fdt64(ARM_GIC_CPUI_SIZE),
++    };
++
++    qemu_devtree_add_subnode(fdt, "/intc");
++    qemu_devtree_setprop_string(fdt, "/intc", "compatible",
++            "arm,cortex-a15-gic");
++    qemu_devtree_setprop_cell(fdt, "/intc", "#interrupt-cells",
++            GIC_FDT_IRQ_NUM_CELLS);
++    qemu_devtree_setprop(fdt, "/intc", "interrupt-controller", NULL, 0);
++    qemu_devtree_setprop(fdt, "/intc", "reg", reg_prop, sizeof(reg_prop));
++    qemu_devtree_setprop_cell(fdt, "/intc", "phandle", phandle);
++}
++
++static void add_timer_nodes(void *fdt, const struct arm_boot_info *binfo)
++{
++    uint32_t cpu_mask =
++        (((1 << binfo->nb_cpus) - 1) << GIC_FDT_IRQ_PPI_CPU_SHIFT)
++                        & GIC_FDT_IRQ_PPI_CPU_MASK;
++    cpu_mask = 0xf00;
++    uint32_t irq_prop[] = {
++        cpu_to_fdt32(GIC_FDT_IRQ_TYPE_PPI),
++        cpu_to_fdt32(13),
++        cpu_to_fdt32(cpu_mask | GIC_FDT_IRQ_FLAGS_EDGE_LO_HI),
++
++        cpu_to_fdt32(GIC_FDT_IRQ_TYPE_PPI),
++        cpu_to_fdt32(14),
++        cpu_to_fdt32(cpu_mask | GIC_FDT_IRQ_FLAGS_EDGE_LO_HI),
++
++        cpu_to_fdt32(GIC_FDT_IRQ_TYPE_PPI),
++        cpu_to_fdt32(11),
++        cpu_to_fdt32(cpu_mask | GIC_FDT_IRQ_FLAGS_EDGE_LO_HI),
++
++        cpu_to_fdt32(GIC_FDT_IRQ_TYPE_PPI),
++        cpu_to_fdt32(10),
++        cpu_to_fdt32(cpu_mask | GIC_FDT_IRQ_FLAGS_EDGE_LO_HI),
++    };
++
++    qemu_devtree_add_subnode(fdt, "/timer");
++    qemu_devtree_setprop_string(fdt, "/timer", "compatible", "arm,armv7-timer");
++    qemu_devtree_setprop(fdt, "/timer", "interrupts", irq_prop,
++            sizeof(irq_prop));
++}
++
++#define NRMAPIRQS 43
++
++static void add_interrupt_map(void *fdt, const char *soc, uint32_t gic)
++{
++    int i, irq;
++    int len;
++    uint32_t *map;
++
++    qemu_devtree_setprop_cell(fdt, soc, "#interrupt-cells", 0x1);
++    qemu_devtree_setprop_cells(fdt, soc, "interrupt-map-mask", 0, 63);
++
++    len = NRMAPIRQS * 6 * sizeof(uint32_t);
++    map = g_malloc(len);
++
++    for (i = 0, irq = 0; irq < NRMAPIRQS; irq++) {
++        map[i++] = cpu_to_be32(0x0);
++        map[i++] = cpu_to_be32(irq);
++        map[i++] = cpu_to_be32(gic);
++        map[i++] = cpu_to_be32(0x0);
++        map[i++] = cpu_to_be32(irq);
++        map[i++] = cpu_to_be32(4);
++    }
++    qemu_devtree_setprop(fdt, soc, "interrupt-map", map, len);
++    g_free(map);
++}
++
++static void *machvirt_dtb(hwaddr addr, const struct arm_boot_info *binfo,
++        int *fdt_size)
++{
++    void *fdt;
++    uint32_t gic_phandle;
++    uint32_t clock_phandle;
++    char compatible_sb[] = "simple-bus\0arm,amba-bus";
++    char compatible_uart[] = "arm,pl011\0arm,primecell";
++    char compatible_timer[] = "arm,sp804\0arm,primecell";
++    char clock_names_uart[] = "uartclk\0apb_pclk";
++    char clock_names_timer[] = "timerclk\0apb_pclk";
++
++    fdt = create_device_tree(fdt_size);
++    if (fdt == NULL) {
++        goto out;
++    }
++    gic_phandle = qemu_devtree_alloc_phandle(fdt);
++
++    /* Header */
++    qemu_devtree_setprop_cell(fdt, "/", "interrupt-parent", gic_phandle);
++    qemu_devtree_setprop_string(fdt, "/", "compatible", "linux,dummy-virt");
++    qemu_devtree_setprop_cell(fdt, "/", "#address-cells", 0x2);
++    qemu_devtree_setprop_cell(fdt, "/", "#size-cells", 0x2);
++
++    /*
++     * /chosen and /memory nodes must exist
++     * only add properties are not added later in arm_boot
++     */
++    qemu_devtree_add_subnode(fdt, "/chosen");
++    qemu_devtree_add_subnode(fdt, "/memory");
++    qemu_devtree_setprop_string(fdt, "/memory", "device_type", "memory");
++
++    /* CPU and peripherals (interrupt controller, timers, etc) */
++    add_cpu_nodes(fdt, binfo);
++    add_gic_nodes(fdt, gic_phandle);
++    add_timer_nodes(fdt, binfo);
++
++    qemu_devtree_add_subnode(fdt, "/soc");
++    qemu_devtree_setprop(fdt, "/soc", "compatible", compatible_sb,
++            sizeof(compatible_sb));
++    qemu_devtree_setprop_cell(fdt, "/soc", "#address-cells", 0x1);
++    qemu_devtree_setprop_cell(fdt, "/soc", "#size-cells", 0x1);
++    qemu_devtree_setprop_cells(fdt, "/soc", "ranges", 0x10000000, 0x0,
++            0x10000000, 0x10000000);
++    qemu_devtree_setprop_cell(fdt, "/soc", "#interrupt-cells", 0x1);
++
++    add_interrupt_map(fdt, "/soc", gic_phandle);
++
++    clock_phandle = qemu_devtree_alloc_phandle(fdt);
++    qemu_devtree_add_subnode(fdt, "/soc/clock");
++    qemu_devtree_setprop_string(fdt, "/soc/clock", "compatible", "fixed-clock");
++    qemu_devtree_setprop_cell(fdt, "/soc/clock", "#clock-cells", 0x0);
++    qemu_devtree_setprop_cell(fdt, "/soc/clock", "clock-frequency", 24000000);
++    qemu_devtree_setprop_string(fdt, "/soc/clock", "clock-output-names",
++            "clk24mhz");
++    qemu_devtree_setprop_cell(fdt, "/soc/clock", "phandle", clock_phandle);
++
++    qemu_devtree_add_subnode(fdt, "/soc/uart");
++    qemu_devtree_setprop(fdt, "/soc/uart", "compatible", compatible_uart,
++            sizeof(compatible_uart));
++    qemu_devtree_setprop_cells(fdt, "/soc/uart", "reg", 0x1c090000, 0x1000);
++    qemu_devtree_setprop_cell(fdt, "/soc/uart", "interrupts", 0x5);
++    qemu_devtree_setprop_cells(fdt, "/soc/uart", "clocks", clock_phandle,
++            clock_phandle);
++    qemu_devtree_setprop(fdt, "/soc/uart", "clock-names", clock_names_uart,
++            sizeof(clock_names_uart));
++
++    qemu_devtree_add_subnode(fdt, "/soc/timer");
++    qemu_devtree_setprop(fdt, "/soc/timer", "compatible", compatible_timer,
++            sizeof(compatible_timer));
++    qemu_devtree_setprop_cells(fdt, "/soc/timer", "reg", 0x1c110000, 0x1000);
++    qemu_devtree_setprop_cell(fdt, "/soc/timer", "interrupts", 0x2);
++    qemu_devtree_setprop_cells(fdt, "/soc/timer", "clocks", clock_phandle,
++            clock_phandle);
++    qemu_devtree_setprop(fdt, "/soc/timer", "clock-names", clock_names_timer,
++            sizeof(clock_names_timer));
++#if 0
++    /* PSCI firmware */
++    qemu_devtree_add_subnode(fdt, "/psci");
++    qemu_devtree_setprop_string(fdt, "/psci", "compatible", "arm,psci");
++    qemu_devtree_setprop_string(fdt, "/psci", "method", "hvc");
++    qemu_devtree_setprop_cell(fdt, "/psci", "cpu_suspend",
++            KVM_PSCI_FN_CPU_SUSPEND);
++    qemu_devtree_setprop_cell(fdt, "/psci", "cpu_off", KVM_PSCI_FN_CPU_OFF);
++    qemu_devtree_setprop_cell(fdt, "/psci", "cpu_on", KVM_PSCI_FN_CPU_ON);
++    qemu_devtree_setprop_cell(fdt, "/psci", "migrate", KVM_PSCI_FN_MIGRATE);
++#endif
++
++out:
++    return fdt;
++}
++
++
++static struct arm_boot_info machvirt_binfo;
++
++static void machvirt_init(QEMUMachineInitArgs *args)
++{
++    qemu_irq pic[64];
++    MemoryRegion *sysmem = get_system_memory();
++    int n;
++    MemoryRegion *ram = g_new(MemoryRegion, 1);
++    qemu_irq cpu_irq[4];
++    DeviceState *dev;
++    SysBusDevice *busdev;
++    const char *cpu_model = args->cpu_model;
++
++    if (!cpu_model) {
++        cpu_model = "cortex-a15";
++    }
++
++    for (n = 0; n < smp_cpus; n++) {
++        ARMCPU *cpu;
++        qemu_irq *irqp;
++
++        cpu = cpu_arm_init(cpu_model);
++        if (!cpu) {
++            fprintf(stderr, "Unable to find CPU definition %s\n", cpu_model);
++            exit(1);
++        }
++        irqp = arm_pic_init_cpu(cpu);
++        cpu_irq[n] = irqp[ARM_PIC_CPU_IRQ];
++    }
++
++    {
++        /* We have to use a separate 64 bit variable here to avoid the gcc
++         * "comparison is always false due to limited range of data type"
++         * warning if we are on a host where ram_addr_t is 32 bits.
++         */
++        uint64_t rsz = ram_size;
++        if (rsz > (30ULL * 1024 * 1024 * 1024)) {
++            fprintf(stderr, "mach-virt: cannot model more than 30GB RAM\n");
++            exit(1);
++        }
++    }
++
++    memory_region_init_ram(ram, "mach-virt.ram", ram_size);
++    vmstate_register_ram_global(ram);
++    /* RAM is from 0x80000000 upwards; there is no low-memory alias for it. */
++    memory_region_add_subregion(sysmem, 0x80000000, ram);
++
++    /* 0x2c000000 A15MPCore private memory region (GIC) */
++    dev = qdev_create(NULL, "a15mpcore_priv");
++    qdev_prop_set_uint32(dev, "num-cpu", smp_cpus);
++    qdev_init_nofail(dev);
++    busdev = SYS_BUS_DEVICE(dev);
++    sysbus_mmio_map(busdev, 0, 0x2c000000);
++    for (n = 0; n < smp_cpus; n++) {
++        sysbus_connect_irq(busdev, n, cpu_irq[n]);
++    }
++
++    for (n = 0; n < 64; n++) {
++        pic[n] = qdev_get_gpio_in(dev, n);
++    }
++
++    /*
++     * Not completely virt yet, we do have one uart
++     * .. and a timer...
++     */
++    sysbus_create_simple("pl011", 0x1c090000, pic[5]);
++    sysbus_create_simple("sp804", 0x1c110000, pic[2]);
++
++    machvirt_binfo.ram_size = args->ram_size;
++    machvirt_binfo.kernel_filename = args->kernel_filename;
++    machvirt_binfo.kernel_cmdline = args->kernel_cmdline;
++    machvirt_binfo.initrd_filename = args->initrd_filename;
++    machvirt_binfo.nb_cpus = smp_cpus;
++    machvirt_binfo.board_id = -1;
++    machvirt_binfo.loader_start = 0x80000000;
++    machvirt_binfo.smp_bootreg_addr = 0x1c010000 + 0x30;
++    machvirt_binfo.gic_cpu_if_addr = 0x2c002000;
++    machvirt_binfo.get_dtb = machvirt_dtb;
++    arm_load_kernel(arm_env_get_cpu(first_cpu), &machvirt_binfo);
++}
++
++static QEMUMachine machvirt_a15_machine = {
++    .name = "machvirt-a15",
++    .desc = "ARM Virtual Cortex-A15",
++    .init = machvirt_init,
++    .max_cpus = 4,
++    DEFAULT_MACHINE_OPTIONS,
++};
++
++static void machvirt_machine_init(void)
++{
++    qemu_register_machine(&machvirt_a15_machine);
++}
++
++machine_init(machvirt_machine_init);
+-- 
+1.7.9.5
+
+

@@ -1,0 +1,1 @@
+../ccid-and-libcacard-fixes-for-windows-mingw/v3.1366671870/0023-dev-smartcard-reader-change-default-protocol-to-T0.patch

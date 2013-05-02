@@ -1,0 +1,17 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Hans de Goede <hdegoede@redhat.com>
+To: Hans de Goede <hdegoede@redhat.com>, Gerd Hoffmann <kraxel@redhat.com>
+Cc: qemu-devel@nongnu.org
+Date: Tue,  9 Apr 2013 10:24:21 +0200
+Message-id: 1365495862-11276-1-git-send-email-hdegoede@redhat.com
+Subject: [PATCH 0/1] ehci_free_packet: Discard finished packets when the queue
+ is halted v3
+
+Hi Gerd,
+
+And here is a v3 fixing a whitespace issue in v2, sorry about the noise.
+
+Regards,
+
+Hans
+

@@ -1,0 +1,64 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Stefan Hajnoczi <stefanha@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Anthony Liguori <aliguori@us.ibm.com>, Dmitry Fleytman <dmitry@daynix.com>,
+ Stefan Hajnoczi <stefanha@redhat.com>
+Date: Mon, 8 Apr 2013 17:43:48 +0200
+Message-id: 1365435829-23535-2-git-send-email-stefanha@redhat.com
+Subject: [PATCH 1/2] vmxnet3: iPXE compatibility fixes
+
+From: Dmitry Fleytman <dmitry@daynix.com>
+
+iPXE vmxnet3 driver makes a few assumptions regarding device operation
+that were missed during testing with Linux and Windows drivers.
+This patch adds following logic:
+  1. Additional GET commands processing added
+  2. Max number of RX chunks should be set to 1 when driver passes 0
+     via corresponding shared memory field
+  3. Enforecement for max chunks number added
+
+Signed-off-by: Dmitry Fleytman <dmitry@daynix.com>
+Signed-off-by: Stefan Hajnoczi <stefanha@redhat.com>
+---
+ hw/vmxnet3.c | 11 +++++++++++
+ 1 file changed, 11 insertions(+)
+
+diff --git a/hw/vmxnet3.c b/hw/vmxnet3.c
+index bdd256e..1e18168 100644
+--- a/hw/vmxnet3.c
++++ b/hw/vmxnet3.c
+@@ -1033,6 +1033,7 @@ vmxnet3_indicate_packet(VMXNET3State *s)
+         is_head = false;
+         ready_rxcd_pa = new_rxcd_pa;
+         new_rxcd_pa = 0;
++        num_frags++;
+     }
+ 
+     if (0 != ready_rxcd_pa) {
+@@ -1324,6 +1325,10 @@ static void vmxnet3_activate_device(VMXNET3State *s)
+     s->max_rx_frags =
+         VMXNET3_READ_DRV_SHARED16(s->drv_shmem, devRead.misc.maxNumRxSG);
+ 
++    if (s->max_rx_frags == 0) {
++        s->max_rx_frags = 1;
++    }
++
+     VMW_CFPRN("Max RX fragments is %u", s->max_rx_frags);
+ 
+     s->event_int_idx =
+@@ -1524,6 +1529,12 @@ static uint64_t vmxnet3_get_command_status(VMXNET3State *s)
+         VMW_CFPRN("Device active: %" PRIx64, ret);
+         break;
+ 
++    case VMXNET3_CMD_RESET_DEV:
++    case VMXNET3_CMD_QUIESCE_DEV:
++    case VMXNET3_CMD_GET_QUEUE_STATUS:
++        ret = 0;
++        break;
++
+     case VMXNET3_CMD_GET_LINK:
+         ret = s->link_status_and_speed;
+         VMW_CFPRN("Link and speed: %" PRIx64, ret);
+-- 
+1.8.1.4
+

@@ -1,0 +1,69 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Alexander Graf <agraf@suse.de>
+To: qemu-ppc@nongnu.org
+Cc: Blue Swirl <blauwirbel@gmail.com>, Aurelien Jarno <aurelien@aurel32.net>,
+ Cornelia Huck <cornelia.huck@de.ibm.com>, qemu-devel@nongnu.org
+Date: Fri, 26 Apr 2013 20:19:27 +0200
+Message-id: 1367000373-7972-19-git-send-email-agraf@suse.de
+Subject: [PATCH 18/24] s390-ccw.img: Get queue config from host.
+
+From: Cornelia Huck <cornelia.huck@de.ibm.com>
+
+Ask the host about the configuration instead of guessing it.
+
+Signed-off-by: Cornelia Huck <cornelia.huck@de.ibm.com>
+Signed-off-by: Alexander Graf <agraf@suse.de>
+---
+ pc-bios/s390-ccw/virtio.c |   10 +++++++---
+ pc-bios/s390-ccw/virtio.h |    5 +++++
+ 2 files changed, 12 insertions(+), 3 deletions(-)
+
+diff --git a/pc-bios/s390-ccw/virtio.c b/pc-bios/s390-ccw/virtio.c
+index e0cede5..5b9e1dc 100644
+--- a/pc-bios/s390-ccw/virtio.c
++++ b/pc-bios/s390-ccw/virtio.c
+@@ -257,17 +257,21 @@ int virtio_read(ulong sector, void *load_addr)
+ void virtio_setup_block(struct subchannel_id schid)
+ {
+     struct vq_info_block info;
++    struct vq_config_block config = {};
+ 
+     virtio_reset(schid);
+ 
+-    /* XXX need to fetch the 128 from host */
+-    vring_init(&block, 128, (void*)(100 * 1024 * 1024),
++    config.index = 0;
++    if (run_ccw(schid, CCW_CMD_READ_VQ_CONF, &config, sizeof(config))) {
++        virtio_panic("Could not get block device configuration\n");
++    }
++    vring_init(&block, config.num, (void*)(100 * 1024 * 1024),
+                KVM_S390_VIRTIO_RING_ALIGN);
+ 
+     info.queue = (100ULL * 1024ULL* 1024ULL);
+     info.align = KVM_S390_VIRTIO_RING_ALIGN;
+     info.index = 0;
+-    info.num = 128;
++    info.num = config.num;
+     block.schid = schid;
+ 
+     if (!run_ccw(schid, CCW_CMD_SET_VQ, &info, sizeof(info))) {
+diff --git a/pc-bios/s390-ccw/virtio.h b/pc-bios/s390-ccw/virtio.h
+index a33199d..86fdd57 100644
+--- a/pc-bios/s390-ccw/virtio.h
++++ b/pc-bios/s390-ccw/virtio.h
+@@ -53,6 +53,11 @@ struct vq_info_block {
+     u16 num;
+ } __attribute__((packed));
+ 
++struct vq_config_block {
++    u16 index;
++    u16 num;
++} __attribute__((packed));
++
+ struct virtio_dev {
+     struct virtio_dev_header *header;
+     struct virtio_vqconfig *vqconfig;
+-- 
+1.6.0.2
+
+

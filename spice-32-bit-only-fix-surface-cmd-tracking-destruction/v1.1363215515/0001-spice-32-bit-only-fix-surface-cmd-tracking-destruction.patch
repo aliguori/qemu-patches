@@ -1,0 +1,34 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Alon Levy <alevy@redhat.com>
+To: Alon Levy <alevy@redhat.com>, qemu-devel@nongnu.org
+Cc: kraxel@redhat.com, qemu-devel@nongnu.org
+Date: Wed, 13 Mar 2013 17:58:35 +0200
+Message-id: 1363190315-23956-1-git-send-email-alevy@redhat.com
+Subject: [PATCH 1/1] spice: (32 bit only) fix surface cmd tracking destruction
+
+No change for 64 bit arches, but for 32 bit previously we zeroed half
+the surfaces cmd array, instead of all of it.
+
+Signed-off-by: Alon Levy <alevy@redhat.com>
+Acked-by: Hans de Goede <hdegoede@redhat.com>
+---
+ hw/qxl.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/hw/qxl.c b/hw/qxl.c
+index ef69348..4cbab45 100644
+--- a/hw/qxl.c
++++ b/hw/qxl.c
+@@ -226,7 +226,7 @@ static void qxl_spice_destroy_surfaces_complete(PCIQXLDevice *qxl)
+     trace_qxl_spice_destroy_surfaces_complete(qxl->id);
+     qemu_mutex_lock(&qxl->track_lock);
+     memset(qxl->guest_surfaces.cmds, 0,
+-           sizeof(qxl->guest_surfaces.cmds) * qxl->ssd.num_surfaces);
++           sizeof(qxl->guest_surfaces.cmds[0]) * qxl->ssd.num_surfaces);
+     qxl->guest_surfaces.count = 0;
+     qemu_mutex_unlock(&qxl->track_lock);
+ }
+-- 
+1.8.1.4
+
+

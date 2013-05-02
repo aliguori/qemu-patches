@@ -1,0 +1,1 @@
+../implement-power-chip/v2.1365182884/0006-ich9-refactor-wakeup-reset-function.patch

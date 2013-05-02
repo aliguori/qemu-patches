@@ -1,0 +1,1114 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Jason Wang <jasowang@redhat.com>
+To: aliguori@us.ibm.com, shajnocz@redhat.com, qemu-devel@nongnu.org,
+ mst@redhat.com
+Cc: krkumar2@in.ibm.com, kvm@vger.kernel.org, mprivozn@redhat.com,
+ rusty@rustcorp.com.au, Jason Wang <jasowang@redhat.com>,
+ gaowanlong@cn.fujitsu.com, jwhan@filewood.snu.ac.kr, shiyer@redhat.com
+Date: Fri, 25 Jan 2013 18:35:24 +0800
+Message-id: 1359110143-42984-2-git-send-email-jasowang@redhat.com
+Subject: [PATCH 01/20] net: introduce qemu_get_queue()
+
+To support multiqueue, the patch introduce a helper qemu_get_queue()
+which is used to get the NetClientState of a device. The following patches would
+refactor this helper to support multiqueue.
+
+Signed-off-by: Jason Wang <jasowang@redhat.com>
+---
+ hw/cadence_gem.c        |    9 +++--
+ hw/dp8393x.c            |    9 +++--
+ hw/e1000.c              |   24 ++++++++-------
+ hw/eepro100.c           |   12 ++++----
+ hw/etraxfs_eth.c        |    4 +-
+ hw/lan9118.c            |   10 +++---
+ hw/mcf_fec.c            |    4 +-
+ hw/milkymist-minimac2.c |    4 +-
+ hw/mipsnet.c            |    4 +-
+ hw/musicpal.c           |    2 +-
+ hw/ne2000-isa.c         |    2 +-
+ hw/ne2000.c             |    7 ++--
+ hw/opencores_eth.c      |    6 ++--
+ hw/pcnet-pci.c          |    2 +-
+ hw/pcnet.c              |    7 ++--
+ hw/rtl8139.c            |   14 ++++----
+ hw/smc91c111.c          |    4 +-
+ hw/spapr_llan.c         |    4 +-
+ hw/stellaris_enet.c     |    5 ++-
+ hw/usb/dev-network.c    |   10 +++---
+ hw/virtio-net.c         |   76 ++++++++++++++++++++++++++---------------------
+ hw/xen_nic.c            |   13 +++++---
+ hw/xgmac.c              |    4 +-
+ hw/xilinx_axienet.c     |    4 +-
+ hw/xilinx_ethlite.c     |    4 +-
+ include/net/net.h       |    1 +
+ net/net.c               |    5 +++
+ savevm.c                |    2 +-
+ 28 files changed, 138 insertions(+), 114 deletions(-)
+
+diff --git a/hw/cadence_gem.c b/hw/cadence_gem.c
+index 0d83442..9de688f 100644
+--- a/hw/cadence_gem.c
++++ b/hw/cadence_gem.c
+@@ -389,10 +389,10 @@ static void gem_init_register_masks(GemState *s)
+  */
+ static void phy_update_link(GemState *s)
+ {
+-    DB_PRINT("down %d\n", s->nic->nc.link_down);
++    DB_PRINT("down %d\n", qemu_get_queue(s->nic)->link_down);
+ 
+     /* Autonegotiation status mirrors link status.  */
+-    if (s->nic->nc.link_down) {
++    if (qemu_get_queue(s->nic)->link_down) {
+         s->phy_regs[PHY_REG_STATUS] &= ~(PHY_REG_STATUS_ANEGCMPL |
+                                          PHY_REG_STATUS_LINK);
+         s->phy_regs[PHY_REG_INT_ST] |= PHY_REG_INT_ST_LINKC;
+@@ -906,9 +906,10 @@ static void gem_transmit(GemState *s)
+ 
+             /* Send the packet somewhere */
+             if (s->phy_loop) {
+-                gem_receive(&s->nic->nc, tx_packet, total_bytes);
++                gem_receive(qemu_get_queue(s->nic), tx_packet, total_bytes);
+             } else {
+-                qemu_send_packet(&s->nic->nc, tx_packet, total_bytes);
++                qemu_send_packet(qemu_get_queue(s->nic), tx_packet,
++                                 total_bytes);
+             }
+ 
+             /* Prepare for next packet */
+diff --git a/hw/dp8393x.c b/hw/dp8393x.c
+index b501450..c2d0bc8 100644
+--- a/hw/dp8393x.c
++++ b/hw/dp8393x.c
+@@ -339,6 +339,7 @@ static void do_receiver_disable(dp8393xState *s)
+ 
+ static void do_transmit_packets(dp8393xState *s)
+ {
++    NetClientState *nc = qemu_get_queue(s->nic);
+     uint16_t data[12];
+     int width, size;
+     int tx_len, len;
+@@ -408,13 +409,13 @@ static void do_transmit_packets(dp8393xState *s)
+         if (s->regs[SONIC_RCR] & (SONIC_RCR_LB1 | SONIC_RCR_LB0)) {
+             /* Loopback */
+             s->regs[SONIC_TCR] |= SONIC_TCR_CRSL;
+-            if (s->nic->nc.info->can_receive(&s->nic->nc)) {
++            if (nc->info->can_receive(nc)) {
+                 s->loopback_packet = 1;
+-                s->nic->nc.info->receive(&s->nic->nc, s->tx_buffer, tx_len);
++                nc->info->receive(nc, s->tx_buffer, tx_len);
+             }
+         } else {
+             /* Transmit packet */
+-            qemu_send_packet(&s->nic->nc, s->tx_buffer, tx_len);
++            qemu_send_packet(nc, s->tx_buffer, tx_len);
+         }
+         s->regs[SONIC_TCR] |= SONIC_TCR_PTX;
+ 
+@@ -903,7 +904,7 @@ void dp83932_init(NICInfo *nd, hwaddr base, int it_shift,
+ 
+     s->nic = qemu_new_nic(&net_dp83932_info, &s->conf, nd->model, nd->name, s);
+ 
+-    qemu_format_nic_info_str(&s->nic->nc, s->conf.macaddr.a);
++    qemu_format_nic_info_str(qemu_get_queue(s->nic), s->conf.macaddr.a);
+     qemu_register_reset(nic_reset, s);
+     nic_reset(s);
+ 
+diff --git a/hw/e1000.c b/hw/e1000.c
+index ef06ca1..7b310d7 100644
+--- a/hw/e1000.c
++++ b/hw/e1000.c
+@@ -167,11 +167,11 @@ set_phy_ctrl(E1000State *s, int index, uint16_t val)
+ {
+     if ((val & MII_CR_AUTO_NEG_EN) && (val & MII_CR_RESTART_AUTO_NEG)) {
+         /* no need auto-negotiation if link was down */
+-        if (s->nic->nc.link_down) {
++        if (qemu_get_queue(s->nic)->link_down) {
+             s->phy_reg[PHY_STATUS] |= MII_SR_AUTONEG_COMPLETE;
+             return;
+         }
+-        s->nic->nc.link_down = true;
++        qemu_get_queue(s->nic)->link_down = true;
+         e1000_link_down(s);
+         s->phy_reg[PHY_STATUS] &= ~MII_SR_AUTONEG_COMPLETE;
+         DBGOUT(PHY, "Start link auto negotiation\n");
+@@ -183,7 +183,7 @@ static void
+ e1000_autoneg_timer(void *opaque)
+ {
+     E1000State *s = opaque;
+-    s->nic->nc.link_down = false;
++    qemu_get_queue(s->nic)->link_down = false;
+     e1000_link_up(s);
+     s->phy_reg[PHY_STATUS] |= MII_SR_AUTONEG_COMPLETE;
+     DBGOUT(PHY, "Auto negotiation is completed\n");
+@@ -286,7 +286,7 @@ static void e1000_reset(void *opaque)
+     d->rxbuf_min_shift = 1;
+     memset(&d->tx, 0, sizeof d->tx);
+ 
+-    if (d->nic->nc.link_down) {
++    if (qemu_get_queue(d->nic)->link_down) {
+         e1000_link_down(d);
+     }
+ 
+@@ -314,7 +314,7 @@ set_rx_control(E1000State *s, int index, uint32_t val)
+     s->rxbuf_min_shift = ((val / E1000_RCTL_RDMTS_QUAT) & 3) + 1;
+     DBGOUT(RX, "RCTL: %d, mac_reg[RCTL] = 0x%x\n", s->mac_reg[RDT],
+            s->mac_reg[RCTL]);
+-    qemu_flush_queued_packets(&s->nic->nc);
++    qemu_flush_queued_packets(qemu_get_queue(s->nic));
+ }
+ 
+ static void
+@@ -465,10 +465,11 @@ fcs_len(E1000State *s)
+ static void
+ e1000_send_packet(E1000State *s, const uint8_t *buf, int size)
+ {
++    NetClientState *nc = qemu_get_queue(s->nic);
+     if (s->phy_reg[PHY_CTRL] & MII_CR_LOOPBACK) {
+-        s->nic->nc.info->receive(&s->nic->nc, buf, size);
++        nc->info->receive(nc, buf, size);
+     } else {
+-        qemu_send_packet(&s->nic->nc, buf, size);
++        qemu_send_packet(nc, buf, size);
+     }
+ }
+ 
+@@ -953,7 +954,7 @@ set_rdt(E1000State *s, int index, uint32_t val)
+ {
+     s->mac_reg[index] = val & 0xffff;
+     if (e1000_has_rxbufs(s, 1)) {
+-        qemu_flush_queued_packets(&s->nic->nc);
++        qemu_flush_queued_packets(qemu_get_queue(s->nic));
+     }
+ }
+ 
+@@ -1107,10 +1108,11 @@ static bool is_version_1(void *opaque, int version_id)
+ static int e1000_post_load(void *opaque, int version_id)
+ {
+     E1000State *s = opaque;
++    NetClientState *nc = qemu_get_queue(s->nic);
+ 
+     /* nc.link_down can't be migrated, so infer link_down according
+      * to link status bit in mac_reg[STATUS] */
+-    s->nic->nc.link_down = (s->mac_reg[STATUS] & E1000_STATUS_LU) == 0;
++    nc->link_down = (s->mac_reg[STATUS] & E1000_STATUS_LU) == 0;
+ 
+     return 0;
+ }
+@@ -1242,7 +1244,7 @@ pci_e1000_uninit(PCIDevice *dev)
+     qemu_free_timer(d->autoneg_timer);
+     memory_region_destroy(&d->mmio);
+     memory_region_destroy(&d->io);
+-    qemu_del_net_client(&d->nic->nc);
++    qemu_del_net_client(qemu_get_queue(d->nic));
+ }
+ 
+ static NetClientInfo net_e1000_info = {
+@@ -1289,7 +1291,7 @@ static int pci_e1000_init(PCIDevice *pci_dev)
+     d->nic = qemu_new_nic(&net_e1000_info, &d->conf,
+                           object_get_typename(OBJECT(d)), d->dev.qdev.id, d);
+ 
+-    qemu_format_nic_info_str(&d->nic->nc, macaddr);
++    qemu_format_nic_info_str(qemu_get_queue(d->nic), macaddr);
+ 
+     add_boot_device_path(d->conf.bootindex, &pci_dev->qdev, "/ethernet-phy@0");
+ 
+diff --git a/hw/eepro100.c b/hw/eepro100.c
+index 6bbefb5..5b77bdc 100644
+--- a/hw/eepro100.c
++++ b/hw/eepro100.c
+@@ -828,7 +828,7 @@ static void tx_command(EEPRO100State *s)
+         }
+     }
+     TRACE(RXTX, logout("%p sending frame, len=%d,%s\n", s, size, nic_dump(buf, size)));
+-    qemu_send_packet(&s->nic->nc, buf, size);
++    qemu_send_packet(qemu_get_queue(s->nic), buf, size);
+     s->statistics.tx_good_frames++;
+     /* Transmit with bad status would raise an CX/TNO interrupt.
+      * (82557 only). Emulation never has bad status. */
+@@ -1036,7 +1036,7 @@ static void eepro100_ru_command(EEPRO100State * s, uint8_t val)
+         }
+         set_ru_state(s, ru_ready);
+         s->ru_offset = e100_read_reg4(s, SCBPointer);
+-        qemu_flush_queued_packets(&s->nic->nc);
++        qemu_flush_queued_packets(qemu_get_queue(s->nic));
+         TRACE(OTHER, logout("val=0x%02x (rx start)\n", val));
+         break;
+     case RX_RESUME:
+@@ -1849,7 +1849,7 @@ static void pci_nic_uninit(PCIDevice *pci_dev)
+     memory_region_destroy(&s->flash_bar);
+     vmstate_unregister(&pci_dev->qdev, s->vmstate, s);
+     eeprom93xx_free(&pci_dev->qdev, s->eeprom);
+-    qemu_del_net_client(&s->nic->nc);
++    qemu_del_net_client(qemu_get_queue(s->nic));
+ }
+ 
+ static NetClientInfo net_eepro100_info = {
+@@ -1895,14 +1895,14 @@ static int e100_nic_init(PCIDevice *pci_dev)
+     s->nic = qemu_new_nic(&net_eepro100_info, &s->conf,
+                           object_get_typename(OBJECT(pci_dev)), pci_dev->qdev.id, s);
+ 
+-    qemu_format_nic_info_str(&s->nic->nc, s->conf.macaddr.a);
+-    TRACE(OTHER, logout("%s\n", s->nic->nc.info_str));
++    qemu_format_nic_info_str(qemu_get_queue(s->nic), s->conf.macaddr.a);
++    TRACE(OTHER, logout("%s\n", qemu_get_queue(s->nic)->info_str));
+ 
+     qemu_register_reset(nic_reset, s);
+ 
+     s->vmstate = g_malloc(sizeof(vmstate_eepro100));
+     memcpy(s->vmstate, &vmstate_eepro100, sizeof(vmstate_eepro100));
+-    s->vmstate->name = s->nic->nc.model;
++    s->vmstate->name = qemu_get_queue(s->nic)->model;
+     vmstate_register(&pci_dev->qdev, -1, s->vmstate, s);
+ 
+     add_boot_device_path(s->conf.bootindex, &pci_dev->qdev, "/ethernet-phy@0");
+diff --git a/hw/etraxfs_eth.c b/hw/etraxfs_eth.c
+index ec23fa6..9df476a 100644
+--- a/hw/etraxfs_eth.c
++++ b/hw/etraxfs_eth.c
+@@ -545,7 +545,7 @@ static int eth_tx_push(void *opaque, unsigned char *buf, int len, bool eop)
+ 	struct fs_eth *eth = opaque;
+ 
+ 	D(printf("%s buf=%p len=%d\n", __func__, buf, len));
+-	qemu_send_packet(&eth->nic->nc, buf, len);
++        qemu_send_packet(qemu_get_queue(eth->nic), buf, len);
+ 	return len;
+ }
+ 
+@@ -606,7 +606,7 @@ static int fs_eth_init(SysBusDevice *dev)
+ 	qemu_macaddr_default_if_unset(&s->conf.macaddr);
+ 	s->nic = qemu_new_nic(&net_etraxfs_info, &s->conf,
+ 			      object_get_typename(OBJECT(s)), dev->qdev.id, s);
+-	qemu_format_nic_info_str(&s->nic->nc, s->conf.macaddr.a);
++        qemu_format_nic_info_str(qemu_get_queue(s->nic), s->conf.macaddr.a);
+ 
+ 	tdk_init(&s->phy);
+ 	mdio_attach(&s->mdio_bus, &s->phy, s->phyaddr);
+diff --git a/hw/lan9118.c b/hw/lan9118.c
+index 6596979..262f389 100644
+--- a/hw/lan9118.c
++++ b/hw/lan9118.c
+@@ -341,7 +341,7 @@ static void lan9118_update(lan9118_state *s)
+ 
+ static void lan9118_mac_changed(lan9118_state *s)
+ {
+-    qemu_format_nic_info_str(&s->nic->nc, s->conf.macaddr.a);
++    qemu_format_nic_info_str(qemu_get_queue(s->nic), s->conf.macaddr.a);
+ }
+ 
+ static void lan9118_reload_eeprom(lan9118_state *s)
+@@ -373,7 +373,7 @@ static void phy_update_irq(lan9118_state *s)
+ static void phy_update_link(lan9118_state *s)
+ {
+     /* Autonegotiation status mirrors link status.  */
+-    if (s->nic->nc.link_down) {
++    if (qemu_get_queue(s->nic)->link_down) {
+         s->phy_status &= ~0x0024;
+         s->phy_int |= PHY_INT_DOWN;
+     } else {
+@@ -657,9 +657,9 @@ static void do_tx_packet(lan9118_state *s)
+     /* FIXME: Honor TX disable, and allow queueing of packets.  */
+     if (s->phy_control & 0x4000)  {
+         /* This assumes the receive routine doesn't touch the VLANClient.  */
+-        lan9118_receive(&s->nic->nc, s->txp->data, s->txp->len);
++        lan9118_receive(qemu_get_queue(s->nic), s->txp->data, s->txp->len);
+     } else {
+-        qemu_send_packet(&s->nic->nc, s->txp->data, s->txp->len);
++        qemu_send_packet(qemu_get_queue(s->nic), s->txp->data, s->txp->len);
+     }
+     s->txp->fifo_used = 0;
+ 
+@@ -1335,7 +1335,7 @@ static int lan9118_init1(SysBusDevice *dev)
+ 
+     s->nic = qemu_new_nic(&net_lan9118_info, &s->conf,
+                           object_get_typename(OBJECT(dev)), dev->qdev.id, s);
+-    qemu_format_nic_info_str(&s->nic->nc, s->conf.macaddr.a);
++    qemu_format_nic_info_str(qemu_get_queue(s->nic), s->conf.macaddr.a);
+     s->eeprom[0] = 0xa5;
+     for (i = 0; i < 6; i++) {
+         s->eeprom[i + 1] = s->conf.macaddr.a[i];
+diff --git a/hw/mcf_fec.c b/hw/mcf_fec.c
+index 2423f64..8a90bf8 100644
+--- a/hw/mcf_fec.c
++++ b/hw/mcf_fec.c
+@@ -174,7 +174,7 @@ static void mcf_fec_do_tx(mcf_fec_state *s)
+         if (bd.flags & FEC_BD_L) {
+             /* Last buffer in frame.  */
+             DPRINTF("Sending packet\n");
+-            qemu_send_packet(&s->nic->nc, frame, len);
++            qemu_send_packet(qemu_get_queue(s->nic), frame, len);
+             ptr = frame;
+             frame_size = 0;
+             s->eir |= FEC_INT_TXF;
+@@ -476,5 +476,5 @@ void mcf_fec_init(MemoryRegion *sysmem, NICInfo *nd,
+ 
+     s->nic = qemu_new_nic(&net_mcf_fec_info, &s->conf, nd->model, nd->name, s);
+ 
+-    qemu_format_nic_info_str(&s->nic->nc, s->conf.macaddr.a);
++    qemu_format_nic_info_str(qemu_get_queue(s->nic), s->conf.macaddr.a);
+ }
+diff --git a/hw/milkymist-minimac2.c b/hw/milkymist-minimac2.c
+index 43d6c19..2a8a4ef 100644
+--- a/hw/milkymist-minimac2.c
++++ b/hw/milkymist-minimac2.c
+@@ -257,7 +257,7 @@ static void minimac2_tx(MilkymistMinimac2State *s)
+     trace_milkymist_minimac2_tx_frame(txcount - 12);
+ 
+     /* send packet, skipping preamble and sfd */
+-    qemu_send_packet_raw(&s->nic->nc, buf + 8, txcount - 12);
++    qemu_send_packet_raw(qemu_get_queue(s->nic), buf + 8, txcount - 12);
+ 
+     s->regs[R_TXCOUNT] = 0;
+ 
+@@ -480,7 +480,7 @@ static int milkymist_minimac2_init(SysBusDevice *dev)
+     qemu_macaddr_default_if_unset(&s->conf.macaddr);
+     s->nic = qemu_new_nic(&net_milkymist_minimac2_info, &s->conf,
+                           object_get_typename(OBJECT(dev)), dev->qdev.id, s);
+-    qemu_format_nic_info_str(&s->nic->nc, s->conf.macaddr.a);
++    qemu_format_nic_info_str(qemu_get_queue(s->nic), s->conf.macaddr.a);
+ 
+     return 0;
+ }
+diff --git a/hw/mipsnet.c b/hw/mipsnet.c
+index feac815..15761b1 100644
+--- a/hw/mipsnet.c
++++ b/hw/mipsnet.c
+@@ -173,7 +173,7 @@ static void mipsnet_ioport_write(void *opaque, hwaddr addr,
+         if (s->tx_written == s->tx_count) {
+             /* Send buffer. */
+             trace_mipsnet_send(s->tx_count);
+-            qemu_send_packet(&s->nic->nc, s->tx_buffer, s->tx_count);
++            qemu_send_packet(qemu_get_queue(s->nic), s->tx_buffer, s->tx_count);
+             s->tx_count = s->tx_written = 0;
+             s->intctl |= MIPSNET_INTCTL_TXDONE;
+             s->busy = 1;
+@@ -241,7 +241,7 @@ static int mipsnet_sysbus_init(SysBusDevice *dev)
+ 
+     s->nic = qemu_new_nic(&net_mipsnet_info, &s->conf,
+                           object_get_typename(OBJECT(dev)), dev->qdev.id, s);
+-    qemu_format_nic_info_str(&s->nic->nc, s->conf.macaddr.a);
++    qemu_format_nic_info_str(qemu_get_queue(s->nic), s->conf.macaddr.a);
+ 
+     return 0;
+ }
+diff --git a/hw/musicpal.c b/hw/musicpal.c
+index 7ac0a91..9e22f69 100644
+--- a/hw/musicpal.c
++++ b/hw/musicpal.c
+@@ -257,7 +257,7 @@ static void eth_send(mv88w8618_eth_state *s, int queue_index)
+             len = desc.bytes;
+             if (len < 2048) {
+                 cpu_physical_memory_read(desc.buffer, buf, len);
+-                qemu_send_packet(&s->nic->nc, buf, len);
++                qemu_send_packet(qemu_get_queue(s->nic), buf, len);
+             }
+             desc.cmdstat &= ~MP_ETH_TX_OWN;
+             s->icr |= 1 << (MP_ETH_IRQ_TXLO_BIT - queue_index);
+diff --git a/hw/ne2000-isa.c b/hw/ne2000-isa.c
+index 7c11229..fa47e12 100644
+--- a/hw/ne2000-isa.c
++++ b/hw/ne2000-isa.c
+@@ -77,7 +77,7 @@ static int isa_ne2000_initfn(ISADevice *dev)
+ 
+     s->nic = qemu_new_nic(&net_ne2000_isa_info, &s->c,
+                           object_get_typename(OBJECT(dev)), dev->qdev.id, s);
+-    qemu_format_nic_info_str(&s->nic->nc, s->c.macaddr.a);
++    qemu_format_nic_info_str(qemu_get_queue(s->nic), s->c.macaddr.a);
+ 
+     return 0;
+ }
+diff --git a/hw/ne2000.c b/hw/ne2000.c
+index 872115c..03c4209 100644
+--- a/hw/ne2000.c
++++ b/hw/ne2000.c
+@@ -300,7 +300,8 @@ static void ne2000_ioport_write(void *opaque, uint32_t addr, uint32_t val)
+                     index -= NE2000_PMEM_SIZE;
+                 /* fail safe: check range on the transmitted length  */
+                 if (index + s->tcnt <= NE2000_PMEM_END) {
+-                    qemu_send_packet(&s->nic->nc, s->mem + index, s->tcnt);
++                    qemu_send_packet(qemu_get_queue(s->nic), s->mem + index,
++                                     s->tcnt);
+                 }
+                 /* signal end of transfer */
+                 s->tsr = ENTSR_PTX;
+@@ -737,7 +738,7 @@ static int pci_ne2000_init(PCIDevice *pci_dev)
+ 
+     s->nic = qemu_new_nic(&net_ne2000_info, &s->c,
+                           object_get_typename(OBJECT(pci_dev)), pci_dev->qdev.id, s);
+-    qemu_format_nic_info_str(&s->nic->nc, s->c.macaddr.a);
++    qemu_format_nic_info_str(qemu_get_queue(s->nic), s->c.macaddr.a);
+ 
+     add_boot_device_path(s->c.bootindex, &pci_dev->qdev, "/ethernet-phy@0");
+ 
+@@ -750,7 +751,7 @@ static void pci_ne2000_exit(PCIDevice *pci_dev)
+     NE2000State *s = &d->ne2000;
+ 
+     memory_region_destroy(&s->io);
+-    qemu_del_net_client(&s->nic->nc);
++    qemu_del_net_client(qemu_get_queue(s->nic));
+ }
+ 
+ static Property ne2000_properties[] = {
+diff --git a/hw/opencores_eth.c b/hw/opencores_eth.c
+index 746a959..2496d4e 100644
+--- a/hw/opencores_eth.c
++++ b/hw/opencores_eth.c
+@@ -339,7 +339,7 @@ static void open_eth_reset(void *opaque)
+     s->rx_desc = 0x40;
+ 
+     mii_reset(&s->mii);
+-    open_eth_set_link_status(&s->nic->nc);
++    open_eth_set_link_status(qemu_get_queue(s->nic));
+ }
+ 
+ static int open_eth_can_receive(NetClientState *nc)
+@@ -499,7 +499,7 @@ static void open_eth_start_xmit(OpenEthState *s, desc *tx)
+     if (tx_len > len) {
+         memset(buf + len, 0, tx_len - len);
+     }
+-    qemu_send_packet(&s->nic->nc, buf, tx_len);
++    qemu_send_packet(qemu_get_queue(s->nic), buf, tx_len);
+ 
+     if (tx->len_flags & TXD_WR) {
+         s->tx_desc = 0;
+@@ -606,7 +606,7 @@ static void open_eth_mii_command_host_write(OpenEthState *s, uint32_t val)
+         } else {
+             s->regs[MIIRX_DATA] = 0xffff;
+         }
+-        SET_REGFIELD(s, MIISTATUS, LINKFAIL, s->nic->nc.link_down);
++        SET_REGFIELD(s, MIISTATUS, LINKFAIL, qemu_get_queue(s->nic)->link_down);
+     }
+ }
+ 
+diff --git a/hw/pcnet-pci.c b/hw/pcnet-pci.c
+index a94f642..54a849d 100644
+--- a/hw/pcnet-pci.c
++++ b/hw/pcnet-pci.c
+@@ -279,7 +279,7 @@ static void pci_pcnet_uninit(PCIDevice *dev)
+     memory_region_destroy(&d->io_bar);
+     qemu_del_timer(d->state.poll_timer);
+     qemu_free_timer(d->state.poll_timer);
+-    qemu_del_net_client(&d->state.nic->nc);
++    qemu_del_net_client(qemu_get_queue(d->state.nic));
+ }
+ 
+ static NetClientInfo net_pci_pcnet_info = {
+diff --git a/hw/pcnet.c b/hw/pcnet.c
+index 30f1000..2126e22 100644
+--- a/hw/pcnet.c
++++ b/hw/pcnet.c
+@@ -1261,11 +1261,12 @@ static void pcnet_transmit(PCNetState *s)
+                 if (BCR_SWSTYLE(s) == 1)
+                     add_crc = !GET_FIELD(tmd.status, TMDS, NOFCS);
+                 s->looptest = add_crc ? PCNET_LOOPTEST_CRC : PCNET_LOOPTEST_NOCRC;
+-                pcnet_receive(&s->nic->nc, s->buffer, s->xmit_pos);
++                pcnet_receive(qemu_get_queue(s->nic), s->buffer, s->xmit_pos);
+                 s->looptest = 0;
+             } else
+                 if (s->nic)
+-                    qemu_send_packet(&s->nic->nc, s->buffer, s->xmit_pos);
++                    qemu_send_packet(qemu_get_queue(s->nic), s->buffer,
++                                     s->xmit_pos);
+ 
+             s->csr[0] &= ~0x0008;   /* clear TDMD */
+             s->csr[4] |= 0x0004;    /* set TXSTRT */
+@@ -1730,7 +1731,7 @@ int pcnet_common_init(DeviceState *dev, PCNetState *s, NetClientInfo *info)
+ 
+     qemu_macaddr_default_if_unset(&s->conf.macaddr);
+     s->nic = qemu_new_nic(info, &s->conf, object_get_typename(OBJECT(dev)), dev->id, s);
+-    qemu_format_nic_info_str(&s->nic->nc, s->conf.macaddr.a);
++    qemu_format_nic_info_str(qemu_get_queue(s->nic), s->conf.macaddr.a);
+ 
+     add_boot_device_path(s->conf.bootindex, dev, "/ethernet-phy@0");
+ 
+diff --git a/hw/rtl8139.c b/hw/rtl8139.c
+index cfbf3f4..22d24ae 100644
+--- a/hw/rtl8139.c
++++ b/hw/rtl8139.c
+@@ -1259,7 +1259,7 @@ static void rtl8139_reset(DeviceState *d)
+     //s->BasicModeStatus |= 0x0040; /* UTP medium */
+     s->BasicModeStatus |= 0x0020; /* autonegotiation completed */
+     /* preserve link state */
+-    s->BasicModeStatus |= s->nic->nc.link_down ? 0 : 0x04;
++    s->BasicModeStatus |= qemu_get_queue(s->nic)->link_down ? 0 : 0x04;
+ 
+     s->NWayAdvert    = 0x05e1; /* all modes, full duplex */
+     s->NWayLPAR      = 0x05e1; /* all modes, full duplex */
+@@ -1787,7 +1787,7 @@ static void rtl8139_transfer_frame(RTL8139State *s, uint8_t *buf, int size,
+         }
+ 
+         DPRINTF("+++ transmit loopback mode\n");
+-        rtl8139_do_receive(&s->nic->nc, buf, size, do_interrupt);
++        rtl8139_do_receive(qemu_get_queue(s->nic), buf, size, do_interrupt);
+ 
+         if (iov) {
+             g_free(buf2);
+@@ -1796,9 +1796,9 @@ static void rtl8139_transfer_frame(RTL8139State *s, uint8_t *buf, int size,
+     else
+     {
+         if (iov) {
+-            qemu_sendv_packet(&s->nic->nc, iov, 3);
++            qemu_sendv_packet(qemu_get_queue(s->nic), iov, 3);
+         } else {
+-            qemu_send_packet(&s->nic->nc, buf, size);
++            qemu_send_packet(qemu_get_queue(s->nic), buf, size);
+         }
+     }
+ }
+@@ -3230,7 +3230,7 @@ static int rtl8139_post_load(void *opaque, int version_id)
+ 
+     /* nc.link_down can't be migrated, so infer link_down according
+      * to link status bit in BasicModeStatus */
+-    s->nic->nc.link_down = (s->BasicModeStatus & 0x04) == 0;
++    qemu_get_queue(s->nic)->link_down = (s->BasicModeStatus & 0x04) == 0;
+ 
+     return 0;
+ }
+@@ -3446,7 +3446,7 @@ static void pci_rtl8139_uninit(PCIDevice *dev)
+     }
+     qemu_del_timer(s->timer);
+     qemu_free_timer(s->timer);
+-    qemu_del_net_client(&s->nic->nc);
++    qemu_del_net_client(qemu_get_queue(s->nic));
+ }
+ 
+ static void rtl8139_set_link_status(NetClientState *nc)
+@@ -3503,7 +3503,7 @@ static int pci_rtl8139_init(PCIDevice *dev)
+ 
+     s->nic = qemu_new_nic(&net_rtl8139_info, &s->conf,
+                           object_get_typename(OBJECT(dev)), dev->qdev.id, s);
+-    qemu_format_nic_info_str(&s->nic->nc, s->conf.macaddr.a);
++    qemu_format_nic_info_str(qemu_get_queue(s->nic), s->conf.macaddr.a);
+ 
+     s->cplus_txbuffer = NULL;
+     s->cplus_txbuffer_len = 0;
+diff --git a/hw/smc91c111.c b/hw/smc91c111.c
+index 36cb4ed..b097d6b 100644
+--- a/hw/smc91c111.c
++++ b/hw/smc91c111.c
+@@ -237,7 +237,7 @@ static void smc91c111_do_tx(smc91c111_state *s)
+             smc91c111_release_packet(s, packetnum);
+         else if (s->tx_fifo_done_len < NUM_PACKETS)
+             s->tx_fifo_done[s->tx_fifo_done_len++] = packetnum;
+-        qemu_send_packet(&s->nic->nc, p, len);
++        qemu_send_packet(qemu_get_queue(s->nic), p, len);
+     }
+     s->tx_fifo_len = 0;
+     smc91c111_update(s);
+@@ -753,7 +753,7 @@ static int smc91c111_init1(SysBusDevice *dev)
+     qemu_macaddr_default_if_unset(&s->conf.macaddr);
+     s->nic = qemu_new_nic(&net_smc91c111_info, &s->conf,
+                           object_get_typename(OBJECT(dev)), dev->qdev.id, s);
+-    qemu_format_nic_info_str(&s->nic->nc, s->conf.macaddr.a);
++    qemu_format_nic_info_str(qemu_get_queue(s->nic), s->conf.macaddr.a);
+     /* ??? Save/restore.  */
+     return 0;
+ }
+diff --git a/hw/spapr_llan.c b/hw/spapr_llan.c
+index db34b48..d53d4ae 100644
+--- a/hw/spapr_llan.c
++++ b/hw/spapr_llan.c
+@@ -199,7 +199,7 @@ static int spapr_vlan_init(VIOsPAPRDevice *sdev)
+ 
+     dev->nic = qemu_new_nic(&net_spapr_vlan_info, &dev->nicconf,
+                             object_get_typename(OBJECT(sdev)), sdev->qdev.id, dev);
+-    qemu_format_nic_info_str(&dev->nic->nc, dev->nicconf.macaddr.a);
++    qemu_format_nic_info_str(qemu_get_queue(dev->nic), dev->nicconf.macaddr.a);
+ 
+     return 0;
+ }
+@@ -462,7 +462,7 @@ static target_ulong h_send_logical_lan(PowerPCCPU *cpu, sPAPREnvironment *spapr,
+         p += VLAN_BD_LEN(bufs[i]);
+     }
+ 
+-    qemu_send_packet(&dev->nic->nc, lbuf, total_len);
++    qemu_send_packet(qemu_get_queue(dev->nic), lbuf, total_len);
+ 
+     return H_SUCCESS;
+ }
+diff --git a/hw/stellaris_enet.c b/hw/stellaris_enet.c
+index 5e9053f..99d4730 100644
+--- a/hw/stellaris_enet.c
++++ b/hw/stellaris_enet.c
+@@ -259,7 +259,8 @@ static void stellaris_enet_write(void *opaque, hwaddr offset,
+                     memset(&s->tx_fifo[s->tx_frame_len], 0, 60 - s->tx_frame_len);
+                     s->tx_fifo_len = 60;
+                 }
+-                qemu_send_packet(&s->nic->nc, s->tx_fifo, s->tx_frame_len);
++                qemu_send_packet(qemu_get_queue(s->nic), s->tx_fifo,
++                                 s->tx_frame_len);
+                 s->tx_frame_len = -1;
+                 s->ris |= SE_INT_TXEMP;
+                 stellaris_enet_update(s);
+@@ -412,7 +413,7 @@ static int stellaris_enet_init(SysBusDevice *dev)
+ 
+     s->nic = qemu_new_nic(&net_stellaris_enet_info, &s->conf,
+                           object_get_typename(OBJECT(dev)), dev->qdev.id, s);
+-    qemu_format_nic_info_str(&s->nic->nc, s->conf.macaddr.a);
++    qemu_format_nic_info_str(qemu_get_queue(s->nic), s->conf.macaddr.a);
+ 
+     stellaris_enet_reset(s);
+     register_savevm(&s->busdev.qdev, "stellaris_enet", -1, 1,
+diff --git a/hw/usb/dev-network.c b/hw/usb/dev-network.c
+index 9dede4c..a131f9c 100644
+--- a/hw/usb/dev-network.c
++++ b/hw/usb/dev-network.c
+@@ -1012,7 +1012,7 @@ static int rndis_keepalive_response(USBNetState *s,
+ static void usb_net_reset_in_buf(USBNetState *s)
+ {
+     s->in_ptr = s->in_len = 0;
+-    qemu_flush_queued_packets(&s->nic->nc);
++    qemu_flush_queued_packets(qemu_get_queue(s->nic));
+ }
+ 
+ static int rndis_parse(USBNetState *s, uint8_t *data, int length)
+@@ -1196,7 +1196,7 @@ static void usb_net_handle_dataout(USBNetState *s, USBPacket *p)
+ 
+     if (!is_rndis(s)) {
+         if (p->iov.size < 64) {
+-            qemu_send_packet(&s->nic->nc, s->out_buf, s->out_ptr);
++            qemu_send_packet(qemu_get_queue(s->nic), s->out_buf, s->out_ptr);
+             s->out_ptr = 0;
+         }
+         return;
+@@ -1209,7 +1209,7 @@ static void usb_net_handle_dataout(USBNetState *s, USBPacket *p)
+         uint32_t offs = 8 + le32_to_cpu(msg->DataOffset);
+         uint32_t size = le32_to_cpu(msg->DataLength);
+         if (offs + size <= len)
+-            qemu_send_packet(&s->nic->nc, s->out_buf + offs, size);
++            qemu_send_packet(qemu_get_queue(s->nic), s->out_buf + offs, size);
+     }
+     s->out_ptr -= len;
+     memmove(s->out_buf, &s->out_buf[len], s->out_ptr);
+@@ -1330,7 +1330,7 @@ static void usb_net_handle_destroy(USBDevice *dev)
+ 
+     /* TODO: remove the nd_table[] entry */
+     rndis_clear_responsequeue(s);
+-    qemu_del_net_client(&s->nic->nc);
++    qemu_del_net_client(qemu_get_queue(s->nic));
+ }
+ 
+ static NetClientInfo net_usbnet_info = {
+@@ -1361,7 +1361,7 @@ static int usb_net_initfn(USBDevice *dev)
+     qemu_macaddr_default_if_unset(&s->conf.macaddr);
+     s->nic = qemu_new_nic(&net_usbnet_info, &s->conf,
+                           object_get_typename(OBJECT(s)), s->dev.qdev.id, s);
+-    qemu_format_nic_info_str(&s->nic->nc, s->conf.macaddr.a);
++    qemu_format_nic_info_str(qemu_get_queue(s->nic), s->conf.macaddr.a);
+     snprintf(s->usbstring_mac, sizeof(s->usbstring_mac),
+              "%02x%02x%02x%02x%02x%02x",
+              0x40,
+diff --git a/hw/virtio-net.c b/hw/virtio-net.c
+index 3bb01b1..551f6dc 100644
+--- a/hw/virtio-net.c
++++ b/hw/virtio-net.c
+@@ -95,7 +95,7 @@ static void virtio_net_set_config(VirtIODevice *vdev, const uint8_t *config)
+ 
+     if (memcmp(netcfg.mac, n->mac, ETH_ALEN)) {
+         memcpy(n->mac, netcfg.mac, ETH_ALEN);
+-        qemu_format_nic_info_str(&n->nic->nc, n->mac);
++        qemu_format_nic_info_str(qemu_get_queue(n->nic), n->mac);
+     }
+ }
+ 
+@@ -107,34 +107,36 @@ static bool virtio_net_started(VirtIONet *n, uint8_t status)
+ 
+ static void virtio_net_vhost_status(VirtIONet *n, uint8_t status)
+ {
+-    if (!n->nic->nc.peer) {
++    NetClientState *nc = qemu_get_queue(n->nic);
++
++    if (!nc->peer) {
+         return;
+     }
+-    if (n->nic->nc.peer->info->type != NET_CLIENT_OPTIONS_KIND_TAP) {
++    if (nc->peer->info->type != NET_CLIENT_OPTIONS_KIND_TAP) {
+         return;
+     }
+ 
+-    if (!tap_get_vhost_net(n->nic->nc.peer)) {
++    if (!tap_get_vhost_net(nc->peer)) {
+         return;
+     }
+     if (!!n->vhost_started == virtio_net_started(n, status) &&
+-                              !n->nic->nc.peer->link_down) {
++                              !nc->peer->link_down) {
+         return;
+     }
+     if (!n->vhost_started) {
+         int r;
+-        if (!vhost_net_query(tap_get_vhost_net(n->nic->nc.peer), &n->vdev)) {
++        if (!vhost_net_query(tap_get_vhost_net(nc->peer), &n->vdev)) {
+             return;
+         }
+         n->vhost_started = 1;
+-        r = vhost_net_start(tap_get_vhost_net(n->nic->nc.peer), &n->vdev);
++        r = vhost_net_start(tap_get_vhost_net(nc->peer), &n->vdev);
+         if (r < 0) {
+             error_report("unable to start vhost net: %d: "
+                          "falling back on userspace virtio", -r);
+             n->vhost_started = 0;
+         }
+     } else {
+-        vhost_net_stop(tap_get_vhost_net(n->nic->nc.peer), &n->vdev);
++        vhost_net_stop(tap_get_vhost_net(nc->peer), &n->vdev);
+         n->vhost_started = 0;
+     }
+ }
+@@ -204,13 +206,16 @@ static void virtio_net_reset(VirtIODevice *vdev)
+ 
+ static void peer_test_vnet_hdr(VirtIONet *n)
+ {
+-    if (!n->nic->nc.peer)
++    NetClientState *nc = qemu_get_queue(n->nic);
++    if (!nc->peer) {
+         return;
++    }
+ 
+-    if (n->nic->nc.peer->info->type != NET_CLIENT_OPTIONS_KIND_TAP)
++    if (nc->peer->info->type != NET_CLIENT_OPTIONS_KIND_TAP) {
+         return;
++    }
+ 
+-    n->has_vnet_hdr = tap_has_vnet_hdr(n->nic->nc.peer);
++    n->has_vnet_hdr = tap_has_vnet_hdr(nc->peer);
+ }
+ 
+ static int peer_has_vnet_hdr(VirtIONet *n)
+@@ -223,7 +228,7 @@ static int peer_has_ufo(VirtIONet *n)
+     if (!peer_has_vnet_hdr(n))
+         return 0;
+ 
+-    n->has_ufo = tap_has_ufo(n->nic->nc.peer);
++    n->has_ufo = tap_has_ufo(qemu_get_queue(n->nic)->peer);
+ 
+     return n->has_ufo;
+ }
+@@ -236,8 +241,8 @@ static void virtio_net_set_mrg_rx_bufs(VirtIONet *n, int mergeable_rx_bufs)
+         sizeof(struct virtio_net_hdr_mrg_rxbuf) : sizeof(struct virtio_net_hdr);
+ 
+     if (peer_has_vnet_hdr(n) &&
+-        tap_has_vnet_hdr_len(n->nic->nc.peer, n->guest_hdr_len)) {
+-        tap_set_vnet_hdr_len(n->nic->nc.peer, n->guest_hdr_len);
++        tap_has_vnet_hdr_len(qemu_get_queue(n->nic)->peer, n->guest_hdr_len)) {
++        tap_set_vnet_hdr_len(qemu_get_queue(n->nic)->peer, n->guest_hdr_len);
+         n->host_hdr_len = n->guest_hdr_len;
+     }
+ }
+@@ -245,6 +250,7 @@ static void virtio_net_set_mrg_rx_bufs(VirtIONet *n, int mergeable_rx_bufs)
+ static uint32_t virtio_net_get_features(VirtIODevice *vdev, uint32_t features)
+ {
+     VirtIONet *n = to_virtio_net(vdev);
++    NetClientState *nc = qemu_get_queue(n->nic);
+ 
+     features |= (1 << VIRTIO_NET_F_MAC);
+ 
+@@ -265,14 +271,13 @@ static uint32_t virtio_net_get_features(VirtIODevice *vdev, uint32_t features)
+         features &= ~(0x1 << VIRTIO_NET_F_HOST_UFO);
+     }
+ 
+-    if (!n->nic->nc.peer ||
+-        n->nic->nc.peer->info->type != NET_CLIENT_OPTIONS_KIND_TAP) {
++    if (!nc->peer || nc->peer->info->type != NET_CLIENT_OPTIONS_KIND_TAP) {
+         return features;
+     }
+-    if (!tap_get_vhost_net(n->nic->nc.peer)) {
++    if (!tap_get_vhost_net(nc->peer)) {
+         return features;
+     }
+-    return vhost_net_get_features(tap_get_vhost_net(n->nic->nc.peer), features);
++    return vhost_net_get_features(tap_get_vhost_net(nc->peer), features);
+ }
+ 
+ static uint32_t virtio_net_bad_features(VirtIODevice *vdev)
+@@ -293,25 +298,25 @@ static uint32_t virtio_net_bad_features(VirtIODevice *vdev)
+ static void virtio_net_set_features(VirtIODevice *vdev, uint32_t features)
+ {
+     VirtIONet *n = to_virtio_net(vdev);
++    NetClientState *nc = qemu_get_queue(n->nic);
+ 
+     virtio_net_set_mrg_rx_bufs(n, !!(features & (1 << VIRTIO_NET_F_MRG_RXBUF)));
+ 
+     if (n->has_vnet_hdr) {
+-        tap_set_offload(n->nic->nc.peer,
++        tap_set_offload(nc->peer,
+                         (features >> VIRTIO_NET_F_GUEST_CSUM) & 1,
+                         (features >> VIRTIO_NET_F_GUEST_TSO4) & 1,
+                         (features >> VIRTIO_NET_F_GUEST_TSO6) & 1,
+                         (features >> VIRTIO_NET_F_GUEST_ECN)  & 1,
+                         (features >> VIRTIO_NET_F_GUEST_UFO)  & 1);
+     }
+-    if (!n->nic->nc.peer ||
+-        n->nic->nc.peer->info->type != NET_CLIENT_OPTIONS_KIND_TAP) {
++    if (!nc->peer || nc->peer->info->type != NET_CLIENT_OPTIONS_KIND_TAP) {
+         return;
+     }
+-    if (!tap_get_vhost_net(n->nic->nc.peer)) {
++    if (!tap_get_vhost_net(nc->peer)) {
+         return;
+     }
+-    vhost_net_ack_features(tap_get_vhost_net(n->nic->nc.peer), features);
++    vhost_net_ack_features(tap_get_vhost_net(nc->peer), features);
+ }
+ 
+ static int virtio_net_handle_rx_mode(VirtIONet *n, uint8_t cmd,
+@@ -463,7 +468,7 @@ static void virtio_net_handle_rx(VirtIODevice *vdev, VirtQueue *vq)
+ {
+     VirtIONet *n = to_virtio_net(vdev);
+ 
+-    qemu_flush_queued_packets(&n->nic->nc);
++    qemu_flush_queued_packets(qemu_get_queue(n->nic));
+ }
+ 
+ static int virtio_net_can_receive(NetClientState *nc)
+@@ -605,8 +610,9 @@ static ssize_t virtio_net_receive(NetClientState *nc, const uint8_t *buf, size_t
+     unsigned mhdr_cnt = 0;
+     size_t offset, i, guest_offset;
+ 
+-    if (!virtio_net_can_receive(&n->nic->nc))
++    if (!virtio_net_can_receive(qemu_get_queue(n->nic))) {
+         return -1;
++    }
+ 
+     /* hdr_len refers to the header we supply to the guest */
+     if (!virtio_net_has_buffers(n, size + n->guest_hdr_len - n->host_hdr_len))
+@@ -754,7 +760,7 @@ static int32_t virtio_net_flush_tx(VirtIONet *n, VirtQueue *vq)
+ 
+         len = n->guest_hdr_len;
+ 
+-        ret = qemu_sendv_packet_async(&n->nic->nc, out_sg, out_num,
++        ret = qemu_sendv_packet_async(qemu_get_queue(n->nic), out_sg, out_num,
+                                       virtio_net_tx_complete);
+         if (ret == 0) {
+             virtio_queue_set_notification(n->tx_vq, 0);
+@@ -951,7 +957,7 @@ static int virtio_net_load(QEMUFile *f, void *opaque, int version_id)
+         }
+ 
+         if (n->has_vnet_hdr) {
+-            tap_set_offload(n->nic->nc.peer,
++            tap_set_offload(qemu_get_queue(n->nic)->peer,
+                     (n->vdev.guest_features >> VIRTIO_NET_F_GUEST_CSUM) & 1,
+                     (n->vdev.guest_features >> VIRTIO_NET_F_GUEST_TSO4) & 1,
+                     (n->vdev.guest_features >> VIRTIO_NET_F_GUEST_TSO6) & 1,
+@@ -989,7 +995,7 @@ static int virtio_net_load(QEMUFile *f, void *opaque, int version_id)
+ 
+     /* nc.link_down can't be migrated, so infer link_down according
+      * to link status bit in n->status */
+-    n->nic->nc.link_down = (n->status & VIRTIO_NET_S_LINK_UP) == 0;
++    qemu_get_queue(n->nic)->link_down = (n->status & VIRTIO_NET_S_LINK_UP) == 0;
+ 
+     return 0;
+ }
+@@ -1013,16 +1019,18 @@ static NetClientInfo net_virtio_info = {
+ static bool virtio_net_guest_notifier_pending(VirtIODevice *vdev, int idx)
+ {
+     VirtIONet *n = to_virtio_net(vdev);
++    NetClientState *nc = qemu_get_queue(n->nic);
+     assert(n->vhost_started);
+-    return vhost_net_virtqueue_pending(tap_get_vhost_net(n->nic->nc.peer), idx);
++    return vhost_net_virtqueue_pending(tap_get_vhost_net(nc->peer), idx);
+ }
+ 
+ static void virtio_net_guest_notifier_mask(VirtIODevice *vdev, int idx,
+                                            bool mask)
+ {
+     VirtIONet *n = to_virtio_net(vdev);
++    NetClientState *nc = qemu_get_queue(n->nic);
+     assert(n->vhost_started);
+-    vhost_net_virtqueue_mask(tap_get_vhost_net(n->nic->nc.peer),
++    vhost_net_virtqueue_mask(tap_get_vhost_net(nc->peer),
+                              vdev, idx, mask);
+ }
+ 
+@@ -1069,13 +1077,13 @@ VirtIODevice *virtio_net_init(DeviceState *dev, NICConf *conf,
+     n->nic = qemu_new_nic(&net_virtio_info, conf, object_get_typename(OBJECT(dev)), dev->id, n);
+     peer_test_vnet_hdr(n);
+     if (peer_has_vnet_hdr(n)) {
+-        tap_using_vnet_hdr(n->nic->nc.peer, 1);
++        tap_using_vnet_hdr(qemu_get_queue(n->nic)->peer, 1);
+         n->host_hdr_len = sizeof(struct virtio_net_hdr);
+     } else {
+         n->host_hdr_len = 0;
+     }
+ 
+-    qemu_format_nic_info_str(&n->nic->nc, conf->macaddr.a);
++    qemu_format_nic_info_str(qemu_get_queue(n->nic), conf->macaddr.a);
+ 
+     n->tx_waiting = 0;
+     n->tx_burst = net->txburst;
+@@ -1102,7 +1110,7 @@ void virtio_net_exit(VirtIODevice *vdev)
+     /* This will stop vhost backend if appropriate. */
+     virtio_net_set_status(vdev, 0);
+ 
+-    qemu_purge_queued_packets(&n->nic->nc);
++    qemu_purge_queued_packets(qemu_get_queue(n->nic));
+ 
+     unregister_savevm(n->qdev, "virtio-net", n);
+ 
+@@ -1116,6 +1124,6 @@ void virtio_net_exit(VirtIODevice *vdev)
+         qemu_bh_delete(n->tx_bh);
+     }
+ 
+-    qemu_del_net_client(&n->nic->nc);
++    qemu_del_net_client(qemu_get_queue(n->nic));
+     virtio_cleanup(&n->vdev);
+ }
+diff --git a/hw/xen_nic.c b/hw/xen_nic.c
+index dc12110..d5b39ea 100644
+--- a/hw/xen_nic.c
++++ b/hw/xen_nic.c
+@@ -185,9 +185,11 @@ static void net_tx_packets(struct XenNetDev *netdev)
+                 }
+                 memcpy(tmpbuf, page + txreq.offset, txreq.size);
+                 net_checksum_calculate(tmpbuf, txreq.size);
+-                qemu_send_packet(&netdev->nic->nc, tmpbuf, txreq.size);
++                qemu_send_packet(qemu_get_queue(netdev->nic), tmpbuf,
++                                 txreq.size);
+             } else {
+-                qemu_send_packet(&netdev->nic->nc, page + txreq.offset, txreq.size);
++                qemu_send_packet(qemu_get_queue(netdev->nic),
++                                 page + txreq.offset, txreq.size);
+             }
+             xc_gnttab_munmap(netdev->xendev.gnttabdev, page, 1);
+             net_tx_response(netdev, &txreq, NETIF_RSP_OKAY);
+@@ -329,7 +331,8 @@ static int net_init(struct XenDevice *xendev)
+     netdev->nic = qemu_new_nic(&net_xen_info, &netdev->conf,
+                                "xen", NULL, netdev);
+ 
+-    snprintf(netdev->nic->nc.info_str, sizeof(netdev->nic->nc.info_str),
++    snprintf(qemu_get_queue(netdev->nic)->info_str,
++             sizeof(qemu_get_queue(netdev->nic)->info_str),
+              "nic: xenbus vif macaddr=%s", netdev->mac);
+ 
+     /* fill info */
+@@ -405,7 +408,7 @@ static void net_disconnect(struct XenDevice *xendev)
+         netdev->rxs = NULL;
+     }
+     if (netdev->nic) {
+-        qemu_del_net_client(&netdev->nic->nc);
++        qemu_del_net_client(qemu_get_queue(netdev->nic));
+         netdev->nic = NULL;
+     }
+ }
+@@ -414,7 +417,7 @@ static void net_event(struct XenDevice *xendev)
+ {
+     struct XenNetDev *netdev = container_of(xendev, struct XenNetDev, xendev);
+     net_tx_packets(netdev);
+-    qemu_flush_queued_packets(&netdev->nic->nc);
++    qemu_flush_queued_packets(qemu_get_queue(netdev->nic));
+ }
+ 
+ static int net_free(struct XenDevice *xendev)
+diff --git a/hw/xgmac.c b/hw/xgmac.c
+index 00dae77..4d7bb13 100644
+--- a/hw/xgmac.c
++++ b/hw/xgmac.c
+@@ -235,7 +235,7 @@ static void xgmac_enet_send(struct XgmacState *s)
+         frame_size += len;
+         if (bd.ctl_stat & 0x20000000) {
+             /* Last buffer in frame.  */
+-            qemu_send_packet(&s->nic->nc, frame, len);
++            qemu_send_packet(qemu_get_queue(s->nic), frame, len);
+             ptr = frame;
+             frame_size = 0;
+             s->regs[DMA_STATUS] |= DMA_STATUS_TI | DMA_STATUS_NIS;
+@@ -391,7 +391,7 @@ static int xgmac_enet_init(SysBusDevice *dev)
+     qemu_macaddr_default_if_unset(&s->conf.macaddr);
+     s->nic = qemu_new_nic(&net_xgmac_enet_info, &s->conf,
+                           object_get_typename(OBJECT(dev)), dev->qdev.id, s);
+-    qemu_format_nic_info_str(&s->nic->nc, s->conf.macaddr.a);
++    qemu_format_nic_info_str(qemu_get_queue(s->nic), s->conf.macaddr.a);
+ 
+     s->regs[XGMAC_ADDR_HIGH(0)] = (s->conf.macaddr.a[5] << 8) |
+                                    s->conf.macaddr.a[4];
+diff --git a/hw/xilinx_axienet.c b/hw/xilinx_axienet.c
+index 51c2896..a7e8e2c 100644
+--- a/hw/xilinx_axienet.c
++++ b/hw/xilinx_axienet.c
+@@ -826,7 +826,7 @@ axienet_stream_push(StreamSlave *obj, uint8_t *buf, size_t size, uint32_t *hdr)
+         buf[write_off + 1] = csum & 0xff;
+     }
+ 
+-    qemu_send_packet(&s->nic->nc, buf, size);
++    qemu_send_packet(qemu_get_queue(s->nic), buf, size);
+ 
+     s->stats.tx_bytes += size;
+     s->regs[R_IS] |= IS_TX_COMPLETE;
+@@ -853,7 +853,7 @@ static int xilinx_enet_init(SysBusDevice *dev)
+     qemu_macaddr_default_if_unset(&s->conf.macaddr);
+     s->nic = qemu_new_nic(&net_xilinx_enet_info, &s->conf,
+                           object_get_typename(OBJECT(dev)), dev->qdev.id, s);
+-    qemu_format_nic_info_str(&s->nic->nc, s->conf.macaddr.a);
++    qemu_format_nic_info_str(qemu_get_queue(s->nic), s->conf.macaddr.a);
+ 
+     tdk_init(&s->TEMAC.phy);
+     mdio_attach(&s->TEMAC.mdio_bus, &s->TEMAC.phy, s->c_phyaddr);
+diff --git a/hw/xilinx_ethlite.c b/hw/xilinx_ethlite.c
+index 2254851..5ab3915 100644
+--- a/hw/xilinx_ethlite.c
++++ b/hw/xilinx_ethlite.c
+@@ -117,7 +117,7 @@ eth_write(void *opaque, hwaddr addr,
+ 
+             D(qemu_log("%s addr=%x val=%x\n", __func__, addr * 4, value));
+             if ((value & (CTRL_P | CTRL_S)) == CTRL_S) {
+-                qemu_send_packet(&s->nic->nc,
++                qemu_send_packet(qemu_get_queue(s->nic),
+                                  (void *) &s->regs[base],
+                                  s->regs[base + R_TX_LEN0]);
+                 D(qemu_log("eth_tx %d\n", s->regs[base + R_TX_LEN0]));
+@@ -223,7 +223,7 @@ static int xilinx_ethlite_init(SysBusDevice *dev)
+     qemu_macaddr_default_if_unset(&s->conf.macaddr);
+     s->nic = qemu_new_nic(&net_xilinx_ethlite_info, &s->conf,
+                           object_get_typename(OBJECT(dev)), dev->qdev.id, s);
+-    qemu_format_nic_info_str(&s->nic->nc, s->conf.macaddr.a);
++    qemu_format_nic_info_str(qemu_get_queue(s->nic), s->conf.macaddr.a);
+     return 0;
+ }
+ 
+diff --git a/include/net/net.h b/include/net/net.h
+index 4a92b6c..5d8aecf 100644
+--- a/include/net/net.h
++++ b/include/net/net.h
+@@ -77,6 +77,7 @@ NICState *qemu_new_nic(NetClientInfo *info,
+                        const char *model,
+                        const char *name,
+                        void *opaque);
++NetClientState *qemu_get_queue(NICState *nic);
+ void qemu_del_net_client(NetClientState *nc);
+ NetClientState *qemu_find_vlan_client_by_name(Monitor *mon, int vlan_id,
+                                               const char *client_str);
+diff --git a/net/net.c b/net/net.c
+index cdd9b04..e9a0d15 100644
+--- a/net/net.c
++++ b/net/net.c
+@@ -234,6 +234,11 @@ NICState *qemu_new_nic(NetClientInfo *info,
+     return nic;
+ }
+ 
++NetClientState *qemu_get_queue(NICState *nic)
++{
++    return &nic->nc;
++}
++
+ static void qemu_cleanup_net_client(NetClientState *nc)
+ {
+     QTAILQ_REMOVE(&net_clients, nc, next);
+diff --git a/savevm.c b/savevm.c
+index 304d1ef..749b57e 100644
+--- a/savevm.c
++++ b/savevm.c
+@@ -81,7 +81,7 @@ static void qemu_announce_self_iter(NICState *nic, void *opaque)
+ 
+     len = announce_self_create(buf, nic->conf->macaddr.a);
+ 
+-    qemu_send_packet_raw(&nic->nc, buf, len);
++    qemu_send_packet_raw(qemu_get_queue(nic), buf, len);
+ }
+ 
+ 
+-- 
+1.7.1
+
+--
+To unsubscribe from this list: send the line "unsubscribe kvm" in
+the body of a message to majordomo@vger.kernel.org
+More majordomo info at  http://vger.kernel.org/majordomo-info.html
