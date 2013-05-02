@@ -1,1 +1,1 @@
-../replace-cpuid_features-fields-with-a-featue-word-array-v8/v1.1366061133/0001-target-i386-Move-cpuid_xlevel-cpuid_xlevel2-fields-in-X86CPU.patch
+../replace-cpuid_features-fields-with-a-featue-word-array/v8.0.1366061133/0001-target-i386-Move-cpuid_xlevel-cpuid_xlevel2-fields-in-X86CPU.patch

@@ -1,1 +1,1 @@
-../replace-cpuid_features-fields-with-a-featue-word-array-v8/v1.1366061133/0002-target-i386-kvmc-Code-formatting-changes.patch
+../replace-cpuid_features-fields-with-a-featue-word-array/v8.0.1366061133/0002-target-i386-kvmc-Code-formatting-changes.patch

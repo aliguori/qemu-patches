@@ -1,0 +1,39 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Eduardo Habkost <ehabkost@redhat.com>
+To: qemu-devel@nongnu.org, =?UTF-8?q?Andreas=20F=C3=A4rber?= <afaerber@suse.de>
+Cc: Igor Mammedov <imammedo@redhat.com>
+Date: Tue, 16 Apr 2013 13:12:02 -0300
+Message-id: 1366128724-31860-3-git-send-email-ehabkost@redhat.com
+Subject: [PATCH 2/4] target-i386/kvm.c: Code formatting changes
+
+Add appropriate spaces around operators, and break line where it needs
+to be broken to allow feature-words array to be introduced without
+having too-long lines.
+
+Signed-off-by: Eduardo Habkost <ehabkost@redhat.com>
+---
+Changes v9:
+ * 1-char alignment change: keep the opening parenthesis of both sides
+   of the "==" operator starting at the same column
+---
+ target-i386/kvm.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/target-i386/kvm.c b/target-i386/kvm.c
+index 397afeb..e650900 100644
+--- a/target-i386/kvm.c
++++ b/target-i386/kvm.c
+@@ -610,7 +610,8 @@ int kvm_arch_init_vcpu(CPUState *cs)
+     cpuid_data.cpuid.nent = cpuid_i;
+ 
+     if (((env->cpuid_version >> 8)&0xF) >= 6
+-        && (env->cpuid_features&(CPUID_MCE|CPUID_MCA)) == (CPUID_MCE|CPUID_MCA)
++        && (env->cpuid_features & (CPUID_MCE|CPUID_MCA)) ==
++           (CPUID_MCE|CPUID_MCA)
+         && kvm_check_extension(cs->kvm_state, KVM_CAP_MCE) > 0) {
+         uint64_t mcg_cap;
+         int banks;
+-- 
+1.8.1.4
+
+

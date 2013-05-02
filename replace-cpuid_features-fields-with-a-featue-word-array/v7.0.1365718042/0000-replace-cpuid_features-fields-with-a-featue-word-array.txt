@@ -1,0 +1,47 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Eduardo Habkost <ehabkost@redhat.com>
+To: qemu-devel@nongnu.org
+Cc: Igor Mammedov <imammedo@redhat.com>,
+ =?UTF-8?q?Andreas=20F=C3=A4rber?= <afaerber@suse.de>
+Date: Thu, 11 Apr 2013 17:07:22 -0300
+Message-id: 1365710844-30453-1-git-send-email-ehabkost@redhat.com
+Subject: [PATCH 0/2] replace cpuid_*features fields with a featue word array
+
+Yet Another rebase.
+
+Changes v7:
+ - Rebase on top qom-cpu-next
+   (commit 3755f0a9d48da07258f4a0ef5e883272799e47b9)
+
+Changes v6:
+ - Rebase on top of Andreas' qom-cpu tree (commit
+   9260944307077b93a66bf861a467107af986fe47)
+ - Break lines on kvm_check_features_against_host()
+ - Break the lines on builtin_x86_defs just after the "=".
+   This way the feature lists stay on separate lines, this patch gets
+   easier to review, and future patches that touches the code around
+   builtin_x86_defs will be even easier to review (as they won't need
+   to touch the lines containing the fature lists again)
+
+
+Eduardo Habkost (2):
+  target-i386/cpu.c: Coding style fixes
+  target-i386: Replace cpuid_*features fields with a feature word array
+
+ bsd-user/elfload.c        |   2 +-
+ bsd-user/main.c           |   4 +-
+ hw/i386/kvm/clock.c       |   2 +-
+ linux-user/elfload.c      |   2 +-
+ linux-user/main.c         |   4 +-
+ target-i386/cpu.c         | 412 ++++++++++++++++++++++++++++------------------
+ target-i386/cpu.h         |  15 +-
+ target-i386/helper.c      |   4 +-
+ target-i386/kvm.c         |   5 +-
+ target-i386/misc_helper.c |  14 +-
+ target-i386/translate.c   |  10 +-
+ 11 files changed, 274 insertions(+), 200 deletions(-)
+
+-- 
+1.8.1.4
+
+

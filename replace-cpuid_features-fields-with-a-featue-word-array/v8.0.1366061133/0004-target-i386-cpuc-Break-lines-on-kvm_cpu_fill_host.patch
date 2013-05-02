@@ -1,0 +1,40 @@
+From patches Mon Sep 17 00:00:00 2001
+From: Eduardo Habkost <ehabkost@redhat.com>
+To: Eduardo Habkost <ehabkost@redhat.com>, Igor Mammedov <imammedo@redhat.com>,
+ qemu-devel@nongnu.org, =?UTF-8?q?Andreas=20F=C3=A4rber?= <afaerber@suse.de>
+Cc: Igor Mammedov <imammedo@redhat.com>,
+ Andreas =?ISO-8859-1?B?RuRyYmVy?= <afaerber@suse.de>, qemu-devel@nongnu.org,
+ Andreas =?iso-8859-1?Q?F=E4rber?= <afaerber@suse.de>
+Date: Mon, 15 Apr 2013 16:25:37 -0300
+Message-id: 1366053940-9401-5-git-send-email-ehabkost@redhat.com
+Subject: [PATCH 4/7] target-i386/cpu.c: Break lines on kvm_cpu_fill_host()
+
+Break lines so they don't get too long once the *_features fields are
+replaced by an array.
+
+Signed-off-by: Eduardo Habkost <ehabkost@redhat.com>
+---
+ target-i386/cpu.c | 6 ++++--
+ 1 file changed, 4 insertions(+), 2 deletions(-)
+
+diff --git a/target-i386/cpu.c b/target-i386/cpu.c
+index 732cafd..5390ca5 100644
+--- a/target-i386/cpu.c
++++ b/target-i386/cpu.c
+@@ -918,8 +918,10 @@ static void kvm_cpu_fill_host(x86_def_t *x86_cpu_def)
+     x86_cpu_def->stepping = eax & 0x0F;
+ 
+     x86_cpu_def->level = kvm_arch_get_supported_cpuid(s, 0x0, 0, R_EAX);
+-    x86_cpu_def->features = kvm_arch_get_supported_cpuid(s, 0x1, 0, R_EDX);
+-    x86_cpu_def->ext_features = kvm_arch_get_supported_cpuid(s, 0x1, 0, R_ECX);
++    x86_cpu_def->features =
++        kvm_arch_get_supported_cpuid(s, 0x1, 0, R_EDX);
++    x86_cpu_def->ext_features =
++        kvm_arch_get_supported_cpuid(s, 0x1, 0, R_ECX);
+ 
+     if (x86_cpu_def->level >= 7) {
+         x86_cpu_def->cpuid_7_0_ebx_features =
+-- 
+1.8.1.4
+
+

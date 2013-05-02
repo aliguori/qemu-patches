@@ -1,6 +1,7 @@
 From patches Mon Sep 17 00:00:00 2001
 From: John Rigby <john.rigby@linaro.org>
-To: Laurent Desnogues <laurent.desnogues@gmail.com>,
+To: Peter Maydell <peter.maydell@linaro.org>,
+ Laurent Desnogues <laurent.desnogues@gmail.com>,
  John Rigby <john.rigby@linaro.org>, Alexander Graf <agraf@suse.de>,
  qemu-devel <qemu-devel@nongnu.org>
 Cc: Peter Maydell <peter.maydell@linaro.org>,

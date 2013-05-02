@@ -1,1 +1,1 @@
-../replace-cpuid_features-fields-with-a-featue-word-array-v8/v1.1366061133/0007-target-i386-Replace-cpuid_features-fields-with-a-feature-word-array.patch
+../replace-cpuid_features-fields-with-a-featue-word-array/v8.0.1366061133/0007-target-i386-Replace-cpuid_features-fields-with-a-feature-word-array.patch

@@ -1,7 +1,11 @@
 From patches Mon Sep 17 00:00:00 2001
 From: =?utf-8?q?Herv=C3=A9_Poussineau_=3Chpoussin=40reactos=2Eorg=3E?=
-To: qemu-devel@nongnu.org
-Cc: qemu-ppc@nongnu.org, =?UTF-8?q?Andreas=20F=C3=A4rber?= <afaerber@suse.de>,
+To: Blue Swirl <blauwirbel@gmail.com>,
+ =?ISO-8859-1?Q?Herv=E9_Poussineau?= <hpoussin@reactos.org>,
+ qemu-devel@nongnu.org
+Cc: =?ISO-8859-1?Q?Andreas_F=E4rber?= <afaerber@suse.de>, qemu-ppc@nongnu.org,
+ =?UTF-8?q?Andreas=20F=C3=A4rber?= <afaerber@suse.de>,
+ qemu-devel <qemu-devel@nongnu.org>,
  =?UTF-8?q?Herv=C3=A9=20Poussineau?= <hpoussin@reactos.org>
 Date: Thu,  2 May 2013 22:09:01 +0200
 Message-id: 1367525344-7755-5-git-send-email-hpoussin@reactos.org
