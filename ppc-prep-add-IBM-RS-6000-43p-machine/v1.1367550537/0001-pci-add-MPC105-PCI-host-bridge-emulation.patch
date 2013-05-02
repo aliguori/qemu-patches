@@ -1,8 +1,13 @@
 From patches Mon Sep 17 00:00:00 2001
 From: =?utf-8?q?Herv=C3=A9_Poussineau_=3Chpoussin=40reactos=2Eorg=3E?=
-To: qemu-devel@nongnu.org
-Cc: qemu-ppc@nongnu.org, =?UTF-8?q?Andreas=20F=C3=A4rber?= <afaerber@suse.de>,
- =?UTF-8?q?Herv=C3=A9=20Poussineau?= <hpoussin@reactos.org>
+To: qemu-devel@nongnu.org,
+ =?utf-8?Q?Herv=C3=A9_Poussineau?= <hpoussin@reactos.org>
+Cc: "qemu-devel@nongnu.org" <qemu-devel@nongnu.org>,
+ "qemu-ppc@nongnu.org" <qemu-ppc@nongnu.org>, qemu-ppc@nongnu.org,
+ =?utf-8?Q?Herv=C3=A9_Poussineau?= <hpoussin@reactos.org>,
+ =?UTF-8?q?Herv=C3=A9=20Poussineau?= <hpoussin@reactos.org>,
+ =?utf-8?Q?Andreas_F=C3=A4rber?= <afaerber@suse.de>,
+ =?UTF-8?q?Andreas=20F=C3=A4rber?= <afaerber@suse.de>
 Date: Thu,  2 May 2013 22:08:58 +0200
 Message-id: 1367525344-7755-2-git-send-email-hpoussin@reactos.org
 Subject: [PATCH 1/7] pci: add MPC105 PCI host bridge emulation
